@@ -31,8 +31,9 @@
         android:enableOnBackInvokedCallback="true"
         android:requestLegacyExternalStorage="false">
 
+        <!-- Use full class name so Flutter tools can detect v2 embedding correctly -->
         <activity
-            android:name=".MainActivity"
+            android:name="com.retrocam.app.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
@@ -51,6 +52,7 @@
             </intent-filter>
         </activity>
 
+        <!-- Flutter v2 embedding marker -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

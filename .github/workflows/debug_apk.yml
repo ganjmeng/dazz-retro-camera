@@ -33,17 +33,30 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Print Flutter version
-        run: flutter --version
+      - name: Print Flutter version and locate SDK
+        id: flutter_info
+        run: |
+          flutter --version
+          FLUTTER_ROOT=$(flutter --version --machine 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('flutterRoot',''))" 2>/dev/null)
+          if [ -z "$FLUTTER_ROOT" ]; then
+            FLUTTER_ROOT=$(dirname $(dirname $(which flutter)))
+          fi
+          echo "FLUTTER_ROOT=$FLUTTER_ROOT" >> $GITHUB_ENV
+          echo "Flutter SDK root: $FLUTTER_ROOT"
 
       - name: Generate local.properties
         working-directory: ./flutter_app/android
         run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          echo "flutter.sdk=$(flutter --version --machine 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('flutterRoot',''))" 2>/dev/null || dirname $(dirname $(which flutter)))" >> local.properties
-          echo "flutter.buildMode=debug" >> local.properties
-          echo "flutter.versionName=1.0.0" >> local.properties
-          echo "flutter.versionCode=1" >> local.properties
+          cat > local.properties << EOF
+          sdk.dir=$ANDROID_SDK_ROOT
+          flutter.sdk=${{ env.FLUTTER_ROOT }}
+          flutter.buildMode=debug
+          flutter.versionName=1.0.0
+          flutter.versionCode=1
+          EOF
+          # Remove leading whitespace from heredoc
+          sed -i 's/^[[:space:]]*//' local.properties
+          echo "=== local.properties content ==="
           cat local.properties
 
       - name: Install Flutter dependencies
@@ -62,22 +75,29 @@ jobs:
         run: |
           TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          cp flutter_app/build/app/outputs/flutter-apk/app-debug.apk \
-             flutter_app/build/app/outputs/flutter-apk/dazz-debug-${TIMESTAMP}-${SHORT_SHA}.apk
+          APK_SRC="flutter_app/build/app/outputs/flutter-apk/app-debug.apk"
+          APK_DST="flutter_app/build/app/outputs/flutter-apk/dazz-debug-${TIMESTAMP}-${SHORT_SHA}.apk"
+          cp "$APK_SRC" "$APK_DST"
           echo "APK_NAME=dazz-debug-${TIMESTAMP}-${SHORT_SHA}.apk" >> $GITHUB_ENV
+          echo "APK_PATH=$APK_DST" >> $GITHUB_ENV
+          ls -lh flutter_app/build/app/outputs/flutter-apk/
 
       - name: Upload Debug APK as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APK_NAME }}
-          path: flutter_app/build/app/outputs/flutter-apk/dazz-debug-*.apk
+          path: ${{ env.APK_PATH }}
           retention-days: 14
           if-no-files-found: error
 
-      - name: Print download instructions
+      - name: Build summary
         run: |
-          echo "=========================================="
-          echo "✅ Debug APK build complete!"
-          echo "APK: ${{ env.APK_NAME }}"
-          echo "Download from: Actions tab → This workflow run → Artifacts"
-          echo "=========================================="
+          echo "## ✅ Debug APK Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| APK Name | \`${{ env.APK_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download the APK from the **Artifacts** section of this workflow run." >> $GITHUB_STEP_SUMMARY
