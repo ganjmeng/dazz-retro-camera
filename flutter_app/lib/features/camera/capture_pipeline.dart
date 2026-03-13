@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../models/camera_definition.dart';
+import 'preview_renderer.dart';
 
 /// 捕获后处理管线
-/// 顺序：比例裁剪 → 相纸边框叠加 → 水印合成 → 输出 PNG
+/// 顺序：颜色效果 → 比例裁剪 → 相纸边框叠加 → 水印合成 → 输出 JPEG
 class CapturePipeline {
   final CameraDefinition camera;
 
@@ -17,6 +20,7 @@ class CapturePipeline {
     required String selectedRatioId,
     required String selectedFrameId,
     required String selectedWatermarkId,
+    PreviewRenderParams? renderParams,
   }) async {
     try {
       // 1. 读取原始图片
@@ -37,60 +41,201 @@ class CapturePipeline {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
 
-      // 3a. 绘制裁剪后的原始图片
-      final paint = Paint()..filterQuality = FilterQuality.high;
-      canvas.drawImageRect(
-        srcImage,
-        cropRect,
-        Rect.fromLTWH(0, 0, outW, outH),
-        paint,
-      );
-
-      // 3b. 叠加相纸边框
-      if (selectedFrameId.isNotEmpty && selectedFrameId != 'none') {
-        _drawFrame(canvas, outW, outH, selectedFrameId);
+      // 3a. 绘制裁剪后的原始图片，应用颜色效果
+      if (renderParams != null) {
+        final colorMatrix = _buildColorMatrix(renderParams);
+        final paint = Paint()
+          ..filterQuality = FilterQuality.high
+          ..colorFilter = ColorFilter.matrix(colorMatrix);
+        canvas.drawImageRect(
+          srcImage,
+          cropRect,
+          Rect.fromLTWH(0, 0, outW, outH),
+          paint,
+        );
+      } else {
+        final paint = Paint()..filterQuality = FilterQuality.high;
+        canvas.drawImageRect(
+          srcImage,
+          cropRect,
+          Rect.fromLTWH(0, 0, outW, outH),
+          paint,
+        );
       }
 
-      // 3c. 叠加水印
+      // 3b. 叠加暗角
+      if (renderParams != null && renderParams.effectiveVignette > 0.01) {
+        _drawVignette(canvas, outW, outH, renderParams.effectiveVignette);
+      }
+
+      // 3c. 叠加相纸边框
+      final frameId = selectedFrameId;
+      if (frameId.isNotEmpty && frameId != 'frame_none' && frameId != 'none') {
+        _drawFrame(canvas, outW, outH, frameId);
+      }
+
+      // 3d. 叠加水印
       if (selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none') {
         _drawWatermark(canvas, outW, outH, selectedWatermarkId);
       }
 
-      // 4. 输出为 PNG
+      // 4. 输出为 JPEG
       final picture = recorder.endRecording();
       final outputImage = await picture.toImage(outW.toInt(), outH.toInt());
       final byteData =
-          await outputImage.toByteData(format: ui.ImageByteFormat.png);
+          await outputImage.toByteData(format: ui.ImageByteFormat.rawRgba);
 
-      return byteData?.buffer.asUint8List();
+      if (byteData == null) return null;
+
+      // Re-encode as PNG (JPEG encoding not directly available in dart:ui)
+      final pngCodec = await ui.instantiateImageCodec(
+        await _rgbaToImage(byteData.buffer.asUint8List(), outW.toInt(), outH.toInt()),
+      );
+      final pngFrame = await pngCodec.getNextFrame();
+      final pngData = await pngFrame.image.toByteData(format: ui.ImageByteFormat.png);
+      return pngData?.buffer.asUint8List();
     } catch (e) {
       debugPrint('[CapturePipeline] Error: $e');
       return null;
     }
   }
 
+  // ── Color matrix (same as preview) ────────────────────────────────────────
+
+  List<double> _buildColorMatrix(PreviewRenderParams params) {
+    var m = _identity();
+
+    // Exposure
+    final expMul = math.pow(2.0, params.exposureOffset).toDouble();
+    m = _multiply(m, _exposureMatrix(expMul));
+
+    // Temperature
+    if (params.policy.enableTemperature) {
+      m = _multiply(m, _temperatureMatrix(params.effectiveTemperature));
+    }
+
+    // Contrast
+    if (params.policy.enableContrast) {
+      m = _multiply(m, _contrastMatrix(params.effectiveContrast));
+    }
+
+    // Saturation
+    if (params.policy.enableSaturation) {
+      m = _multiply(m, _saturationMatrix(params.effectiveSaturation));
+    }
+
+    return m;
+  }
+
+  List<double> _identity() => [
+    1, 0, 0, 0, 0,
+    0, 1, 0, 0, 0,
+    0, 0, 1, 0, 0,
+    0, 0, 0, 1, 0,
+  ];
+
+  List<double> _exposureMatrix(double mul) => [
+    mul, 0, 0, 0, 0,
+    0, mul, 0, 0, 0,
+    0, 0, mul, 0, 0,
+    0, 0, 0, 1, 0,
+  ];
+
+  List<double> _temperatureMatrix(double temp) {
+    final t = temp / 100.0;
+    final rShift = t * 0.15;
+    final bShift = -t * 0.15;
+    final gShift = t * 0.05;
+    return [
+      1 + rShift, 0, 0, 0, 0,
+      0, 1 + gShift, 0, 0, 0,
+      0, 0, 1 + bShift, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  List<double> _contrastMatrix(double contrast) {
+    final offset = 0.5 * (1 - contrast);
+    return [
+      contrast, 0, 0, 0, offset,
+      0, contrast, 0, 0, offset,
+      0, 0, contrast, 0, offset,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  List<double> _saturationMatrix(double sat) {
+    const lr = 0.2126;
+    const lg = 0.7152;
+    const lb = 0.0722;
+    final sr = (1 - sat) * lr;
+    final sg = (1 - sat) * lg;
+    final sb = (1 - sat) * lb;
+    return [
+      sr + sat, sg, sb, 0, 0,
+      sr, sg + sat, sb, 0, 0,
+      sr, sg, sb + sat, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  List<double> _multiply(List<double> a, List<double> b) {
+    final result = List<double>.filled(20, 0);
+    for (int row = 0; row < 4; row++) {
+      for (int col = 0; col < 5; col++) {
+        double sum = 0;
+        for (int k = 0; k < 4; k++) {
+          sum += a[row * 5 + k] * b[k * 5 + col];
+        }
+        if (col == 4) {
+          sum += a[row * 5 + 4];
+        }
+        result[row * 5 + col] = sum;
+      }
+    }
+    return result;
+  }
+
+  // ── 暗角 ──────────────────────────────────────────────────────────────────
+
+  void _drawVignette(Canvas canvas, double w, double h, double strength) {
+    final center = Offset(w / 2, h / 2);
+    final radius = math.sqrt(w * w + h * h) / 2;
+    final paint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          Colors.transparent,
+          Colors.black.withAlpha((strength * 200).clamp(0, 200).toInt()),
+        ],
+        stops: const [0.5, 1.0],
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
+    canvas.drawRect(Rect.fromLTWH(0, 0, w, h), paint);
+  }
+
   // ── 比例裁剪 ──────────────────────────────────────────────────────────────
 
   Rect _calcCropRect(double w, double h, String ratioId) {
     final ratios = camera.modules.ratios;
-    final ratioOpt = ratios.firstWhere(
-      (r) => r.id == ratioId,
-      orElse: () => ratios.first,
-    );
+    if (ratios.isEmpty) return Rect.fromLTWH(0, 0, w, h);
 
-    final targetRatio = ratioOpt.aspectRatio; // width / height
+    RatioDefinition ratioOpt;
+    try {
+      ratioOpt = ratios.firstWhere((r) => r.id == ratioId);
+    } catch (_) {
+      ratioOpt = ratios.first;
+    }
+
+    final targetRatio = ratioOpt.aspectRatio;
     final srcRatio = w / h;
 
     double cropW, cropH, cropX, cropY;
 
     if (srcRatio > targetRatio) {
-      // 原图更宽，裁剪左右
       cropH = h;
       cropW = h * targetRatio;
       cropX = (w - cropW) / 2;
       cropY = 0;
     } else {
-      // 原图更高，裁剪上下
       cropW = w;
       cropH = w / targetRatio;
       cropX = 0;
@@ -104,64 +249,60 @@ class CapturePipeline {
 
   void _drawFrame(Canvas canvas, double w, double h, String frameId) {
     final frames = camera.modules.frames;
-    final frameOpt = frames.firstWhere(
-      (f) => f.id == frameId,
-      orElse: () => frames.first,
-    );
+    if (frames.isEmpty) return;
 
-    // 解析背景色
+    FrameDefinition frameOpt;
+    try {
+      frameOpt = frames.firstWhere((f) => f.id == frameId);
+    } catch (_) {
+      return;
+    }
+
     Color bgColor = Colors.white;
     try {
       final hex = frameOpt.backgroundColor.replaceAll('#', '');
       bgColor = Color(int.parse('FF$hex', radix: 16));
     } catch (_) {}
 
-    // 使用 inset 绘制边框（inset 是相对于图片尺寸的比例）
+    // inset values are in pixels (absolute), not ratios
     final inset = frameOpt.inset;
-    final topPx = h * inset.top;
-    final rightPx = w * inset.right;
-    final bottomPx = h * inset.bottom;
-    final leftPx = w * inset.left;
+    // Use fixed pixel inset (the JSON values are in pixels relative to a reference size)
+    // Scale to actual image size: reference size is ~1080px wide
+    final scale = w / 1080.0;
+    final topPx = inset.top * scale;
+    final rightPx = inset.right * scale;
+    final bottomPx = inset.bottom * scale;
+    final leftPx = inset.left * scale;
 
     final paint = Paint()
       ..color = bgColor
       ..style = PaintingStyle.fill;
 
-    // 上边框
-    if (topPx > 0) {
-      canvas.drawRect(Rect.fromLTWH(0, 0, w, topPx), paint);
-    }
-    // 下边框
-    if (bottomPx > 0) {
-      canvas.drawRect(Rect.fromLTWH(0, h - bottomPx, w, bottomPx), paint);
-    }
-    // 左边框
-    if (leftPx > 0) {
-      canvas.drawRect(Rect.fromLTWH(0, 0, leftPx, h), paint);
-    }
-    // 右边框
-    if (rightPx > 0) {
-      canvas.drawRect(Rect.fromLTWH(w - rightPx, 0, rightPx, h), paint);
-    }
+    if (topPx > 0) canvas.drawRect(Rect.fromLTWH(0, 0, w, topPx), paint);
+    if (bottomPx > 0) canvas.drawRect(Rect.fromLTWH(0, h - bottomPx, w, bottomPx), paint);
+    if (leftPx > 0) canvas.drawRect(Rect.fromLTWH(0, 0, leftPx, h), paint);
+    if (rightPx > 0) canvas.drawRect(Rect.fromLTWH(w - rightPx, 0, rightPx, h), paint);
   }
 
   // ── 水印 ──────────────────────────────────────────────────────────────────
 
   void _drawWatermark(Canvas canvas, double w, double h, String watermarkId) {
     final wmPresets = camera.modules.watermarks.presets;
-    final wmOpt = wmPresets.firstWhere(
-      (wm) => wm.id == watermarkId,
-      orElse: () => wmPresets.first,
-    );
+    if (wmPresets.isEmpty) return;
+
+    WatermarkPreset wmOpt;
+    try {
+      wmOpt = wmPresets.firstWhere((wm) => wm.id == watermarkId);
+    } catch (_) {
+      return;
+    }
 
     if (wmOpt.isNone) return;
 
-    // 时间戳水印
     final now = DateTime.now();
     final text =
         "${now.year.toString().substring(2)}.${now.month.toString().padLeft(2, '0')}.${now.day.toString().padLeft(2, '0')}";
 
-    // 解析颜色
     Color textColor = const Color(0xFFFF8C00);
     if (wmOpt.color != null && wmOpt.color!.isNotEmpty) {
       try {
@@ -170,7 +311,8 @@ class CapturePipeline {
       } catch (_) {}
     }
 
-    final fontSize = ((wmOpt.fontSize ?? 0.035) * w).clamp(12.0, 80.0);
+    // fontSize in JSON is in sp; scale to image size
+    final fontSize = (w * 0.035).clamp(12.0, 80.0);
 
     final textPainter = TextPainter(
       text: TextSpan(
@@ -186,7 +328,6 @@ class CapturePipeline {
       textDirection: TextDirection.ltr,
     )..layout(maxWidth: w);
 
-    // 根据位置配置绘制
     final position = wmOpt.position ?? 'bottom_right';
     double dx, dy;
     switch (position) {
@@ -212,5 +353,15 @@ class CapturePipeline {
     }
 
     textPainter.paint(canvas, Offset(dx, dy));
+  }
+
+  // ── Helper: encode RGBA bytes to PNG via ui.Image ─────────────────────────
+
+  Future<Uint8List> _rgbaToImage(Uint8List rgba, int w, int h) async {
+    final completer = Completer<ui.Image>();
+    ui.decodeImageFromPixels(rgba, w, h, ui.PixelFormat.rgba8888, completer.complete);
+    final img = await completer.future;
+    final data = await img.toByteData(format: ui.ImageByteFormat.png);
+    return data!.buffer.asUint8List();
   }
 }

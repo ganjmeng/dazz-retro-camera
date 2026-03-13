@@ -1,0 +1,267 @@
+{
+  "id": "fxn_r",
+  "name": "FXN R",
+  "category": "film",
+  "mode": "photo",
+  "supportsPhoto": true,
+  "supportsVideo": false,
+  "focalLengthLabel": "35mm",
+
+  "sensor": {
+    "type": "film",
+    "dynamicRange": 7,
+    "baseNoise": 0.28,
+    "colorDepth": 8
+  },
+
+  "defaultLook": {
+    "baseLut": null,
+    "temperature": 35,
+    "contrast": 0.95,
+    "saturation": 1.05,
+    "vignette": 0.12,
+    "distortion": 0.01,
+    "chromaticAberration": 0.05,
+    "bloom": 0.03,
+    "flare": 0.02
+  },
+
+  "modules": {
+    "filters": [
+      {
+        "id": "fxn_retro",
+        "name": "Retro",
+        "nameEn": "Retro",
+        "lut": null,
+        "contrast": 0.95,
+        "saturation": 1.05,
+        "grain": "heavy",
+        "thumbnail": null
+      },
+      {
+        "id": "fxn_faded",
+        "name": "Faded",
+        "nameEn": "Faded",
+        "lut": null,
+        "contrast": 0.88,
+        "saturation": 0.95,
+        "grain": "heavy",
+        "thumbnail": null
+      }
+    ],
+
+    "lenses": [
+      {
+        "id": "std",
+        "name": "标准",
+        "nameEn": "Std",
+        "vignette": 0.10,
+        "distortion": 0.01,
+        "chromaticAberration": 0.04,
+        "bloom": 0.03,
+        "flare": 0.02,
+        "softFocus": 0.02,
+        "refraction": 0.0,
+        "thumbnail": null
+      },
+      {
+        "id": "vintage",
+        "name": "复古",
+        "nameEn": "Vintage",
+        "vignette": 0.16,
+        "distortion": 0.02,
+        "chromaticAberration": 0.08,
+        "bloom": 0.04,
+        "flare": 0.03,
+        "softFocus": 0.05,
+        "refraction": 0.0,
+        "thumbnail": null
+      },
+      {
+        "id": "dream",
+        "name": "梦幻",
+        "nameEn": "Dream",
+        "vignette": 0.10,
+        "distortion": 0.01,
+        "chromaticAberration": 0.05,
+        "bloom": 0.15,
+        "flare": 0.05,
+        "softFocus": 0.08,
+        "refraction": 0.0,
+        "thumbnail": null
+      },
+      {
+        "id": "light_leak",
+        "name": "漏光",
+        "nameEn": "Light Leak",
+        "vignette": 0.14,
+        "distortion": 0.02,
+        "chromaticAberration": 0.07,
+        "bloom": 0.05,
+        "flare": 0.10,
+        "softFocus": 0.03,
+        "refraction": 0.0,
+        "thumbnail": null
+      },
+      {
+        "id": "prism",
+        "name": "棱镜",
+        "nameEn": "Prism",
+        "vignette": 0.12,
+        "distortion": 0.01,
+        "chromaticAberration": 0.10,
+        "bloom": 0.04,
+        "flare": 0.03,
+        "softFocus": 0.02,
+        "refraction": 0.20,
+        "thumbnail": null
+      }
+    ],
+
+    "ratios": [
+      {
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_2_3",
+        "label": "2:3",
+        "width": 2,
+        "height": 3,
+        "supportsFrame": false
+      },
+      {
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "width": 3,
+        "height": 4,
+        "supportsFrame": true
+      }
+    ],
+
+    "frames": [
+      {
+        "id": "film_border",
+        "name": "胶卷边框",
+        "nameEn": "Film Border",
+        "asset": null,
+        "backgroundColor": "#EAE6DD",
+        "inset": {
+          "top": 22,
+          "right": 22,
+          "bottom": 22,
+          "left": 22
+        },
+        "supportedRatios": ["ratio_1_1", "ratio_3_4"],
+        "thumbnail": null
+      }
+    ],
+
+    "watermarks": {
+      "presets": [
+        {
+          "id": "date_orange",
+          "name": "橙色日期",
+          "color": "#FF8A3D",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "monospace"
+        },
+        {
+          "id": "date_white",
+          "name": "白色日期",
+          "color": "#FFFFFF",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "monospace"
+        },
+        {
+          "id": "none",
+          "name": "无水印"
+        }
+      ],
+      "editor": {
+        "allowColorChange": true,
+        "allowPositionChange": true,
+        "allowSizeChange": true,
+        "allowOrientationChange": true
+      }
+    },
+
+    "extras": []
+  },
+
+  "defaultSelection": {
+    "filterId": "fxn_retro",
+    "lensId": "std",
+    "ratioId": "ratio_2_3",
+    "frameId": null,
+    "watermarkPresetId": "date_orange",
+    "extraId": null
+  },
+
+  "uiCapabilities": {
+    "enableFilter": true,
+    "enableLens": true,
+    "enableRatio": true,
+    "enableFrame": true,
+    "enableWatermark": true,
+    "enableExtra": false
+  },
+
+  "previewCapabilities": {
+    "allowSmallViewport": true,
+    "allowGridOverlay": true,
+    "allowZoom": true,
+    "allowImportImage": true,
+    "allowTimer": true,
+    "allowFlash": true
+  },
+
+  "previewPolicy": {
+    "enableLut": false,
+    "enableTemperature": true,
+    "enableContrast": true,
+    "enableSaturation": true,
+    "enableVignette": true,
+    "enableLightLensEffect": true,
+    "enableGrain": false,
+    "enableBloom": true,
+    "enableChromaticAberration": true,
+    "enableFrameComposite": false,
+    "enableWatermarkComposite": true
+  },
+
+  "exportPolicy": {
+    "jpegQuality": 0.92,
+    "applyRatioCrop": true,
+    "applyFrameOnExport": true,
+    "applyWatermarkOnExport": true,
+    "preserveMetadata": true
+  },
+
+  "videoConfig": {
+    "enabled": false,
+    "fpsOptions": [24, 30, 60],
+    "resolutionOptions": ["SD", "HD", "4K"],
+    "defaultFps": 30,
+    "defaultResolution": "HD",
+    "supportsAudio": true,
+    "videoBitrate": 12000000
+  },
+
+  "assets": {
+    "thumbnail": "assets/thumbnails/cameras/fxn_r.jpg",
+    "icon": "assets/thumbnails/cameras/fxn_r_icon.jpg"
+  },
+
+  "meta": {
+    "version": "final",
+    "premium": false,
+    "sortOrder": 30,
+    "tags": ["retro", "film", "toy", "warm"]
+  }
+}

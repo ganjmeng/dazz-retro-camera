@@ -80,6 +80,11 @@ class CameraDefinition {
     return CameraDefinition.fromJson(json);
   }
 
+  static CameraDefinition fromJsonString(String jsonStr) {
+    final json = jsonDecode(jsonStr) as Map<String, dynamic>;
+    return CameraDefinition.fromJson(json);
+  }
+
   FilterDefinition? filterById(String? id) {
     if (id == null) return null;
     try { return modules.filters.firstWhere((f) => f.id == id); } catch (_) { return null; }
