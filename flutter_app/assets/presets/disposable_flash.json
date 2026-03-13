@@ -1,0 +1,62 @@
+{
+  "id": "disposable_flash",
+  "name": "Disposable Flash",
+  "category": "disposable",
+  "outputType": "photo",
+  "isPremium": false,
+  "thumbnail": "thumbnails/disposable_flash.png",
+  "baseModel": {
+    "sensor": { "type": "film_scan" },
+    "lens": { "vignette": 0.35, "distortion": 0.04 },
+    "color": { "contrast": 1.12, "saturation": 1.05 }
+  },
+  "optionGroups": {
+    "films": [
+      {
+        "id": "disposable_color",
+        "name": "Color Flash",
+        "isDefault": true,
+        "rendering": {
+          "lut": "lut/disposable_flash.cube",
+          "grain": "grain/grain_coarse.png",
+          "grainIntensity": 0.30,
+          "temperatureShift": 100.0,
+          "chromaticAberration": 0.015,
+          "vignetteAmount": 0.35,
+          "bloomAmount": 0.20,
+          "halationAmount": 0.15
+        }
+      }
+    ],
+    "ratios": [
+      { "id": "ratio_3_2", "name": "3:2", "value": "3:2", "isDefault": true }
+    ],
+    "watermarks": [
+      {
+        "id": "date_red",
+        "name": "Red Date",
+        "isDefault": true,
+        "type": "digital_date",
+        "rendering": {
+          "asset": "watermarks/date_stamp_orange.png",
+          "position": "bottom_right",
+          "opacity": 0.95,
+          "color": "#FFFF3030"
+        }
+      },
+      {
+        "id": "none",
+        "name": "None",
+        "isDefault": false,
+        "type": "none"
+      }
+    ]
+  },
+  "uiCapabilities": {
+    "showFilmSelector": false,
+    "showLensSelector": false,
+    "showPaperSelector": false,
+    "showRatioSelector": false,
+    "showWatermarkSelector": true
+  }
+}

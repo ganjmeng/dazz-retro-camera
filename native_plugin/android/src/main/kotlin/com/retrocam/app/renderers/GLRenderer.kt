@@ -12,6 +12,11 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
     private var inputSurfaceTexture: SurfaceTexture? = null
     private var inputSurface: Surface? = null
     
+    // External Textures
+    private var lutTextureId = -1
+    private var grainTextureId = -1
+    private var frameTextureId = -1
+    
     // Shader Parameters
     private var contrast = 1.0f
     private var saturation = 1.0f
@@ -45,6 +50,23 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
         (params["chromaticAberration"] as? Number)?.let { chromaticAberration = it.toFloat() }
         (params["noise"] as? Number)?.let { noiseAmount = it.toFloat() }
         (params["vignette"] as? Number)?.let { vignetteAmount = it.toFloat() }
+        
+        // In a real implementation, we would load the textures from Flutter assets here
+        // using FlutterInjector.instance().flutterLoader().getLookupKeyForAsset()
+        (params["lut"] as? String)?.let { path ->
+            println("GLRenderer: Should load LUT from $path")
+            // lutTextureId = loadTexture(path)
+        }
+        (params["grain"] as? String)?.let { path ->
+            println("GLRenderer: Should load Grain from $path")
+            // grainTextureId = loadTexture(path)
+        }
+        (params["frame"] as? String)?.let { path ->
+            println("GLRenderer: Should load Frame from $path")
+            // frameTextureId = loadTexture(path)
+        } ?: run {
+            frameTextureId = -1
+        }
     }
     
     /**
@@ -73,6 +95,24 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
         
         // 3. Update Uniforms
         time += 0.016f
+        
+        // Bind external textures
+        // if (lutTextureId != -1) {
+        //     glActiveTexture(GL_TEXTURE1)
+        //     glBindTexture(GL_TEXTURE_3D, lutTextureId)
+        //     glUniform1i(lutLoc, 1)
+        // }
+        // if (grainTextureId != -1) {
+        //     glActiveTexture(GL_TEXTURE2)
+        //     glBindTexture(GL_TEXTURE_2D, grainTextureId)
+        //     glUniform1i(grainLoc, 2)
+        // }
+        // if (frameTextureId != -1) {
+        //     glActiveTexture(GL_TEXTURE3)
+        //     glBindTexture(GL_TEXTURE_2D, frameTextureId)
+        //     glUniform1i(frameLoc, 3)
+        // }
+        
         // glUniform1f(contrastLoc, contrast)
         // glUniform1f(saturationLoc, saturation)
         // glUniform1f(caLoc, chromaticAberration)

@@ -1,0 +1,62 @@
+{
+  "id": "portrait_soft",
+  "name": "Soft Portrait",
+  "category": "film",
+  "outputType": "photo",
+  "isPremium": false,
+  "thumbnail": "thumbnails/portrait_soft.png",
+  "baseModel": {
+    "sensor": { "type": "film_scan" },
+    "color": { "contrast": 0.95, "saturation": 0.98 }
+  },
+  "optionGroups": {
+    "films": [
+      {
+        "id": "portra",
+        "name": "Portra",
+        "isDefault": true,
+        "rendering": {
+          "lut": "lut/soft_portrait.cube",
+          "grain": "grain/grain_fine.png",
+          "grainIntensity": 0.18,
+          "temperatureShift": 120.0,
+          "chromaticAberration": 0.004,
+          "vignetteAmount": 0.15
+        }
+      }
+    ],
+    "lenses": [
+      {
+        "id": "soft_focus",
+        "name": "Soft Focus",
+        "isDefault": true,
+        "rendering": {
+          "bloom": 0.12,
+          "blurRadius": 0.6,
+          "vignette": 0.10
+        }
+      },
+      {
+        "id": "normal_lens",
+        "name": "Normal",
+        "isDefault": false,
+        "rendering": {
+          "bloom": 0.0,
+          "blurRadius": 0.0,
+          "vignette": 0.08
+        }
+      }
+    ],
+    "ratios": [
+      { "id": "ratio_3_2", "name": "3:2", "value": "3:2", "isDefault": true },
+      { "id": "ratio_4_5", "name": "4:5", "value": "4:5", "isDefault": false }
+    ]
+  },
+  "uiCapabilities": {
+    "showFilmSelector": true,
+    "showLensSelector": true,
+    "showPaperSelector": false,
+    "showRatioSelector": true,
+    "showWatermarkSelector": false
+  }
+}

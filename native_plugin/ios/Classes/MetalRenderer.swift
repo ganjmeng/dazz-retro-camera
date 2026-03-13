@@ -23,6 +23,11 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
     // Current parameters
     private var ccdParams = CCDParams()
     
+    // External textures
+    private var lutTexture: MTLTexture?
+    private var grainTexture: MTLTexture?
+    private var frameTexture: MTLTexture?
+    
     init(registry: FlutterTextureRegistry) {
         self.registry = registry
         self.device = MTLCreateSystemDefaultDevice()
@@ -79,6 +84,23 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let noise = params["noise"] as? Float { ccdParams.noiseAmount = noise }
         if let vignette = params["vignette"] as? Float { ccdParams.vignetteAmount = vignette }
         if let bloom = params["bloom"] as? Float { ccdParams.bloomAmount = bloom }
+        
+        // In a real implementation, we would load the textures from Flutter assets here
+        // using FlutterPluginRegistrar.lookupKey(forAsset:) and MTKTextureLoader
+        if let lutPath = params["lut"] as? String {
+            print("Metal: Should load LUT from \(lutPath)")
+            // loadTexture(assetPath: lutPath, target: &lutTexture)
+        }
+        if let grainPath = params["grain"] as? String {
+            print("Metal: Should load Grain from \(grainPath)")
+            // loadTexture(assetPath: grainPath, target: &grainTexture)
+        }
+        if let framePath = params["frame"] as? String {
+            print("Metal: Should load Frame from \(framePath)")
+            // loadTexture(assetPath: framePath, target: &frameTexture)
+        } else {
+            frameTexture = nil
+        }
     }
     
     func setTextureId(_ id: Int64) {
@@ -142,6 +164,11 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         
         renderEncoder.setRenderPipelineState(pipelineState)
         renderEncoder.setFragmentTexture(textureIn, index: 0)
+        
+        // Bind external textures if available
+        if let lut = lutTexture { renderEncoder.setFragmentTexture(lut, index: 1) }
+        if let grain = grainTexture { renderEncoder.setFragmentTexture(grain, index: 2) }
+        if let frame = frameTexture { renderEncoder.setFragmentTexture(frame, index: 3) }
         
         // Update time for dynamic noise
         ccdParams.time += 0.016 // roughly 60fps

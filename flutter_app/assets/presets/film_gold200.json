@@ -1,0 +1,73 @@
+{
+  "id": "film_gold200",
+  "name": "Gold 200",
+  "category": "film",
+  "outputType": "photo",
+  "isPremium": false,
+  "thumbnail": "thumbnails/film_gold200.png",
+  "baseModel": {
+    "sensor": { "type": "film_scan" },
+    "color": { "contrast": 1.05, "saturation": 1.08 }
+  },
+  "optionGroups": {
+    "films": [
+      {
+        "id": "gold200",
+        "name": "Gold 200",
+        "isDefault": true,
+        "rendering": {
+          "lut": "lut/kodak_gold.cube",
+          "grain": "grain/grain_fine.png",
+          "grainIntensity": 0.25,
+          "temperatureShift": 150.0,
+          "chromaticAberration": 0.008,
+          "vignetteAmount": 0.20
+        }
+      },
+      {
+        "id": "gold_warm",
+        "name": "Warm Gold",
+        "isDefault": false,
+        "rendering": {
+          "lut": "lut/kodak_gold.cube",
+          "grain": "grain/grain_fine.png",
+          "grainIntensity": 0.22,
+          "temperatureShift": 300.0,
+          "chromaticAberration": 0.006,
+          "vignetteAmount": 0.18
+        }
+      }
+    ],
+    "ratios": [
+      { "id": "ratio_3_2", "name": "3:2", "value": "3:2", "isDefault": true },
+      { "id": "ratio_1_1", "name": "1:1", "value": "1:1", "isDefault": false }
+    ],
+    "watermarks": [
+      {
+        "id": "film_corner_mark",
+        "name": "Film Mark",
+        "isDefault": true,
+        "type": "camera_name",
+        "rendering": {
+          "asset": "watermarks/camera_name_mark.png",
+          "textFormat": "GOLD200",
+          "position": "bottom_left",
+          "opacity": 0.80
+        }
+      },
+      {
+        "id": "none",
+        "name": "None",
+        "isDefault": false,
+        "type": "none"
+      }
+    ]
+  },
+  "uiCapabilities": {
+    "showFilmSelector": true,
+    "showLensSelector": false,
+    "showPaperSelector": false,
+    "showRatioSelector": true,
+    "showWatermarkSelector": true
+  }
+}

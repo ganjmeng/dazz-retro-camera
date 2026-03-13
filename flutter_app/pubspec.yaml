@@ -50,4 +50,8 @@ flutter:
   
   assets:
     - assets/presets/
-    - assets/images/
+    - assets/lut/
+    - assets/grain/
+    - assets/frames/
+    - assets/watermarks/
+    - assets/thumbnails/
