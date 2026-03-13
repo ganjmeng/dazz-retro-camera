@@ -1,55 +1,137 @@
 {
   "id": "film_scan",
   "name": "Film Scan",
-  "category": "scanner",
+  "category": "film",
   "outputType": "photo",
   "isPremium": false,
   "thumbnail": "thumbnails/film_scan.png",
   "baseModel": {
-    "sensor": { "type": "scanner", "dust": 0.05 },
-    "color": { "contrast": 1.0, "saturation": 0.92 }
+    "sensor": {
+      "type": "film",
+      "dynamic_range": 12.0,
+      "noise": 0.06
+    },
+    "color": {
+      "temperature": 0,
+      "contrast": 1.02,
+      "saturation": 0.95,
+      "brightness": 0.0
+    },
+    "highlight": {
+      "halation": 0.25,
+      "rolloff": 0.40
+    }
   },
   "optionGroups": {
     "films": [
       {
-        "id": "scan_clean",
-        "name": "Clean Scan",
+        "id": "scan_standard",
+        "name": "Standard Scan",
         "isDefault": true,
         "rendering": {
           "lut": "lut/film_scan.cube",
           "grain": "grain/grain_fine.png",
           "grainIntensity": 0.15,
           "temperatureShift": 0.0,
-          "chromaticAberration": 0.003,
-          "vignetteAmount": 0.10,
-          "dustAmount": 0.0
+          "chromaticAberration": 0.002,
+          "vignetteAmount": 0.08,
+          "fadeAmount": 0.04
         }
       },
       {
-        "id": "scan_dust",
-        "name": "Dusty Scan",
+        "id": "scan_overexposed",
+        "name": "Overexposed",
+        "isDefault": false,
+        "rendering": {
+          "lut": "lut/film_scan.cube",
+          "grain": "grain/grain_fine.png",
+          "grainIntensity": 0.12,
+          "temperatureShift": 100.0,
+          "chromaticAberration": 0.003,
+          "vignetteAmount": 0.05,
+          "fadeAmount": 0.12
+        }
+      },
+      {
+        "id": "scan_bw",
+        "name": "B&W",
         "isDefault": false,
         "rendering": {
           "lut": "lut/film_scan.cube",
           "grain": "grain/grain_coarse.png",
-          "grainIntensity": 0.28,
-          "temperatureShift": -50.0,
-          "chromaticAberration": 0.008,
-          "vignetteAmount": 0.22,
-          "dustAmount": 0.15
+          "grainIntensity": 0.30,
+          "temperatureShift": 0.0,
+          "chromaticAberration": 0.0,
+          "vignetteAmount": 0.15,
+          "fadeAmount": 0.02
         }
       }
     ],
+    "lenses": [
+      {
+        "id": "scan_normal",
+        "name": "Normal",
+        "isDefault": true,
+        "rendering": {
+          "vignette": 0.08,
+          "distortion": 0.008,
+          "chromaticAberration": 0.002,
+          "bloom": 0.04
+        }
+      }
+    ],
+    "papers": [],
     "ratios": [
       { "id": "ratio_3_2", "name": "3:2", "value": "3:2", "isDefault": true },
-      { "id": "ratio_1_1", "name": "1:1", "value": "1:1", "isDefault": false }
+      { "id": "ratio_4_3", "name": "4:3", "value": "4:3", "isDefault": false },
+      { "id": "ratio_1_1", "name": "1:1", "value": "1:1", "isDefault": false },
+      { "id": "ratio_16_9", "name": "16:9", "value": "16:9", "isDefault": false }
+    ],
+    "watermarks": [
+      {
+        "id": "scan_date",
+        "name": "Date",
+        "type": "digital_date",
+        "isDefault": true,
+        "rendering": {
+          "position": "bottom_right",
+          "color": "#FFCC44",
+          "opacity": 0.85,
+          "fontSize": 12.0,
+          "renderLayer": "image"
+        }
+      },
+      {
+        "id": "none",
+        "name": "None",
+        "type": "none",
+        "isDefault": false,
+        "rendering": {}
+      }
     ]
+  },
+  "defaultSelection": {
+    "filmId": "scan_standard",
+    "lensId": "scan_normal",
+    "ratioId": "ratio_3_2",
+    "watermarkId": "scan_date"
   },
   "uiCapabilities": {
     "showFilmSelector": true,
-    "showLensSelector": false,
+    "showLensSelector": true,
     "showPaperSelector": false,
     "showRatioSelector": true,
-    "showWatermarkSelector": false
+    "showWatermarkSelector": true,
+    "showFlashButton": true,
+    "showTimerButton": true,
+    "showGridButton": true
+  },
+  "exportPolicy": {
+    "maxResolution": 4000,
+    "jpegQuality": 94,
+    "preserveMetadata": true,
+    "applyPaperComposite": false,
+    "applyWatermark": true,
+    "applyRatioCrop": true
   }
 }

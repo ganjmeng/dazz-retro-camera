@@ -6,57 +6,105 @@
   "isPremium": false,
   "thumbnail": "thumbnails/disposable_flash.png",
   "baseModel": {
-    "sensor": { "type": "film_scan" },
-    "lens": { "vignette": 0.35, "distortion": 0.04 },
-    "color": { "contrast": 1.12, "saturation": 1.05 }
+    "sensor": {
+      "type": "disposable",
+      "dynamic_range": 6.0,
+      "noise": 0.35
+    },
+    "color": {
+      "temperature": 200,
+      "contrast": 1.15,
+      "saturation": 1.08,
+      "brightness": 0.05
+    },
+    "highlight": {
+      "halation": 0.08,
+      "rolloff": 0.20
+    }
   },
   "optionGroups": {
     "films": [
       {
-        "id": "disposable_color",
-        "name": "Color Flash",
+        "id": "flash_daylight",
+        "name": "Daylight",
         "isDefault": true,
         "rendering": {
           "lut": "lut/disposable_flash.cube",
           "grain": "grain/grain_coarse.png",
-          "grainIntensity": 0.30,
-          "temperatureShift": 100.0,
+          "grainIntensity": 0.35,
+          "temperatureShift": 200.0,
+          "chromaticAberration": 0.012,
+          "vignetteAmount": 0.20,
+          "jpegArtifacts": 0.12,
+          "fadeAmount": 0.06
+        }
+      },
+      {
+        "id": "flash_indoor",
+        "name": "Indoor Flash",
+        "isDefault": false,
+        "rendering": {
+          "lut": "lut/disposable_flash.cube",
+          "grain": "grain/grain_coarse.png",
+          "grainIntensity": 0.40,
+          "temperatureShift": 350.0,
           "chromaticAberration": 0.015,
-          "vignetteAmount": 0.35,
-          "bloomAmount": 0.20,
-          "halationAmount": 0.15
+          "vignetteAmount": 0.25,
+          "jpegArtifacts": 0.15,
+          "fadeAmount": 0.08
         }
       }
     ],
+    "lenses": [],
+    "papers": [],
     "ratios": [
-      { "id": "ratio_3_2", "name": "3:2", "value": "3:2", "isDefault": true }
+      { "id": "ratio_4_3", "name": "4:3", "value": "4:3", "isDefault": true },
+      { "id": "ratio_3_2", "name": "3:2", "value": "3:2", "isDefault": false }
     ],
     "watermarks": [
       {
-        "id": "date_red",
-        "name": "Red Date",
-        "isDefault": true,
+        "id": "disposable_date",
+        "name": "Date",
         "type": "digital_date",
+        "isDefault": true,
         "rendering": {
-          "asset": "watermarks/date_stamp_orange.png",
           "position": "bottom_right",
-          "opacity": 0.95,
-          "color": "#FFFF3030"
+          "color": "#FF6600",
+          "opacity": 0.92,
+          "fontSize": 14.0,
+          "renderLayer": "image"
         }
       },
       {
         "id": "none",
         "name": "None",
+        "type": "none",
         "isDefault": false,
-        "type": "none"
+        "rendering": {}
       }
     ]
   },
+  "defaultSelection": {
+    "filmId": "flash_daylight",
+    "ratioId": "ratio_4_3",
+    "watermarkId": "disposable_date"
+  },
   "uiCapabilities": {
-    "showFilmSelector": false,
+    "showFilmSelector": true,
     "showLensSelector": false,
     "showPaperSelector": false,
-    "showRatioSelector": false,
-    "showWatermarkSelector": true
+    "showRatioSelector": true,
+    "showWatermarkSelector": true,
+    "showFlashButton": false,
+    "showTimerButton": false,
+    "showGridButton": false
+  },
+  "exportPolicy": {
+    "maxResolution": 3000,
+    "jpegQuality": 82,
+    "preserveMetadata": false,
+    "applyPaperComposite": false,
+    "applyWatermark": true,
+    "applyRatioCrop": true
   }
 }

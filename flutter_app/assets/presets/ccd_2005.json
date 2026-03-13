@@ -1,6 +1,6 @@
 {
   "id": "ccd_2005",
-  "name": "CCD-2005",
+  "name": "CCD 2005",
   "category": "digital_ccd",
   "outputType": "photo",
   "isPremium": false,
@@ -9,71 +9,130 @@
     "sensor": {
       "type": "ccd",
       "dynamic_range": 7.0,
-      "noise": 0.32
+      "noise": 0.30,
+      "colorDepth": 8.0
     },
     "color": {
-      "contrast": 1.1,
-      "saturation": 1.1
+      "temperature": -200,
+      "contrast": 1.08,
+      "saturation": 1.10,
+      "brightness": 0.02
+    },
+    "highlight": {
+      "halation": 0.05,
+      "rolloff": 0.15
     }
   },
   "optionGroups": {
     "films": [
       {
         "id": "ccd_standard",
-        "name": "Standard CCD",
+        "name": "Standard",
         "isDefault": true,
         "rendering": {
           "lut": "lut/ccd_standard.cube",
           "grain": "grain/grain_fine.png",
-          "grainIntensity": 0.25,
+          "grainIntensity": 0.22,
           "chromaticAberration": 0.018,
           "jpegArtifacts": 0.08,
-          "temperatureShift": 0.0
+          "temperatureShift": 0.0,
+          "vignetteAmount": 0.08
         }
       },
       {
         "id": "ccd_cool",
-        "name": "Cool CCD",
+        "name": "Cool",
         "isDefault": false,
         "rendering": {
           "lut": "lut/ccd_standard.cube",
           "grain": "grain/grain_fine.png",
-          "grainIntensity": 0.28,
+          "grainIntensity": 0.25,
           "chromaticAberration": 0.020,
           "jpegArtifacts": 0.06,
-          "temperatureShift": -350.0
+          "temperatureShift": -350.0,
+          "vignetteAmount": 0.10
+        }
+      },
+      {
+        "id": "ccd_warm",
+        "name": "Warm",
+        "isDefault": false,
+        "rendering": {
+          "lut": "lut/ccd_standard.cube",
+          "grain": "grain/grain_fine.png",
+          "grainIntensity": 0.20,
+          "chromaticAberration": 0.015,
+          "jpegArtifacts": 0.07,
+          "temperatureShift": 300.0,
+          "vignetteAmount": 0.06
         }
       }
     ],
+    "lenses": [],
+    "papers": [],
     "ratios": [
       { "id": "ratio_4_3", "name": "4:3", "value": "4:3", "isDefault": true },
-      { "id": "ratio_1_1", "name": "1:1", "value": "1:1", "isDefault": false }
+      { "id": "ratio_1_1", "name": "1:1", "value": "1:1", "isDefault": false },
+      { "id": "ratio_16_9", "name": "16:9", "value": "16:9", "isDefault": false }
     ],
     "watermarks": [
       {
-        "id": "ccd_date",
+        "id": "ccd_date_orange",
         "name": "Date Stamp",
-        "isDefault": true,
         "type": "digital_date",
+        "isDefault": true,
         "rendering": {
-          "asset": "watermarks/date_stamp_orange.png",
           "position": "bottom_right",
-          "opacity": 0.90
+          "color": "#FF8A3D",
+          "opacity": 0.90,
+          "fontSize": 13.0,
+          "renderLayer": "image"
+        }
+      },
+      {
+        "id": "ccd_cam_name",
+        "name": "Camera Name",
+        "type": "camera_name",
+        "isDefault": false,
+        "rendering": {
+          "textFormat": "CCD-2005",
+          "position": "bottom_left",
+          "color": "#FF8A3D",
+          "opacity": 0.80,
+          "fontSize": 11.0,
+          "renderLayer": "image"
         }
       },
       {
         "id": "none",
         "name": "None",
+        "type": "none",
         "isDefault": false,
-        "type": "none"
+        "rendering": {}
       }
     ]
+  },
+  "defaultSelection": {
+    "filmId": "ccd_standard",
+    "ratioId": "ratio_4_3",
+    "watermarkId": "ccd_date_orange"
   },
   "uiCapabilities": {
     "showFilmSelector": true,
     "showLensSelector": false,
     "showPaperSelector": false,
     "showRatioSelector": true,
-    "showWatermarkSelector": true
+    "showWatermarkSelector": true,
+    "showFlashButton": true,
+    "showTimerButton": true,
+    "showGridButton": true
+  },
+  "exportPolicy": {
+    "maxResolution": 4000,
+    "jpegQuality": 88,
+    "preserveMetadata": true,
+    "applyPaperComposite": false,
+    "applyWatermark": true,
+    "applyRatioCrop": true
   }
 }

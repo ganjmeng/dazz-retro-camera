@@ -1,0 +1,121 @@
+{
+  "id": "lomo_lca",
+  "name": "Lomo LC-A",
+  "category": "film",
+  "outputType": "photo",
+  "isPremium": false,
+  "thumbnail": "thumbnails/lomo_lca.png",
+  "baseModel": {
+    "sensor": {
+      "type": "film",
+      "dynamic_range": 9.0,
+      "noise": 0.20
+    },
+    "color": {
+      "temperature": 100,
+      "contrast": 1.20,
+      "saturation": 1.25,
+      "brightness": -0.03
+    },
+    "highlight": {
+      "halation": 0.20,
+      "rolloff": 0.28
+    }
+  },
+  "optionGroups": {
+    "films": [
+      {
+        "id": "lomo_standard",
+        "name": "Standard",
+        "isDefault": true,
+        "rendering": {
+          "lut": "lut/superia.cube",
+          "grain": "grain/grain_fine.png",
+          "grainIntensity": 0.22,
+          "temperatureShift": 100.0,
+          "chromaticAberration": 0.008,
+          "vignetteAmount": 0.30,
+          "fadeAmount": 0.04
+        }
+      },
+      {
+        "id": "lomo_cross",
+        "name": "Cross Process",
+        "isDefault": false,
+        "rendering": {
+          "lut": "lut/superia.cube",
+          "grain": "grain/grain_fine.png",
+          "grainIntensity": 0.18,
+          "temperatureShift": 250.0,
+          "chromaticAberration": 0.012,
+          "vignetteAmount": 0.35,
+          "fadeAmount": 0.02
+        }
+      }
+    ],
+    "lenses": [
+      {
+        "id": "lomo_32mm",
+        "name": "32mm",
+        "isDefault": true,
+        "rendering": {
+          "vignette": 0.30,
+          "distortion": 0.02,
+          "chromaticAberration": 0.008,
+          "bloom": 0.06
+        }
+      }
+    ],
+    "papers": [],
+    "ratios": [
+      { "id": "ratio_1_1", "name": "1:1", "value": "1:1", "isDefault": true },
+      { "id": "ratio_4_3", "name": "4:3", "value": "4:3", "isDefault": false }
+    ],
+    "watermarks": [
+      {
+        "id": "lomo_date",
+        "name": "Date",
+        "type": "digital_date",
+        "isDefault": true,
+        "rendering": {
+          "position": "bottom_right",
+          "color": "#FF6633",
+          "opacity": 0.88,
+          "fontSize": 12.0,
+          "renderLayer": "image"
+        }
+      },
+      {
+        "id": "none",
+        "name": "None",
+        "type": "none",
+        "isDefault": false,
+        "rendering": {}
+      }
+    ]
+  },
+  "defaultSelection": {
+    "filmId": "lomo_standard",
+    "lensId": "lomo_32mm",
+    "ratioId": "ratio_1_1",
+    "watermarkId": "lomo_date"
+  },
+  "uiCapabilities": {
+    "showFilmSelector": true,
+    "showLensSelector": true,
+    "showPaperSelector": false,
+    "showRatioSelector": true,
+    "showWatermarkSelector": true,
+    "showFlashButton": true,
+    "showTimerButton": true,
+    "showGridButton": true
+  },
+  "exportPolicy": {
+    "maxResolution": 3500,
+    "jpegQuality": 90,
+    "preserveMetadata": true,
+    "applyPaperComposite": false,
+    "applyWatermark": true,
+    "applyRatioCrop": true
+  }
+}

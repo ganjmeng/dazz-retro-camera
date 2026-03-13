@@ -1,56 +1,124 @@
 {
-  "id": "vhs_cam",
+  "id": "vhs_camcorder",
   "name": "VHS Camcorder",
   "category": "video",
-  "outputType": "video",
-  "isPremium": true,
+  "outputType": "photo",
+  "isPremium": false,
   "thumbnail": "thumbnails/vhs_camcorder.png",
   "baseModel": {
-    "scan": {
-      "scanlines": 0.18,
-      "interlace": true,
-      "resolution": "480p"
+    "sensor": {
+      "type": "vhs_sim",
+      "dynamic_range": 5.0,
+      "noise": 0.45
     },
-    "color": { "saturation": 0.85, "contrast": 1.05 },
-    "noise": { "luminance": 0.20, "chroma": 0.15 }
+    "color": {
+      "temperature": -100,
+      "contrast": 0.88,
+      "saturation": 0.80,
+      "brightness": -0.02
+    },
+    "highlight": {
+      "halation": 0.03,
+      "rolloff": 0.10
+    }
   },
   "optionGroups": {
+    "films": [
+      {
+        "id": "vhs_classic",
+        "name": "VHS Classic",
+        "isDefault": true,
+        "rendering": {
+          "lut": "lut/ccd_standard.cube",
+          "grain": "grain/grain_coarse.png",
+          "grainIntensity": 0.45,
+          "temperatureShift": -100.0,
+          "chromaticAberration": 0.025,
+          "vignetteAmount": 0.18,
+          "jpegArtifacts": 0.20,
+          "fadeAmount": 0.10
+        }
+      },
+      {
+        "id": "vhs_worn",
+        "name": "Worn Tape",
+        "isDefault": false,
+        "rendering": {
+          "lut": "lut/ccd_standard.cube",
+          "grain": "grain/grain_coarse.png",
+          "grainIntensity": 0.55,
+          "temperatureShift": -200.0,
+          "chromaticAberration": 0.035,
+          "vignetteAmount": 0.25,
+          "jpegArtifacts": 0.30,
+          "fadeAmount": 0.18
+        }
+      }
+    ],
+    "lenses": [],
+    "papers": [],
     "ratios": [
-      { "id": "ratio_4_3", "name": "4:3", "value": "4:3", "isDefault": true }
+      { "id": "ratio_4_3", "name": "4:3", "value": "4:3", "isDefault": true },
+      { "id": "ratio_16_9", "name": "16:9", "value": "16:9", "isDefault": false }
     ],
     "watermarks": [
       {
         "id": "rec_overlay",
-        "name": "REC Marker",
-        "isDefault": true,
+        "name": "REC",
         "type": "video_rec",
+        "isDefault": true,
         "rendering": {
-          "asset": "watermarks/rec_overlay.png",
+          "textFormat": "● REC",
           "position": "top_left",
+          "color": "#FF0000",
           "opacity": 0.90,
-          "blinkInterval": 1000
+          "fontSize": 12.0,
+          "renderLayer": "image"
         }
       },
       {
-        "id": "rec_with_date",
-        "name": "REC + Date",
+        "id": "vhs_date",
+        "name": "Date/Time",
+        "type": "digital_date",
         "isDefault": false,
-        "type": "video_rec_date",
         "rendering": {
-          "asset": "watermarks/rec_overlay.png",
-          "dateAsset": "watermarks/date_stamp_orange.png",
-          "position": "top_left",
-          "opacity": 0.90,
-          "blinkInterval": 1000
+          "position": "bottom_left",
+          "color": "#FFFFFF",
+          "opacity": 0.80,
+          "fontSize": 11.0,
+          "renderLayer": "image"
         }
+      },
+      {
+        "id": "none",
+        "name": "None",
+        "type": "none",
+        "isDefault": false,
+        "rendering": {}
       }
     ]
   },
+  "defaultSelection": {
+    "filmId": "vhs_classic",
+    "ratioId": "ratio_4_3",
+    "watermarkId": "rec_overlay"
+  },
   "uiCapabilities": {
-    "showFilmSelector": false,
+    "showFilmSelector": true,
     "showLensSelector": false,
     "showPaperSelector": false,
     "showRatioSelector": true,
-    "showWatermarkSelector": true
+    "showWatermarkSelector": true,
+    "showFlashButton": false,
+    "showTimerButton": false,
+    "showGridButton": false
+  },
+  "exportPolicy": {
+    "maxResolution": 2000,
+    "jpegQuality": 80,
+    "preserveMetadata": false,
+    "applyPaperComposite": false,
+    "applyWatermark": true,
+    "applyRatioCrop": true
   }
 }

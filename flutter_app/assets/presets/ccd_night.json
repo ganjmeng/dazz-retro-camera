@@ -1,37 +1,110 @@
 {
-  "id": "ccd_night_01",
+  "id": "ccd_night",
   "name": "CCD Night",
-  "category": "CCD",
-  "supportsPhoto": true,
-  "supportsVideo": true,
-  "isPremium": true,
-  "resources": {
-    "lutName": "lut_ccd_night.png",
-    "grainTextureName": "grain_coarse.png",
-    "leakTextureNames": [],
-    "frameOverlayName": null
-  },
-  "params": {
-    "exposureBias": 0.8,
-    "contrast": 1.3,
-    "saturation": 1.2,
-    "temperatureShift": -200.0,
-    "tintShift": 15.0,
-    "sharpen": 0.3,
-    "blurRadius": 1.5,
-    "grainAmount": 0.45,
-    "noiseAmount": 0.35,
-    "vignetteAmount": 0.55,
-    "chromaticAberration": 0.025,
-    "bloomAmount": 0.6,
-    "halationAmount": 0.35,
-    "jpegArtifacts": 0.12,
-    "scanlineAmount": 0.0,
-    "dateStamp": {
-      "enabled": true,
-      "format": "yyyy MM dd",
-      "color": "#FFFFA500",
-      "position": "bottomRight"
+  "category": "digital_ccd",
+  "outputType": "photo",
+  "isPremium": false,
+  "thumbnail": "thumbnails/ccd_night.png",
+  "baseModel": {
+    "sensor": {
+      "type": "ccd",
+      "dynamic_range": 6.0,
+      "noise": 0.50
+    },
+    "color": {
+      "temperature": -400,
+      "contrast": 0.90,
+      "saturation": 0.75,
+      "brightness": -0.05
+    },
+    "highlight": {
+      "halation": 0.08,
+      "rolloff": 0.15
     }
+  },
+  "optionGroups": {
+    "films": [
+      {
+        "id": "night_blue",
+        "name": "Night Blue",
+        "isDefault": true,
+        "rendering": {
+          "lut": "lut/ccd_standard.cube",
+          "grain": "grain/grain_coarse.png",
+          "grainIntensity": 0.50,
+          "temperatureShift": -400.0,
+          "chromaticAberration": 0.030,
+          "vignetteAmount": 0.25,
+          "jpegArtifacts": 0.15,
+          "fadeAmount": 0.05
+        }
+      },
+      {
+        "id": "night_warm",
+        "name": "Night Warm",
+        "isDefault": false,
+        "rendering": {
+          "lut": "lut/ccd_standard.cube",
+          "grain": "grain/grain_coarse.png",
+          "grainIntensity": 0.45,
+          "temperatureShift": 100.0,
+          "chromaticAberration": 0.025,
+          "vignetteAmount": 0.22,
+          "jpegArtifacts": 0.12,
+          "fadeAmount": 0.04
+        }
+      }
+    ],
+    "lenses": [],
+    "papers": [],
+    "ratios": [
+      { "id": "ratio_4_3", "name": "4:3", "value": "4:3", "isDefault": true },
+      { "id": "ratio_1_1", "name": "1:1", "value": "1:1", "isDefault": false }
+    ],
+    "watermarks": [
+      {
+        "id": "night_date",
+        "name": "Date",
+        "type": "digital_date",
+        "isDefault": true,
+        "rendering": {
+          "position": "bottom_right",
+          "color": "#88AAFF",
+          "opacity": 0.85,
+          "fontSize": 13.0,
+          "renderLayer": "image"
+        }
+      },
+      {
+        "id": "none",
+        "name": "None",
+        "type": "none",
+        "isDefault": false,
+        "rendering": {}
+      }
+    ]
+  },
+  "defaultSelection": {
+    "filmId": "night_blue",
+    "ratioId": "ratio_4_3",
+    "watermarkId": "night_date"
+  },
+  "uiCapabilities": {
+    "showFilmSelector": true,
+    "showLensSelector": false,
+    "showPaperSelector": false,
+    "showRatioSelector": true,
+    "showWatermarkSelector": true,
+    "showFlashButton": true,
+    "showTimerButton": true,
+    "showGridButton": true
+  },
+  "exportPolicy": {
+    "maxResolution": 3000,
+    "jpegQuality": 85,
+    "preserveMetadata": false,
+    "applyPaperComposite": false,
+    "applyWatermark": true,
+    "applyRatioCrop": true
   }
 }

@@ -1,53 +1,147 @@
 {
   "id": "fuji_superia",
-  "name": "Superia",
+  "name": "Fuji Superia",
   "category": "film",
   "outputType": "photo",
   "isPremium": false,
   "thumbnail": "thumbnails/fuji_superia.png",
   "baseModel": {
-    "sensor": { "type": "film_scan" },
-    "color": { "saturation": 1.08, "contrast": 1.02 }
+    "sensor": {
+      "type": "film",
+      "dynamic_range": 11.0,
+      "noise": 0.08
+    },
+    "color": {
+      "temperature": 50,
+      "contrast": 1.05,
+      "saturation": 1.12,
+      "brightness": 0.0
+    },
+    "highlight": {
+      "halation": 0.18,
+      "rolloff": 0.35
+    }
   },
   "optionGroups": {
     "films": [
       {
-        "id": "superia_green",
-        "name": "Superia",
+        "id": "superia_200",
+        "name": "Superia 200",
         "isDefault": true,
         "rendering": {
           "lut": "lut/superia.cube",
           "grain": "grain/grain_fine.png",
-          "grainIntensity": 0.22,
-          "temperatureShift": -80.0,
-          "chromaticAberration": 0.006,
-          "vignetteAmount": 0.15
+          "grainIntensity": 0.18,
+          "temperatureShift": 50.0,
+          "chromaticAberration": 0.003,
+          "vignetteAmount": 0.12,
+          "fadeAmount": 0.02
         }
       },
       {
-        "id": "superia_soft",
-        "name": "Soft Superia",
+        "id": "superia_400",
+        "name": "Superia 400",
+        "isDefault": false,
+        "rendering": {
+          "lut": "lut/superia.cube",
+          "grain": "grain/grain_coarse.png",
+          "grainIntensity": 0.28,
+          "temperatureShift": 30.0,
+          "chromaticAberration": 0.004,
+          "vignetteAmount": 0.14,
+          "fadeAmount": 0.03
+        }
+      },
+      {
+        "id": "superia_xtra",
+        "name": "Superia Xtra",
         "isDefault": false,
         "rendering": {
           "lut": "lut/superia.cube",
           "grain": "grain/grain_fine.png",
-          "grainIntensity": 0.18,
-          "temperatureShift": -50.0,
-          "chromaticAberration": 0.004,
+          "grainIntensity": 0.15,
+          "temperatureShift": 80.0,
+          "chromaticAberration": 0.002,
           "vignetteAmount": 0.10,
-          "bloomAmount": 0.08
+          "fadeAmount": 0.0
         }
       }
     ],
+    "lenses": [
+      {
+        "id": "standard_35mm",
+        "name": "35mm",
+        "isDefault": true,
+        "rendering": {
+          "vignette": 0.12,
+          "distortion": 0.01,
+          "chromaticAberration": 0.003,
+          "bloom": 0.05
+        }
+      },
+      {
+        "id": "wide_28mm",
+        "name": "28mm Wide",
+        "isDefault": false,
+        "rendering": {
+          "vignette": 0.20,
+          "distortion": 0.04,
+          "chromaticAberration": 0.006,
+          "bloom": 0.03
+        }
+      }
+    ],
+    "papers": [],
     "ratios": [
-      { "id": "ratio_3_2", "name": "3:2", "value": "3:2", "isDefault": true }
+      { "id": "ratio_3_2", "name": "3:2", "value": "3:2", "isDefault": true },
+      { "id": "ratio_1_1", "name": "1:1", "value": "1:1", "isDefault": false },
+      { "id": "ratio_16_9", "name": "16:9", "value": "16:9", "isDefault": false }
+    ],
+    "watermarks": [
+      {
+        "id": "film_date",
+        "name": "Date",
+        "type": "digital_date",
+        "isDefault": true,
+        "rendering": {
+          "position": "bottom_right",
+          "color": "#FFCC44",
+          "opacity": 0.85,
+          "fontSize": 12.0,
+          "renderLayer": "image"
+        }
+      },
+      {
+        "id": "none",
+        "name": "None",
+        "type": "none",
+        "isDefault": false,
+        "rendering": {}
+      }
     ]
+  },
+  "defaultSelection": {
+    "filmId": "superia_200",
+    "lensId": "standard_35mm",
+    "ratioId": "ratio_3_2",
+    "watermarkId": "film_date"
   },
   "uiCapabilities": {
     "showFilmSelector": true,
-    "showLensSelector": false,
+    "showLensSelector": true,
     "showPaperSelector": false,
     "showRatioSelector": true,
-    "showWatermarkSelector": false
+    "showWatermarkSelector": true,
+    "showFlashButton": true,
+    "showTimerButton": true,
+    "showGridButton": true
+  },
+  "exportPolicy": {
+    "maxResolution": 4000,
+    "jpegQuality": 92,
+    "preserveMetadata": true,
+    "applyPaperComposite": false,
+    "applyWatermark": true,
+    "applyRatioCrop": true
   }
 }

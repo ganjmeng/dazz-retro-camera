@@ -2,68 +2,104 @@
   "id": "polaroid_classic",
   "name": "Polaroid Classic",
   "category": "instant",
-  "outputType": "photo",
-  "isPremium": true,
+  "outputType": "instant",
+  "isPremium": false,
   "thumbnail": "thumbnails/polaroid_classic.png",
   "baseModel": {
-    "sensor": { "type": "instant" },
-    "color": { "contrast": 0.90, "saturation": 0.95 }
+    "sensor": {
+      "type": "instant_sim",
+      "dynamic_range": 6.5,
+      "noise": 0.12
+    },
+    "color": {
+      "temperature": 80,
+      "contrast": 0.92,
+      "saturation": 0.94,
+      "brightness": 0.03
+    },
+    "highlight": {
+      "halation": 0.12,
+      "rolloff": 0.25
+    }
   },
   "optionGroups": {
     "films": [
       {
-        "id": "polaroid_default",
+        "id": "instant_classic",
         "name": "Classic",
         "isDefault": true,
         "rendering": {
           "lut": "lut/instant_polaroid.cube",
           "grain": "grain/grain_fine.png",
-          "grainIntensity": 0.12,
+          "grainIntensity": 0.10,
           "temperatureShift": 80.0,
           "chromaticAberration": 0.005,
-          "vignetteAmount": 0.12
+          "vignetteAmount": 0.08,
+          "fadeAmount": 0.05
+        }
+      },
+      {
+        "id": "instant_fade",
+        "name": "Faded",
+        "isDefault": false,
+        "rendering": {
+          "lut": "lut/instant_polaroid.cube",
+          "grain": "grain/grain_fine.png",
+          "grainIntensity": 0.12,
+          "temperatureShift": 120.0,
+          "chromaticAberration": 0.008,
+          "vignetteAmount": 0.10,
+          "fadeAmount": 0.18
         }
       }
     ],
     "lenses": [
       {
         "id": "soft_lens",
-        "name": "Soft Lens",
+        "name": "Soft",
         "isDefault": true,
         "rendering": {
-          "bloom": 0.15,
           "vignette": 0.10,
-          "blurRadius": 0.8
+          "bloom": 0.12,
+          "blurRadius": 0.5
         }
       },
       {
-        "id": "wide_lens",
-        "name": "Wide Lens",
+        "id": "sharp_lens",
+        "name": "Sharp",
         "isDefault": false,
         "rendering": {
-          "bloom": 0.05,
-          "vignette": 0.18,
-          "distortion": 0.03
+          "vignette": 0.15,
+          "bloom": 0.04,
+          "blurRadius": 0.0
         }
       }
     ],
     "papers": [
       {
-        "id": "white_border",
-        "name": "White Border",
+        "id": "polaroid_white",
+        "name": "White",
         "isDefault": true,
         "rendering": {
-          "frame": "frames/polaroid_white_frame.png",
-          "frameScale": 1.0
+          "frameAsset": "frames/polaroid_white_frame.png",
+          "backgroundColor": "#FFFFFF",
+          "marginTop": 0.04,
+          "marginBottom": 0.22,
+          "marginLeft": 0.04,
+          "marginRight": 0.04
         }
       },
       {
-        "id": "cream_border",
-        "name": "Cream Border",
+        "id": "polaroid_cream",
+        "name": "Cream",
         "isDefault": false,
         "rendering": {
-          "frame": "frames/polaroid_cream_frame.png",
-          "frameScale": 1.0
+          "frameAsset": "frames/polaroid_cream_frame.png",
+          "backgroundColor": "#F5F0E8",
+          "marginTop": 0.04,
+          "marginBottom": 0.22,
+          "marginLeft": 0.04,
+          "marginRight": 0.04
         }
       }
     ],
@@ -73,28 +109,63 @@
     "watermarks": [
       {
         "id": "instant_footer",
-        "name": "Footer Mark",
-        "isDefault": true,
+        "name": "Footer",
         "type": "frame_text",
+        "isDefault": true,
         "rendering": {
           "textFormat": "POLAROID",
           "position": "frame_bottom",
-          "opacity": 0.85
+          "color": "#888888",
+          "opacity": 0.70,
+          "fontSize": 10.0,
+          "renderLayer": "frame"
+        }
+      },
+      {
+        "id": "instant_date",
+        "name": "Date",
+        "type": "digital_date",
+        "isDefault": false,
+        "rendering": {
+          "position": "frame_bottom",
+          "color": "#888888",
+          "opacity": 0.70,
+          "fontSize": 10.0,
+          "renderLayer": "frame"
         }
       },
       {
         "id": "none",
         "name": "None",
+        "type": "none",
         "isDefault": false,
-        "type": "none"
+        "rendering": {}
       }
     ]
+  },
+  "defaultSelection": {
+    "filmId": "instant_classic",
+    "lensId": "soft_lens",
+    "paperId": "polaroid_white",
+    "ratioId": "ratio_1_1",
+    "watermarkId": "instant_footer"
   },
   "uiCapabilities": {
     "showFilmSelector": true,
     "showLensSelector": true,
     "showPaperSelector": true,
     "showRatioSelector": false,
-    "showWatermarkSelector": true
+    "showWatermarkSelector": true,
+    "showFlashButton": true,
+    "showTimerButton": true,
+    "showGridButton": false
+  },
+  "exportPolicy": {
+    "maxResolution": 3000,
+    "jpegQuality": 90,
+    "preserveMetadata": false,
+    "applyPaperComposite": true,
+    "applyWatermark": true,
+    "applyRatioCrop": true
   }
 }

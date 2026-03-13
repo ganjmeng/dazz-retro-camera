@@ -1,16 +1,62 @@
 {
   "id": "dv2003",
-  "name": "DV-2003",
-  "category": "video",
-  "outputType": "video",
+  "name": "DV 2003",
+  "category": "digital_ccd",
+  "outputType": "photo",
   "isPremium": false,
   "thumbnail": "thumbnails/dv2003.png",
   "baseModel": {
-    "noise": { "luminance": 0.25, "chroma": 0.10 },
-    "color": { "saturation": 0.90, "contrast": 1.08 },
-    "scan": { "scanlines": 0.05, "resolution": "720p" }
+    "sensor": {
+      "type": "ccd",
+      "dynamic_range": 6.5,
+      "noise": 0.28
+    },
+    "color": {
+      "temperature": -150,
+      "contrast": 1.05,
+      "saturation": 0.92,
+      "brightness": 0.0
+    },
+    "highlight": {
+      "halation": 0.04,
+      "rolloff": 0.12
+    }
   },
   "optionGroups": {
+    "films": [
+      {
+        "id": "dv_standard",
+        "name": "Standard",
+        "isDefault": true,
+        "rendering": {
+          "lut": "lut/ccd_standard.cube",
+          "grain": "grain/grain_fine.png",
+          "grainIntensity": 0.18,
+          "temperatureShift": -150.0,
+          "chromaticAberration": 0.020,
+          "vignetteAmount": 0.12,
+          "jpegArtifacts": 0.10,
+          "fadeAmount": 0.03
+        }
+      },
+      {
+        "id": "dv_night",
+        "name": "Night Mode",
+        "isDefault": false,
+        "rendering": {
+          "lut": "lut/ccd_standard.cube",
+          "grain": "grain/grain_coarse.png",
+          "grainIntensity": 0.40,
+          "temperatureShift": -300.0,
+          "chromaticAberration": 0.028,
+          "vignetteAmount": 0.22,
+          "jpegArtifacts": 0.18,
+          "fadeAmount": 0.05
+        }
+      }
+    ],
+    "lenses": [],
+    "papers": [],
     "ratios": [
       { "id": "ratio_4_3", "name": "4:3", "value": "4:3", "isDefault": true },
       { "id": "ratio_16_9", "name": "16:9", "value": "16:9", "isDefault": false }
@@ -18,28 +64,47 @@
     "watermarks": [
       {
         "id": "dv_date",
-        "name": "Date Stamp",
-        "isDefault": true,
+        "name": "Date/Time",
         "type": "digital_date",
+        "isDefault": true,
         "rendering": {
-          "asset": "watermarks/date_stamp_orange.png",
-          "position": "bottom_left",
-          "opacity": 0.85
+          "position": "bottom_right",
+          "color": "#FF8A3D",
+          "opacity": 0.88,
+          "fontSize": 12.0,
+          "renderLayer": "image"
         }
       },
       {
         "id": "none",
         "name": "None",
+        "type": "none",
         "isDefault": false,
-        "type": "none"
+        "rendering": {}
       }
     ]
   },
+  "defaultSelection": {
+    "filmId": "dv_standard",
+    "ratioId": "ratio_4_3",
+    "watermarkId": "dv_date"
+  },
   "uiCapabilities": {
-    "showFilmSelector": false,
+    "showFilmSelector": true,
     "showLensSelector": false,
     "showPaperSelector": false,
     "showRatioSelector": true,
-    "showWatermarkSelector": true
+    "showWatermarkSelector": true,
+    "showFlashButton": true,
+    "showTimerButton": true,
+    "showGridButton": false
+  },
+  "exportPolicy": {
+    "maxResolution": 3000,
+    "jpegQuality": 85,
+    "preserveMetadata": false,
+    "applyPaperComposite": false,
+    "applyWatermark": true,
+    "applyRatioCrop": true
   }
 }

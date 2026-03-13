@@ -131,10 +131,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "setZoom"         -> handleSetZoom(call, result)
             "setExposure"     -> handleSetExposure(call, result)
             "setFlash"        -> handleSetFlash(call, result)
-            "startRecording"  -> handleStartRecording(result)
-            "stopRecording"   -> handleStopRecording(result)
-            "dispose"         -> handleDispose(result)
-            else              -> result.notImplemented()
+            "startRecording"   -> handleStartRecording(result)
+            "stopRecording"    -> handleStopRecording(result)
+            "dispose"          -> handleDispose(result)
+            "readImageBytes"   -> handleReadImageBytes(call, result)
+            "writeImageBytes"  -> handleWriteImageBytes(call, result)
+            else               -> result.notImplemented()
         }
     }
 
@@ -448,6 +450,60 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private fun handleDispose(result: MethodChannel.Result) {
         releaseCamera()
         result.success(null)
+    }
+
+    // ─────────────────────────────────────────────
+    // readImageBytes / writeImageBytes
+    // ─────────────────────────────────────────────
+
+    private fun handleReadImageBytes(call: MethodCall, result: MethodChannel.Result) {
+        val uriStr = call.argument<String>("uri") ?: run {
+            result.error("INVALID_ARG", "uri is required", null)
+            return
+        }
+        bgExecutor.execute {
+            try {
+                val uri = android.net.Uri.parse(uriStr)
+                val context = flutterPluginBinding.applicationContext
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                val mainExec = ContextCompat.getMainExecutor(context)
+                mainExec.execute {
+                    if (bytes != null) {
+                        result.success(mapOf("bytes" to bytes.toList()))
+                    } else {
+                        result.error("READ_FAILED", "Could not open stream for URI: $uriStr", null)
+                    }
+                }
+            } catch (e: Exception) {
+                val mainExec = ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
+                mainExec.execute { result.error("READ_FAILED", e.message, null) }
+            }
+        }
+    }
+
+    private fun handleWriteImageBytes(call: MethodCall, result: MethodChannel.Result) {
+        val uriStr = call.argument<String>("uri") ?: run {
+            result.error("INVALID_ARG", "uri is required", null)
+            return
+        }
+        @Suppress("UNCHECKED_CAST")
+        val byteList = call.argument<List<Int>>("bytes") ?: run {
+            result.error("INVALID_ARG", "bytes is required", null)
+            return
+        }
+        bgExecutor.execute {
+            try {
+                val uri = android.net.Uri.parse(uriStr)
+                val context = flutterPluginBinding.applicationContext
+                val bytes = ByteArray(byteList.size) { byteList[it].toByte() }
+                context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
+                val mainExec = ContextCompat.getMainExecutor(context)
+                mainExec.execute { result.success(null) }
+            } catch (e: Exception) {
+                val mainExec = ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
+                mainExec.execute { result.error("WRITE_FAILED", e.message, null) }
+            }
+        }
     }
 
     // ─────────────────────────────────────────────

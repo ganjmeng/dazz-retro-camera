@@ -1,0 +1,149 @@
+{
+  "id": "kodak_gold",
+  "name": "Kodak Gold",
+  "category": "film",
+  "outputType": "photo",
+  "isPremium": false,
+  "thumbnail": "thumbnails/film_gold200.png",
+  "baseModel": {
+    "sensor": {
+      "type": "film",
+      "dynamic_range": 10.5,
+      "noise": 0.10
+    },
+    "color": {
+      "temperature": 150,
+      "contrast": 1.10,
+      "saturation": 1.15,
+      "brightness": 0.02
+    },
+    "highlight": {
+      "halation": 0.22,
+      "rolloff": 0.30
+    }
+  },
+  "optionGroups": {
+    "films": [
+      {
+        "id": "gold_200",
+        "name": "Gold 200",
+        "isDefault": true,
+        "rendering": {
+          "lut": "lut/kodak_gold.cube",
+          "grain": "grain/grain_fine.png",
+          "grainIntensity": 0.20,
+          "temperatureShift": 150.0,
+          "chromaticAberration": 0.004,
+          "vignetteAmount": 0.10,
+          "fadeAmount": 0.03
+        }
+      },
+      {
+        "id": "gold_400",
+        "name": "Gold 400",
+        "isDefault": false,
+        "rendering": {
+          "lut": "lut/kodak_gold.cube",
+          "grain": "grain/grain_coarse.png",
+          "grainIntensity": 0.30,
+          "temperatureShift": 120.0,
+          "chromaticAberration": 0.005,
+          "vignetteAmount": 0.12,
+          "fadeAmount": 0.04
+        }
+      },
+      {
+        "id": "ultramax",
+        "name": "Ultramax 400",
+        "isDefault": false,
+        "rendering": {
+          "lut": "lut/kodak_gold.cube",
+          "grain": "grain/grain_coarse.png",
+          "grainIntensity": 0.25,
+          "temperatureShift": 200.0,
+          "chromaticAberration": 0.003,
+          "vignetteAmount": 0.08,
+          "fadeAmount": 0.01
+        }
+      }
+    ],
+    "lenses": [
+      {
+        "id": "normal_50mm",
+        "name": "50mm",
+        "isDefault": true,
+        "rendering": {
+          "vignette": 0.10,
+          "distortion": 0.005,
+          "chromaticAberration": 0.003,
+          "bloom": 0.06,
+          "flare": 0.03
+        }
+      },
+      {
+        "id": "portrait_85mm",
+        "name": "85mm Portrait",
+        "isDefault": false,
+        "rendering": {
+          "vignette": 0.08,
+          "distortion": 0.002,
+          "chromaticAberration": 0.002,
+          "bloom": 0.08,
+          "blurRadius": 0.3
+        }
+      }
+    ],
+    "papers": [],
+    "ratios": [
+      { "id": "ratio_3_2", "name": "3:2", "value": "3:2", "isDefault": true },
+      { "id": "ratio_4_3", "name": "4:3", "value": "4:3", "isDefault": false },
+      { "id": "ratio_1_1", "name": "1:1", "value": "1:1", "isDefault": false }
+    ],
+    "watermarks": [
+      {
+        "id": "kodak_date",
+        "name": "Date",
+        "type": "digital_date",
+        "isDefault": true,
+        "rendering": {
+          "position": "bottom_right",
+          "color": "#FFAA00",
+          "opacity": 0.88,
+          "fontSize": 13.0,
+          "renderLayer": "image"
+        }
+      },
+      {
+        "id": "none",
+        "name": "None",
+        "type": "none",
+        "isDefault": false,
+        "rendering": {}
+      }
+    ]
+  },
+  "defaultSelection": {
+    "filmId": "gold_200",
+    "lensId": "normal_50mm",
+    "ratioId": "ratio_3_2",
+    "watermarkId": "kodak_date"
+  },
+  "uiCapabilities": {
+    "showFilmSelector": true,
+    "showLensSelector": true,
+    "showPaperSelector": false,
+    "showRatioSelector": true,
+    "showWatermarkSelector": true,
+    "showFlashButton": true,
+    "showTimerButton": true,
+    "showGridButton": true
+  },
+  "exportPolicy": {
+    "maxResolution": 4000,
+    "jpegQuality": 92,
+    "preserveMetadata": true,
+    "applyPaperComposite": false,
+    "applyWatermark": true,
+    "applyRatioCrop": true
+  }
+}

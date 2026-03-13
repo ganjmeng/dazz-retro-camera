@@ -1,62 +1,133 @@
 {
   "id": "portrait_soft",
-  "name": "Soft Portrait",
-  "category": "film",
+  "name": "Portrait Soft",
+  "category": "digital_ccd",
   "outputType": "photo",
   "isPremium": false,
   "thumbnail": "thumbnails/portrait_soft.png",
   "baseModel": {
-    "sensor": { "type": "film_scan" },
-    "color": { "contrast": 0.95, "saturation": 0.98 }
+    "sensor": {
+      "type": "ccd",
+      "dynamic_range": 8.0,
+      "noise": 0.15
+    },
+    "color": {
+      "temperature": 200,
+      "contrast": 0.95,
+      "saturation": 0.90,
+      "brightness": 0.05
+    },
+    "highlight": {
+      "halation": 0.15,
+      "rolloff": 0.30
+    }
   },
   "optionGroups": {
     "films": [
       {
-        "id": "portra",
-        "name": "Portra",
+        "id": "portrait_warm",
+        "name": "Warm Skin",
         "isDefault": true,
         "rendering": {
           "lut": "lut/soft_portrait.cube",
           "grain": "grain/grain_fine.png",
-          "grainIntensity": 0.18,
-          "temperatureShift": 120.0,
-          "chromaticAberration": 0.004,
-          "vignetteAmount": 0.15
+          "grainIntensity": 0.12,
+          "temperatureShift": 200.0,
+          "chromaticAberration": 0.003,
+          "vignetteAmount": 0.08,
+          "fadeAmount": 0.06
+        }
+      },
+      {
+        "id": "portrait_cool",
+        "name": "Cool Skin",
+        "isDefault": false,
+        "rendering": {
+          "lut": "lut/soft_portrait.cube",
+          "grain": "grain/grain_fine.png",
+          "grainIntensity": 0.10,
+          "temperatureShift": -100.0,
+          "chromaticAberration": 0.002,
+          "vignetteAmount": 0.06,
+          "fadeAmount": 0.04
         }
       }
     ],
     "lenses": [
       {
-        "id": "soft_focus",
-        "name": "Soft Focus",
+        "id": "portrait_85mm",
+        "name": "85mm Portrait",
         "isDefault": true,
         "rendering": {
-          "bloom": 0.12,
+          "vignette": 0.08,
+          "bloom": 0.10,
           "blurRadius": 0.6,
-          "vignette": 0.10
+          "chromaticAberration": 0.002
         }
       },
       {
-        "id": "normal_lens",
-        "name": "Normal",
+        "id": "portrait_50mm",
+        "name": "50mm Normal",
         "isDefault": false,
         "rendering": {
-          "bloom": 0.0,
-          "blurRadius": 0.0,
-          "vignette": 0.08
+          "vignette": 0.06,
+          "bloom": 0.06,
+          "blurRadius": 0.2,
+          "chromaticAberration": 0.002
         }
       }
     ],
+    "papers": [],
     "ratios": [
-      { "id": "ratio_3_2", "name": "3:2", "value": "3:2", "isDefault": true },
-      { "id": "ratio_4_5", "name": "4:5", "value": "4:5", "isDefault": false }
+      { "id": "ratio_4_3", "name": "4:3", "value": "4:3", "isDefault": true },
+      { "id": "ratio_3_2", "name": "3:2", "value": "3:2", "isDefault": false },
+      { "id": "ratio_1_1", "name": "1:1", "value": "1:1", "isDefault": false }
+    ],
+    "watermarks": [
+      {
+        "id": "portrait_date",
+        "name": "Date",
+        "type": "digital_date",
+        "isDefault": false,
+        "rendering": {
+          "position": "bottom_right",
+          "color": "#FFCC88",
+          "opacity": 0.80,
+          "fontSize": 12.0,
+          "renderLayer": "image"
+        }
+      },
+      {
+        "id": "none",
+        "name": "None",
+        "type": "none",
+        "isDefault": true,
+        "rendering": {}
+      }
     ]
+  },
+  "defaultSelection": {
+    "filmId": "portrait_warm",
+    "lensId": "portrait_85mm",
+    "ratioId": "ratio_4_3",
+    "watermarkId": "none"
   },
   "uiCapabilities": {
     "showFilmSelector": true,
     "showLensSelector": true,
     "showPaperSelector": false,
     "showRatioSelector": true,
-    "showWatermarkSelector": false
+    "showWatermarkSelector": true,
+    "showFlashButton": true,
+    "showTimerButton": true,
+    "showGridButton": true
+  },
+  "exportPolicy": {
+    "maxResolution": 4000,
+    "jpegQuality": 92,
+    "preserveMetadata": true,
+    "applyPaperComposite": false,
+    "applyWatermark": true,
+    "applyRatioCrop": true
   }
 }
