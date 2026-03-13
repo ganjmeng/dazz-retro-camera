@@ -43,13 +43,14 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cameraManager = CameraSessionManager()
         renderer = MetalRenderer(registry: textureRegistry!)
         
-        cameraManager?.setSampleBufferDelegate(renderer!)
+        // Register texture with Flutter
+        let textureId = textureRegistry!.register(renderer!)
+        renderer?.setTextureId(textureId)
         
-        if let textureId = renderer?.textureId {
-            result(["textureId": textureId])
-        } else {
-            result(FlutterError(code: "1001", message: "Failed to create texture", details: nil))
-        }
+        cameraManager?.sampleBufferDelegate = renderer!
+        cameraManager?.configure()
+        
+        result(["textureId": textureId])
     }
     
     private func handleSetPreset(call: FlutterMethodCall, result: @escaping FlutterResult) {

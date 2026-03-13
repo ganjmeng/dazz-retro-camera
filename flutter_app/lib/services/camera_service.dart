@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../models/preset.dart';
 import '../core/constants.dart';
 
@@ -54,6 +55,23 @@ class CameraService extends StateNotifier<CameraState> {
   /// 初始化相机，获取 Texture ID 并开始预览
   Future<void> initCamera() async {
     state = state.copyWith(isLoading: true, error: null);
+    
+    // 检查并请求权限
+    final statuses = await [
+      Permission.camera,
+      Permission.microphone,
+      Permission.storage,
+    ].request();
+    
+    final hasPermissions = statuses[Permission.camera]?.isGranted == true;
+    if (!hasPermissions) {
+      state = state.copyWith(
+        isLoading: false, 
+        error: 'Camera permission denied. Please grant permission in settings.',
+      );
+      return;
+    }
+
     try {
       // 监听原生事件流
       _eventChannel.receiveBroadcastStream().listen(_onNativeEvent);
