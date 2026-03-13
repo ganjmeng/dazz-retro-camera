@@ -347,6 +347,7 @@ class Preset {
       };
       rawOptionGroups.forEach((key, value) {
         if (value is List) {
+          final keyStr = key.toString();
           final items = value
               .map((e) => OptionItem.fromJson(e as Map<String, dynamic>))
               .toList();
@@ -355,8 +356,8 @@ class Preset {
             orElse: () => items.isNotEmpty ? items.first : const OptionItem(id: '', name: ''),
           );
           optionGroupsList.add(OptionGroup(
-            type: key as String,
-            label: labelMap[key] ?? key as String,
+            type: keyStr,
+            label: labelMap[keyStr] ?? keyStr,
             defaultId: defaultItem.id,
             items: items,
           ));

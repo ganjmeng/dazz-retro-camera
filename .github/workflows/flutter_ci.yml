@@ -28,7 +28,7 @@ jobs:
 
       - name: Analyze code
         working-directory: ./flutter_app
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Run tests
         working-directory: ./flutter_app

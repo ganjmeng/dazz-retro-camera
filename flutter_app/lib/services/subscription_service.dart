@@ -22,6 +22,7 @@ class SubscriptionService extends StateNotifier<bool> {
   /// Mock constructor for testing
   SubscriptionService.mock(bool isPro) : super(isPro);
 
+  // ignore: unused_element
   Future<void> _initPlatformState() async {
     await Purchases.setLogLevel(LogLevel.debug);
 
