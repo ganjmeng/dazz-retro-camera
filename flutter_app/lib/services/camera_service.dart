@@ -123,6 +123,15 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
+  /// 设置闪光灯模式 ('off' | 'on' | 'auto')
+  Future<void> setFlash(String mode) async {
+    try {
+      await _channel.invokeMethod('setFlash', {'mode': mode});
+    } catch (e) {
+      print('Error setting flash: $e');
+    }
+  }
+
   /// 切换前后置摄像头
   Future<void> switchLens() async {
     final newLens = state.currentLens == 'back' ? 'front' : 'back';

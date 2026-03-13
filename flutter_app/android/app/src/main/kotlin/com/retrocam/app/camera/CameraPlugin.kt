@@ -1,7 +1,11 @@
 package com.retrocam.app.camera
 
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.SurfaceTexture
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
 import androidx.camera.core.*
@@ -28,6 +32,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         private const val TAG = "CameraPlugin"
         private const val METHOD_CHANNEL = "com.retrocam.app/camera_control"
         private const val EVENT_CHANNEL = "com.retrocam.app/camera_events"
+        private const val DAZZ_ALBUM = "DAZZ"
     }
 
     // Flutter bindings
@@ -123,6 +128,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "setPreset"       -> handleSetPreset(call, result)
             "switchLens"      -> handleSwitchLens(call, result)
             "takePhoto"       -> handleTakePhoto(call, result)
+            "setZoom"         -> handleSetZoom(call, result)
+            "setExposure"     -> handleSetExposure(call, result)
+            "setFlash"        -> handleSetFlash(call, result)
             "startRecording"  -> handleStartRecording(result)
             "stopRecording"   -> handleStopRecording(result)
             "dispose"         -> handleDispose(result)
@@ -152,14 +160,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         textureEntry = entry
         surfaceTexture = entry.surfaceTexture()
 
-        // Use background thread to get CameraProvider (blocking call), then bind on main thread
         bgExecutor.execute {
             try {
-                // ProcessCameraProvider.getInstance().get() blocks until ready
                 val provider = ProcessCameraProvider.getInstance(context).get()
                 cameraProvider = provider
 
-                // Must bind to lifecycle on main thread
                 val mainExecutor = ContextCompat.getMainExecutor(context)
                 mainExecutor.execute {
                     try {
@@ -191,7 +196,6 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             .requireLensFacing(lensFacing)
             .build()
 
-        // Preview use case – attach to Flutter SurfaceTexture
         preview = Preview.Builder().build().also { prev ->
             prev.setSurfaceProvider { request ->
                 st.setDefaultBufferSize(
@@ -203,12 +207,10 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             }
         }
 
-        // ImageCapture use case
         imageCapture = ImageCapture.Builder()
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             .build()
 
-        // VideoCapture use case
         val recorder = Recorder.Builder()
             .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
             .build()
@@ -229,7 +231,6 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     // ─────────────────────────────────────────────
 
     private fun handleStartPreview(result: MethodChannel.Result) {
-        // Preview is already running once bound; nothing extra needed
         result.success(null)
     }
 
@@ -277,7 +278,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     }
 
     // ─────────────────────────────────────────────
-    // takePhoto
+    // takePhoto — saves to public DCIM/DAZZ via MediaStore
     // ─────────────────────────────────────────────
 
     private fun handleTakePhoto(call: MethodCall, result: MethodChannel.Result) {
@@ -288,24 +289,91 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
 
         val context = flutterPluginBinding.applicationContext
-        val photoFile = createOutputFile(context, "jpg")
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val displayName = "DAZZ_${timestamp}.jpg"
+
+        val outputOptions: ImageCapture.OutputFileOptions
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Android 10+ — use MediaStore (no WRITE_EXTERNAL_STORAGE needed)
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_DCIM}/$DAZZ_ALBUM")
+            }
+            outputOptions = ImageCapture.OutputFileOptions.Builder(
+                context.contentResolver,
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                contentValues
+            ).build()
+        } else {
+            // Android 9 and below — write to DCIM/DAZZ directly
+            val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
+            val dazzDir = File(dcimDir, DAZZ_ALBUM).apply { mkdirs() }
+            val photoFile = File(dazzDir, displayName)
+            outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+        }
 
         capture.takePicture(
             outputOptions,
             cameraExecutor,
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    val path = photoFile.absolutePath
-                    sendEvent("onPhotoCaptured", mapOf("filePath" to path))
-                    result.success(mapOf("filePath" to path))
+                    val savedUri = output.savedUri?.toString() ?: ""
+                    Log.d(TAG, "Photo saved: $savedUri")
+                    val mainExecutor = ContextCompat.getMainExecutor(context)
+                    mainExecutor.execute {
+                        sendEvent("onPhotoCaptured", mapOf("filePath" to savedUri))
+                        result.success(mapOf("filePath" to savedUri))
+                    }
                 }
                 override fun onError(exception: ImageCaptureException) {
                     Log.e(TAG, "takePhoto failed", exception)
-                    result.error("CAPTURE_FAILED", exception.message, null)
+                    val mainExecutor = ContextCompat.getMainExecutor(context)
+                    mainExecutor.execute {
+                        result.error("CAPTURE_FAILED", exception.message, null)
+                    }
                 }
             }
         )
+    }
+
+    // ─────────────────────────────────────────────
+    // setZoom / setExposure / setFlash
+    // ─────────────────────────────────────────────
+
+    private fun handleSetZoom(call: MethodCall, result: MethodChannel.Result) {
+        val zoom = call.argument<Double>("zoom") ?: 1.0
+        try {
+            camera?.cameraControl?.setZoomRatio(zoom.toFloat())
+            result.success(null)
+        } catch (e: Exception) {
+            result.error("ZOOM_FAILED", e.message, null)
+        }
+    }
+
+    private fun handleSetExposure(call: MethodCall, result: MethodChannel.Result) {
+        val ev = call.argument<Double>("ev") ?: 0.0
+        try {
+            camera?.cameraControl?.setExposureCompensationIndex(ev.toInt())
+            result.success(null)
+        } catch (e: Exception) {
+            result.error("EXPOSURE_FAILED", e.message, null)
+        }
+    }
+
+    private fun handleSetFlash(call: MethodCall, result: MethodChannel.Result) {
+        val mode = call.argument<String>("mode") ?: "off"
+        try {
+            imageCapture?.flashMode = when (mode) {
+                "on"   -> ImageCapture.FLASH_MODE_ON
+                "auto" -> ImageCapture.FLASH_MODE_AUTO
+                else   -> ImageCapture.FLASH_MODE_OFF
+            }
+            result.success(null)
+        } catch (e: Exception) {
+            result.error("FLASH_FAILED", e.message, null)
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -324,8 +392,21 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
 
         val context = flutterPluginBinding.applicationContext
-        val videoFile = createOutputFile(context, "mp4")
-        val fileOutputOptions = FileOutputOptions.Builder(videoFile).build()
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val displayName = "DAZZ_VID_${timestamp}.mp4"
+
+        val fileOutputOptions: FileOutputOptions
+        val videoFile: File
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val moviesDir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
+                ?: context.filesDir
+            videoFile = File(moviesDir, displayName)
+        } else {
+            val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+            val dazzDir = File(moviesDir, DAZZ_ALBUM).apply { mkdirs() }
+            videoFile = File(dazzDir, displayName)
+        }
+        fileOutputOptions = FileOutputOptions.Builder(videoFile).build()
 
         recording = vc.output
             .prepareRecording(context, fileOutputOptions)
@@ -388,14 +469,5 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         mainExecutor.execute {
             eventSink?.success(mapOf("type" to type, "payload" to payload))
         }
-    }
-
-    private fun createOutputFile(context: Context, extension: String): File {
-        val mediaDir = context.getExternalFilesDir(null)?.let {
-            File(it, "RetroCam").apply { mkdirs() }
-        } ?: context.filesDir
-
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        return File(mediaDir, "DAZZ_${timestamp}.$extension")
     }
 }

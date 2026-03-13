@@ -1,4 +1,3 @@
-/// Preset 核心数据模型 (V3)
 /// 代表一台"虚拟相机"，包含其视觉效果的完整配置。
 
 // ─── DateStamp 配置 ───────────────────────────────────────────────────────────
@@ -148,36 +147,56 @@ class PresetResources {
 class OptionItem {
   final String id;
   final String name;
+  final bool isDefault;
+  // Legacy fields
   final String? lutName;
   final String? grainTextureName;
   final String? frameOverlayName;
   final String? watermarkName;
+  // V3 rendering map (raw)
+  final Map<String, dynamic>? rendering;
+  // For ratio items
+  final String? value;
+  // For watermark items
+  final String? type;
 
   const OptionItem({
     required this.id,
     required this.name,
+    this.isDefault = false,
     this.lutName,
     this.grainTextureName,
     this.frameOverlayName,
     this.watermarkName,
+    this.rendering,
+    this.value,
+    this.type,
   });
 
   factory OptionItem.fromJson(Map<String, dynamic> json) => OptionItem(
         id: json['id'] as String? ?? '',
         name: json['name'] as String? ?? '',
+        isDefault: json['isDefault'] as bool? ?? false,
         lutName: json['lutName'] as String?,
         grainTextureName: json['grainTextureName'] as String?,
         frameOverlayName: json['frameOverlayName'] as String?,
         watermarkName: json['watermarkName'] as String?,
+        rendering: json['rendering'] as Map<String, dynamic>?,
+        value: json['value'] as String?,
+        type: json['type'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
+        'isDefault': isDefault,
         if (lutName != null) 'lutName': lutName,
         if (grainTextureName != null) 'grainTextureName': grainTextureName,
         if (frameOverlayName != null) 'frameOverlayName': frameOverlayName,
         if (watermarkName != null) 'watermarkName': watermarkName,
+        if (rendering != null) 'rendering': rendering,
+        if (value != null) 'value': value,
+        if (type != null) 'type': type,
       };
 }
 
@@ -313,10 +332,42 @@ class Preset {
     }
 
     // 解析 optionGroups
-    final optionGroupsList = (json['optionGroups'] as List<dynamic>?)
-            ?.map((e) => OptionGroup.fromJson(e as Map<String, dynamic>))
-            .toList() ??
-        [];
+    // V3 格式: Map<String, List> {"films": [...], "ratios": [...]}
+    // Legacy 格式: List<Map> [{type: "films", items: [...]}]
+    List<OptionGroup> optionGroupsList = [];
+    final rawOptionGroups = json['optionGroups'];
+    if (rawOptionGroups is Map) {
+      // V3 Map 格式
+      final labelMap = {
+        'films': '胶卷',
+        'lenses': '镜头',
+        'papers': '相纸',
+        'ratios': '比例',
+        'watermarks': '水印',
+      };
+      rawOptionGroups.forEach((key, value) {
+        if (value is List) {
+          final items = value
+              .map((e) => OptionItem.fromJson(e as Map<String, dynamic>))
+              .toList();
+          final defaultItem = items.firstWhere(
+            (i) => i.isDefault,
+            orElse: () => items.isNotEmpty ? items.first : const OptionItem(id: '', name: ''),
+          );
+          optionGroupsList.add(OptionGroup(
+            type: key as String,
+            label: labelMap[key] ?? key as String,
+            defaultId: defaultItem.id,
+            items: items,
+          ));
+        }
+      });
+    } else if (rawOptionGroups is List) {
+      // Legacy List 格式
+      optionGroupsList = rawOptionGroups
+          .map((e) => OptionGroup.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
 
     // 解析 uiCapabilities
     final uiCap = json['uiCapabilities'] != null
@@ -337,12 +388,18 @@ class Preset {
     final paramsJson = json['params'] as Map<String, dynamic>?;
     final params = paramsJson != null ? PresetParams.fromJson(paramsJson) : null;
 
+    // 解析 baseModel：V3 可能是 Map，兼容 String
+    final rawBaseModel = json['baseModel'];
+    final baseModel = rawBaseModel is String
+        ? rawBaseModel
+        : (json['name'] as String? ?? '');
+
     return Preset(
       id: json['id'] as String,
       name: json['name'] as String,
       category: json['category'] as String? ?? '',
       outputType: outputType,
-      baseModel: json['baseModel'] as String? ?? json['name'] as String? ?? '',
+      baseModel: baseModel,
       isPremium: json['isPremium'] as bool? ?? false,
       optionGroups: optionGroupsList,
       uiCapabilities: uiCap,
