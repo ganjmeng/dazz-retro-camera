@@ -3,24 +3,18 @@ name: Create GitHub Release
 on:
   push:
     tags:
-      - 'v*.*.*' # Trigger on version tags e.g., v1.0.0
+      - 'v*.*.*'
 
 jobs:
   release:
     name: Create Release and Upload Assets
-    needs: [] # We would normally depend on build jobs here, but GitHub Actions allows parallel execution
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Wait for builds to complete
-        # In a real scenario, this job would depend on the android-release and ios-release jobs
-        # For simplicity, we are creating a draft release that can be updated later
-        run: echo "Preparing release for ${{ github.ref_name }}"
+        uses: actions/checkout@v5
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -30,11 +24,11 @@ jobs:
           generate_release_notes: true
           body: |
             ## DAZZ Retro Camera ${{ github.ref_name }}
-            
+
             This is an automated release.
-            
+
             ### Artifacts
-            - Android APK and AAB will be available in the Actions tab.
-            - iOS IPA will be available in the Actions tab (if certificates were provided).
-            
-            Please download the artifacts from the workflow runs and attach them here manually if needed.
+            - Android APK and AAB are available in the Actions tab under the **Android Release Build** workflow.
+            - iOS IPA is available in the Actions tab under the **iOS Release Build** workflow (if certificates were provided).
+
+            Please download the artifacts from the workflow runs and attach them here.

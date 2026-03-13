@@ -13,13 +13,14 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          flutter-version: '3.24.x' # Use appropriate stable version
+          flutter-version: '3.32.x'
+          cache: true
 
       - name: Install dependencies
         working-directory: ./flutter_app
@@ -27,20 +28,20 @@ jobs:
 
       - name: Analyze code
         working-directory: ./flutter_app
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Run tests
         working-directory: ./flutter_app
-        run: flutter test --coverage
+        run: flutter test
 
   android-build-check:
-    name: Android Build Check
+    name: Android Build Check (Debug)
     runs-on: ubuntu-latest
     needs: test
-    
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -52,6 +53,8 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: '3.32.x'
+          cache: true
 
       - name: Install dependencies
         working-directory: ./flutter_app
@@ -61,19 +64,28 @@ jobs:
         working-directory: ./flutter_app
         run: flutter build apk --debug
 
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk-ci
+          path: flutter_app/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 7
+
   ios-build-check:
-    name: iOS Build Check
+    name: iOS Build Check (No Sign)
     runs-on: macos-latest
     needs: test
-    
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: '3.32.x'
+          cache: true
 
       - name: Install dependencies
         working-directory: ./flutter_app

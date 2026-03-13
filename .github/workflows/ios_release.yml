@@ -3,7 +3,7 @@ name: iOS Release Build
 on:
   push:
     tags:
-      - 'v*.*.*' # Trigger on version tags e.g., v1.0.0
+      - 'v*.*.*'
 
 jobs:
   build-ios:
@@ -12,12 +12,14 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: '3.32.x'
+          cache: true
 
       - name: Install dependencies
         working-directory: ./flutter_app
@@ -31,25 +33,20 @@ jobs:
           KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
         run: |
           if [ -n "$BUILD_CERTIFICATE_BASE64" ]; then
-            # create variables
             CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
             PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
             KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-            # import certificate and provisioning profile from secrets
             echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
             echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
 
-            # create temporary keychain
             security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
             security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
             security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-            # import certificate to keychain
             security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
             security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-            # apply provisioning profile
             mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
             cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
           else
@@ -67,9 +64,9 @@ jobs:
           fi
 
       - name: Upload IPA Artifact
-        if: env.BUILD_CERTIFICATE_BASE64 != ''
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
           path: flutter_app/build/ios/ipa/*.ipa
           retention-days: 7
+          if-no-files-found: warn

@@ -3,7 +3,7 @@ name: Android Release Build
 on:
   push:
     tags:
-      - 'v*.*.*' # Trigger on version tags e.g., v1.0.0
+      - 'v*.*.*'
 
 jobs:
   build-android:
@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -24,6 +24,8 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: '3.32.x'
+          cache: true
 
       - name: Install dependencies
         working-directory: ./flutter_app
@@ -46,7 +48,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           if [ -n "$KEYSTORE_PASSWORD" ]; then
-            cat << EOF > ./flutter_app/android/key.properties
+            cat > ./flutter_app/android/key.properties << EOF
             storePassword=$KEYSTORE_PASSWORD
             keyPassword=$KEY_PASSWORD
             keyAlias=$KEY_ALIAS

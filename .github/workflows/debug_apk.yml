@@ -1,0 +1,74 @@
+name: Build Debug APK
+
+on:
+  # 手动触发
+  workflow_dispatch:
+    inputs:
+      note:
+        description: 'Build note (optional)'
+        required: false
+        default: 'Manual debug build'
+  # 每次推送 main 分支也自动构建
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-debug-apk:
+    name: Build & Upload Debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.32.x'
+          cache: true
+
+      - name: Print Flutter version
+        run: flutter --version
+
+      - name: Install Flutter dependencies
+        working-directory: ./flutter_app
+        run: flutter pub get
+
+      - name: Analyze code (non-fatal)
+        working-directory: ./flutter_app
+        run: flutter analyze --no-fatal-infos || true
+
+      - name: Build Debug APK
+        working-directory: ./flutter_app
+        run: flutter build apk --debug --verbose
+
+      - name: Rename APK with timestamp
+        run: |
+          TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          cp flutter_app/build/app/outputs/flutter-apk/app-debug.apk \
+             flutter_app/build/app/outputs/flutter-apk/dazz-debug-${TIMESTAMP}-${SHORT_SHA}.apk
+          echo "APK_NAME=dazz-debug-${TIMESTAMP}-${SHORT_SHA}.apk" >> $GITHUB_ENV
+
+      - name: Upload Debug APK as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: flutter_app/build/app/outputs/flutter-apk/dazz-debug-*.apk
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Print download instructions
+        run: |
+          echo "=========================================="
+          echo "✅ Debug APK build complete!"
+          echo "APK: ${{ env.APK_NAME }}"
+          echo "Download from: Actions tab → This workflow run → Artifacts"
+          echo "=========================================="
