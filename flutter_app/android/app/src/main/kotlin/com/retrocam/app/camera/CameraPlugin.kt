@@ -22,8 +22,7 @@ import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
-    ActivityAware {
+class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware {
 
     companion object {
         private const val TAG = "CameraPlugin"
@@ -55,8 +54,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
     private var textureEntry: TextureRegistry.SurfaceTextureEntry? = null
     private var surfaceTexture: SurfaceTexture? = null
 
-    // Executor
+    // Executors
     private lateinit var cameraExecutor: ExecutorService
+    private lateinit var bgExecutor: ExecutorService
 
     // Filter state
     private var currentPresetJson: Map<*, *>? = null
@@ -68,6 +68,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         flutterPluginBinding = binding
         cameraExecutor = Executors.newSingleThreadExecutor()
+        bgExecutor = Executors.newSingleThreadExecutor()
 
         methodChannel = MethodChannel(binding.binaryMessenger, METHOD_CHANNEL)
         methodChannel.setMethodCallHandler(this)
@@ -86,6 +87,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         methodChannel.setMethodCallHandler(null)
         cameraExecutor.shutdown()
+        bgExecutor.shutdown()
         releaseCamera()
     }
 
@@ -145,24 +147,40 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
             return
         }
 
-        // Create Flutter texture
+        // Create Flutter texture on main thread
         val entry = flutterPluginBinding.textureRegistry.createSurfaceTexture()
         textureEntry = entry
         surfaceTexture = entry.surfaceTexture()
 
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-        cameraProviderFuture.addListener({
+        // Use background thread to get CameraProvider (blocking call), then bind on main thread
+        bgExecutor.execute {
             try {
-                cameraProvider = cameraProviderFuture.get()
-                bindCameraUseCases(owner)
-                result.success(mapOf("textureId" to entry.id()))
-                sendEvent("onCameraReady", emptyMap<String, Any>())
+                // ProcessCameraProvider.getInstance().get() blocks until ready
+                val provider = ProcessCameraProvider.getInstance(context).get()
+                cameraProvider = provider
+
+                // Must bind to lifecycle on main thread
+                val mainExecutor = ContextCompat.getMainExecutor(context)
+                mainExecutor.execute {
+                    try {
+                        bindCameraUseCases(owner)
+                        result.success(mapOf("textureId" to entry.id()))
+                        sendEvent("onCameraReady", emptyMap<String, Any>())
+                    } catch (e: Exception) {
+                        Log.e(TAG, "bindCameraUseCases failed", e)
+                        result.error("CAMERA_INIT_FAILED", e.message, null)
+                        sendEvent("onError", mapOf("message" to (e.message ?: "Unknown error")))
+                    }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "initCamera failed", e)
-                result.error("CAMERA_INIT_FAILED", e.message, null)
-                sendEvent("onError", mapOf("message" to (e.message ?: "Unknown error")))
+                val mainExecutor = ContextCompat.getMainExecutor(context)
+                mainExecutor.execute {
+                    result.error("CAMERA_INIT_FAILED", e.message, null)
+                    sendEvent("onError", mapOf("message" to (e.message ?: "Unknown error")))
+                }
             }
-        }, ContextCompat.getMainExecutor(context))
+        }
     }
 
     private fun bindCameraUseCases(owner: LifecycleOwner) {
@@ -232,8 +250,6 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
     private fun handleSetPreset(call: MethodCall, result: MethodChannel.Result) {
         val preset = call.argument<Map<*, *>>("preset")
         currentPresetJson = preset
-        // Filter application via OpenGL ES is handled in FilterRenderer (future enhancement).
-        // For now, store the preset and acknowledge.
         Log.d(TAG, "setPreset: ${preset?.get("id")}")
         result.success(null)
     }
@@ -272,7 +288,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         }
 
         val context = flutterPluginBinding.applicationContext
-        val photoFile = createOutputFile(context, "JPEG")
+        val photoFile = createOutputFile(context, "jpg")
         val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
         capture.takePicture(
@@ -322,7 +338,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
                         if (!event.hasError()) {
                             sendEvent("onVideoRecorded", mapOf("filePath" to videoFile.absolutePath))
                         } else {
-                            sendEvent("onError", mapOf("message" to "Recording finalized with error: ${event.error}"))
+                            sendEvent("onError", mapOf("message" to "Recording error: ${event.error}"))
                         }
                         sendEvent("onRecordingStateChanged", mapOf("isRecording" to false))
                         recording = null
@@ -341,8 +357,6 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
             return
         }
         rec.stop()
-        // The actual filePath will be sent via EventChannel onVideoRecorded.
-        // Return success immediately; Flutter side can listen to the event.
         result.success(mapOf("filePath" to null))
     }
 
