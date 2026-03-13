@@ -12,6 +12,9 @@ on:
   push:
     branches: [ "main" ]
 
+permissions:
+  contents: write   # 允许创建 Release 和上传 Release Assets
+
 jobs:
   build-debug-apk:
     name: Build & Upload Debug APK
@@ -80,6 +83,7 @@ jobs:
           cp "$APK_SRC" "$APK_DST"
           echo "APK_NAME=dazz-debug-${TIMESTAMP}-${SHORT_SHA}.apk" >> $GITHUB_ENV
           echo "APK_PATH=$APK_DST" >> $GITHUB_ENV
+          echo "RELEASE_TAG=debug-${TIMESTAMP}-${SHORT_SHA}" >> $GITHUB_ENV
           ls -lh flutter_app/build/app/outputs/flutter-apk/
 
       - name: Upload Debug APK as Artifact
@@ -90,6 +94,28 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      - name: Create GitHub Release and upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: "Debug Build ${{ env.RELEASE_TAG }}"
+          body: |
+            ## 🤖 自动构建的 Debug APK
+
+            | 字段 | 值 |
+            |------|-----|
+            | **APK 文件** | `${{ env.APK_NAME }}` |
+            | **Commit** | `${{ github.sha }}` |
+            | **Branch** | `${{ github.ref_name }}` |
+            | **触发方式** | `${{ github.event_name }}` |
+
+            > ⚠️ 这是 Debug 版本，仅供测试使用，不可用于生产环境。
+          files: ${{ env.APK_PATH }}
+          prerelease: true
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build summary
         run: |
           echo "## ✅ Debug APK Build Complete" >> $GITHUB_STEP_SUMMARY
@@ -99,5 +125,6 @@ jobs:
           echo "| APK Name | \`${{ env.APK_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release Tag | \`${{ env.RELEASE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download the APK from the **Artifacts** section of this workflow run." >> $GITHUB_STEP_SUMMARY
+          echo "📦 APK 已发布到 [GitHub Releases](https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }})" >> $GITHUB_STEP_SUMMARY
