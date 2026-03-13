@@ -1,0 +1,387 @@
+package com.retrocam.app.camera
+
+import android.content.Context
+import android.graphics.SurfaceTexture
+import android.util.Log
+import android.view.Surface
+import androidx.camera.core.*
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.*
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleOwner
+import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
+import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.MethodCall
+import io.flutter.plugin.common.MethodChannel
+import io.flutter.view.TextureRegistry
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+
+class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
+    ActivityAware {
+
+    companion object {
+        private const val TAG = "CameraPlugin"
+        private const val METHOD_CHANNEL = "com.retrocam.app/camera_control"
+        private const val EVENT_CHANNEL = "com.retrocam.app/camera_events"
+    }
+
+    // Flutter bindings
+    private lateinit var methodChannel: MethodChannel
+    private lateinit var eventChannel: EventChannel
+    private var eventSink: EventChannel.EventSink? = null
+    private lateinit var flutterPluginBinding: FlutterPlugin.FlutterPluginBinding
+
+    // Activity / lifecycle
+    private var activityBinding: ActivityPluginBinding? = null
+    private val lifecycleOwner: LifecycleOwner?
+        get() = activityBinding?.activity as? LifecycleOwner
+
+    // CameraX
+    private var cameraProvider: ProcessCameraProvider? = null
+    private var camera: Camera? = null
+    private var preview: Preview? = null
+    private var imageCapture: ImageCapture? = null
+    private var videoCapture: VideoCapture<Recorder>? = null
+    private var recording: Recording? = null
+    private var lensFacing: Int = CameraSelector.LENS_FACING_BACK
+
+    // Flutter texture
+    private var textureEntry: TextureRegistry.SurfaceTextureEntry? = null
+    private var surfaceTexture: SurfaceTexture? = null
+
+    // Executor
+    private lateinit var cameraExecutor: ExecutorService
+
+    // Filter state
+    private var currentPresetJson: Map<*, *>? = null
+
+    // ─────────────────────────────────────────────
+    // FlutterPlugin lifecycle
+    // ─────────────────────────────────────────────
+
+    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        flutterPluginBinding = binding
+        cameraExecutor = Executors.newSingleThreadExecutor()
+
+        methodChannel = MethodChannel(binding.binaryMessenger, METHOD_CHANNEL)
+        methodChannel.setMethodCallHandler(this)
+
+        eventChannel = EventChannel(binding.binaryMessenger, EVENT_CHANNEL)
+        eventChannel.setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
+                eventSink = sink
+            }
+            override fun onCancel(arguments: Any?) {
+                eventSink = null
+            }
+        })
+    }
+
+    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        methodChannel.setMethodCallHandler(null)
+        cameraExecutor.shutdown()
+        releaseCamera()
+    }
+
+    // ─────────────────────────────────────────────
+    // ActivityAware lifecycle
+    // ─────────────────────────────────────────────
+
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        activityBinding = binding
+    }
+
+    override fun onDetachedFromActivityForConfigChanges() {
+        activityBinding = null
+    }
+
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        activityBinding = binding
+    }
+
+    override fun onDetachedFromActivity() {
+        activityBinding = null
+    }
+
+    // ─────────────────────────────────────────────
+    // MethodChannel handler
+    // ─────────────────────────────────────────────
+
+    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        when (call.method) {
+            "initCamera"      -> handleInitCamera(call, result)
+            "startPreview"    -> handleStartPreview(result)
+            "stopPreview"     -> handleStopPreview(result)
+            "setPreset"       -> handleSetPreset(call, result)
+            "switchLens"      -> handleSwitchLens(call, result)
+            "takePhoto"       -> handleTakePhoto(call, result)
+            "startRecording"  -> handleStartRecording(result)
+            "stopRecording"   -> handleStopRecording(result)
+            "dispose"         -> handleDispose(result)
+            else              -> result.notImplemented()
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // initCamera
+    // ─────────────────────────────────────────────
+
+    private fun handleInitCamera(call: MethodCall, result: MethodChannel.Result) {
+        val lensArg = call.argument<String>("lens") ?: "back"
+        lensFacing = if (lensArg == "front") CameraSelector.LENS_FACING_FRONT
+                     else CameraSelector.LENS_FACING_BACK
+
+        val context = flutterPluginBinding.applicationContext
+        val owner = lifecycleOwner
+
+        if (owner == null) {
+            result.error("NO_ACTIVITY", "Activity not attached", null)
+            return
+        }
+
+        // Create Flutter texture
+        val entry = flutterPluginBinding.textureRegistry.createSurfaceTexture()
+        textureEntry = entry
+        surfaceTexture = entry.surfaceTexture()
+
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+        cameraProviderFuture.addListener({
+            try {
+                cameraProvider = cameraProviderFuture.get()
+                bindCameraUseCases(owner)
+                result.success(mapOf("textureId" to entry.id()))
+                sendEvent("onCameraReady", emptyMap<String, Any>())
+            } catch (e: Exception) {
+                Log.e(TAG, "initCamera failed", e)
+                result.error("CAMERA_INIT_FAILED", e.message, null)
+                sendEvent("onError", mapOf("message" to (e.message ?: "Unknown error")))
+            }
+        }, ContextCompat.getMainExecutor(context))
+    }
+
+    private fun bindCameraUseCases(owner: LifecycleOwner) {
+        val provider = cameraProvider ?: return
+        val st = surfaceTexture ?: return
+
+        val cameraSelector = CameraSelector.Builder()
+            .requireLensFacing(lensFacing)
+            .build()
+
+        // Preview use case – attach to Flutter SurfaceTexture
+        preview = Preview.Builder().build().also { prev ->
+            prev.setSurfaceProvider { request ->
+                st.setDefaultBufferSize(
+                    request.resolution.width,
+                    request.resolution.height
+                )
+                val surface = Surface(st)
+                request.provideSurface(surface, cameraExecutor) { }
+            }
+        }
+
+        // ImageCapture use case
+        imageCapture = ImageCapture.Builder()
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            .build()
+
+        // VideoCapture use case
+        val recorder = Recorder.Builder()
+            .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
+            .build()
+        videoCapture = VideoCapture.withOutput(recorder)
+
+        provider.unbindAll()
+        camera = provider.bindToLifecycle(
+            owner,
+            cameraSelector,
+            preview,
+            imageCapture,
+            videoCapture
+        )
+    }
+
+    // ─────────────────────────────────────────────
+    // startPreview / stopPreview
+    // ─────────────────────────────────────────────
+
+    private fun handleStartPreview(result: MethodChannel.Result) {
+        // Preview is already running once bound; nothing extra needed
+        result.success(null)
+    }
+
+    private fun handleStopPreview(result: MethodChannel.Result) {
+        try {
+            cameraProvider?.unbind(preview)
+            result.success(null)
+        } catch (e: Exception) {
+            result.error("STOP_PREVIEW_FAILED", e.message, null)
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // setPreset
+    // ─────────────────────────────────────────────
+
+    @Suppress("UNCHECKED_CAST")
+    private fun handleSetPreset(call: MethodCall, result: MethodChannel.Result) {
+        val preset = call.argument<Map<*, *>>("preset")
+        currentPresetJson = preset
+        // Filter application via OpenGL ES is handled in FilterRenderer (future enhancement).
+        // For now, store the preset and acknowledge.
+        Log.d(TAG, "setPreset: ${preset?.get("id")}")
+        result.success(null)
+    }
+
+    // ─────────────────────────────────────────────
+    // switchLens
+    // ─────────────────────────────────────────────
+
+    private fun handleSwitchLens(call: MethodCall, result: MethodChannel.Result) {
+        val lens = call.argument<String>("lens") ?: "back"
+        lensFacing = if (lens == "front") CameraSelector.LENS_FACING_FRONT
+                     else CameraSelector.LENS_FACING_BACK
+
+        val owner = lifecycleOwner
+        if (owner == null) {
+            result.error("NO_ACTIVITY", "Activity not attached", null)
+            return
+        }
+        try {
+            bindCameraUseCases(owner)
+            result.success(null)
+        } catch (e: Exception) {
+            result.error("SWITCH_LENS_FAILED", e.message, null)
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // takePhoto
+    // ─────────────────────────────────────────────
+
+    private fun handleTakePhoto(call: MethodCall, result: MethodChannel.Result) {
+        val capture = imageCapture
+        if (capture == null) {
+            result.error("NOT_INITIALIZED", "Camera not initialized", null)
+            return
+        }
+
+        val context = flutterPluginBinding.applicationContext
+        val photoFile = createOutputFile(context, "JPEG")
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+
+        capture.takePicture(
+            outputOptions,
+            cameraExecutor,
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    val path = photoFile.absolutePath
+                    sendEvent("onPhotoCaptured", mapOf("filePath" to path))
+                    result.success(mapOf("filePath" to path))
+                }
+                override fun onError(exception: ImageCaptureException) {
+                    Log.e(TAG, "takePhoto failed", exception)
+                    result.error("CAPTURE_FAILED", exception.message, null)
+                }
+            }
+        )
+    }
+
+    // ─────────────────────────────────────────────
+    // startRecording / stopRecording
+    // ─────────────────────────────────────────────
+
+    private fun handleStartRecording(result: MethodChannel.Result) {
+        val vc = videoCapture
+        if (vc == null) {
+            result.error("NOT_INITIALIZED", "Camera not initialized", null)
+            return
+        }
+        if (recording != null) {
+            result.success(mapOf("success" to false, "reason" to "already_recording"))
+            return
+        }
+
+        val context = flutterPluginBinding.applicationContext
+        val videoFile = createOutputFile(context, "mp4")
+        val fileOutputOptions = FileOutputOptions.Builder(videoFile).build()
+
+        recording = vc.output
+            .prepareRecording(context, fileOutputOptions)
+            .start(cameraExecutor) { event ->
+                when (event) {
+                    is VideoRecordEvent.Start -> {
+                        sendEvent("onRecordingStateChanged", mapOf("isRecording" to true))
+                    }
+                    is VideoRecordEvent.Finalize -> {
+                        if (!event.hasError()) {
+                            sendEvent("onVideoRecorded", mapOf("filePath" to videoFile.absolutePath))
+                        } else {
+                            sendEvent("onError", mapOf("message" to "Recording finalized with error: ${event.error}"))
+                        }
+                        sendEvent("onRecordingStateChanged", mapOf("isRecording" to false))
+                        recording = null
+                    }
+                    else -> {}
+                }
+            }
+
+        result.success(mapOf("success" to true))
+    }
+
+    private fun handleStopRecording(result: MethodChannel.Result) {
+        val rec = recording
+        if (rec == null) {
+            result.error("NOT_RECORDING", "No active recording", null)
+            return
+        }
+        rec.stop()
+        // The actual filePath will be sent via EventChannel onVideoRecorded.
+        // Return success immediately; Flutter side can listen to the event.
+        result.success(mapOf("filePath" to null))
+    }
+
+    // ─────────────────────────────────────────────
+    // dispose
+    // ─────────────────────────────────────────────
+
+    private fun handleDispose(result: MethodChannel.Result) {
+        releaseCamera()
+        result.success(null)
+    }
+
+    // ─────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────
+
+    private fun releaseCamera() {
+        recording?.stop()
+        recording = null
+        cameraProvider?.unbindAll()
+        cameraProvider = null
+        textureEntry?.release()
+        textureEntry = null
+        surfaceTexture = null
+    }
+
+    private fun sendEvent(type: String, payload: Map<String, Any>) {
+        val mainExecutor = ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
+        mainExecutor.execute {
+            eventSink?.success(mapOf("type" to type, "payload" to payload))
+        }
+    }
+
+    private fun createOutputFile(context: Context, extension: String): File {
+        val mediaDir = context.getExternalFilesDir(null)?.let {
+            File(it, "RetroCam").apply { mkdirs() }
+        } ?: context.filesDir
+
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        return File(mediaDir, "DAZZ_${timestamp}.$extension")
+    }
+}
