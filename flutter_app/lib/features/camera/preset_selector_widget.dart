@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/preset.dart';
 import '../../services/camera_service.dart';
 import '../../services/preset_repository.dart';
+import '../../services/subscription_service.dart';
+import 'package:go_router/go_router.dart';
+import '../../router/app_router.dart';
 
 /// 底部横向滚动的相机 Preset 选择器
 class PresetSelectorWidget extends ConsumerWidget {
@@ -36,6 +39,13 @@ class PresetSelectorWidget extends ConsumerWidget {
 
         return GestureDetector(
           onTap: () {
+            if (preset.isPremium) {
+              final isPro = ref.read(subscriptionServiceProvider);
+              if (!isPro) {
+                context.push(AppRoutes.subscription);
+                return;
+              }
+            }
             ref.read(cameraServiceProvider.notifier).setPreset(preset);
           },
           child: _PresetItem(preset: preset, isSelected: isSelected),
