@@ -1,0 +1,75 @@
+name: iOS Release Build
+
+on:
+  push:
+    tags:
+      - 'v*.*.*' # Trigger on version tags e.g., v1.0.0
+
+jobs:
+  build-ios:
+    name: Build iOS IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install dependencies
+        working-directory: ./flutter_app
+        run: flutter pub get
+
+      - name: Install Apple Certificate and Provisioning Profile
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_BUILD_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+        run: |
+          if [ -n "$BUILD_CERTIFICATE_BASE64" ]; then
+            # create variables
+            CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+            PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+            KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+            # import certificate and provisioning profile from secrets
+            echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+            echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+
+            # create temporary keychain
+            security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+            security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+            security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+            # import certificate to keychain
+            security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+            # apply provisioning profile
+            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+            cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+          else
+            echo "iOS Secrets not found. Skipping code signing setup."
+          fi
+
+      - name: Build iOS IPA
+        working-directory: ./flutter_app
+        run: |
+          if [ -n "${{ secrets.IOS_BUILD_CERTIFICATE_BASE64 }}" ]; then
+            flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+          else
+            echo "Building without signing for testing purposes..."
+            flutter build ios --release --no-codesign
+          fi
+
+      - name: Upload IPA Artifact
+        if: env.BUILD_CERTIFICATE_BASE64 != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: flutter_app/build/ios/ipa/*.ipa
+          retention-days: 7

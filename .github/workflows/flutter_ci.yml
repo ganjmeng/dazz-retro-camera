@@ -1,0 +1,84 @@
+name: Flutter CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    name: Run Tests and Lints
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.24.x' # Use appropriate stable version
+
+      - name: Install dependencies
+        working-directory: ./flutter_app
+        run: flutter pub get
+
+      - name: Analyze code
+        working-directory: ./flutter_app
+        run: flutter analyze
+
+      - name: Run tests
+        working-directory: ./flutter_app
+        run: flutter test --coverage
+
+  android-build-check:
+    name: Android Build Check
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install dependencies
+        working-directory: ./flutter_app
+        run: flutter pub get
+
+      - name: Build Android APK (Debug)
+        working-directory: ./flutter_app
+        run: flutter build apk --debug
+
+  ios-build-check:
+    name: iOS Build Check
+    runs-on: macos-latest
+    needs: test
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install dependencies
+        working-directory: ./flutter_app
+        run: flutter pub get
+
+      - name: Build iOS App (Debug - No Sign)
+        working-directory: ./flutter_app
+        run: flutter build ios --debug --no-codesign

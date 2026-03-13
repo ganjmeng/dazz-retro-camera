@@ -1,0 +1,79 @@
+name: Android Release Build
+
+on:
+  push:
+    tags:
+      - 'v*.*.*' # Trigger on version tags e.g., v1.0.0
+
+jobs:
+  build-android:
+    name: Build Android AAB & APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install dependencies
+        working-directory: ./flutter_app
+        run: flutter pub get
+
+      - name: Decode Keystore
+        env:
+          ENCODED_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$ENCODED_KEYSTORE" ]; then
+            echo $ENCODED_KEYSTORE | base64 --decode > ./flutter_app/android/app/upload-keystore.jks
+          else
+            echo "Keystore secret not found. Skipping signing step."
+          fi
+
+      - name: Create key.properties
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_PASSWORD" ]; then
+            cat << EOF > ./flutter_app/android/key.properties
+            storePassword=$KEYSTORE_PASSWORD
+            keyPassword=$KEY_PASSWORD
+            keyAlias=$KEY_ALIAS
+            storeFile=upload-keystore.jks
+            EOF
+          else
+            echo "Key properties secrets not found."
+          fi
+
+      - name: Build Android App Bundle (AAB)
+        working-directory: ./flutter_app
+        run: flutter build appbundle --release
+
+      - name: Build Android APK
+        working-directory: ./flutter_app
+        run: flutter build apk --release
+
+      - name: Upload AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-appbundle
+          path: flutter_app/build/app/outputs/bundle/release/app-release.aab
+          retention-days: 7
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7
