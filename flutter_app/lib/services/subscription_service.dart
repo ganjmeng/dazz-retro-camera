@@ -65,8 +65,9 @@ class SubscriptionService extends StateNotifier<bool> {
 
   Future<bool> purchasePackage(Package package) async {
     try {
-      CustomerInfo customerInfo = await Purchases.purchasePackage(package);
-      _updateSubscriptionStatus(customerInfo);
+      // purchases_flutter 9.x: use purchase(PurchaseParams) instead of purchasePackage()
+      final result = await Purchases.purchase(PurchaseParams.package(package));
+      _updateSubscriptionStatus(result.customerInfo);
       return state;
     } on PlatformException catch (e) {
       var errorCode = PurchasesErrorHelper.getErrorCode(e);
