@@ -1,0 +1,48 @@
+name: retro_cam
+description: A retro CCD camera simulator app.
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # 状态管理：Riverpod
+  # 选择 Riverpod 而非 Bloc 的原因：
+  # 1. 更轻量，适合中等复杂度的状态管理
+  # 2. 与 Flutter 的声明式 UI 范式更契合
+  # 3. Provider 的依赖注入能力更强，便于测试
+  flutter_riverpod: ^2.5.1
+  
+  # 路由管理
+  go_router: ^13.2.0
+  
+  # 本地存储（保存设置等）
+  shared_preferences: ^2.2.2
+  
+  # 图片选择与相册访问
+  photo_manager: ^3.0.0
+  
+  # 分享功能
+  share_plus: ^7.2.2
+  
+  # 权限管理
+  permission_handler: ^11.3.0
+  
+  # 图片缓存
+  cached_network_image: ^3.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/presets/
+    - assets/images/

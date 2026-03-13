@@ -1,0 +1,22 @@
+name: retro_cam_plugin
+description: Native camera plugin for DAZZ Retro Camera App. Provides AVFoundation+Metal (iOS) and CameraX+OpenGL ES (Android) capabilities.
+version: 0.1.0
+homepage: https://github.com/your-org/dazz-retro-camera
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  plugin_platform_interface: ^2.1.7
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.retrocam.app
+        pluginClass: RetroCamPlugin
+      ios:
+        pluginClass: RetroCamPlugin

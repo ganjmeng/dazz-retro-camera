@@ -1,0 +1,85 @@
+# ============================================================
+# DAZZ Retro Camera — .gitignore
+# ============================================================
+
+# ---- Flutter / Dart ----
+**/flutter_app/.dart_tool/
+**/flutter_app/.flutter-plugins
+**/flutter_app/.flutter-plugins-dependencies
+**/flutter_app/.pub-cache/
+**/flutter_app/.pub/
+**/flutter_app/build/
+**/flutter_app/.packages
+**/flutter_app/pubspec.lock
+**/flutter_app/ios/Flutter/flutter_export_environment.sh
+**/flutter_app/android/local.properties
+**/flutter_app/android/.gradle/
+**/flutter_app/android/app/debug/
+**/flutter_app/android/app/profile/
+**/flutter_app/android/app/release/
+
+# ---- iOS ----
+**/ios/Pods/
+**/ios/Podfile.lock
+**/ios/*.xcworkspace
+**/ios/build/
+**/ios/DerivedData/
+**/ios/**/*.xcuserstate
+**/ios/**/*.xcscheme
+**/ios/*.ipa
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# ---- Android ----
+**/android/.gradle/
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+**/android/app/release/
+**/android/*.keystore
+**/android/*.jks
+
+# ---- macOS ----
+.DS_Store
+**/.DS_Store
+*.swp
+
+# ---- IDE ----
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.project
+.classpath
+.settings/
+
+# ---- Build artifacts ----
+*.o
+*.a
+*.so
+*.dylib
+*.class
+*.jar
+*.apk
+*.aab
+*.ipa
+*.dSYM/
+
+# ---- Secrets & Keys ----
+**/google-services.json
+**/GoogleService-Info.plist
+**/.env
+**/.env.*
+**/secrets.dart
+**/secrets.swift
+**/secrets.kt
