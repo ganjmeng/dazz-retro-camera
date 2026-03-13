@@ -7,13 +7,16 @@ import 'package:purchases_flutter/purchases_flutter.dart';
 const String _revenueCatAppleApiKey = 'appl_YOUR_APPLE_API_KEY';
 const String _revenueCatGoogleApiKey = 'goog_YOUR_GOOGLE_API_KEY';
 
+// 测试阶段：关闭付费功能，所有用户均视为 Pro
+// TODO: 上线前改回 SubscriptionService()
 final subscriptionServiceProvider = StateNotifierProvider<SubscriptionService, bool>((ref) {
-  return SubscriptionService();
+  return SubscriptionService.mock(true);
 });
 
 class SubscriptionService extends StateNotifier<bool> {
-  SubscriptionService() : super(false) {
-    _initPlatformState();
+  SubscriptionService() : super(true) {
+    // 测试阶段跳过 RevenueCat 初始化
+    // _initPlatformState();
   }
 
   /// Mock constructor for testing
