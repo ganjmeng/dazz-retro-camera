@@ -143,6 +143,38 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
+  /// 开始录制视频
+  Future<bool> startRecording() async {
+    if (!state.isReady) return false;
+    
+    try {
+      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('startRecording');
+      if (result?['success'] == true) {
+        state = state.copyWith(isRecording: true);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Failed to start recording: $e');
+      return false;
+    }
+  }
+
+  /// 停止录制视频，返回文件路径
+  Future<String?> stopRecording() async {
+    if (!state.isReady || !state.isRecording) return null;
+    
+    try {
+      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('stopRecording');
+      state = state.copyWith(isRecording: false);
+      return result?['filePath'] as String?;
+    } catch (e) {
+      print('Failed to stop recording: $e');
+      state = state.copyWith(isRecording: false);
+      return null;
+    }
+  }
+
   /// 释放所有资源
   Future<void> disposeCamera() async {
     try {

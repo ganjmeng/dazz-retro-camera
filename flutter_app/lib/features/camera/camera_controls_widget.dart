@@ -57,17 +57,31 @@ class _CameraControlsWidgetState extends ConsumerState<CameraControlsWidget> {
               ),
               
               // 快门按钮
-              GestureDetector(
-                onTap: _isCapturing ? null : _onShutterPressed,
-                child: Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 3),
-                    color: _isCapturing ? Colors.grey : Colors.white,
-                  ),
-                ),
+              Consumer(
+                builder: (context, ref, child) {
+                  final isRecording = ref.watch(cameraServiceProvider.select((s) => s.isRecording));
+                  final isVideoMode = ref.watch(cameraServiceProvider.select((s) => s.currentPreset?.outputType == 'video'));
+                  
+                  return GestureDetector(
+                    onTap: _isCapturing ? null : _onShutterPressed,
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 3),
+                        color: _isCapturing 
+                            ? Colors.grey 
+                            : (isVideoMode 
+                                ? (isRecording ? Colors.red : Colors.red[300])
+                                : Colors.white),
+                      ),
+                      child: isRecording 
+                          ? const Icon(Icons.stop, color: Colors.white, size: 36)
+                          : null,
+                    ),
+                  );
+                },
               ),
               
               // 当前相机图标
@@ -102,8 +116,18 @@ class _CameraControlsWidgetState extends ConsumerState<CameraControlsWidget> {
   }
 
   Future<void> _onShutterPressed() async {
-    setState(() => _isCapturing = true);
-    await ref.read(cameraServiceProvider.notifier).takePhoto();
-    setState(() => _isCapturing = false);
+    final cameraState = ref.read(cameraServiceProvider);
+    
+    if (cameraState.currentPreset?.outputType == 'video') {
+      if (cameraState.isRecording) {
+        await ref.read(cameraServiceProvider.notifier).stopRecording();
+      } else {
+        await ref.read(cameraServiceProvider.notifier).startRecording();
+      }
+    } else {
+      setState(() => _isCapturing = true);
+      await ref.read(cameraServiceProvider.notifier).takePhoto();
+      setState(() => _isCapturing = false);
+    }
   }
 }

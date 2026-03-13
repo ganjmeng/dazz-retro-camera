@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'camera_preview_widget.dart';
 import 'preset_selector_widget.dart';
 import 'camera_controls_widget.dart';
+import 'camera_options_widget.dart';
 import '../../services/camera_service.dart';
 
 class CameraScreen extends ConsumerStatefulWidget {
@@ -41,7 +42,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
               child: CameraControlsWidget(),
             ),
             
-            // 3. 顶层：Preset 选择器（底部滑动列表）
+            // 3. 顶层：相机选项（胶卷、镜头、相纸等），动态显示
+            if (cameraState.currentPreset != null)
+              Positioned(
+                top: 16,
+                right: 16,
+                child: CameraOptionsWidget(preset: cameraState.currentPreset!),
+              ),
+
+            // 4. 顶层：Preset 选择器（底部滑动列表）
             Positioned(
               bottom: 120, // 位于快门按钮上方
               left: 0,

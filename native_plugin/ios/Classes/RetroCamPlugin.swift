@@ -33,6 +33,10 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleSetPreset(call: call, result: result)
         case "takePhoto":
             handleTakePhoto(call: call, result: result)
+        case "startRecording":
+            handleStartRecording(call: call, result: result)
+        case "stopRecording":
+            handleStopRecording(call: call, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -60,17 +64,61 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             return
         }
         
-        // 解析 JSON 并更新 Renderer 的 Shader 和参数
-        // let preset = Preset.fromJson(presetJson)
-        // renderer?.updatePreset(preset)
+        // Parse preset JSON to extract shader parameters
+        var shaderParams: [String: Any] = [:]
+        
+        if let baseModel = presetJson["baseModel"] as? [String: Any] {
+            if let color = baseModel["color"] as? [String: Any] {
+                if let contrast = color["contrast"] as? NSNumber { shaderParams["contrast"] = contrast.floatValue }
+                if let saturation = color["saturation"] as? NSNumber { shaderParams["saturation"] = saturation.floatValue }
+            }
+            if let sensor = baseModel["sensor"] as? [String: Any] {
+                if let noise = sensor["noise"] as? NSNumber { shaderParams["noise"] = noise.floatValue }
+            }
+        }
+        
+        // Also parse active options from optionGroups if they exist in the snapshot
+        // (In a real implementation, we would flatten the active options' rendering params)
+        
+        renderer?.updateParams(shaderParams)
         
         result(["success": true])
     }
     
     private func handleTakePhoto(call: FlutterMethodCall, result: @escaping FlutterResult) {
         // 触发拍照逻辑，获取高分辨率图像后进行渲染并保存
-        // cameraManager?.capturePhoto { image in ... }
-        result(["filePath": "/dummy/path/to/photo.jpg"])
+        // In a full implementation, this would call cameraManager.capturePhoto,
+        // wait for the high-res buffer, pass it through the MetalRenderer with the
+        // current params, apply paper/border if needed, and save to Photos album.
+        
+        // Mock implementation for Phase 2 skeleton
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Simulate processing time
+            Thread.sleep(forTimeInterval: 0.5)
+            
+            DispatchQueue.main.async {
+                result(["filePath": "/dummy/path/to/rendered_photo.jpg"])
+            }
+        }
+    }
+    
+    private func handleStartRecording(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        // In a full implementation, this would setup AVAssetWriter, connect it to the
+        // MetalRenderer output, and start writing frames to a temporary file.
+        result(["success": true])
+    }
+    
+    private func handleStopRecording(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        // In a full implementation, this would finish writing the AVAssetWriter,
+        // save the resulting MP4 file to the Photos album, and return the path.
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            Thread.sleep(forTimeInterval: 1.0)
+            
+            DispatchQueue.main.async {
+                result(["filePath": "/dummy/path/to/rendered_video.mp4"])
+            }
+        }
     }
 }
 

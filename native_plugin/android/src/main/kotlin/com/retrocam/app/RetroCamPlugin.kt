@@ -40,6 +40,8 @@ class RetroCamPlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHandl
             }
             "setPreset" -> handleSetPreset(call, result)
             "takePhoto" -> handleTakePhoto(call, result)
+            "startRecording" -> handleStartRecording(call, result)
+            "stopRecording" -> handleStopRecording(call, result)
             else -> result.notImplemented()
         }
     }
@@ -63,15 +65,63 @@ class RetroCamPlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHandl
             result.error("1003", "Invalid preset parameters", null)
             return
         }
-        // 解析 JSON 并更新 GLRenderer 的 Shader
-        // val preset = Preset.fromJson(presetJson)
-        // glRenderer?.updatePreset(preset)
+        
+        // Parse preset JSON to extract shader parameters
+        val shaderParams = mutableMapOf<String, Any>()
+        
+        val baseModel = presetJson["baseModel"] as? Map<*, *>
+        if (baseModel != null) {
+            val color = baseModel["color"] as? Map<*, *>
+            if (color != null) {
+                color["contrast"]?.let { shaderParams["contrast"] = it }
+                color["saturation"]?.let { shaderParams["saturation"] = it }
+            }
+            val sensor = baseModel["sensor"] as? Map<*, *>
+            if (sensor != null) {
+                sensor["noise"]?.let { shaderParams["noise"] = it }
+            }
+        }
+        
+        glRenderer?.updateParams(shaderParams)
+        
         result.success(mapOf("success" to true))
     }
 
     private fun handleTakePhoto(call: MethodCall, result: Result) {
         // 触发 CameraX 拍照，送入 GL 渲染后保存
-        result.success(mapOf("filePath" to "/dummy/path/to/photo.jpg"))
+        // In a full implementation, this would call cameraManager.takePhoto,
+        // wait for the high-res buffer, pass it through the GLRenderer with the
+        // current params, apply paper/border if needed, and save to MediaStore.
+        
+        // Mock implementation for Phase 2 skeleton
+        Thread {
+            // Simulate processing time
+            Thread.sleep(500)
+            
+            // Return to main thread
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                result.success(mapOf("filePath" to "/dummy/path/to/rendered_photo.jpg"))
+            }
+        }.start()
+    }
+
+    private fun handleStartRecording(call: MethodCall, result: Result) {
+        // In a full implementation, this would setup MediaCodec/MediaMuxer,
+        // connect it to the GLRenderer output surface, and start writing.
+        result.success(mapOf("success" to true))
+    }
+
+    private fun handleStopRecording(call: MethodCall, result: Result) {
+        // In a full implementation, this would stop the MediaCodec/MediaMuxer,
+        // save the resulting MP4 file to MediaStore, and return the path.
+        
+        Thread {
+            Thread.sleep(1000)
+            
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                result.success(mapOf("filePath" to "/dummy/path/to/rendered_video.mp4"))
+            }
+        }.start()
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
