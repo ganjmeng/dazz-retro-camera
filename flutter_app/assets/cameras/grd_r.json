@@ -1,0 +1,274 @@
+{
+  "id": "grd_r",
+  "name": "GRD R",
+  "category": "ccd",
+  "mode": "photo",
+  "supportsPhoto": true,
+  "supportsVideo": false,
+  "focalLengthLabel": "28mm",
+
+  "sensor": {
+    "type": "ccd",
+    "dynamicRange": 10,
+    "baseNoise": 0.06,
+    "colorDepth": 8
+  },
+
+  "defaultLook": {
+    "baseLut": "assets/lut/cameras/grd_r.cube",
+    "temperature": -40,
+    "contrast": 1.08,
+    "saturation": 0.96,
+    "vignette": 0.02,
+    "distortion": 0.0,
+    "chromaticAberration": 0.01,
+    "bloom": 0.0,
+    "flare": 0.0
+  },
+
+  "modules": {
+    "filters": [
+      {
+        "id": "grd_standard",
+        "name": "标准",
+        "nameEn": "Standard",
+        "lut": "assets/lut/filters/grd_standard.cube",
+        "contrast": 1.02,
+        "saturation": 1.0,
+        "grain": "light",
+        "thumbnail": "assets/thumbnails/filters/grd_standard.jpg"
+      },
+      {
+        "id": "grd_high_contrast",
+        "name": "高对比",
+        "nameEn": "High Contrast",
+        "lut": "assets/lut/filters/grd_high_contrast.cube",
+        "contrast": 1.12,
+        "saturation": 0.92,
+        "grain": "medium",
+        "thumbnail": "assets/thumbnails/filters/grd_high_contrast.jpg"
+      }
+    ],
+
+    "lenses": [
+      {
+        "id": "std",
+        "name": "标准",
+        "nameEn": "Std",
+        "vignette": 0.02,
+        "distortion": 0.0,
+        "chromaticAberration": 0.01,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/std.jpg"
+      },
+      {
+        "id": "wide",
+        "name": "广角",
+        "nameEn": "Wide",
+        "vignette": 0.04,
+        "distortion": 0.015,
+        "chromaticAberration": 0.015,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/wide.jpg"
+      },
+      {
+        "id": "vintage",
+        "name": "复古",
+        "nameEn": "Vintage",
+        "vignette": 0.08,
+        "distortion": 0.005,
+        "chromaticAberration": 0.04,
+        "bloom": 0.03,
+        "flare": 0.01,
+        "softFocus": 0.02,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
+      },
+      {
+        "id": "dream",
+        "name": "梦幻",
+        "nameEn": "Dream",
+        "vignette": 0.03,
+        "distortion": 0.0,
+        "chromaticAberration": 0.02,
+        "bloom": 0.12,
+        "flare": 0.03,
+        "softFocus": 0.05,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/dream.jpg"
+      },
+      {
+        "id": "prism",
+        "name": "棱镜",
+        "nameEn": "Prism",
+        "vignette": 0.02,
+        "distortion": 0.0,
+        "chromaticAberration": 0.08,
+        "bloom": 0.04,
+        "flare": 0.0,
+        "softFocus": 0.01,
+        "refraction": 0.18,
+        "thumbnail": "assets/thumbnails/lenses/prism.jpg"
+      }
+    ],
+
+    "ratios": [
+      {
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_2_3",
+        "label": "2:3",
+        "width": 2,
+        "height": 3,
+        "supportsFrame": false
+      },
+      {
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "width": 3,
+        "height": 4,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_9_16",
+        "label": "9:16",
+        "width": 9,
+        "height": 16,
+        "supportsFrame": false
+      }
+    ],
+
+    "frames": [
+      {
+        "id": "frame_clean_white",
+        "name": "白边框",
+        "nameEn": "Clean White",
+        "asset": "assets/frames/frame_clean_white.png",
+        "backgroundColor": "#F5F2EA",
+        "inset": {
+          "top": 20,
+          "right": 20,
+          "bottom": 20,
+          "left": 20
+        },
+        "supportedRatios": ["ratio_1_1", "ratio_3_4"],
+        "thumbnail": "assets/thumbnails/frames/frame_clean_white.jpg"
+      }
+    ],
+
+    "watermarks": {
+      "presets": [
+        {
+          "id": "date_orange",
+          "name": "橙色日期",
+          "color": "#FF8A3D",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "date_white",
+          "name": "白色日期",
+          "color": "#FFFFFF",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "none",
+          "name": "无水印"
+        }
+      ],
+      "editor": {
+        "allowColorChange": true,
+        "allowPositionChange": true,
+        "allowSizeChange": true,
+        "allowOrientationChange": true
+      }
+    },
+
+    "extras": []
+  },
+
+  "defaultSelection": {
+    "filterId": "grd_standard",
+    "lensId": "std",
+    "ratioId": "ratio_3_4",
+    "frameId": null,
+    "watermarkPresetId": "date_orange",
+    "extraId": null
+  },
+
+  "uiCapabilities": {
+    "enableFilter": true,
+    "enableLens": true,
+    "enableRatio": true,
+    "enableFrame": true,
+    "enableWatermark": true,
+    "enableExtra": false
+  },
+
+  "previewCapabilities": {
+    "allowSmallViewport": true,
+    "allowGridOverlay": true,
+    "allowZoom": true,
+    "allowImportImage": true,
+    "allowTimer": true,
+    "allowFlash": true
+  },
+
+  "previewPolicy": {
+    "enableLut": true,
+    "enableTemperature": true,
+    "enableContrast": true,
+    "enableSaturation": true,
+    "enableVignette": true,
+    "enableLightLensEffect": true,
+    "enableGrain": false,
+    "enableBloom": false,
+    "enableChromaticAberration": false,
+    "enableFrameComposite": false,
+    "enableWatermarkComposite": true
+  },
+
+  "exportPolicy": {
+    "jpegQuality": 0.92,
+    "applyRatioCrop": true,
+    "applyFrameOnExport": true,
+    "applyWatermarkOnExport": true,
+    "preserveMetadata": true
+  },
+
+  "videoConfig": {
+    "enabled": false,
+    "fpsOptions": [24, 30, 60],
+    "resolutionOptions": ["SD", "HD", "4K"],
+    "defaultFps": 30,
+    "defaultResolution": "HD",
+    "supportsAudio": true,
+    "videoBitrate": 12000000
+  },
+
+  "assets": {
+    "thumbnail": "assets/thumbnails/cameras/grd_r.jpg",
+    "icon": "assets/thumbnails/cameras/grd_r_icon.jpg"
+  },
+
+  "meta": {
+    "version": "final",
+    "premium": false,
+    "sortOrder": 0,
+    "tags": ["street", "ccd", "ricoh", "28mm", "high-contrast"]
+  }
+}

@@ -1,15 +1,33 @@
-import 'dart:typed_data';
+// camera_screen.dart
+// GRD R 相机主界面 — 精细复刻参考截图 UI
+// 集成 GrdCameraNotifier + PreviewFilterWidget 实时渲染管线
+//
+// UI 结构：
+//   黑色背景
+//   ├── 顶部状态区（绿点指示灯 + ··· 菜单）
+//   ├── 取景框（圆角矩形，内含实时渲染预览 + 悬浮控件）
+//   │     ├── 预览渲染（ColorFilter 色彩矩阵 + 暗角 + 色差）
+//   │     ├── 网格叠加
+//   │     ├── 右上角 ··· 菜单按钮
+//   │     └── 底部悬浮控件条（温度 | 焦距 | 曝光）
+//   ├── 模式切换栏（照片 | 视频 | 样图 | 管理）
+//   ├── 底部功能面板（滑出式：滤镜/镜头/比例/边框/水印）
+//   └── 快门区（图库缩略图 | 快门按钮 | 相机切换）
+
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../../services/camera_service.dart';
-import '../../services/preset_repository.dart';
 import '../../router/app_router.dart';
-import '../../models/preset.dart';
+import 'grd_camera_notifier.dart';
+import 'preview_renderer.dart';
 
-// ─── 相机主屏幕 ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// CameraScreen
+// ─────────────────────────────────────────────────────────────────────────────
 
 class CameraScreen extends ConsumerStatefulWidget {
   const CameraScreen({super.key});
@@ -19,35 +37,34 @@ class CameraScreen extends ConsumerStatefulWidget {
 
 class _CameraScreenState extends ConsumerState<CameraScreen>
     with TickerProviderStateMixin {
-  // ── 相机状态 ──
-  bool _isFrontCamera = false;
-  String _flashMode = 'off'; // 'off' | 'on' | 'auto'
-  int _timerSeconds = 0; // 0 / 3 / 10
-  double _exposureValue = 0.0;
 
-  // ── UI 状态 ──
-  bool _gridEnabled = false;
-  bool _showTopMenu = false;
-  bool _showCameraSelector = false;
-  bool _isTakingPhoto = false;
-  bool _showCaptureFlash = false;
-
-  // ── 底部面板 ──
-  String? _activePanel; // null | 'watermark' | 'frame' | 'filter' | 'ratio' | 'lens'
-
-  // ── 图库 ──
+  // ignore: unused_field
   AssetEntity? _latestAsset;
+  Uint8List? _latestThumb;
+  int _timerCountdown = 0;
+  Timer? _countdownTimer;
+
+  // 曝光拖拽
+  bool _showExposureSlider = false;
+  double _dragStartY = 0;
+  double _dragStartExposure = 0;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(cameraServiceProvider.notifier).initCamera();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(grdCameraProvider.notifier).initialize();
+      await ref.read(cameraServiceProvider.notifier).initCamera();
+      _loadLatestDazzPhoto();
     });
-    _loadLatestDazzPhoto();
   }
 
-  // 只加载 DAZZ 相册中的最新照片
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _loadLatestDazzPhoto() async {
     final ps = await PhotoManager.requestPermissionExtend();
     if (!ps.isAuth) return;
@@ -57,7 +74,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
       ),
     );
-    // 优先找名为 DAZZ 的相册
     AssetPathEntity? dazzPath;
     for (final p in paths) {
       if (p.name.toUpperCase().contains('DAZZ')) {
@@ -69,233 +85,239 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (targetPath == null) return;
     final assets = await targetPath.getAssetListPaged(page: 0, size: 1);
     if (assets.isNotEmpty && mounted) {
-      setState(() => _latestAsset = assets.first);
+      final thumb = await assets.first.thumbnailDataWithSize(
+        const ThumbnailSize(120, 120),
+      );
+      setState(() {
+        _latestAsset = assets.first;
+        _latestThumb = thumb;
+      });
     }
   }
 
-  Future<void> _takePhoto() async {
-    if (_isTakingPhoto) return;
-    setState(() => _isTakingPhoto = true);
-    HapticFeedback.mediumImpact();
-    try {
-      final path = await ref.read(cameraServiceProvider.notifier).takePhoto();
-      if (path != null && mounted) {
-        setState(() => _showCaptureFlash = true);
-        await Future.delayed(const Duration(milliseconds: 150));
-        if (mounted) setState(() => _showCaptureFlash = false);
-        HapticFeedback.lightImpact();
-        await _loadLatestDazzPhoto();
-      }
-    } finally {
-      if (mounted) setState(() => _isTakingPhoto = false);
+  Future<void> _handleShutter() async {
+    final notifier = ref.read(grdCameraProvider.notifier);
+    final st = ref.read(grdCameraProvider);
+    if (st.isTakingPhoto) return;
+
+    if (st.timerSeconds > 0) {
+      setState(() => _timerCountdown = st.timerSeconds);
+      _countdownTimer?.cancel();
+      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+        setState(() {
+          _timerCountdown--;
+          if (_timerCountdown <= 0) {
+            t.cancel();
+            _timerCountdown = 0;
+            _doTakePhoto(notifier);
+          }
+        });
+      });
+    } else {
+      _doTakePhoto(notifier);
     }
   }
 
-  void _toggleFlash() {
-    setState(() {
-      if (_flashMode == 'off') {
-        _flashMode = 'on';
-      } else if (_flashMode == 'on') {
-        _flashMode = 'auto';
-      } else {
-        _flashMode = 'off';
-      }
-    });
-    ref.read(cameraServiceProvider.notifier).setFlash(_flashMode);
-  }
-
-  void _cycleTimer() {
-    setState(() {
-      if (_timerSeconds == 0) _timerSeconds = 3;
-      else if (_timerSeconds == 3) _timerSeconds = 10;
-      else _timerSeconds = 0;
-    });
-  }
-
-  void _switchCamera() {
-    setState(() => _isFrontCamera = !_isFrontCamera);
-    ref.read(cameraServiceProvider.notifier).switchLens();
-    HapticFeedback.selectionClick();
-  }
-
-  void _closeAllPanels() {
-    setState(() {
-      _showTopMenu = false;
-      _showCameraSelector = false;
-      _activePanel = null;
-    });
-  }
-
-  void _showPanel(String panel) {
-    setState(() {
-      _activePanel = _activePanel == panel ? null : panel;
-      _showCameraSelector = false;
-      _showTopMenu = false;
-    });
+  Future<void> _doTakePhoto(GrdCameraNotifier notifier) async {
+    final path = await notifier.takePhoto();
+    if (path != null && mounted) {
+      _loadLatestDazzPhoto();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final grdState = ref.watch(grdCameraProvider);
     final cameraState = ref.watch(cameraServiceProvider);
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
-        onTap: _closeAllPanels,
+        onTap: () {
+          ref.read(grdCameraProvider.notifier).closeAllPanels();
+          setState(() => _showExposureSlider = false);
+        },
         behavior: HitTestBehavior.translucent,
         child: Stack(
           children: [
             SafeArea(
               child: Column(
                 children: [
-                  _buildTopIndicator(),
+                  _buildTopBar(grdState),
                   Expanded(
-                    child: _buildPreviewArea(cameraState),
+                    child: _buildViewfinder(grdState, cameraState),
                   ),
-                  _buildQuickActions(),
-                  const SizedBox(height: 12),
-                  _buildBottomBar(),
-                  _buildBottomHandle(),
+                  _buildModeBar(grdState),
+                  if (grdState.activePanel != null)
+                    _buildActivePanel(grdState)
+                  else
+                    const SizedBox(height: 8),
+                  _buildShutterRow(grdState),
+                  const SizedBox(height: 16),
                 ],
               ),
             ),
             // 拍照闪光
-            if (_showCaptureFlash)
+            if (grdState.showCaptureFlash)
               Positioned.fill(
                 child: IgnorePointer(
-                  child: Container(color: Colors.white.withAlpha(180)),
+                  child: Container(color: Colors.white.withAlpha(200)),
+                ),
+              ),
+            // 倒计时数字
+            if (_timerCountdown > 0)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Center(
+                    child: Text(
+                      '$_timerCountdown',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 96,
+                        fontWeight: FontWeight.w100,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             // 顶部菜单浮层
-            if (_showTopMenu) _buildTopMenuOverlay(),
-            // 相机选择器
-            if (_showCameraSelector)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: _CameraSelectorSheet(
-                  onClose: () => setState(() => _showCameraSelector = false),
-                  onShowPanel: _showPanel,
-                  activePanel: _activePanel,
-                ),
-              ),
-            // 底部功能面板
-            if (_activePanel != null && !_showCameraSelector)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: _buildActivePanel(),
-              ),
+            if (grdState.showTopMenu)
+              _buildTopMenuOverlay(grdState),
           ],
         ),
       ),
     );
   }
 
-  // ── 顶部绿色指示灯 ──
-  Widget _buildTopIndicator() {
+  // ── 顶部状态栏 ──────────────────────────────────────────────────────────────
+
+  Widget _buildTopBar(GrdCameraState st) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 4),
-      child: Center(
-        child: Container(
-          width: 8,
-          height: 8,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            color: Color(0xFF00E676),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      child: Row(
+        children: [
+          // 绿色录制指示灯
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0xFF00E676),
+            ),
           ),
-        ),
+          const Spacer(),
+          // 相机名称
+          if (st.camera != null)
+            Text(
+              st.camera!.name,
+              style: const TextStyle(
+                color: Colors.white54,
+                fontSize: 13,
+                letterSpacing: 1.2,
+              ),
+            ),
+          const Spacer(),
+          // 焦距标签
+          if (st.camera?.focalLengthLabel != null)
+            Text(
+              st.camera!.focalLengthLabel!,
+              style: const TextStyle(
+                color: Colors.white38,
+                fontSize: 12,
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  // ── 预览区域 ──
-  Widget _buildPreviewArea(CameraState cameraState) {
+  // ── 取景框 ──────────────────────────────────────────────────────────────────
+
+  Widget _buildViewfinder(GrdCameraState grdState, CameraState cameraState) {
+    final aspectRatio = grdState.previewAspectRatio;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         child: AspectRatio(
-          aspectRatio: 3 / 4,
+          aspectRatio: aspectRatio,
           child: Container(
-            color: const Color(0xFF111111),
+            color: const Color(0xFF0A0A0A),
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // 相机预览
+                // 相机预览 + 渲染管线
                 if (cameraState.isReady && cameraState.textureId != null)
-                  Texture(textureId: cameraState.textureId!)
+                  _buildRenderedPreview(grdState, cameraState.textureId!)
                 else
-                  Container(color: const Color(0xFF0A0A0A)),
-                // 网格
-                if (_gridEnabled) CustomPaint(painter: _GridPainter()),
-                // 加载状态
-                if (cameraState.isLoading)
-                  const Center(
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  ),
-                // 错误信息
-                if (cameraState.error != null)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.camera_alt_outlined,
-                              color: Colors.white54, size: 48),
-                          const SizedBox(height: 12),
-                          Text(
-                            cameraState.error!,
-                            style: const TextStyle(
-                                color: Colors.white54, fontSize: 12),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  _buildPreviewPlaceholder(cameraState),
+
+                // 网格叠加
+                if (grdState.gridEnabled)
+                  CustomPaint(painter: _GridPainter()),
+
                 // 右上角 ··· 菜单
                 Positioned(
                   top: 12,
                   right: 12,
                   child: GestureDetector(
                     onTap: () {
-                      setState(() {
-                        _showTopMenu = !_showTopMenu;
-                        _showCameraSelector = false;
-                        _activePanel = null;
-                      });
+                      ref.read(grdCameraProvider.notifier).toggleTopMenu();
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                          horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.black.withAlpha(100),
-                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.black.withAlpha(120),
+                        borderRadius: BorderRadius.circular(14),
                       ),
                       child: const Text(
                         '···',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 16,
-                          letterSpacing: 2,
+                          fontSize: 15,
+                          letterSpacing: 3,
                           height: 1,
                         ),
                       ),
                     ),
                   ),
                 ),
-                // 底部控制条
+
+                // 曝光拖拽圆圈（参考截图 13001）
+                if (_showExposureSlider)
+                  Positioned(
+                    right: 60,
+                    bottom: 60,
+                    child: GestureDetector(
+                      onVerticalDragStart: (d) {
+                        _dragStartY = d.globalPosition.dy;
+                        _dragStartExposure = grdState.exposureValue;
+                      },
+                      onVerticalDragUpdate: (d) {
+                        final delta = (_dragStartY - d.globalPosition.dy) / 150;
+                        final newVal = (_dragStartExposure + delta).clamp(-2.0, 2.0);
+                        ref.read(grdCameraProvider.notifier).setExposure(newVal);
+                      },
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white60, width: 1.5),
+                          color: Colors.transparent,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // 底部悬浮控件条（温度 | 焦距 | 曝光）
                 Positioned(
                   bottom: 14,
-                  left: 12,
-                  right: 12,
-                  child: _buildPreviewControls(),
+                  left: 16,
+                  right: 16,
+                  child: _buildViewfinderControls(grdState),
                 ),
               ],
             ),
@@ -305,1285 +327,551 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     );
   }
 
-  // ── 预览内控制条 ──
-  Widget _buildPreviewControls() {
-    return Row(
-      children: [
-        // 网格切换
-        _PreviewPill(
-          child: Icon(
-            _gridEnabled ? Icons.grid_on : Icons.grid_off,
-            color: _gridEnabled ? Colors.white : Colors.white60,
-            size: 16,
-          ),
-          onTap: () => setState(() => _gridEnabled = !_gridEnabled),
+  Widget _buildRenderedPreview(GrdCameraState grdState, int textureId) {
+    final params = grdState.renderParams;
+    if (params == null) {
+      return Texture(textureId: textureId);
+    }
+    return PreviewFilterWidget(
+      textureId: textureId,
+      params: params,
+      aspectRatio: grdState.previewAspectRatio,
+    );
+  }
+
+  Widget _buildPreviewPlaceholder(CameraState cameraState) {
+    if (cameraState.isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: Colors.white24,
+          strokeWidth: 1.5,
         ),
-        const SizedBox(width: 8),
-        // 色温
-        _PreviewPill(
+      );
+    }
+    if (cameraState.error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.camera_alt_outlined,
+                color: Colors.white24, size: 40),
+            const SizedBox(height: 8),
+            Text(
+              cameraState.error!,
+              style: const TextStyle(color: Colors.white24, fontSize: 11),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+    return Container(color: const Color(0xFF0D0D0D));
+  }
+
+  // ── 取景框内悬浮控件条 ──────────────────────────────────────────────────────
+
+  Widget _buildViewfinderControls(GrdCameraState st) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // 温度按钮
+        _ViewfinderPill(
+          onTap: () {
+            // 弹出温度调节（简单循环）
+            final cur = st.temperatureOffset;
+            final next = cur <= -60 ? 0.0 : cur - 20.0;
+            ref.read(grdCameraProvider.notifier).setTemperature(next);
+          },
           child: const Icon(Icons.thermostat_outlined,
               color: Colors.white, size: 15),
-          onTap: () {},
         ),
-        const SizedBox(width: 8),
-        // 焦距
-        _PreviewPill(
-          child: const Text(
-            '24',
-            style: TextStyle(
+        const SizedBox(width: 10),
+        // 焦距/镜头标签
+        _ViewfinderPill(
+          onTap: () => ref.read(grdCameraProvider.notifier).togglePanel('lens'),
+          child: Text(
+            st.lensLabel,
+            style: const TextStyle(
               color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
             ),
           ),
-          onTap: () {},
         ),
-        const SizedBox(width: 8),
-        // 曝光
-        GestureDetector(
-          onTap: _showExposureSlider,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.black.withAlpha(140),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.wb_sunny_outlined,
-                    color: Colors.white, size: 14),
-                const SizedBox(width: 3),
-                Text(
-                  _exposureValue == 0.0
-                      ? '0.0'
-                      : _exposureValue.toStringAsFixed(1),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
+        const SizedBox(width: 10),
+        // 曝光值
+        _ViewfinderPill(
+          onTap: () {
+            setState(() => _showExposureSlider = !_showExposureSlider);
+          },
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.wb_sunny_outlined,
+                  color: Colors.white, size: 13),
+              const SizedBox(width: 4),
+              Text(
+                st.exposureValue == 0
+                    ? '0.0'
+                    : st.exposureValue.toStringAsFixed(1),
+                style: TextStyle(
+                  color: st.exposureValue != 0
+                      ? Colors.white
+                      : Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+          isActive: st.exposureValue != 0,
         ),
       ],
     );
   }
 
-  void _showExposureSlider() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) => Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('曝光补偿',
-                      style: TextStyle(color: Colors.white, fontSize: 16)),
-                  Text(
-                    _exposureValue.toStringAsFixed(1),
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              SliderTheme(
-                data: SliderTheme.of(ctx).copyWith(
-                  activeTrackColor: Colors.white,
-                  inactiveTrackColor: Colors.white24,
-                  thumbColor: Colors.white,
-                  overlayColor: Colors.white24,
-                ),
-                child: Slider(
-                  value: _exposureValue,
-                  min: -3.0,
-                  max: 3.0,
-                  divisions: 60,
-                  onChanged: (v) {
-                    setModalState(() {});
-                    setState(() => _exposureValue = v);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  // ── 模式切换栏（照片 | 视频 | 样图 | 管理）──────────────────────────────────
 
-  // ── 快捷操作栏 ──
-  Widget _buildQuickActions() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+  Widget _buildModeBar(GrdCameraState st) {
+    return Container(
+      color: Colors.black,
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _QuickBtn(
-            icon: Icons.add_photo_alternate_outlined,
+          const SizedBox(width: 16),
+          _ModeTab(label: '照片', isActive: true),
+          const SizedBox(width: 20),
+          _ModeTab(label: '视频', isActive: false),
+          const Spacer(),
+          // 样图按钮
+          _TopRoundButton(
+            icon: Icons.landscape_outlined,
+            label: '样图',
             onTap: () {},
           ),
-          _QuickBtn(
-            icon: Icons.timer_outlined,
-            badge: _timerSeconds > 0 ? '${_timerSeconds}s' : null,
-            onTap: _cycleTimer,
+          const SizedBox(width: 8),
+          // 管理按钮
+          _TopRoundButton(
+            icon: Icons.camera_outlined,
+            label: '管理',
+            onTap: () {},
           ),
-          _QuickBtn(
-            icon: _flashMode == 'off'
-                ? Icons.flash_off
-                : _flashMode == 'on'
-                    ? Icons.flash_on
-                    : Icons.flash_auto,
-            onTap: _toggleFlash,
-          ),
-          _QuickBtn(
-            icon: Icons.flip_camera_android_outlined,
-            onTap: _switchCamera,
-          ),
+          const SizedBox(width: 16),
         ],
       ),
     );
   }
 
-  // ── 底部工具栏 ──
-  Widget _buildBottomBar() {
+  // ── 底部功能面板（滑出式）──────────────────────────────────────────────────
+
+  Widget _buildActivePanel(GrdCameraState st) {
+    final camera = st.camera;
+    if (camera == null) return const SizedBox.shrink();
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      color: const Color(0xFFF2F2F2),
+      child: switch (st.activePanel) {
+        'filter' => _FilterPanel(
+            filters: camera.modules.filters,
+            activeId: st.activeFilterId,
+            onSelect: (id) =>
+                ref.read(grdCameraProvider.notifier).selectFilter(id),
+          ),
+        'lens' => _LensPanel(
+            lenses: camera.modules.lenses,
+            activeId: st.activeLensId,
+            onSelect: (id) =>
+                ref.read(grdCameraProvider.notifier).selectLens(id),
+          ),
+        'ratio' => _RatioPanel(
+            ratios: camera.modules.ratios,
+            activeId: st.activeRatioId,
+            onSelect: (id) =>
+                ref.read(grdCameraProvider.notifier).selectRatio(id),
+          ),
+        'frame' => _FramePanel(
+            frames: camera.modules.frames,
+            activeId: st.activeFrameId,
+            activeRatioId: st.activeRatioId,
+            onSelect: (id) =>
+                ref.read(grdCameraProvider.notifier).selectFrame(id),
+          ),
+        'watermark' => _WatermarkPanel(
+            presets: camera.modules.watermarks.presets,
+            activeId: st.activeWatermarkId,
+            onSelect: (id) =>
+                ref.read(grdCameraProvider.notifier).selectWatermark(id),
+          ),
+        _ => const SizedBox.shrink(),
+      },
+    );
+  }
+
+  // ── 快门区 ──────────────────────────────────────────────────────────────────
+
+  Widget _buildShutterRow(GrdCameraState st) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // 左：图库缩略图
-          GestureDetector(
+          // 左侧：图库缩略图
+          _GalleryThumb(
+            thumb: _latestThumb,
             onTap: () => context.push(AppRoutes.gallery),
-            child: _GalleryThumb(asset: _latestAsset),
           ),
-          // 中：快门
-          GestureDetector(
-            onTap: _takePhoto,
-            child: _ShutterButton(isLoading: _isTakingPhoto),
+          // 中间：快门按钮
+          _ShutterButton(
+            isTaking: st.isTakingPhoto,
+            countdown: _timerCountdown,
+            onTap: _handleShutter,
           ),
-          // 右：相机型号
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _showCameraSelector = !_showCameraSelector;
-                _showTopMenu = false;
-                _activePanel = null;
-              });
-            },
-            child: Consumer(
-              builder: (context, ref, _) {
-                final current = ref.watch(cameraServiceProvider).currentPreset;
-                return _CameraModelButton(preset: current);
-              },
-            ),
+          // 右侧：相机切换（GRD R 图标）
+          _CameraSwitchButton(
+            isFront: st.isFrontCamera,
+            onTap: () => ref.read(grdCameraProvider.notifier).switchCamera(),
           ),
         ],
       ),
     );
   }
 
-  // ── 底部小横条 ──
-  Widget _buildBottomHandle() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 8),
-      child: Center(
-        child: Container(
-          width: 36,
-          height: 4,
-          decoration: BoxDecoration(
-            color: Colors.white24,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      ),
-    );
-  }
+  // ── 顶部菜单浮层 ────────────────────────────────────────────────────────────
 
-  // ── 顶部菜单浮层 ──
-  Widget _buildTopMenuOverlay() {
+  Widget _buildTopMenuOverlay(GrdCameraState st) {
     return Positioned(
-      top: 60,
-      right: 16,
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          width: 200,
-          decoration: BoxDecoration(
-            color: const Color(0xFF2C2C2E),
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(100),
-                blurRadius: 20,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _TopMenuItem(
-                icon: Icons.grid_on,
-                label: '网格',
-                trailing: Switch(
-                  value: _gridEnabled,
-                  onChanged: (v) => setState(() => _gridEnabled = v),
-                  activeColor: Colors.white,
-                  activeTrackColor: Colors.blue,
-                ),
-                onTap: () => setState(() => _gridEnabled = !_gridEnabled),
-              ),
-              const Divider(height: 1, color: Colors.white12),
-              _TopMenuItem(
-                icon: Icons.hd_outlined,
-                label: '清晰度',
-                onTap: () {},
-              ),
-              const Divider(height: 1, color: Colors.white12),
-              _TopMenuItem(
-                icon: Icons.crop_square,
-                label: '小画幅',
-                onTap: () {},
-              ),
-              const Divider(height: 1, color: Colors.white12),
-              _TopMenuItem(
-                icon: Icons.exposure,
-                label: '双重曝光',
-                onTap: () {},
-              ),
-              const Divider(height: 1, color: Colors.white12),
-              _TopMenuItem(
-                icon: Icons.burst_mode_outlined,
-                label: '连拍',
-                onTap: () {},
-              ),
-              const Divider(height: 1, color: Colors.white12),
-              _TopMenuItem(
-                icon: Icons.settings_outlined,
-                label: '设置',
-                onTap: () {
-                  _closeAllPanels();
-                  context.push(AppRoutes.settings);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── 活跃底部面板 ──
-  Widget _buildActivePanel() {
-    switch (_activePanel) {
-      case 'watermark':
-        return _WatermarkPanel(
-          onClose: () => setState(() => _activePanel = null),
-        );
-      case 'frame':
-        return _FramePanel(
-          onClose: () => setState(() => _activePanel = null),
-        );
-      case 'filter':
-        return _FilterPanel(
-          onClose: () => setState(() => _activePanel = null),
-        );
-      case 'ratio':
-        return _RatioPanel(
-          onClose: () => setState(() => _activePanel = null),
-        );
-      case 'lens':
-        return _LensPanel(
-          onClose: () => setState(() => _activePanel = null),
-        );
-      default:
-        return const SizedBox.shrink();
-    }
-  }
-}
-
-// ─── 相机选择器底部弹窗 ─────────────────────────────────────────────────────
-
-class _CameraSelectorSheet extends ConsumerStatefulWidget {
-  final VoidCallback onClose;
-  final void Function(String panel) onShowPanel;
-  final String? activePanel;
-
-  const _CameraSelectorSheet({
-    required this.onClose,
-    required this.onShowPanel,
-    required this.activePanel,
-  });
-
-  @override
-  ConsumerState<_CameraSelectorSheet> createState() =>
-      _CameraSelectorSheetState();
-}
-
-class _CameraSelectorSheetState extends ConsumerState<_CameraSelectorSheet> {
-  String _tab = '照片'; // '照片' | '视频'
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {}, // 阻止点击穿透
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 拖动条
-            Container(
-              margin: const EdgeInsets.only(top: 8),
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[600],
-                borderRadius: BorderRadius.circular(2),
-              ),
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 60, 12, 0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A).withAlpha(240),
+              borderRadius: BorderRadius.circular(16),
             ),
-            // 标签栏
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  _TabButton(
-                    label: '照片',
-                    active: _tab == '照片',
-                    onTap: () => setState(() => _tab = '照片'),
-                  ),
-                  const SizedBox(width: 20),
-                  _TabButton(
-                    label: '视频',
-                    active: _tab == '视频',
-                    onTap: () => setState(() => _tab = '视频'),
-                  ),
-                  const Spacer(),
-                  _OutlineBtn(
-                    icon: Icons.landscape_outlined,
-                    label: '样图',
-                    onTap: () {},
-                  ),
-                  const SizedBox(width: 8),
-                  _OutlineBtn(
-                    icon: Icons.camera_alt_outlined,
-                    label: '管理',
-                    onTap: () {
-                      widget.onClose();
-                      context.push(AppRoutes.settings);
-                    },
-                  ),
-                ],
-              ),
-            ),
-            // 相机列表
-            Consumer(
-              builder: (context, ref, _) {
-                final presetsAsync = ref.watch(presetListProvider);
-                return presetsAsync.when(
-                  data: (presets) {
-                    final filtered = _tab == '视频'
-                        ? presets.where((p) => p.supportsVideo).toList()
-                        : presets.where((p) => p.supportsPhoto).toList();
-                    final current =
-                        ref.watch(cameraServiceProvider).currentPreset;
-                    return SizedBox(
-                      height: 100,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          final preset = filtered[index];
-                          final isSelected = current?.id == preset.id;
-                          return GestureDetector(
-                            onTap: () {
-                              ref
-                                  .read(cameraServiceProvider.notifier)
-                                  .setPreset(preset);
-                              widget.onClose();
-                            },
-                            child: _PresetCell(
-                              preset: preset,
-                              isSelected: isSelected,
-                            ),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                  loading: () => const SizedBox(
-                    height: 100,
-                    child: Center(
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    ),
-                  ),
-                  error: (_, __) => const SizedBox(height: 100),
-                );
-              },
-            ),
-            // 底部功能按钮行（水印/边框/滤镜/比例/镜头）
-            _buildPanelButtons(),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPanelButtons() {
-    final buttons = [
-      ('watermark', Icons.access_time_outlined, '水印'),
-      ('frame', Icons.crop_square_outlined, '边框'),
-      ('filter', Icons.tune_outlined, '滤镜'),
-      ('ratio', Icons.aspect_ratio_outlined, '比例'),
-      ('lens', Icons.camera_outlined, '镜头'),
-    ];
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: buttons.map((b) {
-          final isActive = widget.activePanel == b.$1;
-          return GestureDetector(
-            onTap: () => widget.onShowPanel(b.$1),
+            padding: const EdgeInsets.all(16),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isActive
-                        ? Colors.white.withAlpha(40)
-                        : Colors.white.withAlpha(15),
-                    border: isActive
-                        ? Border.all(color: Colors.white54)
-                        : null,
-                  ),
-                  child: Icon(b.$2,
-                      color: isActive ? Colors.white : Colors.white60,
-                      size: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _TopMenuItem(
+                      icon: st.gridEnabled
+                          ? Icons.grid_on
+                          : Icons.grid_off,
+                      label: st.gridEnabled ? '网格线开启' : '网格线关闭',
+                      onTap: () {
+                        ref.read(grdCameraProvider.notifier).toggleGrid();
+                      },
+                    ),
+                    _TopMenuItem(
+                      icon: Icons.tune,
+                      label: '清晰度',
+                      onTap: () {},
+                    ),
+                    _TopMenuItem(
+                      icon: Icons.crop_free,
+                      label: '小框模式关闭',
+                      onTap: () {},
+                    ),
+                    _TopMenuItem(
+                      icon: Icons.filter_none,
+                      label: '双重曝光关闭',
+                      onTap: () {},
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  b.$3,
-                  style: TextStyle(
-                    color: isActive ? Colors.white : Colors.white54,
-                    fontSize: 11,
-                  ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _TopMenuItem(
+                      icon: Icons.burst_mode_outlined,
+                      label: '连拍关闭',
+                      onTap: () {},
+                    ),
+                    _TopMenuItem(
+                      icon: Icons.settings_outlined,
+                      label: '设置',
+                      onTap: () => context.push(AppRoutes.settings),
+                    ),
+                  ],
                 ),
               ],
             ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-
-// ─── 水印面板 ────────────────────────────────────────────────────────────────
-
-class _WatermarkPanel extends StatefulWidget {
-  final VoidCallback onClose;
-  const _WatermarkPanel({required this.onClose});
-  @override
-  State<_WatermarkPanel> createState() => _WatermarkPanelState();
-}
-
-class _WatermarkPanelState extends State<_WatermarkPanel> {
-  String _tab = '颜色';
-  Color _selectedColor = const Color(0xFFFF8C00);
-  bool _enabled = true;
-
-  static const _colors = [
-    Colors.white,
-    Color(0xFF4CAF50),
-    Color(0xFFFFEB3B),
-    Color(0xFFFF8C00),
-    Color(0xFFFF5722),
-    Color(0xFFF44336),
-    Color(0xFFE91E63),
-    Color(0xFF2196F3),
-    Colors.black,
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {},
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFFF2F2F7),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const _PanelHandle(),
-            // 标题行
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  const Text(
-                    '时间水印',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => setState(() => _enabled = !_enabled),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _enabled ? Colors.black : Colors.grey[300],
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        _enabled ? '有水印' : '无水印',
-                        style: TextStyle(
-                          color: _enabled ? Colors.white : Colors.black54,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // 子标签
-            _SubTabs(
-              tabs: const ['颜色', '样式', '位置', '方向', '大小'],
-              selected: _tab,
-              onSelect: (t) => setState(() => _tab = t),
-            ),
-            const SizedBox(height: 12),
-            // 预览
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Center(
-                child: Text(
-                  "2 25 '22",
-                  style: TextStyle(
-                    color: _selectedColor,
-                    fontSize: 28,
-                    fontFamily: 'monospace',
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            // 颜色选择
-            if (_tab == '颜色')
-              SizedBox(
-                height: 52,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _colors.length,
-                  itemBuilder: (ctx, i) {
-                    final c = _colors[i];
-                    final isSelected = _selectedColor == c;
-                    return GestureDetector(
-                      onTap: () => setState(() => _selectedColor = c),
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        margin: const EdgeInsets.only(right: 10),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: c,
-                          border: isSelected
-                              ? Border.all(color: Colors.blue, width: 3)
-                              : Border.all(
-                                  color: Colors.grey[300]!, width: 1),
-                        ),
-                        child: isSelected
-                            ? const Icon(Icons.check,
-                                color: Colors.white, size: 20)
-                            : null,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            const SizedBox(height: 20),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ─── 边框面板 ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// 取景框内悬浮药丸按钮
+// ─────────────────────────────────────────────────────────────────────────────
 
-class _FramePanel extends StatefulWidget {
-  final VoidCallback onClose;
-  const _FramePanel({required this.onClose});
-  @override
-  State<_FramePanel> createState() => _FramePanelState();
-}
-
-class _FramePanelState extends State<_FramePanel> {
-  String _tab = '样式';
-  int _selectedIndex = 2; // 白色
-
-  static const _frameColors = [
-    Color(0xFF1C1C1E), // 随机
-    Color(0xFFD4B44A), // 黄色
-    Color(0xFFF5F5F5), // 白色
-    Color(0xFF6B8E4E), // 绿色
-    Color(0xFF1A1A1A), // 黑色
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {},
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFFF2F2F7),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const _PanelHandle(),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  const Text(
-                    '边框',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => setState(() => _selectedIndex = -1),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _selectedIndex == -1
-                            ? Colors.black
-                            : Colors.grey[300],
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '无边框',
-                        style: TextStyle(
-                          color: _selectedIndex == -1
-                              ? Colors.white
-                              : Colors.black54,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            _SubTabs(
-              tabs: const ['样式', '背景'],
-              selected: _tab,
-              onSelect: (t) => setState(() => _tab = t),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 80,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _frameColors.length,
-                itemBuilder: (ctx, i) {
-                  final isSelected = _selectedIndex == i;
-                  return GestureDetector(
-                    onTap: () => setState(() => _selectedIndex = i),
-                    child: Stack(
-                      children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          margin: const EdgeInsets.only(right: 10),
-                          decoration: BoxDecoration(
-                            color: _frameColors[i],
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: Colors.grey[300]!,
-                              width: 1,
-                            ),
-                          ),
-                          child: i == 0
-                              ? const Center(
-                                  child: Icon(Icons.shuffle,
-                                      color: Colors.white54, size: 24))
-                              : null,
-                        ),
-                        if (isSelected)
-                          Positioned(
-                            bottom: 4,
-                            right: 14,
-                            child: Container(
-                              width: 20,
-                              height: 20,
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.blue,
-                              ),
-                              child: const Icon(Icons.check,
-                                  color: Colors.white, size: 14),
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── 滤镜面板 ────────────────────────────────────────────────────────────────
-
-class _FilterPanel extends ConsumerStatefulWidget {
-  final VoidCallback onClose;
-  const _FilterPanel({required this.onClose});
-  @override
-  ConsumerState<_FilterPanel> createState() => _FilterPanelState();
-}
-
-class _FilterPanelState extends ConsumerState<_FilterPanel> {
-  int _selectedIndex = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {},
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const _PanelHandle(dark: true),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('滤镜',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600)),
-              ),
-            ),
-            Consumer(
-              builder: (context, ref, _) {
-                final presetsAsync = ref.watch(presetListProvider);
-                return presetsAsync.when(
-                  data: (presets) {
-                    return SizedBox(
-                      height: 90,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        itemCount: presets.length,
-                        itemBuilder: (ctx, i) {
-                          final isSelected = _selectedIndex == i;
-                          return GestureDetector(
-                            onTap: () => setState(() => _selectedIndex = i),
-                            child: Container(
-                              width: 64,
-                              margin: const EdgeInsets.only(right: 8),
-                              child: Column(
-                                children: [
-                                  Container(
-                                    width: 56,
-                                    height: 56,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(10),
-                                      color: Colors.grey[800],
-                                      border: isSelected
-                                          ? Border.all(
-                                              color: Colors.white, width: 2)
-                                          : null,
-                                    ),
-                                    child: const Icon(Icons.camera_alt,
-                                        color: Colors.white54, size: 24),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    presets[i].name,
-                                    style: TextStyle(
-                                      color: isSelected
-                                          ? Colors.white
-                                          : Colors.white54,
-                                      fontSize: 9,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                  loading: () => const SizedBox(
-                      height: 90,
-                      child: Center(
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))),
-                  error: (_, __) => const SizedBox(height: 90),
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── 比例面板 ────────────────────────────────────────────────────────────────
-
-class _RatioPanel extends StatefulWidget {
-  final VoidCallback onClose;
-  const _RatioPanel({required this.onClose});
-  @override
-  State<_RatioPanel> createState() => _RatioPanelState();
-}
-
-class _RatioPanelState extends State<_RatioPanel> {
-  String _selected = '4:3';
-
-  static const _ratios = ['1:1', '4:3', '3:2', '16:9', '全幅'];
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {},
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const _PanelHandle(dark: true),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('比例',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600)),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: _ratios.map((r) {
-                  final isSelected = _selected == r;
-                  return GestureDetector(
-                    onTap: () => setState(() => _selected = r),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? Colors.white
-                            : Colors.white.withAlpha(20),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        r,
-                        style: TextStyle(
-                          color: isSelected ? Colors.black : Colors.white,
-                          fontSize: 14,
-                          fontWeight: isSelected
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── 镜头面板 ────────────────────────────────────────────────────────────────
-
-class _LensPanel extends StatefulWidget {
-  final VoidCallback onClose;
-  const _LensPanel({required this.onClose});
-  @override
-  State<_LensPanel> createState() => _LensPanelState();
-}
-
-class _LensPanelState extends State<_LensPanel> {
-  String _selected = '1x';
-
-  static const _lenses = [
-    ('0.5x', '超广角'),
-    ('1x', '广角'),
-    ('2x', '长焦'),
-    ('5x', '远摄'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {},
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const _PanelHandle(dark: true),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('镜头',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600)),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: _lenses.map((l) {
-                  final isSelected = _selected == l.$1;
-                  return GestureDetector(
-                    onTap: () => setState(() => _selected = l.$1),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isSelected
-                                ? Colors.white
-                                : Colors.white.withAlpha(20),
-                          ),
-                          child: Center(
-                            child: Text(
-                              l.$1,
-                              style: TextStyle(
-                                color:
-                                    isSelected ? Colors.black : Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          l.$2,
-                          style: TextStyle(
-                            color:
-                                isSelected ? Colors.white : Colors.white54,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── 小组件 ──────────────────────────────────────────────────────────────────
-
-class _PreviewPill extends StatelessWidget {
+class _ViewfinderPill extends StatelessWidget {
   final Widget child;
   final VoidCallback onTap;
-  const _PreviewPill({required this.child, required this.onTap});
+  final bool isActive;
+
+  const _ViewfinderPill({
+    required this.child,
+    required this.onTap,
+    this.isActive = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: Colors.black.withAlpha(140),
-          borderRadius: BorderRadius.circular(16),
+          color: isActive
+              ? Colors.white.withAlpha(220)
+              : Colors.black.withAlpha(140),
+          borderRadius: BorderRadius.circular(20),
         ),
-        child: child,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            color: isActive ? Colors.black : Colors.white,
+          ),
+          child: child,
+        ),
       ),
     );
   }
 }
 
-class _QuickBtn extends StatelessWidget {
+// ─────────────────────────────────────────────────────────────────────────────
+// 模式标签
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ModeTab extends StatelessWidget {
+  final String label;
+  final bool isActive;
+
+  const _ModeTab({required this.label, required this.isActive});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: TextStyle(
+        color: isActive ? Colors.white : Colors.white38,
+        fontSize: 16,
+        fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 顶部圆角按钮（样图/管理）
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TopRoundButton extends StatelessWidget {
   final IconData icon;
-  final String? badge;
+  final String label;
   final VoidCallback onTap;
-  const _QuickBtn({required this.icon, this.badge, required this.onTap});
+
+  const _TopRoundButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Icon(icon, color: Colors.white, size: 28),
-          if (badge != null)
-            Positioned(
-              top: -6,
-              right: -8,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: Colors.orange,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(badge!,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold)),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ShutterButton extends StatelessWidget {
-  final bool isLoading;
-  const _ShutterButton({required this.isLoading});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 76,
-      height: 76,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 3),
-        color: isLoading ? Colors.grey[300] : Colors.white,
-      ),
-      child: isLoading
-          ? const Center(
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.black,
-                ),
-              ),
-            )
-          : null,
-    );
-  }
-}
-
-class _GalleryThumb extends StatelessWidget {
-  final AssetEntity? asset;
-  const _GalleryThumb({required this.asset});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        color: const Color(0xFF2C2C2E),
-        border: Border.all(color: Colors.white24, width: 1),
-      ),
-      child: asset != null
-          ? ClipRRect(
-              borderRadius: BorderRadius.circular(9),
-              child: FutureBuilder<Uint8List?>(
-                future: asset!
-                    .thumbnailDataWithSize(const ThumbnailSize(112, 112)),
-                builder: (ctx, snap) {
-                  if (snap.hasData && snap.data != null) {
-                    return Image.memory(snap.data!, fit: BoxFit.cover);
-                  }
-                  return Container(color: Colors.grey[800]);
-                },
-              ),
-            )
-          : const Icon(Icons.photo_library_outlined,
-              color: Colors.white54, size: 24),
-    );
-  }
-}
-
-class _CameraModelButton extends StatelessWidget {
-  final Preset? preset;
-  const _CameraModelButton({required this.preset});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        color: const Color(0xFF2C2C2E),
-        border: Border.all(color: Colors.white24, width: 1),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.camera_alt_outlined, color: Colors.white, size: 22),
-          if (preset != null) ...[
-            const SizedBox(height: 2),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white24),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white60, size: 14),
+            const SizedBox(width: 4),
             Text(
-              preset!.name.length > 6
-                  ? preset!.name.substring(0, 6)
-                  : preset!.name,
-              style: const TextStyle(color: Colors.white70, fontSize: 8),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
+              label,
+              style: const TextStyle(color: Colors.white60, fontSize: 13),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
-class _PresetCell extends StatelessWidget {
-  final Preset preset;
-  final bool isSelected;
-  const _PresetCell({required this.preset, required this.isSelected});
+// ─────────────────────────────────────────────────────────────────────────────
+// 快门按钮
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ShutterButton extends StatelessWidget {
+  final bool isTaking;
+  final int countdown;
+  final VoidCallback onTap;
+
+  const _ShutterButton({
+    required this.isTaking,
+    required this.countdown,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 72,
-      margin: const EdgeInsets.only(right: 8),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 72,
+        height: 72,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 3),
+        ),
+        child: Center(
+          child: isTaking
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : Container(
+                  width: 58,
+                  height: 58,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 图库缩略图
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _GalleryThumb extends StatelessWidget {
+  final Uint8List? thumb;
+  final VoidCallback onTap;
+
+  const _GalleryThumb({this.thumb, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFD4A017), width: 2.5),
+          color: const Color(0xFF1A1A1A),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: thumb != null
+              ? Image.memory(thumb!, fit: BoxFit.cover)
+              : const Icon(Icons.photo_outlined,
+                  color: Colors.white24, size: 24),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 相机切换按钮（GRD R 相机图标）
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CameraSwitchButton extends StatelessWidget {
+  final bool isFront;
+  final VoidCallback onTap;
+
+  const _CameraSwitchButton({required this.isFront, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.white24,
+            width: 1,
+            style: BorderStyle.solid,
+          ),
+        ),
+        child: ClipOval(
+          child: Container(
+            color: const Color(0xFF111111),
+            child: const Icon(
+              Icons.cameraswitch_outlined,
+              color: Colors.white60,
+              size: 24,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 顶部菜单项
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TopMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _TopMenuItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 64,
-            height: 64,
+            width: 56,
+            height: 56,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: const Color(0xFF3A3A3C),
-              border: Border.all(
-                color: isSelected ? Colors.white : Colors.transparent,
-                width: 2,
-              ),
+              color: Colors.white.withAlpha(12),
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: Stack(
-              children: [
-                const Center(
-                  child: Icon(Icons.camera_alt,
-                      color: Colors.white54, size: 26),
-                ),
-                if (preset.isPremium)
-                  Positioned(
-                    bottom: 4,
-                    right: 4,
-                    child: Container(
-                      width: 16,
-                      height: 16,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Color(0xFF007AFF),
-                      ),
-                      child: const Center(
-                        child: Text('β',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            child: Icon(icon, color: Colors.white, size: 22),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
-            preset.name,
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.grey[400],
-              fontSize: 10,
-            ),
-            overflow: TextOverflow.ellipsis,
+            label,
+            style: const TextStyle(color: Colors.white60, fontSize: 10),
             textAlign: TextAlign.center,
           ),
         ],
@@ -1592,175 +880,794 @@ class _PresetCell extends StatelessWidget {
   }
 }
 
-class _TabButton extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  const _TabButton(
-      {required this.label, required this.active, required this.onTap});
+// ─────────────────────────────────────────────────────────────────────────────
+// 滤镜面板
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FilterPanel extends StatelessWidget {
+  final List filters;
+  final String? activeId;
+  final void Function(String) onSelect;
+
+  const _FilterPanel({
+    required this.filters,
+    required this.activeId,
+    required this.onSelect,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Text(
-        label,
-        style: TextStyle(
-          color: active ? Colors.white : Colors.grey[500],
-          fontSize: 16,
-          fontWeight: active ? FontWeight.bold : FontWeight.normal,
+    return _PanelContainer(
+      title: '滤镜',
+      rightAction: activeId != null ? '无滤镜' : null,
+      onRightAction: activeId != null ? () => onSelect('none') : null,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            for (final f in filters)
+              Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: _FilterItem(
+                  filter: f,
+                  isActive: f.id == activeId,
+                  onTap: () => onSelect(f.id),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _OutlineBtn extends StatelessWidget {
-  final IconData icon;
-  final String label;
+class _FilterItem extends StatelessWidget {
+  final dynamic filter;
+  final bool isActive;
   final VoidCallback onTap;
-  const _OutlineBtn(
-      {required this.icon, required this.label, required this.onTap});
+
+  const _FilterItem({
+    required this.filter,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: const Color(0xFFE0E0E0),
+                  border: isActive
+                      ? Border.all(color: Colors.black, width: 2.5)
+                      : null,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    color: filter.id == 'grd_high_contrast'
+                        ? const Color(0xFF2A2A2A)
+                        : const Color(0xFF8A9BA8),
+                  ),
+                ),
+              ),
+              if (isActive)
+                Positioned(
+                  bottom: 4,
+                  right: 4,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black,
+                    ),
+                    child: const Icon(Icons.check,
+                        color: Colors.white, size: 12),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            filter.name as String,
+            style: const TextStyle(fontSize: 11, color: Colors.black87),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 镜头面板（5个镜头）
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _LensPanel extends StatelessWidget {
+  final List lenses;
+  final String? activeId;
+  final void Function(String) onSelect;
+
+  const _LensPanel({
+    required this.lenses,
+    required this.activeId,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _PanelContainer(
+      title: '镜头',
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            for (final l in lenses)
+              Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: _LensItem(
+                  lens: l,
+                  isActive: l.id == activeId,
+                  onTap: () => onSelect(l.id),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LensItem extends StatelessWidget {
+  final dynamic lens;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _LensItem({
+    required this.lens,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  // 镜头特效颜色
+  Color _lensColor(String id) {
+    switch (id) {
+      case 'wide': return const Color(0xFF4A90D9);
+      case 'vintage': return const Color(0xFF8B6914);
+      case 'dream': return const Color(0xFFD4A0C8);
+      case 'prism': return const Color(0xFF6A4FC8);
+      default: return const Color(0xFF4A4A4A);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _lensColor(lens.id as String),
+                  border: isActive
+                      ? Border.all(color: Colors.black, width: 2.5)
+                      : Border.all(color: Colors.transparent, width: 2.5),
+                ),
+                child: Center(
+                  child: Text(
+                    (lens.nameEn as String).substring(0, 1).toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              if (isActive)
+                Positioned(
+                  bottom: 2,
+                  right: 2,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black,
+                    ),
+                    child: const Icon(Icons.check,
+                        color: Colors.white, size: 12),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            lens.name as String,
+            style: const TextStyle(fontSize: 11, color: Colors.black87),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 比例面板
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _RatioPanel extends StatelessWidget {
+  final List ratios;
+  final String? activeId;
+  final void Function(String) onSelect;
+
+  const _RatioPanel({
+    required this.ratios,
+    required this.activeId,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _PanelContainer(
+      title: '比例',
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            for (final r in ratios)
+              Padding(
+                padding: const EdgeInsets.only(right: 20),
+                child: _RatioItem(
+                  ratio: r,
+                  isActive: r.id == activeId,
+                  onTap: () => onSelect(r.id),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RatioItem extends StatelessWidget {
+  final dynamic ratio;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _RatioItem({
+    required this.ratio,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final w = (ratio.width as int).toDouble();
+    final h = (ratio.height as int).toDouble();
+    final maxH = 56.0;
+    final maxW = 56.0;
+    double rw, rh;
+    if (w / h > 1) {
+      rw = maxW;
+      rh = maxW * h / w;
+    } else {
+      rh = maxH;
+      rw = maxH * w / h;
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 64,
+            height: 64,
+            child: Center(
+              child: Container(
+                width: rw,
+                height: rh,
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: isActive ? Colors.black : Colors.black38,
+                    width: isActive ? 2.5 : 1.5,
+                  ),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            ratio.label as String,
+            style: TextStyle(
+              fontSize: 12,
+              color: isActive ? Colors.black : Colors.black54,
+              fontWeight:
+                  isActive ? FontWeight.w600 : FontWeight.w400,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 边框面板
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FramePanel extends StatelessWidget {
+  final List frames;
+  final String? activeId;
+  final String? activeRatioId;
+  final void Function(String) onSelect;
+
+  const _FramePanel({
+    required this.frames,
+    required this.activeId,
+    required this.activeRatioId,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _PanelContainer(
+      title: '边框',
+      rightAction: '无边框',
+      onRightAction: () => onSelect('frame_none'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 样式 tab
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Row(
+              children: [
+                _FrameTabLabel(label: '样式', isActive: true),
+                const SizedBox(width: 20),
+                _FrameTabLabel(label: '背景', isActive: false),
+              ],
+            ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                // 随机/无边框
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: _FrameItem(
+                    id: 'frame_none',
+                    label: '无',
+                    isActive: activeId == null || activeId == 'frame_none',
+                    onTap: () => onSelect('frame_none'),
+                    child: const Icon(Icons.shuffle, size: 28, color: Colors.black54),
+                  ),
+                ),
+                for (final f in frames)
+                  if (f.id != 'frame_none')
+                    Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: _FrameItem(
+                        id: f.id,
+                        label: f.name,
+                        isActive: f.id == activeId,
+                        onTap: () => onSelect(f.id),
+                        child: Container(
+                          color: const Color(0xFFF5F2EA),
+                          child: Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Container(
+                              color: const Color(0xFFD0C8B8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FrameTabLabel extends StatelessWidget {
+  final String label;
+  final bool isActive;
+  const _FrameTabLabel({required this.label, required this.isActive});
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            color: isActive ? Colors.black : Colors.black38,
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+        if (isActive)
+          Container(
+            margin: const EdgeInsets.only(top: 2),
+            height: 2,
+            width: 24,
+            color: Colors.black,
+          ),
+      ],
+    );
+  }
+}
+
+class _FrameItem extends StatelessWidget {
+  final String id;
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _FrameItem({
+    required this.id,
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: isActive
+                      ? Border.all(color: Colors.black, width: 2.5)
+                      : Border.all(color: Colors.black12, width: 1),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: child,
+                ),
+              ),
+              if (isActive)
+                Positioned(
+                  bottom: 4,
+                  right: 4,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black,
+                    ),
+                    child: const Icon(Icons.check,
+                        color: Colors.white, size: 12),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(label,
+              style: const TextStyle(fontSize: 11, color: Colors.black87)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 水印面板
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _WatermarkPanel extends StatelessWidget {
+  final List presets;
+  final String? activeId;
+  final void Function(String) onSelect;
+
+  const _WatermarkPanel({
+    required this.presets,
+    required this.activeId,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _PanelContainer(
+      title: '时间水印',
+      rightAction: '无水印',
+      onRightAction: () => onSelect('none'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 颜色 tab 行
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Row(
+              children: [
+                _FrameTabLabel(label: '颜色', isActive: true),
+                const SizedBox(width: 20),
+                _FrameTabLabel(label: '样式', isActive: false),
+                const SizedBox(width: 20),
+                _FrameTabLabel(label: '位置', isActive: false),
+                const SizedBox(width: 20),
+                _FrameTabLabel(label: '方向', isActive: false),
+                const SizedBox(width: 20),
+                _FrameTabLabel(label: '大小', isActive: false),
+              ],
+            ),
+          ),
+          // 水印预览
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Container(
+              width: double.infinity,
+              height: 60,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: Text(
+                  _currentDateString(),
+                  style: TextStyle(
+                    color: _activeColor(activeId),
+                    fontSize: 22,
+                    fontFamily: 'monospace',
+                    letterSpacing: 2,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // 颜色选择行
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                // 彩虹渐变
+                _ColorDot(
+                  color: null,
+                  isActive: false,
+                  onTap: () {},
+                  isRainbow: true,
+                ),
+                for (final color in _watermarkColors)
+                  _ColorDot(
+                    color: color,
+                    isActive: _isColorActive(activeId, color),
+                    onTap: () => _selectByColor(color, onSelect, presets),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static const List<Color> _watermarkColors = [
+    Color(0xFF4CAF50),
+    Color(0xFFFFEB3B),
+    Color(0xFFFF9800),
+    Color(0xFFFF8A3D), // date_orange
+    Color(0xFFF44336),
+    Color(0xFFE91E63),
+    Color(0xFF2196F3),
+    Colors.black,
+    Colors.white,
+  ];
+
+  Color _activeColor(String? id) {
+    if (id == 'date_orange') return const Color(0xFFFF8A3D);
+    if (id == 'date_white') return Colors.white;
+    return const Color(0xFFFF8A3D);
+  }
+
+  bool _isColorActive(String? activeId, Color color) {
+    if (activeId == 'date_orange' &&
+        color == const Color(0xFFFF8A3D)) return true;
+    if (activeId == 'date_white' && color == Colors.white) return true;
+    return false;
+  }
+
+  void _selectByColor(
+      Color color, void Function(String) onSelect, List presets) {
+    if (color == const Color(0xFFFF8A3D)) {
+      onSelect('date_orange');
+    } else if (color == Colors.white) {
+      onSelect('date_white');
+    } else {
+      onSelect('date_orange');
+    }
+  }
+
+  String _currentDateString() {
+    final now = DateTime.now();
+    return '${now.month} ${now.day.toString().padLeft(2, '0')} \'${now.year.toString().substring(2)}';
+  }
+}
+
+class _ColorDot extends StatelessWidget {
+  final Color? color;
+  final bool isActive;
+  final VoidCallback onTap;
+  final bool isRainbow;
+
+  const _ColorDot({
+    this.color,
+    required this.isActive,
+    required this.onTap,
+    this.isRainbow = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        margin: const EdgeInsets.only(right: 10),
+        width: 36,
+        height: 36,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.grey[600]!),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: Colors.white, size: 13),
-            const SizedBox(width: 4),
-            Text(label,
-                style: const TextStyle(color: Colors.white, fontSize: 12)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TopMenuItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Widget? trailing;
-  final VoidCallback onTap;
-  const _TopMenuItem(
-      {required this.icon,
-      required this.label,
-      this.trailing,
-      required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.white, size: 18),
-            const SizedBox(width: 10),
-            Text(label,
-                style: const TextStyle(color: Colors.white, fontSize: 14)),
-            const Spacer(),
-            if (trailing != null) trailing!,
-          ],
+          shape: BoxShape.circle,
+          gradient: isRainbow
+              ? const SweepGradient(colors: [
+                  Colors.red,
+                  Colors.orange,
+                  Colors.yellow,
+                  Colors.green,
+                  Colors.blue,
+                  Colors.purple,
+                  Colors.red,
+                ])
+              : null,
+          color: isRainbow ? null : color,
+          border: isActive
+              ? Border.all(color: Colors.black, width: 2.5)
+              : Border.all(color: Colors.black12, width: 1),
         ),
       ),
     );
   }
 }
 
-class _SubTabs extends StatelessWidget {
-  final List<String> tabs;
-  final String selected;
-  final void Function(String) onSelect;
-  const _SubTabs(
-      {required this.tabs, required this.selected, required this.onSelect});
+// ─────────────────────────────────────────────────────────────────────────────
+// 面板容器（通用）
+// ─────────────────────────────────────────────────────────────────────────────
 
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: tabs.map((t) {
-          final isSelected = selected == t;
-          return GestureDetector(
-            onTap: () => onSelect(t),
-            child: Padding(
-              padding: const EdgeInsets.only(right: 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    t,
-                    style: TextStyle(
-                      color: isSelected ? Colors.black : Colors.black45,
-                      fontSize: 14,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  if (isSelected)
-                    Container(
-                      height: 2,
-                      width: 20,
-                      color: Colors.black,
-                    ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
+class _PanelContainer extends StatelessWidget {
+  final String title;
+  final String? rightAction;
+  final VoidCallback? onRightAction;
+  final Widget child;
 
-class _PanelHandle extends StatelessWidget {
-  final bool dark;
-  const _PanelHandle({this.dark = false});
+  const _PanelContainer({
+    required this.title,
+    this.rightAction,
+    this.onRightAction,
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(top: 8, bottom: 4),
-      width: 36,
-      height: 4,
-      decoration: BoxDecoration(
-        color: dark ? Colors.white24 : Colors.black26,
-        borderRadius: BorderRadius.circular(2),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF2F2F2),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 拖拽指示条
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 8, bottom: 4),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.black12,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          // 标题行
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 16, 0),
+            child: Row(
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black,
+                  ),
+                ),
+                const Spacer(),
+                if (rightAction != null)
+                  GestureDetector(
+                    onTap: onRightAction,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        rightAction!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          child,
+        ],
       ),
     );
   }
 }
 
-// ─── 网格画笔 ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// 网格画笔
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white24
+      ..color = Colors.white.withAlpha(60)
       ..strokeWidth = 0.5;
-    final w = size.width;
-    final h = size.height;
-    canvas.drawLine(Offset(w / 3, 0), Offset(w / 3, h), paint);
-    canvas.drawLine(Offset(w * 2 / 3, 0), Offset(w * 2 / 3, h), paint);
-    canvas.drawLine(Offset(0, h / 3), Offset(w, h / 3), paint);
-    canvas.drawLine(Offset(0, h * 2 / 3), Offset(w, h * 2 / 3), paint);
+    // 三等分线
+    for (int i = 1; i < 3; i++) {
+      final x = size.width * i / 3;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+      final y = size.height * i / 3;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
   }
 
   @override
-  bool shouldRepaint(_GridPainter oldDelegate) => false;
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -49,6 +49,7 @@ flutter:
   uses-material-design: true
   
   assets:
+    - assets/cameras/
     - assets/presets/
     - assets/lut/
     - assets/grain/

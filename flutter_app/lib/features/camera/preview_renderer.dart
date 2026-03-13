@@ -1,0 +1,553 @@
+// preview_renderer.dart
+// Real-time preview rendering pipeline for GRD R camera.
+// Applies: temperature shift, contrast, saturation, vignette, chromatic aberration,
+// bloom, soft-focus, and lens distortion using Flutter CustomPainter + ColorFilter.
+//
+// Design: Darkroom Aesthetics — deep brown-black, amber highlights, film grain texture.
+
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import '../../models/camera_definition.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PreviewRenderParams — all parameters needed for one frame render
+// ─────────────────────────────────────────────────────────────────────────────
+
+class PreviewRenderParams {
+  final DefaultLook defaultLook;
+  final FilterDefinition? activeFilter;
+  final LensDefinition? activeLens;
+  final double temperatureOffset; // user-adjusted, -100..100
+  final double exposureOffset;    // user-adjusted, -2.0..2.0
+  final PreviewPolicy policy;
+
+  const PreviewRenderParams({
+    required this.defaultLook,
+    this.activeFilter,
+    this.activeLens,
+    this.temperatureOffset = 0,
+    this.exposureOffset = 0,
+    required this.policy,
+  });
+
+  // Effective vignette = defaultLook + lens override
+  double get effectiveVignette {
+    final base = defaultLook.vignette;
+    final lens = activeLens?.vignette ?? 0;
+    return (base + lens).clamp(0.0, 1.0);
+  }
+
+  double get effectiveChromaticAberration {
+    final base = defaultLook.chromaticAberration;
+    final lens = activeLens?.chromaticAberration ?? 0;
+    return (base + lens).clamp(0.0, 0.1);
+  }
+
+  double get effectiveBloom {
+    final base = defaultLook.bloom;
+    final lens = activeLens?.bloom ?? 0;
+    return (base + lens).clamp(0.0, 1.0);
+  }
+
+  double get effectiveSoftFocus {
+    return (activeLens?.softFocus ?? 0).clamp(0.0, 1.0);
+  }
+
+  double get effectiveContrast {
+    final base = defaultLook.contrast;
+    final filter = activeFilter?.contrast ?? 1.0;
+    return (base * filter).clamp(0.5, 2.0);
+  }
+
+  double get effectiveSaturation {
+    final base = defaultLook.saturation;
+    final filter = activeFilter?.saturation ?? 1.0;
+    return (base * filter).clamp(0.0, 2.0);
+  }
+
+  // Temperature: combine defaultLook + user offset
+  // defaultLook.temperature is in Kelvin offset (-100 = cool, +100 = warm)
+  double get effectiveTemperature {
+    return (defaultLook.temperature + temperatureOffset).clamp(-100.0, 100.0);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PreviewFilterWidget — wraps camera Texture with render effects
+// ─────────────────────────────────────────────────────────────────────────────
+
+class PreviewFilterWidget extends StatelessWidget {
+  final int textureId;
+  final PreviewRenderParams params;
+  final double aspectRatio;
+
+  const PreviewFilterWidget({
+    super.key,
+    required this.textureId,
+    required this.params,
+    this.aspectRatio = 3 / 4,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: AspectRatio(
+        aspectRatio: aspectRatio,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Layer 1: Raw camera texture with color correction
+            _ColorCorrectedTexture(textureId: textureId, params: params),
+
+            // Layer 2: Chromatic aberration (color fringing)
+            if (params.policy.enableChromaticAberration &&
+                params.effectiveChromaticAberration > 0.001)
+              _ChromaticAberrationLayer(
+                textureId: textureId,
+                strength: params.effectiveChromaticAberration,
+              ),
+
+            // Layer 3: Bloom / soft glow
+            if (params.policy.enableBloom && params.effectiveBloom > 0.01)
+              _BloomLayer(
+                textureId: textureId,
+                strength: params.effectiveBloom,
+                softFocus: params.effectiveSoftFocus,
+              ),
+
+            // Layer 4: Vignette overlay
+            if (params.policy.enableVignette && params.effectiveVignette > 0.01)
+              _VignetteLayer(strength: params.effectiveVignette),
+
+            // Layer 5: Lens distortion indicator (visual only, subtle)
+            if (params.activeLens?.distortion != null &&
+                (params.activeLens!.distortion).abs() > 0.01)
+              _DistortionIndicator(distortion: params.activeLens!.distortion),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer 1: Color-corrected camera texture
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ColorCorrectedTexture extends StatelessWidget {
+  final int textureId;
+  final PreviewRenderParams params;
+
+  const _ColorCorrectedTexture({
+    required this.textureId,
+    required this.params,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorMatrix = _buildColorMatrix(params);
+
+    return ColorFiltered(
+      colorFilter: ColorFilter.matrix(colorMatrix),
+      child: Texture(textureId: textureId),
+    );
+  }
+
+  /// Build a 5x4 color matrix combining:
+  /// - Temperature (warm/cool shift)
+  /// - Contrast
+  /// - Saturation
+  /// - Exposure offset
+  static List<double> _buildColorMatrix(PreviewRenderParams params) {
+    // Start with identity
+    var m = _identity();
+
+    // 1. Exposure (brightness multiplier)
+    final expMul = math.pow(2.0, params.exposureOffset).toDouble();
+    m = _multiply(m, _exposureMatrix(expMul));
+
+    // 2. Temperature shift
+    if (params.policy.enableTemperature) {
+      m = _multiply(m, _temperatureMatrix(params.effectiveTemperature));
+    }
+
+    // 3. Contrast
+    if (params.policy.enableContrast) {
+      m = _multiply(m, _contrastMatrix(params.effectiveContrast));
+    }
+
+    // 4. Saturation
+    if (params.policy.enableSaturation) {
+      m = _multiply(m, _saturationMatrix(params.effectiveSaturation));
+    }
+
+    return m;
+  }
+
+  static List<double> _identity() => [
+    1, 0, 0, 0, 0,
+    0, 1, 0, 0, 0,
+    0, 0, 1, 0, 0,
+    0, 0, 0, 1, 0,
+  ];
+
+  static List<double> _exposureMatrix(double mul) => [
+    mul, 0, 0, 0, 0,
+    0, mul, 0, 0, 0,
+    0, 0, mul, 0, 0,
+    0, 0, 0, 1, 0,
+  ];
+
+  /// Temperature: warm = more red/yellow, cool = more blue/cyan
+  static List<double> _temperatureMatrix(double temp) {
+    // temp: -100 (cool) to +100 (warm)
+    final t = temp / 100.0;
+    final rShift = t * 0.15;
+    final bShift = -t * 0.15;
+    final gShift = t * 0.05;
+    return [
+      1 + rShift, 0, 0, 0, 0,
+      0, 1 + gShift, 0, 0, 0,
+      0, 0, 1 + bShift, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  /// Contrast: pivot at 0.5
+  static List<double> _contrastMatrix(double contrast) {
+    final offset = 0.5 * (1 - contrast);
+    return [
+      contrast, 0, 0, 0, offset,
+      0, contrast, 0, 0, offset,
+      0, 0, contrast, 0, offset,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  /// Saturation using luminance weights
+  static List<double> _saturationMatrix(double sat) {
+    const lr = 0.2126;
+    const lg = 0.7152;
+    const lb = 0.0722;
+    final sr = (1 - sat) * lr;
+    final sg = (1 - sat) * lg;
+    final sb = (1 - sat) * lb;
+    return [
+      sr + sat, sg, sb, 0, 0,
+      sr, sg + sat, sb, 0, 0,
+      sr, sg, sb + sat, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  /// Multiply two 5x4 color matrices (row-major, 20 elements)
+  static List<double> _multiply(List<double> a, List<double> b) {
+    final result = List<double>.filled(20, 0);
+    for (int row = 0; row < 4; row++) {
+      for (int col = 0; col < 5; col++) {
+        double sum = 0;
+        for (int k = 0; k < 4; k++) {
+          sum += a[row * 5 + k] * b[k * 5 + col];
+        }
+        if (col == 4) {
+          sum += a[row * 5 + 4]; // translation component
+        }
+        result[row * 5 + col] = sum;
+      }
+    }
+    return result;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer 2: Chromatic Aberration (RGB channel offset)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ChromaticAberrationLayer extends StatelessWidget {
+  final int textureId;
+  final double strength; // 0..0.1
+
+  const _ChromaticAberrationLayer({
+    required this.textureId,
+    required this.strength,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final offset = strength * 8.0; // pixels
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Red channel shifted left
+        Positioned.fill(
+          child: Transform.translate(
+            offset: Offset(-offset, 0),
+            child: ColorFiltered(
+              colorFilter: const ColorFilter.matrix([
+                1, 0, 0, 0, 0,
+                0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0,
+                0, 0, 0, 0.35, 0,
+              ]),
+              child: Texture(textureId: textureId),
+            ),
+          ),
+        ),
+        // Blue channel shifted right
+        Positioned.fill(
+          child: Transform.translate(
+            offset: Offset(offset, 0),
+            child: ColorFiltered(
+              colorFilter: const ColorFilter.matrix([
+                0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0,
+                0, 0, 1, 0, 0,
+                0, 0, 0, 0.35, 0,
+              ]),
+              child: Texture(textureId: textureId),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer 3: Bloom / Soft Focus Glow
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BloomLayer extends StatelessWidget {
+  final int textureId;
+  final double strength; // 0..1
+  final double softFocus; // 0..1
+
+  const _BloomLayer({
+    required this.textureId,
+    required this.strength,
+    required this.softFocus,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final blurRadius = (strength * 12 + softFocus * 20).clamp(0.0, 30.0);
+    final opacity = (strength * 0.25 + softFocus * 0.15).clamp(0.0, 0.5);
+
+    return Opacity(
+      opacity: opacity,
+      child: ImageFiltered(
+        imageFilter: ui.ImageFilter.blur(
+          sigmaX: blurRadius,
+          sigmaY: blurRadius,
+          tileMode: TileMode.clamp,
+        ),
+        child: ColorFiltered(
+          colorFilter: const ColorFilter.matrix([
+            1.2, 0, 0, 0, 0,
+            0, 1.1, 0, 0, 0,
+            0, 0, 0.9, 0, 0,
+            0, 0, 0, 1, 0,
+          ]),
+          child: Texture(textureId: textureId),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer 4: Vignette (radial dark gradient)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _VignetteLayer extends StatelessWidget {
+  final double strength; // 0..1
+
+  const _VignetteLayer({required this.strength});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: CustomPaint(
+        painter: _VignettePainter(strength: strength),
+      ),
+    );
+  }
+}
+
+class _VignettePainter extends CustomPainter {
+  final double strength;
+
+  const _VignettePainter({required this.strength});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.sqrt(
+      size.width * size.width + size.height * size.height,
+    ) / 2;
+
+    // Inner radius: clear zone (60% of frame)
+    final innerRadius = radius * (1.0 - strength * 0.5);
+    // Outer radius: full dark
+    final outerRadius = radius * 1.1;
+
+    final paint = Paint()
+      ..shader = RadialGradient(
+        center: Alignment.center,
+        radius: 1.0,
+        colors: [
+          Colors.transparent,
+          Colors.transparent,
+          Colors.black.withAlpha((strength * 200).round()),
+        ],
+        stops: [
+          0.0,
+          innerRadius / outerRadius,
+          1.0,
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: outerRadius));
+
+    canvas.drawRect(Offset.zero & size, paint);
+  }
+
+  @override
+  bool shouldRepaint(_VignettePainter old) => old.strength != strength;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer 5: Distortion indicator (subtle corner warp hint)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _DistortionIndicator extends StatelessWidget {
+  final double distortion; // negative = barrel, positive = pincushion
+
+  const _DistortionIndicator({required this.distortion});
+
+  @override
+  Widget build(BuildContext context) {
+    // Very subtle visual indicator — just a slight opacity gradient
+    // Real barrel/pincushion distortion requires GPU shader (handled in capture pipeline)
+    final isBarrel = distortion < 0;
+    return IgnorePointer(
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment.center,
+            radius: 1.0,
+            colors: [
+              Colors.transparent,
+              isBarrel
+                  ? Colors.black.withAlpha(15)
+                  : Colors.white.withAlpha(8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WatermarkOverlay — renders date/time watermark on preview
+// ─────────────────────────────────────────────────────────────────────────────
+
+class WatermarkOverlay extends StatelessWidget {
+  final WatermarkPreset? preset;
+
+  const WatermarkOverlay({super.key, this.preset});
+
+  @override
+  Widget build(BuildContext context) {
+    if (preset == null || preset!.isNone) return const SizedBox.shrink();
+
+    final color = _parseColor(preset!.color ?? '#FF8A3D');
+    final now = DateTime.now();
+    final dateStr =
+        '${now.month} ${now.day.toString().padLeft(2, ' ')} \'${now.year.toString().substring(2)}';
+
+    return Positioned(
+      right: 16,
+      bottom: 16,
+      child: Text(
+        dateStr,
+        style: TextStyle(
+          color: color,
+          fontSize: preset!.fontSize ?? 14,
+          fontFamily: 'monospace',
+          fontWeight: FontWeight.bold,
+          shadows: [
+            Shadow(
+              color: Colors.black.withAlpha(120),
+              blurRadius: 4,
+              offset: const Offset(1, 1),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _parseColor(String hex) {
+    try {
+      final h = hex.replaceAll('#', '');
+      return Color(int.parse('FF$h', radix: 16));
+    } catch (_) {
+      return const Color(0xFFFF8A3D);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GridOverlay — rule-of-thirds grid
+// ─────────────────────────────────────────────────────────────────────────────
+
+class GridOverlay extends StatelessWidget {
+  const GridOverlay({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: CustomPaint(
+        painter: _GridPainter(),
+      ),
+    );
+  }
+}
+
+class _GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withAlpha(60)
+      ..strokeWidth = 0.5;
+
+    // Vertical lines at 1/3 and 2/3
+    canvas.drawLine(
+      Offset(size.width / 3, 0),
+      Offset(size.width / 3, size.height),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(size.width * 2 / 3, 0),
+      Offset(size.width * 2 / 3, size.height),
+      paint,
+    );
+
+    // Horizontal lines at 1/3 and 2/3
+    canvas.drawLine(
+      Offset(0, size.height / 3),
+      Offset(size.width, size.height / 3),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height * 2 / 3),
+      Offset(size.width, size.height * 2 / 3),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GridPainter old) => false;
+}
