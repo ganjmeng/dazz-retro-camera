@@ -12,6 +12,10 @@ class CameraState {
   final int? textureId;
   final Preset? currentPreset;
   final bool isRecording;
+  // V3 aliases for compatibility
+  bool get isInitialized => isReady;
+  bool get isProcessing => isLoading;
+  String? get errorMessage => error;
   final String currentLens; // "front" | "back"
 
   const CameraState({

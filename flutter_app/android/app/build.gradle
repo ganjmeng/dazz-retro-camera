@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace "com.retrocam.app"
+    namespace = "com.retrocam.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -19,7 +19,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.retrocam.app"
+        applicationId = "com.retrocam.app"
         minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -33,7 +33,6 @@ android {
             shrinkResources false
         }
         debug {
-            applicationIdSuffix ".debug"
             debuggable true
         }
     }

@@ -1,5 +1,7 @@
-/// Preset 核心数据模型
+/// Preset 核心数据模型 (V3)
 /// 代表一台"虚拟相机"，包含其视觉效果的完整配置。
+
+// ─── DateStamp 配置 ───────────────────────────────────────────────────────────
 
 class DateStampConfig {
   final bool enabled;
@@ -28,6 +30,8 @@ class DateStampConfig {
         'position': position,
       };
 }
+
+// ─── PresetParams（渲染参数） ─────────────────────────────────────────────────
 
 class PresetParams {
   final double exposureBias;
@@ -106,6 +110,8 @@ class PresetParams {
       };
 }
 
+// ─── PresetResources（资源引用） ──────────────────────────────────────────────
+
 class PresetResources {
   final String lutName;
   final String grainTextureName;
@@ -120,8 +126,8 @@ class PresetResources {
   });
 
   factory PresetResources.fromJson(Map<String, dynamic> json) => PresetResources(
-        lutName: json['lutName'] as String,
-        grainTextureName: json['grainTextureName'] as String,
+        lutName: json['lutName'] as String? ?? '',
+        grainTextureName: json['grainTextureName'] as String? ?? '',
         leakTextureNames: (json['leakTextureNames'] as List<dynamic>?)
                 ?.map((e) => e as String)
                 .toList() ??
@@ -137,47 +143,224 @@ class PresetResources {
       };
 }
 
-class Preset {
+// ─── V3: OptionItem（选项条目） ───────────────────────────────────────────────
+
+class OptionItem {
   final String id;
   final String name;
-  final String category;
-  final bool supportsPhoto;
-  final bool supportsVideo;
-  final bool isPremium;
-  final PresetResources resources;
-  final PresetParams params;
+  final String? lutName;
+  final String? grainTextureName;
+  final String? frameOverlayName;
+  final String? watermarkName;
 
-  const Preset({
+  const OptionItem({
     required this.id,
     required this.name,
-    required this.category,
-    required this.supportsPhoto,
-    required this.supportsVideo,
-    required this.isPremium,
-    required this.resources,
-    required this.params,
+    this.lutName,
+    this.grainTextureName,
+    this.frameOverlayName,
+    this.watermarkName,
   });
 
-  factory Preset.fromJson(Map<String, dynamic> json) => Preset(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        category: json['category'] as String,
-        supportsPhoto: json['supportsPhoto'] as bool? ?? true,
-        supportsVideo: json['supportsVideo'] as bool? ?? false,
-        isPremium: json['isPremium'] as bool? ?? false,
-        resources: PresetResources.fromJson(
-            json['resources'] as Map<String, dynamic>),
-        params: PresetParams.fromJson(json['params'] as Map<String, dynamic>),
+  factory OptionItem.fromJson(Map<String, dynamic> json) => OptionItem(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        lutName: json['lutName'] as String?,
+        grainTextureName: json['grainTextureName'] as String?,
+        frameOverlayName: json['frameOverlayName'] as String?,
+        watermarkName: json['watermarkName'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
+        if (lutName != null) 'lutName': lutName,
+        if (grainTextureName != null) 'grainTextureName': grainTextureName,
+        if (frameOverlayName != null) 'frameOverlayName': frameOverlayName,
+        if (watermarkName != null) 'watermarkName': watermarkName,
+      };
+}
+
+// ─── V3: OptionGroup（选项组） ────────────────────────────────────────────────
+
+class OptionGroup {
+  final String type; // 'films' | 'lenses' | 'papers' | 'ratios' | 'watermarks'
+  final String label;
+  final String defaultId;
+  final List<OptionItem> items;
+
+  const OptionGroup({
+    required this.type,
+    required this.label,
+    required this.defaultId,
+    required this.items,
+  });
+
+  factory OptionGroup.fromJson(Map<String, dynamic> json) => OptionGroup(
+        type: json['type'] as String? ?? '',
+        label: json['label'] as String? ?? '',
+        defaultId: json['defaultId'] as String? ?? '',
+        items: (json['items'] as List<dynamic>?)
+                ?.map((e) => OptionItem.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [],
+      );
+
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        'label': label,
+        'defaultId': defaultId,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+// ─── V3: UiCapabilities（UI 能力声明） ────────────────────────────────────────
+
+class UiCapabilities {
+  final bool showFilmSelector;
+  final bool showLensSelector;
+  final bool showPaperSelector;
+  final bool showRatioSelector;
+  final bool showWatermarkSelector;
+  final bool showFlashButton;
+  final bool showTimerButton;
+  final bool showGridButton;
+
+  const UiCapabilities({
+    this.showFilmSelector = false,
+    this.showLensSelector = false,
+    this.showPaperSelector = false,
+    this.showRatioSelector = false,
+    this.showWatermarkSelector = false,
+    this.showFlashButton = true,
+    this.showTimerButton = true,
+    this.showGridButton = true,
+  });
+
+  factory UiCapabilities.fromJson(Map<String, dynamic> json) => UiCapabilities(
+        showFilmSelector: json['showFilmSelector'] as bool? ?? false,
+        showLensSelector: json['showLensSelector'] as bool? ?? false,
+        showPaperSelector: json['showPaperSelector'] as bool? ?? false,
+        showRatioSelector: json['showRatioSelector'] as bool? ?? false,
+        showWatermarkSelector: json['showWatermarkSelector'] as bool? ?? false,
+        showFlashButton: json['showFlashButton'] as bool? ?? true,
+        showTimerButton: json['showTimerButton'] as bool? ?? true,
+        showGridButton: json['showGridButton'] as bool? ?? true,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'showFilmSelector': showFilmSelector,
+        'showLensSelector': showLensSelector,
+        'showPaperSelector': showPaperSelector,
+        'showRatioSelector': showRatioSelector,
+        'showWatermarkSelector': showWatermarkSelector,
+        'showFlashButton': showFlashButton,
+        'showTimerButton': showTimerButton,
+        'showGridButton': showGridButton,
+      };
+}
+
+// ─── Preset（主模型） ─────────────────────────────────────────────────────────
+
+class Preset {
+  final String id;
+  final String name;
+  final String category;
+  /// V3: 输出类型，'photo' | 'video' | 'both'
+  final String outputType;
+  /// V3: 基础机型名称（用于 UI 展示）
+  final String baseModel;
+  final bool isPremium;
+  /// V3: 动态选项组（胶卷/镜头/相纸/比例/水印）
+  final List<OptionGroup> optionGroups;
+  /// V3: UI 能力声明（控制哪些选项按钮可见）
+  final UiCapabilities uiCapabilities;
+  /// 渲染资源（兼容旧版 JSON）
+  final PresetResources? resources;
+  /// 渲染参数（兼容旧版 JSON）
+  final PresetParams? params;
+
+  // 兼容旧字段
+  bool get supportsPhoto => outputType == 'photo' || outputType == 'both';
+  bool get supportsVideo => outputType == 'video' || outputType == 'both';
+
+  const Preset({
+    required this.id,
+    required this.name,
+    required this.category,
+    this.outputType = 'photo',
+    this.baseModel = '',
+    this.isPremium = false,
+    this.optionGroups = const [],
+    this.uiCapabilities = const UiCapabilities(),
+    this.resources,
+    this.params,
+  });
+
+  factory Preset.fromJson(Map<String, dynamic> json) {
+    // 解析 outputType：兼容旧版 supportsVideo 字段
+    String outputType = json['outputType'] as String? ?? '';
+    if (outputType.isEmpty) {
+      final supportsVideo = json['supportsVideo'] as bool? ?? false;
+      final supportsPhoto = json['supportsPhoto'] as bool? ?? true;
+      if (supportsVideo && supportsPhoto) {
+        outputType = 'both';
+      } else if (supportsVideo) {
+        outputType = 'video';
+      } else {
+        outputType = 'photo';
+      }
+    }
+
+    // 解析 optionGroups
+    final optionGroupsList = (json['optionGroups'] as List<dynamic>?)
+            ?.map((e) => OptionGroup.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        [];
+
+    // 解析 uiCapabilities
+    final uiCap = json['uiCapabilities'] != null
+        ? UiCapabilities.fromJson(json['uiCapabilities'] as Map<String, dynamic>)
+        : UiCapabilities(
+            showFilmSelector: optionGroupsList.any((g) => g.type == 'films'),
+            showLensSelector: optionGroupsList.any((g) => g.type == 'lenses'),
+            showPaperSelector: optionGroupsList.any((g) => g.type == 'papers'),
+            showRatioSelector: optionGroupsList.any((g) => g.type == 'ratios'),
+            showWatermarkSelector: optionGroupsList.any((g) => g.type == 'watermarks'),
+          );
+
+    // 解析 resources（可选）
+    final resourcesJson = json['resources'] as Map<String, dynamic>?;
+    final resources = resourcesJson != null ? PresetResources.fromJson(resourcesJson) : null;
+
+    // 解析 params（可选）
+    final paramsJson = json['params'] as Map<String, dynamic>?;
+    final params = paramsJson != null ? PresetParams.fromJson(paramsJson) : null;
+
+    return Preset(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      category: json['category'] as String? ?? '',
+      outputType: outputType,
+      baseModel: json['baseModel'] as String? ?? json['name'] as String? ?? '',
+      isPremium: json['isPremium'] as bool? ?? false,
+      optionGroups: optionGroupsList,
+      uiCapabilities: uiCap,
+      resources: resources,
+      params: params,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
         'category': category,
-        'supportsPhoto': supportsPhoto,
-        'supportsVideo': supportsVideo,
+        'outputType': outputType,
+        'baseModel': baseModel,
         'isPremium': isPremium,
-        'resources': resources.toJson(),
-        'params': params.toJson(),
+        'optionGroups': optionGroups.map((e) => e.toJson()).toList(),
+        'uiCapabilities': uiCapabilities.toJson(),
+        if (resources != null) 'resources': resources!.toJson(),
+        if (params != null) 'params': params!.toJson(),
       };
 }

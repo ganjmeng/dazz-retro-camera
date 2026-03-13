@@ -47,7 +47,7 @@ class SettingsScreen extends ConsumerWidget {
                         const SizedBox(height: 4),
                         Text(
                           isPro ? '已解锁全部相机与高级功能' : '解锁所有复古相机、高画质导出与无水印',
-                          style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12),
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12),
                         ),
                       ],
                     ),

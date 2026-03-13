@@ -23,8 +23,13 @@ void main() {
       expect(find.text('设置'), findsWidgets);
       expect(find.text('隐私政策'), findsOneWidget);
 
-      // Navigate back
-      await tester.tap(find.byIcon(Icons.arrow_back).or(find.byType(BackButton)));
+      // Navigate back using back button or arrow_back icon
+      final backButton = find.byIcon(Icons.arrow_back);
+      if (backButton.evaluate().isNotEmpty) {
+        await tester.tap(backButton);
+      } else {
+        await tester.tap(find.byType(BackButton));
+      }
       await tester.pumpAndSettle();
 
       // Verify back on camera screen

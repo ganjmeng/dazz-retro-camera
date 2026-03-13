@@ -16,6 +16,9 @@ class SubscriptionService extends StateNotifier<bool> {
     _initPlatformState();
   }
 
+  /// Mock constructor for testing
+  SubscriptionService.mock(bool isPro) : super(isPro);
+
   Future<void> _initPlatformState() async {
     await Purchases.setLogLevel(LogLevel.debug);
 

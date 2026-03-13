@@ -14,7 +14,7 @@ void main() {
         'category': 'ccd',
         'outputType': 'photo',
         'isPremium': false,
-        'baseModel': {}
+        'baseModel': 'Test Camera Model'
       }),
       Preset.fromJson({
         'id': 'cam_2',
@@ -22,7 +22,7 @@ void main() {
         'category': 'film',
         'outputType': 'photo',
         'isPremium': true,
-        'baseModel': {}
+        'baseModel': 'Test Camera Model'
       }),
     ];
 

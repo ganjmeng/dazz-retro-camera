@@ -14,14 +14,15 @@ void main() {
         ),
       ),
     );
+    await tester.pump();
 
-    // Verify app bar elements
-    expect(find.byIcon(Icons.settings), findsOneWidget);
-    expect(find.byIcon(Icons.flip_camera_ios), findsOneWidget);
-    expect(find.byIcon(Icons.flash_off), findsOneWidget);
-
-    // Verify bottom controls
+    // Verify key widget types are present
     expect(find.byType(CameraControlsWidget), findsOneWidget);
     expect(find.byType(PresetSelectorWidget), findsOneWidget);
+
+    // Verify icons that are actually used in camera_controls_widget.dart
+    expect(find.byIcon(Icons.flip_camera_ios_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.flash_off_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.camera_alt_outlined), findsOneWidget);
   });
 }
