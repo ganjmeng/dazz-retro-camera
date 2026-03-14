@@ -383,8 +383,12 @@ class _SubPanelState extends ConsumerState<_SubPanel>
             // 子 Tab 行（水印/边框有多 Tab）
             if (widget.type == _SubPanelType.watermark) _buildWatermarkTabs(),
             if (widget.type == _SubPanelType.frame) _buildFrameTabs(),
-            // 内容区
-            _buildContent(st),
+            // 内容区（可滚动）
+            Flexible(
+              child: SingleChildScrollView(
+                child: _buildContent(st),
+              ),
+            ),
             SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
           ],
         ),
@@ -580,13 +584,15 @@ class _SubPanelState extends ConsumerState<_SubPanel>
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            const itemMinWidth = 100.0;
+            const itemSize = 64.0;  // 固定 item 大小 64dp
             const spacing = 12.0;
-            final cols = ((constraints.maxWidth + spacing) / (itemMinWidth + spacing)).floor().clamp(2, 8);
+            final cols = ((constraints.maxWidth + spacing) / (itemSize + spacing)).floor().clamp(2, 8);
+            final ratio = itemSize / itemSize;  // 1:1 正方形
             return GridView.count(
               crossAxisCount: cols,
               crossAxisSpacing: spacing,
               mainAxisSpacing: spacing,
+              childAspectRatio: ratio,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: allCells,
@@ -627,13 +633,14 @@ class _SubPanelState extends ConsumerState<_SubPanel>
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              const itemMinWidth = 100.0;
+              const itemSize = 64.0;  // 固定 item 大小 64dp
               const spacing = 12.0;
-              final cols = ((constraints.maxWidth + spacing) / (itemMinWidth + spacing)).floor().clamp(2, 8);
+              final cols = ((constraints.maxWidth + spacing) / (itemSize + spacing)).floor().clamp(2, 8);
               return GridView.count(
                 crossAxisCount: cols,
                 crossAxisSpacing: spacing,
                 mainAxisSpacing: spacing,
+                childAspectRatio: 1.0,  // 1:1 正方形
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 children: bgCells,

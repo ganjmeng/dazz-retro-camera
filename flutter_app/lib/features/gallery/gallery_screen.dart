@@ -46,7 +46,24 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void initState() {
     super.initState();
+    // 监听 MediaStore 变更，有新文件保存时自动刷新
+    PhotoManager.addChangeCallback(_onMediaChange);
+    PhotoManager.startChangeNotify();
     _fetchAssets();
+  }
+
+  void _onMediaChange(MethodCall call) {
+    // MediaStore 有变动（新照片保存、删除等）时自动刷新
+    if (mounted) {
+      _fetchAssets();
+    }
+  }
+
+  @override
+  void dispose() {
+    PhotoManager.removeChangeCallback(_onMediaChange);
+    PhotoManager.stopChangeNotify();
+    super.dispose();
   }
 
   @override

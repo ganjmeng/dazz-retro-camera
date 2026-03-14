@@ -459,15 +459,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ),
           ),
 
-          // ── 曝光水平滑动条（取景框和工具栏之间，垂直居中）──
+          // ── 曝光水平滑动条（取景框和工具栏之间黑色区域垂直居中）──
           if (_showExposureSlider)
             Positioned(
               left: 0,
               right: 0,
-              // 居中在黑色区域：底部面板顶部 + 黑色区域高度/2 - 自身高度/2
-              // 黑色区域 = kBottomPanelH + bottomSafeH（底部面板），上方是取景框
-              // 用 bottom 定位：距底部面板顶部居中
-              bottom: kBottomPanelH + bottomSafeH + 8,
+              // top = 取景框底部，bottom = 底部面板顶部
+              // Flutter 将自动在这个区间内居中显示内容
+              top: viewfinderTopOffset + viewfinderH,
+              bottom: kBottomPanelH + bottomSafeH,
               child: Center(
                 child: _ExposureHorizontalSlider(
                   value: st.exposureValue,
@@ -480,13 +480,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
-          // ── 色温控制面板（取景框和工具栏之间，垂直居中）──
+          // ── 色温控制面板（取景框和工具栏之间黑色区域垂直居中）──
           if (_showWbPanel)
             Positioned(
               left: 0,
               right: 0,
-              bottom: kBottomPanelH + bottomSafeH + 8,
-              child: _WbControlPanel(
+              top: viewfinderTopOffset + viewfinderH,
+              bottom: kBottomPanelH + bottomSafeH,
+              child: Center(
+                child: _WbControlPanel(
                 colorTempK: st.colorTempK,
                 wbMode: st.wbMode,
                 onTempChanged: (k) =>
@@ -502,7 +504,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   _showViewfinderHint(labels[mode] ?? mode);
                 },
               ),
-            ),
+            ),  // Center
+            ),  // Positioned
           // ── 右上角菜单弹框 ── ──
           if (st.showTopMenu) _buildTopMenuOverlay(st),
           // ── 倒计时蒙层 ──
