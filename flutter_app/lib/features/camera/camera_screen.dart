@@ -23,6 +23,7 @@ import '../../services/camera_service.dart';
 import 'camera_notifier.dart';
 import 'preview_renderer.dart';
 import '../gallery/gallery_screen.dart';
+import 'camera_config_sheet.dart';
 
 // ─── 颜色常量 ─────────────────────────────────────────────────────────────────
 const _kBlack = Color(0xFF000000);
@@ -629,9 +630,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               ),
             ),
           ),
-          // 右侧: 相机切换图标（虚线圆圈背景，点击打开Options）
+          // 右侧: 相机切换图标（虚线圆圈背景，点击打开相机配置菜单）
           GestureDetector(
-            onTap: _openOptions,
+            onTap: () => showCameraConfigSheet(context),
             child: SizedBox(
               width: 70,
               height: 70,

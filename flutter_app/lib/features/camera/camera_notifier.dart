@@ -33,6 +33,8 @@ class CameraAppState {
   // User adjustments
   final double temperatureOffset; // -100..100
   final double exposureValue;     // -2.0..2.0
+  final String? watermarkColor;       // hex color override for watermark
+  final String? frameBackgroundColor; // hex color override for frame background
 
   // UI state
   final String? activePanel; // null | 'filter' | 'lens' | 'ratio' | 'frame' | 'watermark'
@@ -58,6 +60,8 @@ class CameraAppState {
     this.activeWatermarkId,
     this.temperatureOffset = 0,
     this.exposureValue = 0,
+    this.watermarkColor,
+    this.frameBackgroundColor,
     this.activePanel,
     this.gridEnabled = false,
     this.showTopMenu = false,
@@ -82,6 +86,8 @@ class CameraAppState {
     String? activeWatermarkId,
     double? temperatureOffset,
     double? exposureValue,
+    String? watermarkColor,
+    String? frameBackgroundColor,
     String? activePanel,
     bool? gridEnabled,
     bool? showTopMenu,
@@ -107,6 +113,8 @@ class CameraAppState {
       activeWatermarkId: activeWatermarkId ?? this.activeWatermarkId,
       temperatureOffset: temperatureOffset ?? this.temperatureOffset,
       exposureValue: exposureValue ?? this.exposureValue,
+      watermarkColor: watermarkColor ?? this.watermarkColor,
+      frameBackgroundColor: frameBackgroundColor ?? this.frameBackgroundColor,
       activePanel: clearPanel ? null : (activePanel ?? this.activePanel),
       gridEnabled: gridEnabled ?? this.gridEnabled,
       showTopMenu: showTopMenu ?? this.showTopMenu,
@@ -259,6 +267,17 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   void selectWatermark(String id) {
     state = state.copyWith(activeWatermarkId: id);
   }
+
+  void selectWatermarkColor(String hexColor) {
+    state = state.copyWith(watermarkColor: hexColor);
+  }
+
+  void selectFrameBackground(String hexColor) {
+    state = state.copyWith(frameBackgroundColor: hexColor);
+  }
+
+  /// Alias for switchToCamera (used by CameraConfigSheet)
+  Future<void> switchCamera(String cameraId) => switchToCamera(cameraId);
 
   // ── Camera controls ──
 
