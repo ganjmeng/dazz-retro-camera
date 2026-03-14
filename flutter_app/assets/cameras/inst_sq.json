@@ -147,7 +147,9 @@
         ],
         "thumbnail": "assets/thumbnails/frames/polaroid_white.jpg",
         "lightLeak": 0.35,
-        "shake": 0.0
+        "shake": 0.0,
+        "outerPadding": 40,
+        "outerBackgroundColor": "#FFFFFF"
       },
       {
         "id": "polaroid_cream",
@@ -166,7 +168,9 @@
         ],
         "thumbnail": "assets/thumbnails/frames/polaroid_cream.jpg",
         "lightLeak": 0.5,
-        "shake": 0.3
+        "shake": 0.3,
+        "outerPadding": 40,
+        "outerBackgroundColor": "#FFFFFF"
       },
       {
         "id": "polaroid_green",
@@ -185,7 +189,9 @@
         ],
         "thumbnail": "assets/thumbnails/frames/polaroid_green.jpg",
         "lightLeak": 0.25,
-        "shake": 0.2
+        "shake": 0.2,
+        "outerPadding": 40,
+        "outerBackgroundColor": "#FFFFFF"
       },
       {
         "id": "polaroid_yellow",
@@ -204,7 +210,9 @@
         ],
         "thumbnail": "assets/thumbnails/frames/polaroid_yellow.jpg",
         "lightLeak": 0.3,
-        "shake": 0.0
+        "shake": 0.0,
+        "outerPadding": 40,
+        "outerBackgroundColor": "#FFFFFF"
       },
       {
         "id": "polaroid_purple",
@@ -223,7 +231,9 @@
         ],
         "thumbnail": "assets/thumbnails/frames/polaroid_purple.jpg",
         "lightLeak": 0.4,
-        "shake": 0.25
+        "shake": 0.25,
+        "outerPadding": 40,
+        "outerBackgroundColor": "#FFFFFF"
       }
     ],
     "watermarks": {

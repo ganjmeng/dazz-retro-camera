@@ -111,7 +111,9 @@
           "ratio_1_1",
           "ratio_3_4"
         ],
-        "thumbnail": "assets/thumbnails/frames/frame_clean_white.jpg"
+        "thumbnail": "assets/thumbnails/frames/frame_clean_white.jpg",
+        "outerPadding": 40,
+        "outerBackgroundColor": "#FFFFFF"
       }
     ],
     "watermarks": {

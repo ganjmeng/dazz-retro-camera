@@ -317,8 +317,25 @@ class FrameDefinition {
   final double lightLeak;
   /// 抖动模糊强度 0.0~1.0（0=无，1=最强）
   final double shake;
+  /// 外层背景间距（相框外周的白边），相对于 1080px 参考宽度
+  final double outerPadding;
+  /// 外层背景色（相框外面的背景，默认白色）
+  final String outerBackgroundColor;
 
-  const FrameDefinition({required this.id, required this.name, required this.nameEn, this.asset, required this.backgroundColor, required this.inset, required this.supportedRatios, this.thumbnail, this.lightLeak = 0.0, this.shake = 0.0});
+  const FrameDefinition({
+    required this.id,
+    required this.name,
+    required this.nameEn,
+    this.asset,
+    required this.backgroundColor,
+    required this.inset,
+    required this.supportedRatios,
+    this.thumbnail,
+    this.lightLeak = 0.0,
+    this.shake = 0.0,
+    this.outerPadding = 0.0,
+    this.outerBackgroundColor = '#FFFFFF',
+  });
 
   factory FrameDefinition.fromJson(Map<String, dynamic> json) => FrameDefinition(
     id: json['id'] as String,
@@ -331,6 +348,8 @@ class FrameDefinition {
     thumbnail: json['thumbnail'] as String?,
     lightLeak: (json['lightLeak'] as num?)?.toDouble() ?? 0.0,
     shake: (json['shake'] as num?)?.toDouble() ?? 0.0,
+    outerPadding: (json['outerPadding'] as num?)?.toDouble() ?? 0.0,
+    outerBackgroundColor: json['outerBackgroundColor'] as String? ?? '#FFFFFF',
   );
 }
 

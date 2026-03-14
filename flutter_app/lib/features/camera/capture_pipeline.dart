@@ -66,38 +66,78 @@ class CapturePipeline {
         }
       }
 
-      // 最终画布尺寸 = 裁剪尺寸 + 边框
-      final canvasW = outW + leftPx + rightPx;
-      final canvasH = outH + topPx + bottomPx;
+      // ── 3b. 外层背景间距计算 ────────────────────────────────────────────────────
+      // 如果相框有 outerPadding，则在相框外周再加一圈背景
+      double outerPadPx = 0;
+      if (frameOpt != null && frameOpt.outerPadding > 0) {
+        final refSize = math.min(outW, outH);
+        final scale = refSize / 1080.0;
+        outerPadPx = frameOpt.outerPadding * scale;
+      }
+
+      // 相框层画布尺寸 = 裁剪尺寸 + 边框 inset
+      final frameCanvasW = outW + leftPx + rightPx;
+      final frameCanvasH = outH + topPx + bottomPx;
+
+      // 最终输出画布尺寸 = 相框画布 + 外层背景间距
+      final canvasW = frameCanvasW + outerPadPx * 2;
+      final canvasH = frameCanvasH + outerPadPx * 2;
+
+      // 相框在输出画布中的偏移
+      final frameOffsetX = outerPadPx;
+      final frameOffsetY = outerPadPx;
 
       // ── 4. 创建画布 ──────────────────────────────────────────────────────────
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, canvasW, canvasH));
 
-         // ── 4a. 先填充边框背景色 ────────────────────────────────────────────
+      // ── 4a. 先填充外层背景（如果有 outerPadding）──────────────────────────────
+      if (frameOpt != null && outerPadPx > 0) {
+        // 外层背景色：用户在"背景"Tab 选择的颜色，否则用 outerBackgroundColor
+        Color outerBgColor = Colors.white;
+        final outerHexSrc = (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
+            ? frameBackgroundColor
+            : frameOpt.outerBackgroundColor;
+        try {
+          if (outerHexSrc.toLowerCase() != 'transparent') {
+            final hex = outerHexSrc.replaceAll('#', '');
+            outerBgColor = Color(int.parse('FF$hex', radix: 16));
+          }
+        } catch (_) {}
+        canvas.drawRect(
+          Rect.fromLTWH(0, 0, canvasW, canvasH),
+          Paint()..color = outerBgColor,
+        );
+      }
+
+      // ── 4b. 填充相框背景色（相框层区域）────────────────────────────────────────
       if (frameOpt != null) {
         Color bgColor = const Color(0xFFF5F2EA);
-        // 优先使用用户选择的背景色，如果没有则用 JSON 默认值
-        final bgHexSrc = (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
-            ? frameBackgroundColor
-            : frameOpt.backgroundColor;
+        // 有外层背景时，相框本身用 JSON 的 backgroundColor
+        // 无外层背景时，用用户选择的颜色（向后兼容）
+        final bgHexSrc = (outerPadPx > 0)
+            ? frameOpt.backgroundColor
+            : ((frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
+                ? frameBackgroundColor
+                : frameOpt.backgroundColor);
         try {
           if (bgHexSrc.toLowerCase() == 'transparent') {
-            // 透明背景：不绘制背景（保持默认白色）
-            bgColor = Colors.white;
+            bgColor = Colors.transparent;
           } else {
             final hex = bgHexSrc.replaceAll('#', '');
             bgColor = Color(int.parse('FF$hex', radix: 16));
           }
         } catch (_) {}
-        canvas.drawRect(
-          Rect.fromLTWH(0, 0, canvasW, canvasH),
-          Paint()..color = bgColor,
-        );
+        if (bgColor != Colors.transparent) {
+          canvas.drawRect(
+            Rect.fromLTWH(frameOffsetX, frameOffsetY, frameCanvasW, frameCanvasH),
+            Paint()..color = bgColor,
+          );
+        }
       }
 
       // ── 4b. 绘制图片（抖动模糊 + 颜色效果）────────────────────────────────────
-      final destRect = Rect.fromLTWH(leftPx, topPx, outW, outH);
+      final destRect = Rect.fromLTWH(frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
       final shakeStrength = frameOpt?.shake ?? 0.0;
 
       // 抖动模糊：先绘制偏移的鬼影层（低透明度），再绘制主图
@@ -110,8 +150,8 @@ class CapturePipeline {
         final dy2 = (rng.nextDouble() - 0.5) * 2 * maxOffset * 0.6;
         final ghostAlpha1 = (shakeStrength * 55).clamp(0, 55).toInt();
         final ghostAlpha2 = (shakeStrength * 35).clamp(0, 35).toInt();
-        final shakeRect1 = Rect.fromLTWH(leftPx + dx1, topPx + dy1, outW, outH);
-        final shakeRect2 = Rect.fromLTWH(leftPx + dx2, topPx + dy2, outW, outH);
+        final shakeRect1 = Rect.fromLTWH(frameOffsetX + leftPx + dx1, frameOffsetY + topPx + dy1, outW, outH);
+        final shakeRect2 = Rect.fromLTWH(frameOffsetX + leftPx + dx2, frameOffsetY + topPx + dy2, outW, outH);
 
         if (renderParams != null) {
           final colorMatrix = _buildColorMatrix(renderParams);
@@ -157,13 +197,13 @@ class CapturePipeline {
 
       // ── 4c. 暗角（只在图片区域内绘制）──────────────────────────────────────────
       if (renderParams != null && renderParams.effectiveVignette > 0.01) {
-        _drawVignette(canvas, leftPx, topPx, outW, outH, renderParams.effectiveVignette);
+        _drawVignette(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, renderParams.effectiveVignette);
       }
 
       // ── 4d. 漏光效果（在图片区域内，角落径向渐变）──────────────────────────────
       final lightLeakStrength = frameOpt?.lightLeak ?? 0.0;
       if (lightLeakStrength > 0.01) {
-        _drawLightLeak(canvas, leftPx, topPx, outW, outH, lightLeakStrength);
+        _drawLightLeak(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, lightLeakStrength);
       }
 
       // ── 4e. 水印（移至4g，在相框纹理之后绘制）──────────────────────────────────
@@ -183,7 +223,7 @@ class CapturePipeline {
             Rect.fromLTWH(0, 0,
               frameImgFrame.image.width.toDouble(),
               frameImgFrame.image.height.toDouble()),
-            Rect.fromLTWH(0, 0, canvasW, canvasH),
+            Rect.fromLTWH(frameOffsetX, frameOffsetY, frameCanvasW, frameCanvasH),
             Paint()..filterQuality = FilterQuality.high,
           );
           debugPrint('[CapturePipeline] frame texture applied: ${frameOpt.asset}');
@@ -194,7 +234,7 @@ class CapturePipeline {
 
       // ── 4g. 水印（在相框纹理之后绘制，确保始终在最上层不被遮挡）────────────────
       if (selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none') {
-        _drawWatermark(canvas, leftPx, topPx, outW, outH, selectedWatermarkId);
+        _drawWatermark(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, selectedWatermarkId);
       }
 
       // ── 5. 输出为 PNG ────────────────────────────────────────────────────────
