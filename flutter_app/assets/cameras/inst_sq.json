@@ -137,10 +137,10 @@
         "asset": "assets/frames/polaroid_white.png",
         "backgroundColor": "#F8F6F1",
         "inset": {
-          "top": 56,
-          "right": 56,
-          "bottom": 186,
-          "left": 56
+          "top": 108,
+          "right": 108,
+          "bottom": 324,
+          "left": 108
         },
         "supportedRatios": [
           "ratio_1_1"
@@ -156,10 +156,10 @@
         "asset": "assets/frames/polaroid_cream.png",
         "backgroundColor": "#F4EEDC",
         "inset": {
-          "top": 56,
-          "right": 56,
-          "bottom": 186,
-          "left": 56
+          "top": 108,
+          "right": 108,
+          "bottom": 324,
+          "left": 108
         },
         "supportedRatios": [
           "ratio_1_1"
@@ -175,10 +175,10 @@
         "asset": "assets/frames/polaroid_green.png",
         "backgroundColor": "#6CA85F",
         "inset": {
-          "top": 56,
-          "right": 56,
-          "bottom": 186,
-          "left": 56
+          "top": 108,
+          "right": 108,
+          "bottom": 324,
+          "left": 108
         },
         "supportedRatios": [
           "ratio_1_1"
@@ -188,16 +188,35 @@
         "shake": 0.2
       },
       {
+        "id": "polaroid_yellow",
+        "name": "黄色拍立得",
+        "nameEn": "Polaroid Yellow",
+        "asset": "assets/frames/polaroid_yellow.png",
+        "backgroundColor": "#E8D84B",
+        "inset": {
+          "top": 108,
+          "right": 108,
+          "bottom": 324,
+          "left": 108
+        },
+        "supportedRatios": [
+          "ratio_1_1"
+        ],
+        "thumbnail": "assets/thumbnails/frames/polaroid_yellow.jpg",
+        "lightLeak": 0.3,
+        "shake": 0.0
+      },
+      {
         "id": "polaroid_purple",
         "name": "紫色拍立得",
         "nameEn": "Polaroid Purple",
         "asset": "assets/frames/polaroid_purple.png",
         "backgroundColor": "#8C4B6E",
         "inset": {
-          "top": 56,
-          "right": 56,
-          "bottom": 186,
-          "left": 56
+          "top": 108,
+          "right": 108,
+          "bottom": 324,
+          "left": 108
         },
         "supportedRatios": [
           "ratio_1_1"
@@ -243,7 +262,7 @@
     "filterId": "inst_classic",
     "lensId": "std",
     "ratioId": "ratio_1_1",
-    "frameId": "polaroid_white",
+    "frameId": "polaroid_yellow",
     "watermarkPresetId": "date_orange",
     "extraId": null
   },
