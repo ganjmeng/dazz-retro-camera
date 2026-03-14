@@ -90,7 +90,10 @@ class PreviewRenderParams {
 class PreviewFilterWidget extends StatelessWidget {
   final int textureId;
   final PreviewRenderParams params;
+  /// 目标比例（用户选择，如 1:1/3:4/9:16）——只用于取景框容器大小计算
   final double aspectRatio;
+  /// 相机传感器实际输出比例（固定为 3/4）——用于 cover 缩放计算
+  static const double _kSensorAspect = 3.0 / 4.0; // CameraX 默认输出 4:3
 
   const PreviewFilterWidget({
     super.key,
@@ -102,21 +105,26 @@ class PreviewFilterWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 预览始终充满容器（BoxFit.cover 效果）
-    // 不用 AspectRatio 限制大小，避免黑边
+    // cover 计算基于传感器实际比例（_kSensorAspect = 3/4）
+    // 而不是目标比例（aspectRatio），避免 1:1 等比例切换时画面被拉伸
     return LayoutBuilder(
       builder: (context, constraints) {
         final containerW = constraints.maxWidth;
         final containerH = constraints.maxHeight;
-        // 相机传感器比例（默认 3:4 竖屏）
-        final sensorAspect = aspectRatio; // width/height
-        // 计算 cover 比例：选择让内容充满容器的最小缩放
-        final scaleByW = containerW / (containerH * sensorAspect);
-        final scaleByH = containerH / (containerW / sensorAspect);
-        final scale = math.max(scaleByW, scaleByH);
-        final scaledW = containerH * sensorAspect * scale;
-        final scaledH = containerW / sensorAspect * scale;
-        final overflowW = math.max(scaledW, containerW);
-        final overflowH = math.max(scaledH, containerH);
+        // 使用传感器实际比例计算 cover
+        const sensorAspect = _kSensorAspect;
+        // BoxFit.cover：选择让内容充满容器的最小缩放
+        final containerAspect = containerW / containerH;
+        double overflowW, overflowH;
+        if (containerAspect >= sensorAspect) {
+          // 容器更宽 → 宽度铺满，高度可能超出
+          overflowW = containerW;
+          overflowH = containerW / sensorAspect;
+        } else {
+          // 容器更高 → 高度铺满，宽度可能超出
+          overflowH = containerH;
+          overflowW = containerH * sensorAspect;
+        }
         return ClipRect(
           child: OverflowBox(
             maxWidth: overflowW,

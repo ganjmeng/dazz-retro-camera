@@ -26,14 +26,24 @@ import 'camera_notifier.dart';
 import 'preview_renderer.dart';
 import '../gallery/gallery_screen.dart';
 import 'camera_config_sheet.dart';
-
-// ─── 颜色常量 ─────────────────────────────────────────────────────────────────
+// ─── 颜色常量 ─────────────────────────────────────────────────────────────────────────────
 const _kBlack = Color(0xFF000000);
 const _kDarkGray = Color(0xFF1C1C1E);
 const _kLightGray = Color(0xFF3A3A3C);
 const _kWhite = Colors.white;
 const _kBlue = Color(0xFF007AFF);
 const _kRed = Color(0xFFFF3B30);
+
+// ─── 布局常量（提升为顶层常量，供多个方法共享）─────────────────────────────────────────────────────────────────────────────
+const kToolbarH = 64.0;
+const kShutterH = 96.0;
+const kBottomPanelTopPad = 12.0; // 减小顶部间距，让快门行整体上移
+const kToolbarShutterGap = 32.0; // 加大工具栏和快门行间距
+const kBottomPanelH = kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
+const kCapsuleH = 40.0;
+const kCapsuleBottomOffset = kBottomPanelH + 16.0; // 距屏幕底部的距离
+const kViewfinderHPadding = 12.0;
+const kTopBarH = 44.0;
 
 class CameraScreen extends ConsumerStatefulWidget {
   const CameraScreen({super.key});
@@ -132,49 +142,70 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Future<void> _loadLatestThumb({bool afterCapture = false}) async {
-    // 拍照后先清除 photo_manager 全部缓存，等待系统写入完成，再重新查询
+    // 拍照后分段重试：先等 500ms，查不到再等 1000ms/2000ms，最多重试 3 次
     if (afterCapture) {
       await PhotoManager.clearFileCache();
-      // 等待 Android MediaStore 扫描完成（1.2s 比 600ms 更可靠）
-      await Future.delayed(const Duration(milliseconds: 1200));
+      await Future.delayed(const Duration(milliseconds: 500));
     }
     // 每次都重新请求权限以强制 photo_manager 刷新内部资产缓存
     final perm = await PhotoManager.requestPermissionExtend();
     if (!perm.isAuth) return;
-    // 获取所有相册（含 DAZZ）
-    final albums = await PhotoManager.getAssetPathList(
-      type: RequestType.image,
-      filterOption: FilterOptionGroup(
-        orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
-      ),
-    );
-    if (albums.isEmpty) return;
-    // 优先从 DAZZ 专属相册读取最新照片
-    AssetPathEntity? dazzAlbum;
-    AssetPathEntity? recentAlbum; // "最近项目" 或 "所有照片" 相册
-    for (final album in albums) {
-      final name = album.name.toUpperCase();
-      if (name == 'DAZZ') {
-        dazzAlbum = album;
-        break;
+
+    // afterCapture 时最多重试 3 次，普通加载只查 1 次
+    final maxRetries = afterCapture ? 3 : 1;
+    final retryDelays = [1000, 2000]; // 第 2、3 次重试前额外等待 ms
+
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+      if (attempt > 0) {
+        // 重试前清缓存并等待
+        await PhotoManager.clearFileCache();
+        await Future.delayed(Duration(milliseconds: retryDelays[attempt - 1]));
+        if (!mounted) return;
       }
-      // Android: "Recent" / iOS: "Recents" / 中文: "最近项目"
-      if (recentAlbum == null &&
-          (name.contains('RECENT') || name.contains('最近') || album.isAll)) {
-        recentAlbum = album;
-      }
-    }
-    // DAZZ 相册 > 最近项目 > 第一个相册
-    final targetAlbum = dazzAlbum ?? recentAlbum ?? albums.first;
-    final assets = await targetAlbum.getAssetListRange(start: 0, end: 1);
-    if (assets.isNotEmpty && mounted) {
-      final thumb = await assets.first.thumbnailDataWithSize(
-        const ThumbnailSize(120, 120),
+
+      // 获取所有相册（含 DAZZ）
+      final albums = await PhotoManager.getAssetPathList(
+        type: RequestType.image,
+        filterOption: FilterOptionGroup(
+          orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
+        ),
       );
-      if (mounted) setState(() {
-        _latestThumb = thumb;
-        _latestAsset = assets.first;
-      });
+      if (albums.isEmpty) continue;
+
+      // 优先从 DAZZ 专属相册读取最新照片
+      AssetPathEntity? dazzAlbum;
+      AssetPathEntity? recentAlbum; // "最近项目" 或 "所有照片" 相册
+      for (final album in albums) {
+        final name = album.name.toUpperCase();
+        if (name == 'DAZZ') {
+          dazzAlbum = album;
+          break;
+        }
+        // Android: "Recent" / iOS: "Recents" / 中文: "最近项目"
+        if (recentAlbum == null &&
+            (name.contains('RECENT') || name.contains('最近') || album.isAll)) {
+          recentAlbum = album;
+        }
+      }
+
+      // DAZZ 相册 > 最近项目 > 第一个相册
+      final targetAlbum = dazzAlbum ?? recentAlbum ?? albums.first;
+      final assets = await targetAlbum.getAssetListRange(start: 0, end: 1);
+      if (assets.isNotEmpty && mounted) {
+        final thumb = await assets.first.thumbnailDataWithSize(
+          const ThumbnailSize(120, 120),
+        );
+        if (mounted) {
+          setState(() {
+            _latestThumb = thumb;
+            _latestAsset = assets.first;
+          });
+          debugPrint('[CameraScreen] _loadLatestThumb OK on attempt ${attempt + 1}, id=${assets.first.id}');
+          return; // 成功，不再重试
+        }
+      } else {
+        debugPrint('[CameraScreen] _loadLatestThumb attempt ${attempt + 1}: no assets in ${targetAlbum.name}');
+      }
     }
   }
 
@@ -220,16 +251,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final screenW = mq.size.width;
     final statusBarH = mq.padding.top;
     final bottomSafeH = mq.padding.bottom;
-    // 底部面板固定高度（精确复刻截图）:
-    // 工具栏(64) + 间距(16) + 快门行(96) + 底部安全区
-    const kToolbarH = 64.0;
-    const kShutterH = 96.0;
-    const kBottomPanelH = kToolbarH + 16.0 + kShutterH;
-    // 取景框左右边距（参考截图：约 12px 边距）
-    const kViewfinderHPadding = 12.0;
+    // 底部面板常量已提升为顶层常量（文件顶部定义）
+    // kToolbarH=64, kShutterH=96, kBottomPanelTopPad=12, kToolbarShutterGap=32
+    // kBottomPanelH=204, kCapsuleH=40, kCapsuleBottomOffset=220
     final viewfinderW = screenW - kViewfinderHPadding * 2;
-    // 顶部：状态栏 + 44px（"..."按钮区域）
-    const kTopBarH = 44.0;
     final maxViewfinderH = mq.size.height - statusBarH - kTopBarH - kBottomPanelH - bottomSafeH - 8;
     final ratioViewfinderH = viewfinderW / st.previewAspectRatio;
     // 限制在合理范围内
@@ -274,7 +299,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               ),
             ),
           ),
-          // ── 取景框（有圆角+左右边距，在顶部按钮行下方）──
+          // ── 取景框（有圆角+左右边距，在顶部按鈕行下方）──
           Positioned(
             top: statusBarH + kTopBarH,
             left: kViewfinderHPadding,
@@ -286,7 +311,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ),
           ),
 
-          // ── 右上角菜单弹框 ──
+          // ── 控制胶囊：固定在工具栏上方，不随取景框高度变化──
+          // 视觉上会浮在取景框画面上（最高层）
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: kCapsuleBottomOffset + bottomSafeH,
+            height: kCapsuleH,
+            child: Center(child: _buildControlCapsule(st)),
+          ),
+
+          // ── 右上角菜单弹框 ── ──
           if (st.showTopMenu) _buildTopMenuOverlay(st),
           // ── 倒计时遮罩 ──
           if (_timerCountdown > 0) _buildCountdownOverlay(),
@@ -335,13 +370,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 child: CircularProgressIndicator(color: _kWhite, strokeWidth: 2),
               ),
             ),
-          // 控制胶囊：固定在取景框内部底部（叠加在画面上）
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 16,
-            child: Center(child: _buildControlCapsule(st)),
-          ),
+          // 控制胶囊已移到主 Stack 固定层，取景框内部不再渲染
         ],
       ),
     );
@@ -356,10 +385,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 20),
+          const SizedBox(height: kBottomPanelTopPad),
           // 工具图标行（4个图标+文字标签）
           _buildToolbar(st),
-          const SizedBox(height: 16),
+          const SizedBox(height: kToolbarShutterGap),
           // 快门行
           _buildShutterRow(st),
           // 底部安全区域

@@ -353,29 +353,32 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                     sourceFile.name
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    // Step 1: Insert with IS_PENDING=1 (file reserved, invisible to gallery)
                     val contentValues = ContentValues().apply {
                         put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
                         put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
                         put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_DCIM}/$DAZZ_ALBUM")
+                        put(MediaStore.Images.Media.IS_PENDING, 1)
                     }
                     val uri = context.contentResolver.insert(
                         MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues
                     )
+                    Log.d(TAG, "[saveToGallery] MediaStore insert uri=$uri")
                     if (uri != null) {
+                        // Step 2: Write bytes
                         context.contentResolver.openOutputStream(uri)?.use { os ->
                             sourceFile.inputStream().use { it.copyTo(os) }
                         }
-                        // CRITICAL: Clear IS_PENDING flag so photo_manager can see the file immediately
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            val updateValues = ContentValues().apply {
-                                put(MediaStore.Images.Media.IS_PENDING, 0)
-                            }
-                            context.contentResolver.update(uri, updateValues, null, null)
+                        // Step 3: CRITICAL — Clear IS_PENDING so photo_manager can see the file
+                        val updateValues = ContentValues().apply {
+                            put(MediaStore.Images.Media.IS_PENDING, 0)
                         }
-                        Log.d(TAG, "Saved to gallery via MediaStore: $uri")
+                        val rows = context.contentResolver.update(uri, updateValues, null, null)
+                        Log.d(TAG, "[saveToGallery] IS_PENDING cleared, rows=$rows, uri=$uri")
                         val mainExecutor = ContextCompat.getMainExecutor(context)
                         mainExecutor.execute { result.success(mapOf("success" to true, "uri" to uri.toString())) }
                     } else {
+                        Log.e(TAG, "[saveToGallery] ContentResolver.insert returned null")
                         val mainExecutor = ContextCompat.getMainExecutor(context)
                         mainExecutor.execute { result.error("GALLERY_SAVE_FAILED", "ContentResolver insert returned null", null) }
                     }
