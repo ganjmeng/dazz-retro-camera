@@ -72,6 +72,39 @@ float3 applySaturation(float3 color, float saturation) {
     return mix(float3(luminance), color, saturation);
 }
 
+/// Unsharp Mask 锐化
+/// 原理：sharpen(x) = original + strength * (original - blur)
+/// 使用 3x3 高斯模糊近似作为 blur
+float3 applySharpen(
+    texture2d<float> tex,
+    sampler s,
+    float2 uv,
+    float2 texelSize,
+    float amount
+) {
+    float3 center = tex.sample(s, uv).rgb;
+
+    // 3x3 高斯核（权重归一化）
+    // [ 1 2 1 ]
+    // [ 2 4 2 ] / 16
+    // [ 1 2 1 ]
+    float3 blur =
+        tex.sample(s, uv + float2(-texelSize.x, -texelSize.y)).rgb * 1.0 +
+        tex.sample(s, uv + float2( 0.0,         -texelSize.y)).rgb * 2.0 +
+        tex.sample(s, uv + float2( texelSize.x, -texelSize.y)).rgb * 1.0 +
+        tex.sample(s, uv + float2(-texelSize.x,  0.0        )).rgb * 2.0 +
+        center                                                       * 4.0 +
+        tex.sample(s, uv + float2( texelSize.x,  0.0        )).rgb * 2.0 +
+        tex.sample(s, uv + float2(-texelSize.x,  texelSize.y)).rgb * 1.0 +
+        tex.sample(s, uv + float2( 0.0,          texelSize.y)).rgb * 2.0 +
+        tex.sample(s, uv + float2( texelSize.x,  texelSize.y)).rgb * 1.0;
+    blur /= 16.0;
+
+    // amount 范围 0~1，映射到实际锐化强度 0~2.0
+    float strength = amount * 2.0;
+    return clamp(center + strength * (center - blur), 0.0, 1.0);
+}
+
 // MARK: - CCD 风格片段着色器
 
 fragment float4 ccdFragmentShader(
@@ -81,18 +114,34 @@ fragment float4 ccdFragmentShader(
     texture2d<float> grainTexture [[texture(2)]],
     constant CCDParams &params [[buffer(0)]]
 ) {
-    constexpr sampler textureSampler(mag_filter::linear, min_filter::linear);
-    
+    constexpr sampler textureSampler(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
+
     float2 uv = in.texCoord;
-    
+
+    // 计算单像素大小（用于锐化卷积）
+    uint texWidth  = cameraTexture.get_width();
+    uint texHeight = cameraTexture.get_height();
+    float2 texelSize = float2(1.0 / float(texWidth), 1.0 / float(texHeight));
+
+    // === Pass 0: 锐化 (Unsharp Mask) ===
+    // 在色彩调整之前对原始相机纹理做锐化，保留更多细节
+    float3 color;
+    if (params.sharpen > 0.0) {
+        color = applySharpen(cameraTexture, textureSampler, uv, texelSize, params.sharpen);
+    } else {
+        color = cameraTexture.sample(textureSampler, uv).rgb;
+    }
+
     // === Pass 1: 色差 (Chromatic Aberration) ===
     // 对 R、G、B 三个通道分别采样略微偏移的位置，模拟镜头色差
-    float ca = params.chromaticAberration;
-    float r = cameraTexture.sample(textureSampler, uv + float2(ca, 0.0)).r;
-    float g = cameraTexture.sample(textureSampler, uv).g;
-    float b = cameraTexture.sample(textureSampler, uv - float2(ca, 0.0)).b;
-    float3 color = float3(r, g, b);
-    
+    if (params.chromaticAberration > 0.0) {
+        float ca = params.chromaticAberration;
+        float r = cameraTexture.sample(textureSampler, uv + float2(ca, 0.0)).r;
+        float g = cameraTexture.sample(textureSampler, uv).g;
+        float b = cameraTexture.sample(textureSampler, uv - float2(ca, 0.0)).b;
+        color = float3(r, g, b);
+    }
+
     // === Pass 2: 基础色彩调整 ===
     color = applyTemperatureShift(color, params.temperatureShift);
     color = applyContrast(color, params.contrast);

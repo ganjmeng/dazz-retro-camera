@@ -136,6 +136,16 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
+  /// 设置清晰度（锐化强度）
+  /// [level] 0.0=低, 0.5=中, 1.0=高
+  Future<void> setSharpen(double level) async {
+    try {
+      await _channel.invokeMethod('setSharpen', {'level': level});
+    } catch (e) {
+      print('Error setting sharpen: $e');
+    }
+  }
+
   /// 切换前后置摄像头（switchCamera 为 switchLens 的别名）
   Future<void> switchCamera() async => switchLens();
 

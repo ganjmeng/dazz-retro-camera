@@ -69,6 +69,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
     // Filter state
     private var currentPresetJson: Map<*, *>? = null
+    private var currentSharpenLevel: Float = 0.5f
+    // GL Renderer
+    private var glRenderer: CameraGLRenderer? = null
 
     // ─────────────────────────────────────────────
     // FlutterPlugin lifecycle
@@ -136,6 +139,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "setExposure"     -> handleSetExposure(call, result)
             "setFlash"        -> handleSetFlash(call, result)
             "setWhiteBalance" -> handleSetWhiteBalance(call, result)
+            "setSharpen"      -> handleSetSharpen(call, result)
             "startRecording"  -> handleStartRecording(result)
             "stopRecording"   -> handleStopRecording(result)
             "saveToGallery"   -> handleSaveToGallery(call, result)
@@ -202,14 +206,29 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             .requireLensFacing(lensFacing)
             .build()
 
+        // 初始化 GL 渲染器（如果尚未初始化）
+        val ctx = flutterPluginBinding.applicationContext
+        if (glRenderer == null) {
+            glRenderer = CameraGLRenderer(ctx, st)
+        }
+        val renderer = glRenderer!!
+
         preview = Preview.Builder().build().also { prev ->
-            prev.setSurfaceProvider { request ->
-                st.setDefaultBufferSize(
-                    request.resolution.width,
-                    request.resolution.height
-                )
-                val surface = Surface(st)
-                request.provideSurface(surface, cameraExecutor) { }
+            // 在 cameraExecutor 上执行，避免主线程阻塞
+            prev.setSurfaceProvider(cameraExecutor) { request ->
+                val w = request.resolution.width
+                val h = request.resolution.height
+                // initialize() 内部会同步等待 GL 初始化完成（最多 1 秒）
+                renderer.initialize(w, h)
+                val inputSurface = renderer.getInputSurface()
+                if (inputSurface != null) {
+                    request.provideSurface(inputSurface, cameraExecutor) { }
+                } else {
+                    // 降级：直接输出到 Flutter SurfaceTexture（无 GL 滤镜）
+                    st.setDefaultBufferSize(w, h)
+                    val surface = Surface(st)
+                    request.provideSurface(surface, cameraExecutor) { }
+                }
             }
         }
 
@@ -258,6 +277,19 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val preset = call.argument<Map<*, *>>("preset")
         currentPresetJson = preset
         Log.d(TAG, "setPreset: ${preset?.get("id")}")
+        // 将 preset 参数传递给 GL 渲染器
+        if (preset != null) {
+            val params = mutableMapOf<String, Any>()
+            (preset["contrast"]            as? Number)?.let { params["contrast"]            = it }
+            (preset["saturation"]          as? Number)?.let { params["saturation"]          = it }
+            (preset["temperatureShift"]    as? Number)?.let { params["temperatureShift"]    = it }
+            (preset["chromaticAberration"] as? Number)?.let { params["chromaticAberration"] = it }
+            (preset["noise"]               as? Number)?.let { params["noise"]               = it }
+            (preset["vignette"]            as? Number)?.let { params["vignette"]            = it }
+            (preset["grain"]               as? Number)?.let { params["grain"]               = it }
+            (preset["sharpen"]             as? Number)?.let { params["sharpen"]             = it }
+            glRenderer?.updateParams(params)
+        }
         result.success(null)
     }
 
@@ -480,6 +512,44 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     }
 
     // ─────────────────────────────────────────────
+    // setSharpen — GPU Unsharp Mask + Camera2 EDGE_MODE（双重锐化）
+    // level: 0.0=低, 0.5=中, 1.0=高
+    // ─────────────────────────────────────────────
+    private fun handleSetSharpen(call: MethodCall, result: MethodChannel.Result) {
+        val level = call.argument<Double>("level") ?: 0.5
+        currentSharpenLevel = level.toFloat()
+        // 1. 更新 GL 渲染器中的 Unsharp Mask 强度
+        glRenderer?.setSharpen(currentSharpenLevel)
+        try {
+            val cam = camera
+            if (cam == null) {
+                result.success(null)
+                return
+            }
+            // 使用 Camera2Interop 设置 EDGE_MODE
+            // EDGE_MODE_OFF=0, EDGE_MODE_FAST=1, EDGE_MODE_HIGH_QUALITY=2
+            val edgeMode = when {
+                level < 0.2  -> android.hardware.camera2.CameraMetadata.EDGE_MODE_OFF
+                level < 0.7  -> android.hardware.camera2.CameraMetadata.EDGE_MODE_FAST
+                else         -> android.hardware.camera2.CameraMetadata.EDGE_MODE_HIGH_QUALITY
+            }
+            val options = CaptureRequestOptions.Builder()
+                .setCaptureRequestOption(
+                    android.hardware.camera2.CaptureRequest.EDGE_MODE,
+                    edgeMode
+                )
+                .build()
+            Camera2CameraControl.from(cam.cameraControl).setCaptureRequestOptions(options)
+            Log.d(TAG, "setSharpen: level=$level, edgeMode=$edgeMode")
+            result.success(null)
+        } catch (e: Exception) {
+            // 部分设备不支持 Camera2Interop，静默失败
+            Log.w(TAG, "setSharpen failed (device may not support): ${e.message}")
+            result.success(null)
+        }
+    }
+
+    // ─────────────────────────────────────────────
     // startRecording / stopRecording
     // ─────────────────────────────────────────────
 
@@ -562,6 +632,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         recording = null
         cameraProvider?.unbindAll()
         cameraProvider = null
+        glRenderer?.release()
+        glRenderer = null
         textureEntry?.release()
         textureEntry = null
         surfaceTexture = null

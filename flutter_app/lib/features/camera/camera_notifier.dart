@@ -333,7 +333,11 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   void cycleSharpen() {
-    state = state.copyWith(sharpenLevel: (state.sharpenLevel + 1) % 3);
+    final next = (state.sharpenLevel + 1) % 3;
+    state = state.copyWith(sharpenLevel: next);
+    // 0=低(0.0), 1=中(0.5), 2=高(1.0)
+    const levels = [0.0, 0.5, 1.0];
+    _ref.read(cameraServiceProvider.notifier).setSharpen(levels[next]);
   }
 
   void cycleFlash() {

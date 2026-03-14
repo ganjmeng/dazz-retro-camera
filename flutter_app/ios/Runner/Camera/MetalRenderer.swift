@@ -156,6 +156,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = params["chromaticAberration"] as? Float { ccdParams.chromaticAberration = v }
         if let v = params["bloom"] as? Float { ccdParams.bloomAmount = v }
         if let v = params["halation"] as? Float { ccdParams.halationAmount = v }
+        if let v = params["sharpen"] as? Float { ccdParams.sharpen = v }
 
         // 加载 LUT 纹理
         if let lutAsset = params["lut"] as? String, !lutAsset.isEmpty {
@@ -324,6 +325,16 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
                                 poolAttrs as CFDictionary,
                                 bufferAttrs as CFDictionary,
                                 &outputPixelBufferPool)
+    }
+
+    // MARK: - Sharpen Control
+
+    /// 设置锐化强度（由 setSharpen method channel 调用）
+    /// level: 0.0=低, 0.5=中, 1.0=高
+    func setSharpen(_ level: Float) {
+        paramsLock.lock()
+        ccdParams.sharpen = level
+        paramsLock.unlock()
     }
 
     // MARK: - Capture Current Frame (for photo composition)

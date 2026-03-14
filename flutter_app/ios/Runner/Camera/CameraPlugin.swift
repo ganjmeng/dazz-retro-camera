@@ -74,6 +74,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleSetExposure(call: call, result: result)
         case "setWhiteBalance":
             handleSetWhiteBalance(call: call, result: result)
+        case "setSharpen":
+            handleSetSharpen(call: call, result: result)
         case "saveToGallery":
             handleSaveToGallery(call: call, result: result)
         case "dispose":
@@ -148,6 +150,20 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
                 if let bloom = sensor["bloom"] as? NSNumber { shaderParams["bloom"] = bloom.floatValue }
             }
         }
+        // 解析 params 子对象（PresetParams.toJson() 输出）
+        if let params = presetJson["params"] as? [String: Any] {
+            if let contrast = params["contrast"] as? NSNumber { shaderParams["contrast"] = contrast.floatValue }
+            if let saturation = params["saturation"] as? NSNumber { shaderParams["saturation"] = saturation.floatValue }
+            if let temperatureShift = params["temperatureShift"] as? NSNumber { shaderParams["temperatureShift"] = temperatureShift.floatValue }
+            if let tintShift = params["tintShift"] as? NSNumber { shaderParams["tintShift"] = tintShift.floatValue }
+            if let sharpen = params["sharpen"] as? NSNumber { shaderParams["sharpen"] = sharpen.floatValue }
+            if let grainAmount = params["grainAmount"] as? NSNumber { shaderParams["grainAmount"] = grainAmount.floatValue }
+            if let noiseAmount = params["noiseAmount"] as? NSNumber { shaderParams["noise"] = noiseAmount.floatValue }
+            if let vignetteAmount = params["vignetteAmount"] as? NSNumber { shaderParams["vignette"] = vignetteAmount.floatValue }
+            if let ca = params["chromaticAberration"] as? NSNumber { shaderParams["chromaticAberration"] = ca.floatValue }
+            if let bloom = params["bloomAmount"] as? NSNumber { shaderParams["bloom"] = bloom.floatValue }
+            if let halation = params["halationAmount"] as? NSNumber { shaderParams["halation"] = halation.floatValue }
+        }
         if let lut = presetJson["lut"] as? String { shaderParams["lut"] = lut }
         if let grain = presetJson["grain"] as? String { shaderParams["grain"] = grain }
         renderer?.updateParams(shaderParams)
@@ -202,6 +218,17 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let mode = args?["mode"] as? String ?? "auto"
         let tempK = args?["tempK"] as? Int ?? 5500
         cameraManager?.setWhiteBalance(mode: mode, tempK: tempK)
+        result(nil)
+    }
+
+    // ─────────────────────────────────────────────
+    // setSharpen — 通过 Metal shader unsharp mask 实现锐化
+    // level: 0.0=低, 0.5=中, 1.0=高
+    // ─────────────────────────────────────────────
+    private func handleSetSharpen(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any]
+        let level = args?["level"] as? Double ?? 0.5
+        renderer?.setSharpen(Float(level))
         result(nil)
     }
 
