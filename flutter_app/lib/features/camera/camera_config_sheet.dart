@@ -252,7 +252,13 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
       barrierColor: Colors.black26,
       isDismissible: true, // 点击遗罩关闭
       enableDrag: true,    // 下拉手势关闭
-      builder: (_) => _SubPanel(type: type, camera: cam),
+      // 使用 useRootNavigator=false 确保 modal 在 ProviderScope 内部
+      useRootNavigator: false,
+      builder: (modalCtx) => ProviderScope(
+        // 共享父级 ProviderContainer，确保子面板能正确 watch/read 全局状态
+        parent: ProviderScope.containerOf(ctx),
+        child: _SubPanel(type: type, camera: cam),
+      ),
     );
   }
 }
@@ -1608,15 +1614,10 @@ const _kWatermarkColors = [
   Color(0xFF000000), // 黑
 ];
 
+// 背景色只保留黑/白/透明三种
 const _kFrameBgColors = [
-  Color(0xFFE8D84B), // 拍立得黄
-  Color(0xFFF5F2EA), // 奶白
   Color(0xFFFFFFFF), // 纯白
-  Color(0xFF6B8E5A), // 草绿
-  Color(0xFFD4A5A5), // 粉红
-  Color(0xFF7B9EC7), // 天蓝
-  Color(0xFF5C4033), // 深棕
-  Color(0xFF1C1C1E), // 黑
+  Color(0xFF1C1C1E), // 纯黑
 ];
 
 // ─── 工具函数 ──────────────────────────────────────────────────────────────────

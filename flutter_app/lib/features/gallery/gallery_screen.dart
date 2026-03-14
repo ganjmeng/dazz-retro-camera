@@ -80,20 +80,31 @@ class _GalleryScreenState extends State<GalleryScreen> {
   Future<void> _fetchAssets() async {
     setState(() => _isLoading = true);
     final ps = await PhotoManager.requestPermissionExtend();
-    if (!ps.isAuth) {
-      if (mounted) setState(() => _isLoading = false);
+    // hasAccess = authorized || limited（OPPO ColorOS 16 可能返回 limited）
+    if (!ps.hasAccess) {
+      // 尝试引导用户去设置开启权限
+      if (mounted) {
+        setState(() => _isLoading = false);
+        // 显示权限提示
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('请在设置中开启相册访问权限，才能查看成片'),
+            backgroundColor: Color(0xFF3A3A3C),
+          ),
+        );
+      }
       return;
     }
 
     // 强制释放所有缓存，确保能看到最新保存的文件
     await PhotoManager.releaseCache();
-    // 等待 MediaStore 索引完成（Android 需要短暂延迟）
-    await Future.delayed(const Duration(milliseconds: 300));
+    // 等待 MediaStore 索引完成（OPPO ColorOS 需要更长的延迟）
+    await Future.delayed(const Duration(milliseconds: 800));
 
     // 同时获取所有子相册 + 虚拟根相册，确保能找到 DAZZ
     final allPaths = await PhotoManager.getAssetPathList(
       type: RequestType.image,
-      hasAll: true,   // 包含虚拟根相册（小米 MIUI 需要此选项）
+      hasAll: true,   // 包含虚拟根相册（小米 MIUI / OPPO ColorOS 需要此选项）
       onlyAll: false,
       filterOption: FilterOptionGroup(
         orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],

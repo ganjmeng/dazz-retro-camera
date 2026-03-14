@@ -418,6 +418,10 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                         }
                         val rows = context.contentResolver.update(uri, updateValues, null, null)
                         Log.d(TAG, "[saveToGallery] IS_PENDING cleared, rows=$rows, uri=$uri")
+                        // OPPO ColorOS 16 小米 MIUI 兴趣：额外触发 notifyChange 确保 photo_manager 立即感知新文件
+                        context.contentResolver.notifyChange(
+                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, null
+                        )
                         val mainExecutor = ContextCompat.getMainExecutor(context)
                         mainExecutor.execute { result.success(mapOf("success" to true, "uri" to uri.toString())) }
                     } else {

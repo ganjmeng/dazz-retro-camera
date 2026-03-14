@@ -286,9 +286,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   /// App 启动时加载最新缩略图（不用于拍照后刷新）
   Future<void> _loadLatestThumb() async {
     final perm = await PhotoManager.requestPermissionExtend();
-    if (!perm.isAuth) return;
+    if (!perm.hasAccess) return;
     final albums = await PhotoManager.getAssetPathList(
       type: RequestType.image,
+      hasAll: true,
+      onlyAll: false,
       filterOption: FilterOptionGroup(
         orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
       ),
@@ -1791,7 +1793,7 @@ class _GallerySheetState extends State<_GallerySheet> {
   }
   Future<void> _loadPhotos() async {
     final perm = await PhotoManager.requestPermissionExtend();
-    if (!perm.isAuth) { if (mounted) setState(() => _loading = false); return; }
+    if (!perm.hasAccess) { if (mounted) setState(() => _loading = false); return; }
     final albums = await PhotoManager.getAssetPathList(
       type: RequestType.image,
       filterOption: FilterOptionGroup(
