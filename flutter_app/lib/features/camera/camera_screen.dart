@@ -131,7 +131,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
   }
 
-  Future<void> _loadLatestThumb() async {
+  Future<void> _loadLatestThumb({bool afterCapture = false}) async {
+    // 拍照后先清除 photo_manager 缓存，再稍延读取，确保新照片已写入相册
+    if (afterCapture) {
+      await PhotoManager.clearFileCache();
+      await Future.delayed(const Duration(milliseconds: 600));
+    }
     final perm = await PhotoManager.requestPermissionExtend();
     if (!perm.isAuth) return;
     final albums = await PhotoManager.getAssetPathList(
@@ -182,7 +187,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<void> _doTakePhoto() async {
     final path = await ref.read(cameraAppProvider.notifier).takePhoto();
     if (path != null && mounted) {
-      _loadLatestThumb();
+      // afterCapture=true 确保先清除缓存再读取，避免读到旧缩略图
+      _loadLatestThumb(afterCapture: true);
     }
   }
 
@@ -203,34 +209,38 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final screenW = mq.size.width;
     final statusBarH = mq.padding.top;
     final bottomSafeH = mq.padding.bottom;
-    // 底部面板高度：工具栏(60) + 快门行(80) + 间距(40) + 底部安全区
+    // 底部面板固定高度：工具栏(60) + 快门行(80) + 间距(40) + 底部安全区
     final kBottomPanelH = 220.0 + bottomSafeH;
-    // 取景框高度根据比例动态计算（宽度固定=屏幕宽，高度=宽/比例）
-    final maxViewfinderH = mq.size.height - statusBarH - kBottomPanelH;
-    final ratioViewfinderH = screenW / st.previewAspectRatio;
-    // 限制在合理范围内（不超过可用高度，不小于屏幕宽度）
-    final viewfinderH = ratioViewfinderH.clamp(screenW * 0.75, maxViewfinderH);
+    // 取景框左右边距（参考截图：约 16px 边距）
+    const kViewfinderHPadding = 16.0;
+    final viewfinderW = screenW - kViewfinderHPadding * 2;
+    // 取景框高度根据比例动态计算（宽度=屏幕宽-边距，高度=宽/比例）
+    final maxViewfinderH = mq.size.height - statusBarH - kBottomPanelH - 8;
+    final ratioViewfinderH = viewfinderW / st.previewAspectRatio;
+    // 限制在合理范围内
+    final viewfinderH = ratioViewfinderH.clamp(viewfinderW * 0.75, maxViewfinderH);
 
     return Scaffold(
       backgroundColor: _kBlack,
       body: Stack(
         children: [
-          // ── 主内容（两段式布局）──
-          Column(
-            children: [
-              // 状态栏占位
-              SizedBox(height: statusBarH),
-              // 取景框（精确高度，按比例裁剪）
-              SizedBox(
-                width: screenW,
-                height: viewfinderH,
-                child: _buildViewfinderArea(st, camSvc, viewfinderH, screenW),
-              ),
-              // 下段：底部面板（深灰色圆角）
-              Expanded(
-                child: _buildBottomPanel(st),
-              ),
-            ],
+          // ── 底部面板固定在屏幕底部（不随取景框高度变化）──
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _buildBottomPanel(st),
+          ),
+          // ── 取景框（有圆角+左右边距，居中在状态栏下方）──
+          Positioned(
+            top: statusBarH + 8,
+            left: kViewfinderHPadding,
+            right: kViewfinderHPadding,
+            child: SizedBox(
+              width: viewfinderW,
+              height: viewfinderH,
+              child: _buildViewfinderArea(st, camSvc, viewfinderH, viewfinderW),
+            ),
           ),
           // ── 右上角菜单弹框 ──
           if (st.showTopMenu) _buildTopMenuOverlay(st),
@@ -264,9 +274,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ── 取景框区域（上段）──────────────────────────────────────────────────────
   // 布局：黑色背景，右上角 "•••" 按钮，取景框（含焦距文字+预览+控制胶囊）
   Widget _buildViewfinderArea(CameraAppState st, CameraState camSvc, double areaH, double screenW) {
-    // 截图精确复刻：预览全屏铺满，无边框，无圆角，无焦距文字
-    // 右上角 "•••" 按钮浮在预览上方黑色区域
-    return Stack(
+    // 取景框：圆角 + 左右边距（参考截图 13104/13105）
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Stack(
       fit: StackFit.expand,
       children: [
         // 预览全屏铺满（无边框无圆角）
@@ -320,9 +331,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           ),
         ),
       ],
+      ),
     );
   }
-  // ── 底部面板（下段）──────────────────────────────────────────────────────────
+  // ── 底部面板（下段）────────────────────────────────────────────
   // 布局：深灰色圆角面板，[照片/视频 tab] + [样图/管理] → 相机列表 → 工具栏 → 快门行
   Widget _buildBottomPanel(CameraAppState st) {
     // 截图精确复刻：纯黑背景，无圆角，无 Tab 行，无相机列表
