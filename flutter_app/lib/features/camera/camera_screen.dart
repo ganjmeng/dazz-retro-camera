@@ -881,6 +881,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         padding: const EdgeInsets.symmetric(horizontal: 12),
         children: _kPhotoCameras.map((cam) {
           final isActive = st.activeCameraId == cam.id;
+          // 从 kAllCameras 获取真实图标路径
+          final entry = kAllCameras.where((e) => e.id == cam.id).firstOrNull;
+          final iconPath = entry?.iconPath;
           return GestureDetector(
             onTap: () => _showCameraTransition(
               () => ref.read(cameraAppProvider.notifier).switchToCamera(cam.id),
@@ -895,14 +898,27 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     width: 64,
                     height: 64,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2C2C2E),
+                      color: const Color(0xFF1A1A1A),
                       borderRadius: BorderRadius.circular(14),
                       border: isActive
                           ? Border.all(color: _kWhite, width: 2)
-                          : null,
+                          : Border.all(color: Colors.grey[800]!, width: 1),
                     ),
-                    child: Center(
-                      child: Text(cam.emoji, style: const TextStyle(fontSize: 30)),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(13),
+                      child: iconPath != null
+                          ? Image.asset(
+                              iconPath,
+                              width: 64,
+                              height: 64,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Center(
+                                child: Text(cam.emoji, style: const TextStyle(fontSize: 28)),
+                              ),
+                            )
+                          : Center(
+                              child: Text(cam.emoji, style: const TextStyle(fontSize: 28)),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -910,12 +926,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        cam.name,
-                        style: TextStyle(
-                          color: isActive ? _kWhite : Colors.grey,
-                          fontSize: 10,
-                          fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                      Flexible(
+                        child: Text(
+                          cam.name,
+                          style: TextStyle(
+                            color: isActive ? _kWhite : Colors.grey,
+                            fontSize: 10,
+                            fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       ),
                       if (cam.hasR)
@@ -930,8 +950,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       ),
     );
   }
-
-  Widget _buildPreview(CameraAppState st, CameraState camSvc) {
+    Widget _buildPreview(CameraAppState st, CameraState camSvc) {
     if (camSvc.isLoading) {
       return Container(
         color: Colors.black,
@@ -2726,11 +2745,16 @@ const _kVideoCameras = [
 ];
 
 const _kPhotoCameras = [
-  _CameraItem(id: 'fxn_r', name: 'FXN', emoji: '📷', hasR: true),
   _CameraItem(id: 'grd_r', name: 'GRD', emoji: '📷', hasR: true),
-  _CameraItem(id: 'ccd_r', name: 'CCD', emoji: '📸', hasR: true),
-  _CameraItem(id: 'inst_sqc', name: 'Inst SQC', emoji: '🎞'),
+  _CameraItem(id: 'fxn_r', name: 'FXN', emoji: '📷', hasR: true),
+  _CameraItem(id: 'inst_sq', name: 'INST SQ', emoji: '🎞'),
   _CameraItem(id: 'bw_classic', name: 'BW', emoji: '⬛'),
+  _CameraItem(id: 'ccd_m', name: 'CCD M', emoji: '📸'),
+  _CameraItem(id: 'd_classic', name: 'D Classic', emoji: '📷'),
+  _CameraItem(id: 'inst_c', name: 'INST C', emoji: '🎞'),
+  _CameraItem(id: 'inst_s', name: 'INST S', emoji: '🎞'),
+  _CameraItem(id: 'u300', name: 'U300', emoji: '📷'),
+  _CameraItem(id: 'fisheye', name: 'FISHEYE', emoji: '🔵'),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

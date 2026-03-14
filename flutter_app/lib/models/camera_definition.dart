@@ -142,32 +142,54 @@ class SensorConfig {
 
 class DefaultLook {
   final String? baseLut;
-  final double temperature;
-  final double contrast;
-  final double saturation;
-  final double vignette;
+  final double temperature;   // -100 (cool) ~ +100 (warm)
+  final double tint;          // -100 (green) ~ +100 (magenta)
+  final double contrast;      // 0.5 ~ 1.8 multiplier
+  final double highlights;    // -100 ~ +100 (Lightroom-style)
+  final double shadows;       // -100 ~ +100
+  final double whites;        // -100 ~ +100
+  final double blacks;        // -100 ~ +100
+  final double clarity;       // -100 ~ +100 (midtone micro-contrast)
+  final double vibrance;      // -100 ~ +100 (smart saturation)
+  final double saturation;    // 0.0 ~ 2.0 multiplier
+  final double vignette;      // 0.0 ~ 1.0
   final double distortion;
   final double chromaticAberration;
-  final double bloom;
+  final double bloom;         // 0.0 ~ 1.0
   final double flare;
+  final double grain;         // 0.0 ~ 1.0 grain strength
+  final double colorBiasR;    // -1.0 ~ +1.0 red channel bias
+  final double colorBiasG;    // -1.0 ~ +1.0 green channel bias
+  final double colorBiasB;    // -1.0 ~ +1.0 blue channel bias
 
   const DefaultLook({
     this.baseLut,
     required this.temperature,
+    this.tint = 0,
     required this.contrast,
+    this.highlights = 0,
+    this.shadows = 0,
+    this.whites = 0,
+    this.blacks = 0,
+    this.clarity = 0,
+    this.vibrance = 0,
     required this.saturation,
     required this.vignette,
     required this.distortion,
     required this.chromaticAberration,
     required this.bloom,
     required this.flare,
+    this.grain = 0,
+    this.colorBiasR = 0,
+    this.colorBiasG = 0,
+    this.colorBiasB = 0,
   });
 
   /// 占位默认値（相机 JSON 未加载时使用）
   factory DefaultLook.empty() => const DefaultLook(
     temperature: 0,
-    contrast: 0,
-    saturation: 0,
+    contrast: 1.0,
+    saturation: 1.0,
     vignette: 0,
     distortion: 0,
     chromaticAberration: 0,
@@ -177,14 +199,25 @@ class DefaultLook {
 
   factory DefaultLook.fromJson(Map<String, dynamic> json) => DefaultLook(
     baseLut: json['baseLut'] as String?,
-    temperature: (json['temperature'] as num).toDouble(),
-    contrast: (json['contrast'] as num).toDouble(),
-    saturation: (json['saturation'] as num).toDouble(),
-    vignette: (json['vignette'] as num).toDouble(),
-    distortion: (json['distortion'] as num).toDouble(),
-    chromaticAberration: (json['chromaticAberration'] as num).toDouble(),
-    bloom: (json['bloom'] as num).toDouble(),
-    flare: (json['flare'] as num).toDouble(),
+    temperature: (json['temperature'] as num? ?? 0).toDouble(),
+    tint: (json['tint'] as num? ?? 0).toDouble(),
+    contrast: (json['contrast'] as num? ?? 1.0).toDouble(),
+    highlights: (json['highlights'] as num? ?? 0).toDouble(),
+    shadows: (json['shadows'] as num? ?? 0).toDouble(),
+    whites: (json['whites'] as num? ?? 0).toDouble(),
+    blacks: (json['blacks'] as num? ?? 0).toDouble(),
+    clarity: (json['clarity'] as num? ?? 0).toDouble(),
+    vibrance: (json['vibrance'] as num? ?? 0).toDouble(),
+    saturation: (json['saturation'] as num? ?? 1.0).toDouble(),
+    vignette: (json['vignette'] as num? ?? 0).toDouble(),
+    distortion: (json['distortion'] as num? ?? 0).toDouble(),
+    chromaticAberration: (json['chromaticAberration'] as num? ?? 0).toDouble(),
+    bloom: (json['bloom'] as num? ?? 0).toDouble(),
+    flare: (json['flare'] as num? ?? 0).toDouble(),
+    grain: (json['grain'] as num? ?? 0).toDouble(),
+    colorBiasR: (json['colorBiasR'] as num? ?? 0).toDouble(),
+    colorBiasG: (json['colorBiasG'] as num? ?? 0).toDouble(),
+    colorBiasB: (json['colorBiasB'] as num? ?? 0).toDouble(),
   );
 }
 

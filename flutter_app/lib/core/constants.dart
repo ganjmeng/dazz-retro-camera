@@ -25,4 +25,14 @@ abstract class AppConstants {
   static const String categoryFilm = 'Film';
   static const String categoryDisposable = 'Disposable';
   static const String categoryVideo = 'Video';
+  static const String categoryDigital = 'Digital';
+  static const String categoryInstant = 'Instant';
+  static const String categoryCreative = 'Creative';
+
+  // 相机 category 字符串（与 JSON 中的 category 字段对应）
+  static const String camCategoryCcd = 'ccd';
+  static const String camCategoryFilm = 'film';
+  static const String camCategoryDigital = 'digital';
+  static const String camCategoryInstant = 'instant';
+  static const String camCategoryCreative = 'creative';
 }

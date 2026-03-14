@@ -1,0 +1,293 @@
+{
+  "id": "ccd_m",
+  "name": "CCD M",
+  "category": "ccd",
+  "mode": "photo",
+  "supportsPhoto": true,
+  "supportsVideo": false,
+  "focalLengthLabel": "35mm",
+  "sensor": {
+    "type": "ccd",
+    "dynamicRange": 8,
+    "baseNoise": 0.18,
+    "colorDepth": 8
+  },
+  "defaultLook": {
+    "baseLut": "assets/lut/cameras/ccd_m.cube",
+    "distortion": 0.0,
+    "chromaticAberration": 0.10,
+    "flare": 0.0,
+    "temperature": -6,
+    "tint": -4.0,
+    "contrast": 0.94,
+    "highlights": 8.0,
+    "shadows": 4.0,
+    "whites": 12.0,
+    "blacks": -6.0,
+    "clarity": -2.0,
+    "saturation": 1.06,
+    "vibrance": 8.0,
+    "grain": 0.20,
+    "bloom": 0.08,
+    "vignette": 0.06,
+    "colorBiasR": -0.02,
+    "colorBiasG": 0.01,
+    "colorBiasB": 0.06
+  },
+  "modules": {
+    "filters": [
+      {
+        "id": "ccd_m_standard",
+        "name": "标准",
+        "nameEn": "Standard",
+        "lut": "assets/lut/filters/ccd_m_standard.cube",
+        "contrast": 1.0,
+        "saturation": 1.0,
+        "grain": "medium",
+        "thumbnail": "assets/thumbnails/filters/ccd_m_standard.jpg"
+      },
+      {
+        "id": "ccd_m_vivid",
+        "name": "鲜艳",
+        "nameEn": "Vivid",
+        "lut": "assets/lut/filters/ccd_m_vivid.cube",
+        "contrast": 1.08,
+        "saturation": 1.12,
+        "grain": "medium",
+        "thumbnail": "assets/thumbnails/filters/ccd_m_vivid.jpg"
+      },
+      {
+        "id": "ccd_m_cool",
+        "name": "冷调",
+        "nameEn": "Cool",
+        "lut": "assets/lut/filters/ccd_m_cool.cube",
+        "contrast": 1.0,
+        "saturation": 0.92,
+        "grain": "heavy",
+        "thumbnail": "assets/thumbnails/filters/ccd_m_cool.jpg"
+      }
+    ],
+    "lenses": [
+      {
+        "id": "std",
+        "name": "标准",
+        "nameEn": "Std",
+        "vignette": 0.04,
+        "distortion": 0.0,
+        "chromaticAberration": 0.08,
+        "bloom": 0.05,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/std.jpg"
+      },
+      {
+        "id": "wide",
+        "name": "广角",
+        "nameEn": "Wide",
+        "vignette": 0.06,
+        "distortion": 0.012,
+        "chromaticAberration": 0.12,
+        "bloom": 0.06,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/wide.jpg"
+      },
+      {
+        "id": "vintage",
+        "name": "复古",
+        "nameEn": "Vintage",
+        "vignette": 0.10,
+        "distortion": 0.005,
+        "chromaticAberration": 0.15,
+        "bloom": 0.08,
+        "flare": 0.02,
+        "softFocus": 0.03,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
+      },
+      {
+        "id": "dream",
+        "name": "梦幻",
+        "nameEn": "Dream",
+        "vignette": 0.05,
+        "distortion": 0.0,
+        "chromaticAberration": 0.10,
+        "bloom": 0.14,
+        "flare": 0.04,
+        "softFocus": 0.06,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/dream.jpg"
+      },
+      {
+        "id": "prism",
+        "name": "棱镜",
+        "nameEn": "Prism",
+        "vignette": 0.03,
+        "distortion": 0.0,
+        "chromaticAberration": 0.20,
+        "bloom": 0.05,
+        "flare": 0.0,
+        "softFocus": 0.01,
+        "refraction": 0.20,
+        "thumbnail": "assets/thumbnails/lenses/prism.jpg"
+      }
+    ],
+    "ratios": [
+      {
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "width": 3,
+        "height": 4,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_2_3",
+        "label": "2:3",
+        "width": 2,
+        "height": 3,
+        "supportsFrame": false
+      },
+      {
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_9_16",
+        "label": "9:16",
+        "width": 9,
+        "height": 16,
+        "supportsFrame": false
+      }
+    ],
+    "frames": [
+      {
+        "id": "frame_clean_white",
+        "name": "白边框",
+        "nameEn": "Clean White",
+        "asset": null,
+        "backgroundColor": "#F5F2EA",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 60,
+          "right": 60,
+          "bottom": 60,
+          "left": 60
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/frame_clean_white.jpg",
+        "outerPadding": 30,
+        "outerBackgroundColor": "#FFFFFF"
+      }
+    ],
+    "watermarks": {
+      "presets": [
+        {
+          "id": "date_blue",
+          "name": "蓝色日期",
+          "color": "#5B9BD5",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "date_white",
+          "name": "白色日期",
+          "color": "#FFFFFF",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "none",
+          "name": "无水印"
+        }
+      ],
+      "editor": {
+        "allowColorChange": true,
+        "allowPositionChange": true,
+        "allowSizeChange": true,
+        "allowOrientationChange": true
+      }
+    },
+    "extras": []
+  },
+  "defaultSelection": {
+    "filterId": "ccd_m_standard",
+    "lensId": "std",
+    "ratioId": "ratio_3_4",
+    "frameId": "frame_clean_white",
+    "watermarkPresetId": "date_blue",
+    "extraId": null
+  },
+  "uiCapabilities": {
+    "enableFilter": true,
+    "enableLens": true,
+    "enableRatio": true,
+    "enableFrame": true,
+    "enableWatermark": true,
+    "enableExtra": false
+  },
+  "previewCapabilities": {
+    "allowSmallViewport": true,
+    "allowGridOverlay": true,
+    "allowZoom": true,
+    "allowImportImage": true,
+    "allowTimer": true,
+    "allowFlash": true
+  },
+  "previewPolicy": {
+    "enableLut": true,
+    "enableTemperature": true,
+    "enableContrast": true,
+    "enableSaturation": true,
+    "enableVignette": true,
+    "enableLightLensEffect": true,
+    "enableGrain": false,
+    "enableBloom": false,
+    "enableChromaticAberration": false,
+    "enableFrameComposite": false,
+    "enableWatermarkComposite": true
+  },
+  "exportPolicy": {
+    "jpegQuality": 0.92,
+    "applyRatioCrop": true,
+    "applyFrameOnExport": true,
+    "applyWatermarkOnExport": true,
+    "preserveMetadata": true
+  },
+  "videoConfig": {
+    "enabled": false,
+    "fpsOptions": [24, 30],
+    "resolutionOptions": ["HD"],
+    "defaultFps": 30,
+    "defaultResolution": "HD",
+    "supportsAudio": false,
+    "videoBitrate": 8000000
+  },
+  "assets": {
+    "thumbnail": "assets/thumbnails/cameras/ccd_m.jpg",
+    "icon": "assets/thumbnails/cameras/ccd_m_icon.png"
+  },
+  "meta": {
+    "version": "final",
+    "premium": false,
+    "sortOrder": 4,
+    "tags": [
+      "ccd",
+      "digital",
+      "cool",
+      "noise",
+      "chromatic-aberration",
+      "2005"
+    ]
+  }
+}

@@ -1,0 +1,293 @@
+{
+  "id": "u300",
+  "name": "U300",
+  "category": "film",
+  "mode": "photo",
+  "supportsPhoto": true,
+  "supportsVideo": false,
+  "focalLengthLabel": "32mm",
+  "sensor": {
+    "type": "film",
+    "dynamicRange": 9,
+    "baseNoise": 0.22,
+    "colorDepth": 8
+  },
+  "defaultLook": {
+    "baseLut": "assets/lut/cameras/u300.cube",
+    "distortion": 0.005,
+    "chromaticAberration": 0.04,
+    "flare": 0.0,
+    "temperature": 4,
+    "tint": -4.0,
+    "contrast": 0.92,
+    "highlights": -10.0,
+    "shadows": 6.0,
+    "whites": -4.0,
+    "blacks": 8.0,
+    "clarity": -6.0,
+    "saturation": 0.96,
+    "vibrance": 6.0,
+    "grain": 0.25,
+    "bloom": 0.06,
+    "vignette": 0.08,
+    "colorBiasR": 0.01,
+    "colorBiasG": 0.04,
+    "colorBiasB": -0.01
+  },
+  "modules": {
+    "filters": [
+      {
+        "id": "u300_standard",
+        "name": "标准",
+        "nameEn": "Standard",
+        "lut": "assets/lut/filters/u300_standard.cube",
+        "contrast": 1.0,
+        "saturation": 1.0,
+        "grain": "heavy",
+        "thumbnail": "assets/thumbnails/filters/u300_standard.jpg"
+      },
+      {
+        "id": "u300_travel",
+        "name": "旅行",
+        "nameEn": "Travel",
+        "lut": "assets/lut/filters/u300_travel.cube",
+        "contrast": 0.95,
+        "saturation": 1.05,
+        "grain": "heavy",
+        "thumbnail": "assets/thumbnails/filters/u300_travel.jpg"
+      },
+      {
+        "id": "u300_fade",
+        "name": "褪色",
+        "nameEn": "Fade",
+        "lut": "assets/lut/filters/u300_fade.cube",
+        "contrast": 0.85,
+        "saturation": 0.80,
+        "grain": "heavy",
+        "thumbnail": "assets/thumbnails/filters/u300_fade.jpg"
+      }
+    ],
+    "lenses": [
+      {
+        "id": "std",
+        "name": "标准",
+        "nameEn": "Std",
+        "vignette": 0.06,
+        "distortion": 0.004,
+        "chromaticAberration": 0.04,
+        "bloom": 0.04,
+        "flare": 0.01,
+        "softFocus": 0.02,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/std.jpg"
+      },
+      {
+        "id": "wide",
+        "name": "广角",
+        "nameEn": "Wide",
+        "vignette": 0.10,
+        "distortion": 0.012,
+        "chromaticAberration": 0.06,
+        "bloom": 0.05,
+        "flare": 0.02,
+        "softFocus": 0.02,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/wide.jpg"
+      },
+      {
+        "id": "vintage",
+        "name": "复古",
+        "nameEn": "Vintage",
+        "vignette": 0.12,
+        "distortion": 0.006,
+        "chromaticAberration": 0.08,
+        "bloom": 0.06,
+        "flare": 0.03,
+        "softFocus": 0.05,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
+      },
+      {
+        "id": "dream",
+        "name": "梦幻",
+        "nameEn": "Dream",
+        "vignette": 0.05,
+        "distortion": 0.002,
+        "chromaticAberration": 0.03,
+        "bloom": 0.12,
+        "flare": 0.04,
+        "softFocus": 0.08,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/dream.jpg"
+      },
+      {
+        "id": "prism",
+        "name": "棱镜",
+        "nameEn": "Prism",
+        "vignette": 0.04,
+        "distortion": 0.002,
+        "chromaticAberration": 0.12,
+        "bloom": 0.05,
+        "flare": 0.02,
+        "softFocus": 0.02,
+        "refraction": 0.16,
+        "thumbnail": "assets/thumbnails/lenses/prism.jpg"
+      }
+    ],
+    "ratios": [
+      {
+        "id": "ratio_2_3",
+        "label": "2:3",
+        "width": 2,
+        "height": 3,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "width": 3,
+        "height": 4,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
+        "supportsFrame": false
+      },
+      {
+        "id": "ratio_9_16",
+        "label": "9:16",
+        "width": 9,
+        "height": 16,
+        "supportsFrame": false
+      }
+    ],
+    "frames": [
+      {
+        "id": "frame_film_strip",
+        "name": "胶片边框",
+        "nameEn": "Film Strip",
+        "asset": null,
+        "backgroundColor": "#F5F0E8",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 50,
+          "right": 50,
+          "bottom": 50,
+          "left": 50
+        },
+        "supportedRatios": [
+          "ratio_2_3",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/frame_film_strip.jpg",
+        "outerPadding": 24,
+        "outerBackgroundColor": "#F5F0E8"
+      }
+    ],
+    "watermarks": {
+      "presets": [
+        {
+          "id": "date_orange",
+          "name": "橙色日期",
+          "color": "#FF8A3D",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "date_white",
+          "name": "白色日期",
+          "color": "#FFFFFF",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "none",
+          "name": "无水印"
+        }
+      ],
+      "editor": {
+        "allowColorChange": true,
+        "allowPositionChange": true,
+        "allowSizeChange": true,
+        "allowOrientationChange": true
+      }
+    },
+    "extras": []
+  },
+  "defaultSelection": {
+    "filterId": "u300_standard",
+    "lensId": "std",
+    "ratioId": "ratio_2_3",
+    "frameId": "frame_film_strip",
+    "watermarkPresetId": "date_orange",
+    "extraId": null
+  },
+  "uiCapabilities": {
+    "enableFilter": true,
+    "enableLens": true,
+    "enableRatio": true,
+    "enableFrame": true,
+    "enableWatermark": true,
+    "enableExtra": false
+  },
+  "previewCapabilities": {
+    "allowSmallViewport": true,
+    "allowGridOverlay": true,
+    "allowZoom": true,
+    "allowImportImage": true,
+    "allowTimer": true,
+    "allowFlash": true
+  },
+  "previewPolicy": {
+    "enableLut": true,
+    "enableTemperature": true,
+    "enableContrast": true,
+    "enableSaturation": true,
+    "enableVignette": true,
+    "enableLightLensEffect": true,
+    "enableGrain": false,
+    "enableBloom": false,
+    "enableChromaticAberration": false,
+    "enableFrameComposite": false,
+    "enableWatermarkComposite": true
+  },
+  "exportPolicy": {
+    "jpegQuality": 0.90,
+    "applyRatioCrop": true,
+    "applyFrameOnExport": true,
+    "applyWatermarkOnExport": true,
+    "preserveMetadata": true
+  },
+  "videoConfig": {
+    "enabled": false,
+    "fpsOptions": [24],
+    "resolutionOptions": ["HD"],
+    "defaultFps": 24,
+    "defaultResolution": "HD",
+    "supportsAudio": false,
+    "videoBitrate": 8000000
+  },
+  "assets": {
+    "thumbnail": "assets/thumbnails/cameras/u300.jpg",
+    "icon": "assets/thumbnails/cameras/u300_icon.png"
+  },
+  "meta": {
+    "version": "final",
+    "premium": false,
+    "sortOrder": 8,
+    "tags": [
+      "film",
+      "disposable",
+      "grain",
+      "travel",
+      "kodak",
+      "ultramax"
+    ]
+  }
+}

@@ -1,0 +1,255 @@
+{
+  "id": "fisheye",
+  "name": "FISHEYE",
+  "category": "creative",
+  "mode": "photo",
+  "supportsPhoto": true,
+  "supportsVideo": false,
+  "focalLengthLabel": "10mm",
+  "sensor": {
+    "type": "film",
+    "dynamicRange": 8,
+    "baseNoise": 0.14,
+    "colorDepth": 8
+  },
+  "defaultLook": {
+    "baseLut": "assets/lut/cameras/fisheye.cube",
+    "distortion": 0.60,
+    "chromaticAberration": 0.06,
+    "flare": 0.0,
+    "temperature": 4,
+    "tint": 2.0,
+    "contrast": 1.20,
+    "highlights": -6.0,
+    "shadows": -6.0,
+    "whites": 8.0,
+    "blacks": -16.0,
+    "clarity": 12.0,
+    "saturation": 1.16,
+    "vibrance": 14.0,
+    "grain": 0.14,
+    "bloom": 0.05,
+    "vignette": 0.30,
+    "colorBiasR": 0.01,
+    "colorBiasG": 0.01,
+    "colorBiasB": 0.0
+  },
+  "modules": {
+    "filters": [
+      {
+        "id": "fisheye_standard",
+        "name": "标准",
+        "nameEn": "Standard",
+        "lut": "assets/lut/filters/fisheye_standard.cube",
+        "contrast": 1.0,
+        "saturation": 1.0,
+        "grain": "medium",
+        "thumbnail": "assets/thumbnails/filters/fisheye_standard.jpg"
+      },
+      {
+        "id": "fisheye_skate",
+        "name": "街头",
+        "nameEn": "Skate",
+        "lut": "assets/lut/filters/fisheye_skate.cube",
+        "contrast": 1.20,
+        "saturation": 1.15,
+        "grain": "heavy",
+        "thumbnail": "assets/thumbnails/filters/fisheye_skate.jpg"
+      },
+      {
+        "id": "fisheye_bw",
+        "name": "黑白",
+        "nameEn": "B&W",
+        "lut": "assets/lut/filters/fisheye_bw.cube",
+        "contrast": 1.30,
+        "saturation": 0.0,
+        "grain": "heavy",
+        "thumbnail": "assets/thumbnails/filters/fisheye_bw.jpg"
+      }
+    ],
+    "lenses": [
+      {
+        "id": "fisheye_full",
+        "name": "全鱼眼",
+        "nameEn": "Full Fisheye",
+        "vignette": 0.30,
+        "distortion": 0.60,
+        "chromaticAberration": 0.06,
+        "bloom": 0.04,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/fisheye_full.jpg"
+      },
+      {
+        "id": "fisheye_mild",
+        "name": "轻鱼眼",
+        "nameEn": "Mild",
+        "vignette": 0.20,
+        "distortion": 0.35,
+        "chromaticAberration": 0.04,
+        "bloom": 0.03,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/fisheye_mild.jpg"
+      },
+      {
+        "id": "fisheye_extreme",
+        "name": "极端",
+        "nameEn": "Extreme",
+        "vignette": 0.40,
+        "distortion": 0.85,
+        "chromaticAberration": 0.10,
+        "bloom": 0.05,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/fisheye_extreme.jpg"
+      },
+      {
+        "id": "vintage",
+        "name": "复古",
+        "nameEn": "Vintage",
+        "vignette": 0.35,
+        "distortion": 0.55,
+        "chromaticAberration": 0.08,
+        "bloom": 0.06,
+        "flare": 0.02,
+        "softFocus": 0.02,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
+      },
+      {
+        "id": "prism",
+        "name": "棱镜",
+        "nameEn": "Prism",
+        "vignette": 0.25,
+        "distortion": 0.50,
+        "chromaticAberration": 0.18,
+        "bloom": 0.06,
+        "flare": 0.02,
+        "softFocus": 0.01,
+        "refraction": 0.22,
+        "thumbnail": "assets/thumbnails/lenses/prism.jpg"
+      }
+    ],
+    "ratios": [
+      {
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
+        "supportsFrame": false
+      },
+      {
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "width": 3,
+        "height": 4,
+        "supportsFrame": false
+      },
+      {
+        "id": "ratio_9_16",
+        "label": "9:16",
+        "width": 9,
+        "height": 16,
+        "supportsFrame": false
+      }
+    ],
+    "frames": [],
+    "watermarks": {
+      "presets": [
+        {
+          "id": "date_white",
+          "name": "白色日期",
+          "color": "#FFFFFF",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "none",
+          "name": "无水印"
+        }
+      ],
+      "editor": {
+        "allowColorChange": true,
+        "allowPositionChange": true,
+        "allowSizeChange": true,
+        "allowOrientationChange": true
+      }
+    },
+    "extras": []
+  },
+  "defaultSelection": {
+    "filterId": "fisheye_standard",
+    "lensId": "fisheye_full",
+    "ratioId": "ratio_1_1",
+    "frameId": null,
+    "watermarkPresetId": "none",
+    "extraId": null
+  },
+  "uiCapabilities": {
+    "enableFilter": true,
+    "enableLens": true,
+    "enableRatio": true,
+    "enableFrame": false,
+    "enableWatermark": true,
+    "enableExtra": false
+  },
+  "previewCapabilities": {
+    "allowSmallViewport": true,
+    "allowGridOverlay": false,
+    "allowZoom": false,
+    "allowImportImage": true,
+    "allowTimer": true,
+    "allowFlash": false
+  },
+  "previewPolicy": {
+    "enableLut": true,
+    "enableTemperature": true,
+    "enableContrast": true,
+    "enableSaturation": true,
+    "enableVignette": true,
+    "enableLightLensEffect": true,
+    "enableGrain": false,
+    "enableBloom": false,
+    "enableChromaticAberration": false,
+    "enableFrameComposite": false,
+    "enableWatermarkComposite": true
+  },
+  "exportPolicy": {
+    "jpegQuality": 0.92,
+    "applyRatioCrop": true,
+    "applyFrameOnExport": false,
+    "applyWatermarkOnExport": true,
+    "preserveMetadata": true
+  },
+  "videoConfig": {
+    "enabled": false,
+    "fpsOptions": [24, 30],
+    "resolutionOptions": ["HD"],
+    "defaultFps": 30,
+    "defaultResolution": "HD",
+    "supportsAudio": false,
+    "videoBitrate": 8000000
+  },
+  "assets": {
+    "thumbnail": "assets/thumbnails/cameras/fisheye.jpg",
+    "icon": "assets/thumbnails/cameras/fisheye_icon.png"
+  },
+  "meta": {
+    "version": "final",
+    "premium": false,
+    "sortOrder": 9,
+    "tags": [
+      "creative",
+      "fisheye",
+      "distortion",
+      "skate",
+      "street",
+      "lomography"
+    ]
+  }
+}

@@ -10,7 +10,7 @@ class CameraEntry {
   final String id;
   final String name;
   final String assetPath;
-  final String category; // 'ccd' | 'film' | 'digital'
+  final String category; // 'ccd' | 'film' | 'digital' | 'instant' | 'creative'
   final String? focalLengthLabel;
   final bool premium;
   final int sortOrder;
@@ -31,6 +31,7 @@ class CameraEntry {
 
 /// All registered cameras. Add new cameras here.
 const List<CameraEntry> kAllCameras = [
+  // ── 原有相机 ──────────────────────────────────────────────────────────────
   CameraEntry(
     id: 'grd_r',
     name: 'GRD R',
@@ -70,6 +71,68 @@ const List<CameraEntry> kAllCameras = [
     premium: false,
     sortOrder: 40,
     iconPath: 'assets/thumbnails/cameras/bw_classic_icon.png',
+  ),
+
+  // ── 新增相机 ──────────────────────────────────────────────────────────────
+  CameraEntry(
+    id: 'ccd_m',
+    name: 'CCD M',
+    assetPath: 'assets/cameras/ccd_m.json',
+    category: 'ccd',
+    focalLengthLabel: '35mm',
+    premium: false,
+    sortOrder: 50,
+    iconPath: 'assets/thumbnails/cameras/ccd_m_icon.png',
+  ),
+  CameraEntry(
+    id: 'd_classic',
+    name: 'D Classic',
+    assetPath: 'assets/cameras/d_classic.json',
+    category: 'digital',
+    focalLengthLabel: '38mm',
+    premium: false,
+    sortOrder: 60,
+    iconPath: 'assets/thumbnails/cameras/d_classic_icon.png',
+  ),
+  CameraEntry(
+    id: 'inst_c',
+    name: 'INST C',
+    assetPath: 'assets/cameras/inst_c.json',
+    category: 'instant',
+    focalLengthLabel: '60mm',
+    premium: false,
+    sortOrder: 70,
+    iconPath: 'assets/thumbnails/cameras/inst_c_icon.png',
+  ),
+  CameraEntry(
+    id: 'inst_s',
+    name: 'INST S',
+    assetPath: 'assets/cameras/inst_s.json',
+    category: 'instant',
+    focalLengthLabel: '60mm',
+    premium: false,
+    sortOrder: 80,
+    iconPath: 'assets/thumbnails/cameras/inst_s_icon.png',
+  ),
+  CameraEntry(
+    id: 'u300',
+    name: 'U300',
+    assetPath: 'assets/cameras/u300.json',
+    category: 'film',
+    focalLengthLabel: '32mm',
+    premium: false,
+    sortOrder: 90,
+    iconPath: 'assets/thumbnails/cameras/u300_icon.png',
+  ),
+  CameraEntry(
+    id: 'fisheye',
+    name: 'FISHEYE',
+    assetPath: 'assets/cameras/fisheye.json',
+    category: 'creative',
+    focalLengthLabel: '10mm',
+    premium: false,
+    sortOrder: 100,
+    iconPath: 'assets/thumbnails/cameras/fisheye_icon.png',
   ),
 ];
 

@@ -30,7 +30,7 @@ class PreviewRenderParams {
     this.exposureOffset = 0,
     PreviewPolicy? policy,
   }) : defaultLook = defaultLook ?? const DefaultLook(
-         temperature: 0, contrast: 0, saturation: 0,
+         temperature: 0, contrast: 1.0, saturation: 1.0,
          vignette: 0, distortion: 0, chromaticAberration: 0,
          bloom: 0, flare: 0,
        ),
@@ -81,6 +81,18 @@ class PreviewRenderParams {
   double get effectiveTemperature {
     return (defaultLook.temperature + temperatureOffset).clamp(-100.0, 100.0);
   }
+
+  double get effectiveTint => defaultLook.tint.clamp(-100.0, 100.0);
+  double get effectiveHighlights => defaultLook.highlights.clamp(-100.0, 100.0);
+  double get effectiveShadows => defaultLook.shadows.clamp(-100.0, 100.0);
+  double get effectiveWhites => defaultLook.whites.clamp(-100.0, 100.0);
+  double get effectiveBlacks => defaultLook.blacks.clamp(-100.0, 100.0);
+  double get effectiveClarity => defaultLook.clarity.clamp(-100.0, 100.0);
+  double get effectiveVibrance => defaultLook.vibrance.clamp(-100.0, 100.0);
+  double get effectiveGrain => defaultLook.grain.clamp(0.0, 1.0);
+  double get effectiveColorBiasR => defaultLook.colorBiasR.clamp(-1.0, 1.0);
+  double get effectiveColorBiasG => defaultLook.colorBiasG.clamp(-1.0, 1.0);
+  double get effectiveColorBiasB => defaultLook.colorBiasB.clamp(-1.0, 1.0);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -191,32 +203,70 @@ class _ColorCorrectedTexture extends StatelessWidget {
     );
   }
 
-  /// Build a 5x4 color matrix combining:
-  /// - Temperature (warm/cool shift)
-  /// - Contrast
-  /// - Saturation
-  /// - Exposure offset
+  /// Build a 5x4 color matrix combining the full pipeline:
+  /// Exposure → Temperature → Tint → Blacks/Whites → Contrast → Highlights/Shadows
+  /// → Clarity → Saturation → Vibrance → ColorBias
   static List<double> _buildColorMatrix(PreviewRenderParams params) {
-    // Start with identity
     var m = _identity();
 
     // 1. Exposure (brightness multiplier)
     final expMul = math.pow(2.0, params.exposureOffset).toDouble();
     m = _multiply(m, _exposureMatrix(expMul));
 
-    // 2. Temperature shift
+    // 2. Temperature shift (warm/cool)
     if (params.policy.enableTemperature) {
       m = _multiply(m, _temperatureMatrix(params.effectiveTemperature));
     }
 
-    // 3. Contrast
+    // 3. Tint shift (green/magenta)
+    if (params.policy.enableTemperature && params.effectiveTint.abs() > 0.5) {
+      m = _multiply(m, _tintMatrix(params.effectiveTint));
+    }
+
+    // 4. Blacks & Whites (offset-based tone mapping)
+    if (params.policy.enableContrast) {
+      if (params.effectiveBlacks.abs() > 0.5 || params.effectiveWhites.abs() > 0.5) {
+        m = _multiply(m, _blacksWhitesMatrix(params.effectiveBlacks, params.effectiveWhites));
+      }
+    }
+
+    // 5. Contrast (pivot at 0.5)
     if (params.policy.enableContrast) {
       m = _multiply(m, _contrastMatrix(params.effectiveContrast));
     }
 
-    // 4. Saturation
+    // 6. Highlights & Shadows (zone-based compression)
+    if (params.policy.enableContrast) {
+      if (params.effectiveHighlights.abs() > 0.5 || params.effectiveShadows.abs() > 0.5) {
+        m = _multiply(m, _highlightsShadowsMatrix(
+          params.effectiveHighlights, params.effectiveShadows));
+      }
+    }
+
+    // 7. Clarity (midtone contrast boost — approximated via contrast + offset)
+    if (params.policy.enableContrast && params.effectiveClarity.abs() > 0.5) {
+      m = _multiply(m, _clarityMatrix(params.effectiveClarity));
+    }
+
+    // 8. Saturation
     if (params.policy.enableSaturation) {
       m = _multiply(m, _saturationMatrix(params.effectiveSaturation));
+    }
+
+    // 9. Vibrance (smart saturation — boosts low-saturation areas more)
+    if (params.policy.enableSaturation && params.effectiveVibrance.abs() > 0.5) {
+      m = _multiply(m, _vibranceMatrix(params.effectiveVibrance));
+    }
+
+    // 10. Color Bias (per-channel offset for film emulation)
+    if (params.effectiveColorBiasR.abs() > 0.005 ||
+        params.effectiveColorBiasG.abs() > 0.005 ||
+        params.effectiveColorBiasB.abs() > 0.005) {
+      m = _multiply(m, _colorBiasMatrix(
+        params.effectiveColorBiasR,
+        params.effectiveColorBiasG,
+        params.effectiveColorBiasB,
+      ));
     }
 
     return m;
@@ -276,6 +326,112 @@ class _ColorCorrectedTexture extends StatelessWidget {
       sr + sat, sg, sb, 0, 0,
       sr, sg + sat, sb, 0, 0,
       sr, sg, sb + sat, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  /// Tint: green/magenta axis shift
+  /// tint: -100 (green) to +100 (magenta)
+  static List<double> _tintMatrix(double tint) {
+    final t = tint / 100.0;
+    // Magenta = more red + more blue, less green
+    // Green = more green, less red + less blue
+    final gShift = -t * 0.12;  // tint>0 (magenta): reduce green
+    final rbShift = t * 0.06;  // tint>0 (magenta): slight red+blue boost
+    return [
+      1 + rbShift, 0, 0, 0, 0,
+      0, 1 + gShift, 0, 0, 0,
+      0, 0, 1 + rbShift, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  /// Blacks & Whites: offset the black point and white point
+  /// blacks: -100 (crush blacks) to +100 (lift blacks)
+  /// whites: -100 (lower whites) to +100 (boost whites)
+  static List<double> _blacksWhitesMatrix(double blacks, double whites) {
+    // blacks: positive lifts shadows (adds offset), negative crushes
+    // whites: positive expands highlights (scale), negative compresses
+    final blacksOffset = blacks / 100.0 * 20.0;  // max ±20/255 offset
+    final whitesScale = 1.0 + whites / 100.0 * 0.15; // max ±15% scale
+    return [
+      whitesScale, 0, 0, 0, blacksOffset,
+      0, whitesScale, 0, 0, blacksOffset,
+      0, 0, whitesScale, 0, blacksOffset,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  /// Highlights & Shadows: zone-based tonal adjustment
+  /// Approximated as asymmetric contrast around pivot points
+  /// highlights: -100 (compress highlights) to +100 (boost highlights)
+  /// shadows: -100 (deepen shadows) to +100 (lift shadows)
+  static List<double> _highlightsShadowsMatrix(double highlights, double shadows) {
+    // Highlights: affect upper tonal range (pivot at 0.75 = 191/255)
+    // Shadows: affect lower tonal range (pivot at 0.25 = 64/255)
+    // Approximation: use two-pass offset + scale
+    final hScale = 1.0 + highlights / 100.0 * 0.12;
+    final hOffset = -highlights / 100.0 * 0.12 * 191.0;
+    final sScale = 1.0 - shadows / 100.0 * 0.08;
+    final sOffset = shadows / 100.0 * 0.08 * 64.0 + shadows / 100.0 * 12.0;
+    // Combine: net scale and offset
+    final scale = hScale * sScale;
+    final offset = hOffset * sScale + sOffset;
+    return [
+      scale, 0, 0, 0, offset,
+      0, scale, 0, 0, offset,
+      0, 0, scale, 0, offset,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  /// Clarity: midtone micro-contrast boost
+  /// Approximated as S-curve: increase contrast around midtones
+  /// clarity: -100 (soften) to +100 (sharpen midtones)
+  static List<double> _clarityMatrix(double clarity) {
+    // Clarity boosts contrast in the midtone range (0.3-0.7)
+    // Approximation: slight contrast increase + compensating offset
+    final c = clarity / 100.0;
+    final boost = 1.0 + c * 0.15;  // max 15% contrast boost
+    final offset = -c * 0.15 * 0.5 * 255; // compensate pivot
+    return [
+      boost, 0, 0, 0, offset,
+      0, boost, 0, 0, offset,
+      0, 0, boost, 0, offset,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  /// Vibrance: smart saturation (boosts low-saturation colors more)
+  /// Approximated as weighted saturation with skin-tone protection
+  /// vibrance: -100 (desaturate) to +100 (boost)
+  static List<double> _vibranceMatrix(double vibrance) {
+    // Vibrance is approximately 60% of equivalent saturation boost
+    // but weighted to protect already-saturated colors
+    // Approximation: lower saturation multiplier than full saturation
+    final v = vibrance / 100.0 * 0.6;
+    final sat = 1.0 + v;
+    const lr = 0.2126;
+    const lg = 0.7152;
+    const lb = 0.0722;
+    final sr = (1 - sat) * lr;
+    final sg = (1 - sat) * lg;
+    final sb = (1 - sat) * lb;
+    return [
+      sr + sat, sg, sb, 0, 0,
+      sr, sg + sat, sb, 0, 0,
+      sr, sg, sb + sat, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  /// Color Bias: per-channel offset for film emulation
+  /// bias: -1.0 to +1.0, maps to ±30/255 offset per channel
+  static List<double> _colorBiasMatrix(double r, double g, double b) {
+    return [
+      1, 0, 0, 0, r * 30.0,
+      0, 1, 0, 0, g * 30.0,
+      0, 0, 1, 0, b * 30.0,
       0, 0, 0, 1, 0,
     ];
   }
