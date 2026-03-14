@@ -179,7 +179,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       setState(() => _showExposureSlider = false);
       return;
     }
-    // 如果已有对焦点且点击的不是太阳区域（距太阳中心 > 40px），则太阳复位到中间
+    // 如果已有对焦点且点击的不是太阳区域（距太阳中心 > 40px），则太阳视觉复位到中间
     if (_showFocusRing && _focusPoint != null) {
       final sunCenterX = _focusPoint!.dx + 48.0;
       final sunCenterY = _focusPoint!.dy + _sunOffsetY;
@@ -187,12 +187,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       final dy = d.localPosition.dy - sunCenterY;
       final dist = (dx * dx + dy * dy);
       if (dist > 40 * 40) {
-        // 点击了太阳以外的地方：太阳复位到中间（偏移清零，曝光值也清零）
+        // 点击了太阳以外的地方：太阳视觉回到中间（sunOffsetY = 0）
+        // 但曝光值不变，下次拖动从视觉中间出发继续调整
         setState(() {
           _focusPoint = d.localPosition;
-          _sunOffsetY = 0;
+          _sunOffsetY = 0; // 视觉归中，曝光值保留
         });
-        ref.read(cameraAppProvider.notifier).setExposure(0);
         _focusFadeTimer?.cancel();
         _focusFadeTimer = Timer(const Duration(seconds: 3), () {
           if (mounted) setState(() => _showFocusRing = false);
@@ -203,11 +203,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     setState(() {
       _focusPoint = d.localPosition;
       _showFocusRing = true;
-      // 新对焦点时太阳从中间开始（偏移清零）
+      // 新对焦点时太阳视觉从中间开始（偏移清零），曝光值保留
       _sunOffsetY = 0;
     });
-    // 新对焦点时曝光也重置为 0（从中间开始拖）
-    ref.read(cameraAppProvider.notifier).setExposure(0);
     // 3秒后淡出对焦圈
     _focusFadeTimer?.cancel();
     _focusFadeTimer = Timer(const Duration(seconds: 3), () {
