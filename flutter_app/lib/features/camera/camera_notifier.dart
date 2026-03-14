@@ -47,6 +47,7 @@ class CameraAppState {
   final bool isTakingPhoto;
   final bool showCaptureFlash;
   final bool smallFrameMode;
+  final int sharpenLevel; // 0=低, 1=中, 2=高
 
   const CameraAppState({
     this.activeCameraId = 'grd_r',
@@ -72,6 +73,7 @@ class CameraAppState {
     this.isTakingPhoto = false,
     this.showCaptureFlash = false,
     this.smallFrameMode = false,
+    this.sharpenLevel = 1, // 默认中
   });
 
   CameraAppState copyWith({
@@ -98,6 +100,7 @@ class CameraAppState {
     bool? isTakingPhoto,
     bool? showCaptureFlash,
     bool? smallFrameMode,
+    int? sharpenLevel,
     bool clearPanel = false,
     bool clearError = false,
   }) {
@@ -125,6 +128,7 @@ class CameraAppState {
       isTakingPhoto: isTakingPhoto ?? this.isTakingPhoto,
       showCaptureFlash: showCaptureFlash ?? this.showCaptureFlash,
       smallFrameMode: smallFrameMode ?? this.smallFrameMode,
+      sharpenLevel: sharpenLevel ?? this.sharpenLevel,
     );
   }
 
@@ -295,6 +299,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   void toggleSmallFrame() {
     state = state.copyWith(smallFrameMode: !state.smallFrameMode);
+  }
+
+  void cycleSharpen() {
+    state = state.copyWith(sharpenLevel: (state.sharpenLevel + 1) % 3);
   }
 
   void cycleFlash() {

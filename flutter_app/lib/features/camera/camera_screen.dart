@@ -832,77 +832,98 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ── 右上角菜单弹框（"..."展开）──────────────────────────────────────────────
   Widget _buildTopMenuOverlay(CameraAppState st) {
     final mq = MediaQuery.of(context);
-    // 菜单覆盖在取景框内部上方（截图中菜单从取景框顶部开始）
-    final menuTop = mq.padding.top + 50.0; // 截图：菜单从预览顶部展开
+    // 复刻截图样式：图标直接浮在顶部栏正下方，无卡片容器背景
+    final menuTop = mq.padding.top + kTopBarH;
+    final sharpenLabels = ['低', '中', '高'];
     return GestureDetector(
+      behavior: HitTestBehavior.translucent,
       onTap: () => ref.read(cameraAppProvider.notifier).toggleTopMenu(),
-      child: Container(
-        color: Colors.transparent,
+      child: SizedBox.expand(
         child: Stack(
           children: [
             Positioned(
               top: menuTop,
-              left: 16,
-              right: 16,
+              left: 0,
+              right: 0,
               child: GestureDetector(
                 onTap: () {}, // 阻止穿透
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  decoration: const BoxDecoration(
-                    color: Color(0xCC000000),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(14),
-                      topRight: Radius.circular(14),
-                    ),
-                  ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // 第一行: 4个图标
+                      // 第一行: 4个图标（等宽分布）
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          _MenuGridBtn(
-                            icon: Icons.grid_off,
-                            label: '网格线关闭',
-                            isActive: st.gridEnabled,
+                          // 1. 网格线
+                          _TopMenuBtn(
+                            icon: st.gridEnabled ? Icons.grid_on : Icons.grid_off,
+                            label: st.gridEnabled ? '网格线开启' : '网格线关闭',
                             onTap: () => ref.read(cameraAppProvider.notifier).toggleGrid(),
                           ),
-                          _MenuGridBtn(
-                            icon: Icons.hd_outlined,
+                          // 2. 清晰度（循环切换 低/中/高）
+                          _TopMenuBtn(
+                            customIcon: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.white, width: 1.5),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  sharpenLabels[st.sharpenLevel],
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1,
+                                  ),
+                                ),
+                              ),
+                            ),
                             label: '清晰度',
-                            onTap: () {},
+                            onTap: () => ref.read(cameraAppProvider.notifier).cycleSharpen(),
                           ),
-                          _MenuGridBtn(
-                            icon: Icons.crop_square_outlined,
-                            label: '小框模式开启',
-                            isActive: st.smallFrameMode,
+                          // 3. 小框模式
+                          _TopMenuBtn(
+                            icon: st.smallFrameMode
+                                ? Icons.crop_square
+                                : Icons.crop_square_outlined,
+                            label: st.smallFrameMode ? '小框模式开启' : '小框模式关闭',
                             onTap: () => ref.read(cameraAppProvider.notifier).toggleSmallFrame(),
                           ),
-                          _MenuGridBtn(
+                          // 4. 双重曝光
+                          _TopMenuBtn(
                             icon: Icons.exposure,
                             label: '双重曝光关闭',
                             onTap: () {},
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
-                      // 第二行: 2个图标 + 2个占位穿位
+                      const SizedBox(height: 20),
+                      // 第二行: 2个图标 + 2个占位（保持对齐）
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          _MenuGridBtn(
+                          // 5. 连拍
+                          _TopMenuBtn(
                             icon: Icons.burst_mode_outlined,
                             label: '连拍关闭',
                             onTap: () {},
                           ),
-                          _MenuGridBtn(
+                          // 6. 设置
+                          _TopMenuBtn(
                             icon: Icons.settings_outlined,
                             label: '设置',
-                            onTap: () {},
+                            onTap: () {
+                              ref.read(cameraAppProvider.notifier).toggleTopMenu();
+                            },
                           ),
-                          const SizedBox(width: 60),
-                          const SizedBox(width: 60),
+                          // 占位空白（保持对齐）
+                          const SizedBox(width: 56),
+                          const SizedBox(width: 56),
                         ],
                       ),
                     ],
@@ -1994,6 +2015,53 @@ class _FlashBtn extends StatelessWidget {
             Text(label!, style: const TextStyle(color: Colors.white70, fontSize: 11)),
           ],
         ],
+      ),
+    );
+  }
+}
+
+// 复刻截图样式的顶部菜单按鈕：图标直接显示，无背景容器，白色线条风格
+class _TopMenuBtn extends StatelessWidget {
+  final IconData? icon;
+  final Widget? customIcon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _TopMenuBtn({
+    this.icon,
+    this.customIcon,
+    required this.label,
+    required this.onTap,
+  }) : assert(icon != null || customIcon != null);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 56,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: customIcon ?? Icon(icon!, color: _kWhite, size: 28),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       ),
     );
   }
