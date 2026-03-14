@@ -92,9 +92,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _showExposureSlider = false;
   // 色温面板是否展开（点击色温胶囊触发）
   bool _showWbPanel = false;
-  // ── 捏合缩放 ──────────────────────────────────────────────────────────────
-  // 捏合开始时的缩放值（用于计算相对缩放量）
+  // ── 捩合缩放 ────────────────────────────────────────────────────────────────────────
+  // 捩合开始时的缩放值（用于计算相对缩放量）
   double _pinchStartZoom = 1.0;
+  // 当前活跃触控点数（用于区分单指/双指）
+  int _activePointers = 0;
+  // 是否正在进行双指捩合操作（防止双指触发对焦）
+  bool _isPinching = false;
   // 耗时操作过渡动画（换相机/切滤镜/切比例/切清晰度）
   bool _showTransition = false;
   Timer? _transitionTimer;
@@ -177,8 +181,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     });
   }
 
-  // ── 点击取景框：设置对焦点，显示对焦圈+曝光太阳 ────────────────────────────
+  // ── 点击取景框：设置对焦点，显示对焦圈+曝光太阳 ────────────────────────
   void _onViewfinderTap(TapDownDetails d, double viewfinderH) {
+    // 双指捩合期间不触发对焦
+    if (_isPinching || _activePointers >= 2) return;
     // 关闭曝光水平滑动条
     if (_showExposureSlider) {
       setState(() => _showExposureSlider = false);
@@ -629,18 +635,62 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // ── 色温滤色叠加层（根据 colorTempK 叠加半透明暖/冷色调）──
           if (st.wbMode != 'auto')
             _WbColorOverlay(colorTempK: st.colorTempK),
-          // ── 取景框手势：对焦 + 曝光 + 捏合缩放 ──
-          GestureDetector(
+          // ── 取景框手势：对焦 + 曝光 + 捩合缩放（完全分离）──
+          // Listener 追踪活跃触控点数，确保双指不触发对焦
+          Listener(
             behavior: HitTestBehavior.translucent,
-            onTapDown: (d) => _onViewfinderTap(d, areaH),
-            onScaleStart: (d) {
-              _pinchStartZoom = ref.read(cameraAppProvider).zoomLevel;
+            onPointerDown: (_) {
+              _activePointers++;
+              // 第二根手指放下时立即标记为捩合模式，并取消已有对焦圈
+              if (_activePointers >= 2 && !_isPinching) {
+                _isPinching = true;
+                // 取消对焦圈，避免双指开始时显示对焦圈
+                if (mounted) setState(() => _showFocusRing = false);
+                _focusFadeTimer?.cancel();
+              }
             },
-            onScaleUpdate: (d) {
-              if (d.pointerCount < 2) return;
-              final newZoom = (_pinchStartZoom * d.scale).clamp(0.6, 20.0);
-              ref.read(cameraAppProvider.notifier).setZoom(newZoom);
+            onPointerUp: (_) {
+              _activePointers = (_activePointers - 1).clamp(0, 10);
+              if (_activePointers < 2) {
+                // 所有手指抬起后延迟重置，避免最后一根手指抬起时意外触发对焦
+                Future.delayed(const Duration(milliseconds: 150), () {
+                  if (mounted) _isPinching = false;
+                });
+              }
             },
+            onPointerCancel: (_) {
+              _activePointers = (_activePointers - 1).clamp(0, 10);
+              if (_activePointers < 2) {
+                Future.delayed(const Duration(milliseconds: 150), () {
+                  if (mounted) _isPinching = false;
+                });
+              }
+            },
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTapDown: (d) => _onViewfinderTap(d, areaH),
+              onScaleStart: (d) {
+                if (d.pointerCount >= 2) {
+                  // 双指捩合开始
+                  _isPinching = true;
+                  _pinchStartZoom = ref.read(cameraAppProvider).zoomLevel;
+                  // 隐藏对焦圈，避免干扰
+                  if (mounted) setState(() => _showFocusRing = false);
+                  _focusFadeTimer?.cancel();
+                }
+              },
+              onScaleUpdate: (d) {
+                if (d.pointerCount < 2) return;
+                final newZoom = (_pinchStartZoom * d.scale).clamp(0.6, 20.0);
+                ref.read(cameraAppProvider.notifier).setZoom(newZoom);
+              },
+              onScaleEnd: (d) {
+                // 捩合结束，延迟重置标志（等手指全部抬起）
+                Future.delayed(const Duration(milliseconds: 200), () {
+                  if (mounted) _isPinching = false;
+                });
+              },
+            ),
           ),
           // ── 对焦圈 + 曝光太阳 overlay ──
           if (_showFocusRing && _focusPoint != null)
