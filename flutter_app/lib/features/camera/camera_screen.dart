@@ -62,12 +62,27 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   int _timerCountdown = 0;
   Timer? _countdownTimer;
 
-  // 曝光拖拽
+  // 曝光拖拽（胶囊上的旧逻辑保留备用）
   double _exposureDragStart = 0;
   double _exposureAtDragStart = 0;
   // 温度拖拽
   double _tempDragStart = 0;
   double _tempAtDragStart = 0;
+
+  // ── 对焦圈 + 曝光太阳（取景框内） ──────────────────────────────────────────
+  // 对焦点（相对取景框的局部坐标）
+  Offset? _focusPoint;
+  // 曝光太阳在垂直轨道上的偏移量（像素，正=下=暗，负=上=亮）
+  double _sunOffsetY = 0;
+  // 拖拽太阳时的起始 Y
+  double _sunDragStartY = 0;
+  double _sunOffsetAtDragStart = 0;
+  // 对焦圈淡出计时器
+  Timer? _focusFadeTimer;
+  // 对焦圈是否可见
+  bool _showFocusRing = false;
+  // 曝光水平滑动条是否展开（点击胶囊触发）
+  bool _showExposureSlider = false;
 
   // Options 弹框控制器
   late AnimationController _optionsAnim;
@@ -101,8 +116,56 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _focusFadeTimer?.cancel();
     _optionsAnim.dispose();
     super.dispose();
+  }
+
+  // ── 点击取景框：设置对焦点，显示对焦圈+曝光太阳 ────────────────────────────
+  void _onViewfinderTap(TapDownDetails d, double viewfinderH) {
+    // 关闭曝光水平滑动条
+    if (_showExposureSlider) {
+      setState(() => _showExposureSlider = false);
+      return;
+    }
+    setState(() {
+      _focusPoint = d.localPosition;
+      _showFocusRing = true;
+      // 重置太阳到中间（对应当前曝光值）
+      _sunOffsetY = -ref.read(cameraAppProvider).exposureValue * (viewfinderH * 0.2);
+    });
+    // 3秒后淡出对焦圈
+    _focusFadeTimer?.cancel();
+    _focusFadeTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _showFocusRing = false);
+    });
+    // 通知原生对焦（通过 setExposure 间接触发对焦，如果原生支持对焦点可后续扩展）
+    // TODO: 如需精确对焦坐标，在 CameraService 中添加 setFocusPoint 方法
+    // 目前仅更新 UI 对焦圈位置，原生对焦通过设备自动对焦实现
+  }
+
+  // ── 拖动曝光太阳：上下滑动调整曝光 ─────────────────────────────────────────
+  void _onSunDragStart(DragStartDetails d, double viewfinderH) {
+    _sunDragStartY = d.localPosition.dy;
+    _sunOffsetAtDragStart = _sunOffsetY;
+    _focusFadeTimer?.cancel(); // 拖动时不淡出
+  }
+
+  void _onSunDragUpdate(DragUpdateDetails d, double viewfinderH) {
+    final delta = d.localPosition.dy - _sunDragStartY;
+    final newOffset = (_sunOffsetAtDragStart + delta)
+        .clamp(-viewfinderH * 0.35, viewfinderH * 0.35);
+    setState(() => _sunOffsetY = newOffset);
+    // 将像素偏移映射到曝光值 [-2, 2]：向上(负offset)=增加曝光
+    final newExp = (-newOffset / (viewfinderH * 0.35) * 2.0).clamp(-2.0, 2.0);
+    ref.read(cameraAppProvider.notifier).setExposure(newExp);
+  }
+
+  void _onSunDragEnd(DragEndDetails d, double viewfinderH) {
+    // 拖动结束后 3 秒淡出
+    _focusFadeTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _showFocusRing = false);
+    });
   }
 
   /// 一次性请求所有权限（相机 + 相册，不含麦克风）
@@ -324,9 +387,25 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ),
           ),
 
+          // ── 曝光水平滑动条（取景框和工具栏之间）──
+          if (_showExposureSlider)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: kBottomPanelH + bottomSafeH + 16,
+              child: _ExposureHorizontalSlider(
+                value: st.exposureValue,
+                onChanged: (v) =>
+                    ref.read(cameraAppProvider.notifier).setExposure(v),
+                onReset: () {
+                  ref.read(cameraAppProvider.notifier).setExposure(0);
+                  setState(() => _sunOffsetY = 0);
+                },
+              ),
+            ),
           // ── 右上角菜单弹框 ── ──
           if (st.showTopMenu) _buildTopMenuOverlay(st),
-          // ── 倒计时遮罩 ──
+          // ── 倒计时蒙层 ──
           if (_timerCountdown > 0) _buildCountdownOverlay(),
           // ── 拍摄闪光 ──
           if (st.showCaptureFlash)
@@ -353,7 +432,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     );
   }
 
-  // ─  // ── 取景框区域（上段）──────────────────────────────────────────────
+  // ── 取景框区域（上段）──────────────────────────────────────────────────────────────
   // 布局：圆角取景框，内部只有预览画面和网格线（控制胶囊已移到取景框外部）
   Widget _buildViewfinderArea(CameraAppState st, CameraState camSvc, double areaH, double screenW) {
     return ClipRRect(
@@ -373,12 +452,25 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 child: CircularProgressIndicator(color: _kWhite, strokeWidth: 2),
               ),
             ),
-          // 控制胶囊已移到主 Stack 固定层，取景框内部不再渲染
+          // ── 取景框点击手势：对焦 + 曝光 ──
+          GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTapDown: (d) => _onViewfinderTap(d, areaH),
+          ),
+          // ── 对焦圈 + 曝光太阳 overlay ──
+          if (_showFocusRing && _focusPoint != null)
+            _FocusExposureOverlay(
+              focusPoint: _focusPoint!,
+              sunOffsetY: _sunOffsetY,
+              viewfinderH: areaH,
+              onSunDragStart: (d) => _onSunDragStart(d, areaH),
+              onSunDragUpdate: (d) => _onSunDragUpdate(d, areaH),
+              onSunDragEnd: (d) => _onSunDragEnd(d, areaH),
+            ),
         ],
       ),
     );
-  }
-  // ── 底部面板（下段）────────────────────────────────────────────
+  } // ── 底部面板（下段）────────────────────────────────────────────
   // 布局：深灰色圆角面板，[照片/视频 tab] + [样图/管理] → 相机列表 → 工具栏 → 快门行
   Widget _buildBottomPanel(CameraAppState st) {
     // 底部面板：纯黑背景
@@ -637,33 +729,37 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           ),
         ),
         const SizedBox(width: 10),
-        // 曝光按钮（胶囊形，上下滑动调整）
+        // 曝光按鈕（胶囊形，点击展开水平滑动条）
         GestureDetector(
-          onVerticalDragStart: (d) {
-            _exposureDragStart = d.localPosition.dy;
-            _exposureAtDragStart = st.exposureValue;
+          onTap: () {
+            setState(() => _showExposureSlider = !_showExposureSlider);
           },
-          onVerticalDragUpdate: (d) {
-            final delta = d.localPosition.dy - _exposureDragStart;
-            final newExp = (_exposureAtDragStart - delta * 0.02).clamp(-2.0, 2.0);
-            ref.read(cameraAppProvider.notifier).setExposure(newExp);
-          },
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
             height: 44,
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
-              color: Colors.black.withAlpha(160),
+              color: _showExposureSlider
+                  ? Colors.white.withAlpha(230)
+                  : Colors.black.withAlpha(160),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.wb_sunny_outlined, size: 16, color: _kWhite),
+                Icon(
+                  Icons.wb_sunny_outlined,
+                  size: 16,
+                  color: _showExposureSlider ? Colors.black : _kWhite,
+                ),
                 const SizedBox(width: 6),
                 Text(
-                  st.exposureValue == 0 ? '0.0' : st.exposureValue.toStringAsFixed(1),
-                  style: const TextStyle(
-                    color: _kWhite,
+                  st.exposureValue == 0
+                      ? '0.0'
+                      : (st.exposureValue > 0 ? '+' : '') +
+                          st.exposureValue.toStringAsFixed(1),
+                  style: TextStyle(
+                    color: _showExposureSlider ? Colors.black : _kWhite,
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
                   ),
@@ -2262,4 +2358,160 @@ class _ColorWheelPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ColorWheelPainter old) => false;
+}
+
+// ─── 对焦圈 + 曝光太阳 Overlay ─────────────────────────────────────────────────
+// 复刻截图：白色圆形对焦圈（左），垂直白线轨道（右），太阳图标可上下拖动
+class _FocusExposureOverlay extends StatelessWidget {
+  final Offset focusPoint;
+  final double sunOffsetY;
+  final double viewfinderH;
+  final GestureDragStartCallback onSunDragStart;
+  final GestureDragUpdateCallback onSunDragUpdate;
+  final GestureDragEndCallback onSunDragEnd;
+
+  const _FocusExposureOverlay({
+    required this.focusPoint,
+    required this.sunOffsetY,
+    required this.viewfinderH,
+    required this.onSunDragStart,
+    required this.onSunDragUpdate,
+    required this.onSunDragEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 对焦圈半径
+    const ringR = 36.0;
+    // 太阳图标尺寸
+    const sunSize = 28.0;
+    // 太阳距对焦圈右侧的偏移
+    const sunOffsetX = 48.0;
+    // 轨道高度（取景框高度的 70%）
+    final trackH = viewfinderH * 0.7;
+    // 太阳中心 Y（相对取景框）= 对焦点 Y + sunOffsetY
+    final sunCenterY = focusPoint.dy + sunOffsetY;
+    // 太阳中心 X
+    final sunCenterX = focusPoint.dx + sunOffsetX;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // 垂直轨道线（白色细线，从太阳上方延伸到下方）
+        Positioned(
+          left: sunCenterX - 0.5,
+          top: sunCenterY - trackH / 2,
+          child: Container(
+            width: 1,
+            height: trackH,
+            color: Colors.white.withAlpha(180),
+          ),
+        ),
+        // 对焦圈（白色空心圆，点击位置居中）
+        Positioned(
+          left: focusPoint.dx - ringR,
+          top: focusPoint.dy - ringR,
+          child: Container(
+            width: ringR * 2,
+            height: ringR * 2,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 1.5),
+            ),
+          ),
+        ),
+        // 曝光太阳（可拖动）
+        Positioned(
+          left: sunCenterX - sunSize / 2,
+          top: sunCenterY - sunSize / 2,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onVerticalDragStart: onSunDragStart,
+            onVerticalDragUpdate: onSunDragUpdate,
+            onVerticalDragEnd: onSunDragEnd,
+            child: SizedBox(
+              width: sunSize,
+              height: sunSize,
+              child: const Icon(
+                Icons.wb_sunny_outlined,
+                color: Colors.white,
+                size: sunSize,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── 曝光水平滑动条（点击曝光胶囊后弹出）─────────────────────────────────────
+// 复刻截图：左侧圆形重置按钮 + 右侧水平滑动轨道，滑块圆形白色
+class _ExposureHorizontalSlider extends StatelessWidget {
+  final double value; // -2.0 .. 2.0
+  final ValueChanged<double> onChanged;
+  final VoidCallback onReset;
+
+  const _ExposureHorizontalSlider({
+    required this.value,
+    required this.onChanged,
+    required this.onReset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          // 重置按钮（圆形深灰，点击归零）
+          GestureDetector(
+            onTap: onReset,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black.withAlpha(180),
+                border: Border.all(
+                  color: Colors.white.withAlpha(60),
+                  width: 1,
+                ),
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.refresh,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // 水平滑动轨道
+          Expanded(
+            child: SliderTheme(
+              data: SliderThemeData(
+                trackHeight: 3,
+                activeTrackColor: Colors.white,
+                inactiveTrackColor: Colors.white.withAlpha(80),
+                thumbColor: Colors.white,
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: 10,
+                  elevation: 0,
+                ),
+                overlayShape: SliderComponentShape.noOverlay,
+              ),
+              child: Slider(
+                value: value.clamp(-2.0, 2.0),
+                min: -2.0,
+                max: 2.0,
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
