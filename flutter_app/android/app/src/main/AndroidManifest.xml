@@ -2,6 +2,9 @@
 
     <!-- Camera & Recording Permissions -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- 位置权限：开启位置水印时记录 GPS 坐标到 EXIF -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />

@@ -5,11 +5,14 @@
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:native_exif/native_exif.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/camera_definition.dart';
 import '../../models/camera_registry.dart';
 import '../../services/camera_service.dart';
+import '../../services/location_service.dart';
 import 'preview_renderer.dart';
 import 'capture_pipeline.dart';
 
@@ -60,6 +63,7 @@ class CameraAppState {
   final double zoomLevel;      // 0.6 ~ 20.0, default 1.0
   final bool showZoomSlider;   // 胶囊点击后展开缩放滑动条
   final bool minimapEnabled;   // 小窗模式开关
+  final bool locationEnabled;  // 位置信息开关：开启后拍照将 GPS 坐标写入 EXIF
 
   const CameraAppState({
     this.activeCameraId = 'grd_r',
@@ -95,6 +99,7 @@ class CameraAppState {
     this.zoomLevel = 1.0,
     this.showZoomSlider = false,
     this.minimapEnabled = false,
+    this.locationEnabled = false,
   });
 
   CameraAppState copyWith({
@@ -132,6 +137,7 @@ class CameraAppState {
     double? zoomLevel,
     bool? showZoomSlider,
     bool? minimapEnabled,
+    bool? locationEnabled,
     bool clearPanel = false,
     bool clearError = false,
     bool clearFrameId = false, // 用于将 activeFrameId 清空为 null
@@ -170,6 +176,7 @@ class CameraAppState {
       zoomLevel: zoomLevel ?? this.zoomLevel,
       showZoomSlider: showZoomSlider ?? this.showZoomSlider,
       minimapEnabled: minimapEnabled ?? this.minimapEnabled,
+      locationEnabled: locationEnabled ?? this.locationEnabled,
     );
   }
 
@@ -411,6 +418,27 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     _ref.read(cameraServiceProvider.notifier).setZoom(1.0);
   }
 
+  /// 切换位置信息开关
+  /// 返回切换后的状态和权限结果
+  Future<LocationToggleResult> toggleLocation() async {
+    if (state.locationEnabled) {
+      // 当前开启 → 直接关闭
+      state = state.copyWith(locationEnabled: false);
+      return LocationToggleResult.disabled;
+    }
+    // 当前关闭 → 请求权限后开启
+    final status = await LocationService.instance.checkStatus();
+    if (status == LocationPermissionStatus.deniedForever) {
+      return LocationToggleResult.permissionDeniedForever;
+    }
+    final granted = await LocationService.instance.requestPermission();
+    if (!granted) {
+      return LocationToggleResult.permissionDenied;
+    }
+    state = state.copyWith(locationEnabled: true);
+    return LocationToggleResult.enabled;
+  }
+
   void cycleSharpen() {
     final next = (state.sharpenLevel + 1) % 3;
     state = state.copyWith(sharpenLevel: next);
@@ -458,6 +486,12 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         state = state.copyWith(showCaptureFlash: false);
         HapticFeedback.lightImpact();
 
+        // 如果开启位置，并行获取 GPS 坐标（与后处理并行，不阻塞流程）
+        Future<Position?>? locationFuture;
+        if (state.locationEnabled) {
+          locationFuture = LocationService.instance.getCurrentPosition();
+        }
+
         // Post-process: color effects + ratio crop + frame + watermark
         if (state.camera != null) {
           try {
@@ -484,6 +518,18 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             }
           } catch (e, st) {
             debugPrint('[CameraNotifier] Post-process error: $e\n$st');
+          }
+        }
+
+        // 写入 GPS EXIF（在后处理完成后、保存到相册之前）
+        if (locationFuture != null) {
+          try {
+            final position = await locationFuture;
+            if (position != null) {
+              await _writeGpsExif(path, position);
+            }
+          } catch (e) {
+            debugPrint('[CameraNotifier] GPS EXIF write error: $e');
           }
         }
 
@@ -514,10 +560,28 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
         return TakePhotoResult(path: path, galleryAssetId: galleryAssetId);
       }
-
       return null;
     } finally {
       state = state.copyWith(isTakingPhoto: false);
+    }
+  }
+
+  /// 将 GPS 坐标写入图片文件的 EXIF
+  Future<void> _writeGpsExif(String imagePath, Position position) async {
+    try {
+      final exif = await Exif.fromPath(imagePath);
+      await exif.writeAttributes({
+        'GPSLatitude': position.latitude.abs().toString(),
+        'GPSLatitudeRef': position.latitude >= 0 ? 'N' : 'S',
+        'GPSLongitude': position.longitude.abs().toString(),
+        'GPSLongitudeRef': position.longitude >= 0 ? 'E' : 'W',
+        'GPSAltitude': position.altitude.toString(),
+        'GPSAltitudeRef': position.altitude >= 0 ? '0' : '1',
+      });
+      await exif.close();
+      debugPrint('[CameraNotifier] GPS EXIF written: ${position.latitude}, ${position.longitude}');
+    } catch (e) {
+      debugPrint('[CameraNotifier] Failed to write GPS EXIF: $e');
     }
   }
 }

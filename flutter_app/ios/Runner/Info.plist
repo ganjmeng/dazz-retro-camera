@@ -52,6 +52,10 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>DAZZ uses the microphone to record video with audio.</string>
 	
+	<!-- Location Permission: record GPS coordinates to EXIF when location watermark is enabled -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>DAZZ records your location to embed GPS coordinates in photo EXIF data when location tagging is enabled.</string>
+	
 	<!-- Photo Library Permissions -->
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>DAZZ needs access to your photo library to save and view retro photos.</string>

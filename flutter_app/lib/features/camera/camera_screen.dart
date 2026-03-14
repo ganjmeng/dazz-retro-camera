@@ -24,6 +24,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/camera_definition.dart';
 import '../../models/camera_registry.dart';
 import '../../services/camera_service.dart';
+import '../../services/location_service.dart';
 import '../../router/app_router.dart';
 import 'camera_notifier.dart';
 import 'preview_renderer.dart';
@@ -1387,7 +1388,60 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             btnW: btnW,
                             onTap: () {},
                           ),
-                          // 6. 设置
+                          // 6. 位置信息
+                          _TopMenuBtn(
+                            icon: st.locationEnabled
+                                ? Icons.location_on
+                                : Icons.location_off_outlined,
+                            label: st.locationEnabled ? '位置开启' : '位置关闭',
+                            btnW: btnW,
+                            onTap: () async {
+                              final result = await ref.read(cameraAppProvider.notifier).toggleLocation();
+                              if (!context.mounted) return;
+                              switch (result) {
+                                case LocationToggleResult.enabled:
+                                  _showViewfinderHint('位置信息已开启');
+                                  break;
+                                case LocationToggleResult.disabled:
+                                  _showViewfinderHint('位置信息已关闭');
+                                  break;
+                                case LocationToggleResult.permissionDenied:
+                                  _showViewfinderHint('位置权限被拒绝');
+                                  break;
+                                case LocationToggleResult.permissionDeniedForever:
+                                  // 引导用户到系统设置
+                                  showDialog(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      backgroundColor: const Color(0xFF1C1C1E),
+                                      title: const Text('需要位置权限',
+                                          style: TextStyle(color: Colors.white)),
+                                      content: const Text(
+                                        '请在设置中开启位置权限，以将 GPS 坐标记录到照片',
+                                        style: TextStyle(color: Colors.grey),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx),
+                                          child: const Text('取消',
+                                              style: TextStyle(color: Colors.grey)),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.pop(ctx);
+                                            LocationService.instance.openSettings();
+                                          },
+                                          child: const Text('去设置',
+                                              style: TextStyle(color: Color(0xFFFF9500))),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  break;
+                              }
+                            },
+                          ),
+                          // 7. 设置
                           _TopMenuBtn(
                             icon: Icons.settings_outlined,
                             label: '设置',
@@ -1398,7 +1452,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             },
                           ),
                           // 占位空白（保持等宽对齐）
-                          SizedBox(width: btnW),
                           SizedBox(width: btnW),
                         ],
                       ),
