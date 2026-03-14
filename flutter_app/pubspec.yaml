@@ -56,3 +56,7 @@ flutter:
     - assets/frames/
     - assets/watermarks/
     - assets/thumbnails/
+    - assets/thumbnails/cameras/
+    - assets/thumbnails/filters/
+    - assets/thumbnails/lenses/
+    - assets/thumbnails/frames/

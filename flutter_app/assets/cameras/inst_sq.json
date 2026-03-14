@@ -299,7 +299,7 @@
   },
   "assets": {
     "thumbnail": "assets/thumbnails/cameras/inst_sq.jpg",
-    "icon": "assets/thumbnails/cameras/inst_sq_icon.jpg"
+    "icon": "assets/thumbnails/cameras/inst_sq_icon.png"
   },
   "meta": {
     "version": "final",

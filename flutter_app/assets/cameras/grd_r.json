@@ -258,7 +258,7 @@
   },
   "assets": {
     "thumbnail": "assets/thumbnails/cameras/grd_r.jpg",
-    "icon": "assets/thumbnails/cameras/grd_r_icon.jpg"
+    "icon": "assets/thumbnails/cameras/grd_r_icon.png"
   },
   "meta": {
     "version": "final",

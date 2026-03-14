@@ -198,7 +198,7 @@
   },
   "assets": {
     "thumbnail": "assets/thumbnails/cameras/bw_classic.jpg",
-    "icon": "assets/thumbnails/cameras/bw_classic_icon.jpg"
+    "icon": "assets/thumbnails/cameras/bw_classic_icon.png"
   },
   "meta": {
     "version": "final",
