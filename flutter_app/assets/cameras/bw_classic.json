@@ -1,0 +1,215 @@
+{
+  "id": "bw_classic",
+  "name": "黑白经典",
+  "category": "film",
+  "mode": "photo",
+  "supportsPhoto": true,
+  "supportsVideo": false,
+  "focalLengthLabel": "35mm",
+  "sensor": {
+    "type": "bw",
+    "dynamicRange": 12,
+    "baseNoise": 0.04,
+    "colorDepth": 8
+  },
+  "defaultLook": {
+    "baseLut": null,
+    "temperature": 0,
+    "contrast": 1.2,
+    "saturation": 0.0,
+    "vignette": 0.35,
+    "distortion": 0.0,
+    "chromaticAberration": 0.0,
+    "bloom": 0.0,
+    "flare": 0.0
+  },
+  "modules": {
+    "filters": [
+      {
+        "id": "bw_standard",
+        "name": "标准",
+        "nameEn": "Standard",
+        "lut": null,
+        "contrast": 1.0,
+        "saturation": 1.0,
+        "grain": "none",
+        "thumbnail": "assets/thumbnails/filters/bw_standard.jpg"
+      },
+      {
+        "id": "bw_high_contrast",
+        "name": "高对比",
+        "nameEn": "High Contrast",
+        "lut": null,
+        "contrast": 1.3,
+        "saturation": 1.0,
+        "grain": "none",
+        "thumbnail": "assets/thumbnails/filters/bw_high_contrast.jpg"
+      },
+      {
+        "id": "bw_soft",
+        "name": "柔和",
+        "nameEn": "Soft",
+        "lut": null,
+        "contrast": 0.85,
+        "saturation": 1.0,
+        "grain": "none",
+        "thumbnail": "assets/thumbnails/filters/bw_soft.jpg"
+      }
+    ],
+    "lenses": [
+      {
+        "id": "std",
+        "name": "标准",
+        "nameEn": "Std",
+        "vignette": 0.02,
+        "distortion": 0.0,
+        "chromaticAberration": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/std.jpg"
+      }
+    ],
+    "ratios": [
+      {
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "width": 3,
+        "height": 4,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_9_16",
+        "label": "9:16",
+        "width": 9,
+        "height": 16,
+        "supportsFrame": false
+      }
+    ],
+    "frames": [
+      {
+        "id": "frame_clean_white",
+        "name": "白边框",
+        "nameEn": "Clean White",
+        "asset": "assets/frames/frame_clean_white.png",
+        "backgroundColor": "#F5F2EA",
+        "inset": {
+          "top": 80,
+          "right": 80,
+          "bottom": 120,
+          "left": 80
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/frame_clean_white.jpg"
+      }
+    ],
+    "watermarks": {
+      "presets": [
+        {
+          "id": "date_white",
+          "name": "白色日期",
+          "color": "#FFFFFF",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "none",
+          "name": "无水印"
+        }
+      ],
+      "editor": {
+        "allowColorChange": true,
+        "allowPositionChange": true,
+        "allowSizeChange": true,
+        "allowOrientationChange": true
+      }
+    },
+    "extras": []
+  },
+  "defaultSelection": {
+    "filterId": "bw_standard",
+    "lensId": "std",
+    "ratioId": "ratio_3_4",
+    "frameId": "frame_clean_white",
+    "watermarkPresetId": "date_white",
+    "extraId": null
+  },
+  "uiCapabilities": {
+    "enableFilter": true,
+    "enableLens": false,
+    "enableRatio": true,
+    "enableFrame": true,
+    "enableWatermark": true,
+    "enableExtra": false
+  },
+  "previewCapabilities": {
+    "allowSmallViewport": true,
+    "allowGridOverlay": true,
+    "allowZoom": true,
+    "allowImportImage": true,
+    "allowTimer": true,
+    "allowFlash": true
+  },
+  "previewPolicy": {
+    "enableLut": false,
+    "enableTemperature": false,
+    "enableContrast": true,
+    "enableSaturation": true,
+    "enableVignette": true,
+    "enableLightLensEffect": false,
+    "enableGrain": false,
+    "enableBloom": false,
+    "enableChromaticAberration": false,
+    "enableFrameComposite": false,
+    "enableWatermarkComposite": true
+  },
+  "exportPolicy": {
+    "jpegQuality": 0.92,
+    "applyRatioCrop": true,
+    "applyFrameOnExport": true,
+    "applyWatermarkOnExport": true,
+    "preserveMetadata": true
+  },
+  "videoConfig": {
+    "enabled": false,
+    "fpsOptions": [
+      24,
+      30
+    ],
+    "resolutionOptions": [
+      "HD"
+    ],
+    "defaultFps": 30,
+    "defaultResolution": "HD",
+    "supportsAudio": false,
+    "videoBitrate": 8000000
+  },
+  "assets": {
+    "thumbnail": "assets/thumbnails/cameras/bw_classic.jpg",
+    "icon": "assets/thumbnails/cameras/bw_classic_icon.jpg"
+  },
+  "meta": {
+    "version": "final",
+    "premium": false,
+    "sortOrder": 3,
+    "tags": [
+      "bw",
+      "classic",
+      "monochrome",
+      "35mm",
+      "high-contrast"
+    ]
+  }
+}

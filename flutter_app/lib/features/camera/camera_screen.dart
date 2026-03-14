@@ -2051,6 +2051,7 @@ const _kPhotoCameras = [
   _CameraItem(id: 'grd_r', name: 'GRD', emoji: '📷', hasR: true),
   _CameraItem(id: 'ccd_r', name: 'CCD', emoji: '📸', hasR: true),
   _CameraItem(id: 'inst_sqc', name: 'Inst SQC', emoji: '🎞'),
+  _CameraItem(id: 'bw_classic', name: 'BW', emoji: '⬛'),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -55,6 +55,15 @@ const List<CameraEntry> kAllCameras = [
     premium: false,
     sortOrder: 30,
   ),
+  CameraEntry(
+    id: 'bw_classic',
+    name: 'BW Classic',
+    assetPath: 'assets/cameras/bw_classic.json',
+    category: 'film',
+    focalLengthLabel: '35mm',
+    premium: false,
+    sortOrder: 40,
+  ),
 ];
 
 /// Load a full CameraDefinition by camera id.
