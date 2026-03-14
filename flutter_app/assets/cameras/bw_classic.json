@@ -14,14 +14,25 @@
   },
   "defaultLook": {
     "baseLut": null,
-    "temperature": 0,
-    "contrast": 1.2,
-    "saturation": 0.0,
-    "vignette": 0.35,
     "distortion": 0.0,
     "chromaticAberration": 0.0,
+    "flare": 0.0,
+    "temperature": 0,
+    "tint": 0.0,
+    "contrast": 1.28,
+    "highlights": -6.0,
+    "shadows": -10.0,
+    "whites": 12.0,
+    "blacks": -20.0,
+    "clarity": 14.0,
+    "saturation": 0.0,
+    "vibrance": 0.0,
+    "grain": 0.25,
     "bloom": 0.0,
-    "flare": 0.0
+    "vignette": 0.1,
+    "colorBiasR": 0.0,
+    "colorBiasG": 0.0,
+    "colorBiasB": 0.0
   },
   "modules": {
     "filters": [

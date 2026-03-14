@@ -14,14 +14,25 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/grd_r.cube",
-    "temperature": -35,
-    "contrast": 1.15,
-    "saturation": 0.82,
-    "vignette": 0.45,
     "distortion": 0.0,
     "chromaticAberration": 0.0,
+    "flare": 0.0,
+    "temperature": -14,
+    "tint": 0.0,
+    "contrast": 1.22,
+    "highlights": -8.0,
+    "shadows": -4.0,
+    "whites": 10.0,
+    "blacks": -18.0,
+    "clarity": 18.0,
+    "saturation": 0.94,
+    "vibrance": 4.0,
+    "grain": 0.08,
     "bloom": 0.0,
-    "flare": 0.0
+    "vignette": 0.06,
+    "colorBiasR": 0.0,
+    "colorBiasG": 0.0,
+    "colorBiasB": 0.0
   },
   "modules": {
     "filters": [

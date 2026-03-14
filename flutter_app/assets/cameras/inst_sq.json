@@ -14,14 +14,25 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/inst_sq.cube",
-    "temperature": 20,
-    "contrast": 0.88,
-    "saturation": 1.05,
-    "vignette": 0.1,
     "distortion": 0.0,
     "chromaticAberration": 0.0,
-    "bloom": 0.0,
-    "flare": 0.0
+    "flare": 0.0,
+    "temperature": 35,
+    "tint": 2.0,
+    "contrast": 0.9,
+    "highlights": -14.0,
+    "shadows": 8.0,
+    "whites": -4.0,
+    "blacks": 14.0,
+    "clarity": -6.0,
+    "saturation": 1.08,
+    "vibrance": 6.0,
+    "grain": 0.16,
+    "bloom": 0.14,
+    "vignette": 0.03,
+    "colorBiasR": 0.0,
+    "colorBiasG": 0.0,
+    "colorBiasB": 0.0
   },
   "modules": {
     "filters": [

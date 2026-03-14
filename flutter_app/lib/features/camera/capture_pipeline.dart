@@ -345,23 +345,64 @@ class CapturePipeline {
   List<double> _buildColorMatrix(PreviewRenderParams params) {
     var m = _identity();
 
-    // 曝光
+    // 1. 曝光
     final expMul = math.pow(2.0, params.exposureOffset).toDouble();
     m = _multiply(m, _exposureMatrix(expMul));
 
-    // 色温
+    // 2. 色温
     if (params.policy.enableTemperature) {
       m = _multiply(m, _temperatureMatrix(params.effectiveTemperature));
     }
 
-    // 对比度
+    // 3. 色调 (tint: green/magenta)
+    if (params.policy.enableTemperature && params.effectiveTint.abs() > 0.5) {
+      m = _multiply(m, _tintMatrix(params.effectiveTint));
+    }
+
+    // 4. 黑场/白场
+    if (params.policy.enableContrast) {
+      if (params.effectiveBlacks.abs() > 0.5 || params.effectiveWhites.abs() > 0.5) {
+        m = _multiply(m, _blacksWhitesMatrix(params.effectiveBlacks, params.effectiveWhites));
+      }
+    }
+
+    // 5. 对比度
     if (params.policy.enableContrast) {
       m = _multiply(m, _contrastMatrix(params.effectiveContrast));
     }
 
-    // 饱和度
+    // 6. 高光/阴影
+    if (params.policy.enableContrast) {
+      if (params.effectiveHighlights.abs() > 0.5 || params.effectiveShadows.abs() > 0.5) {
+        m = _multiply(m, _highlightsShadowsMatrix(
+          params.effectiveHighlights, params.effectiveShadows));
+      }
+    }
+
+    // 7. 清晰度 (clarity)
+    if (params.policy.enableContrast && params.effectiveClarity.abs() > 0.5) {
+      m = _multiply(m, _clarityMatrix(params.effectiveClarity));
+    }
+
+    // 8. 饱和度
     if (params.policy.enableSaturation) {
       m = _multiply(m, _saturationMatrix(params.effectiveSaturation));
+    }
+
+    // 9. 自然饱和度 (vibrance)
+    if (params.policy.enableSaturation && params.effectiveVibrance.abs() > 0.5) {
+      m = _multiply(m, _vibranceMatrix(params.effectiveVibrance));
+    }
+
+    // 10. 色彩偏移 (film color bias)
+    if (params.effectiveColorBiasR.abs() > 0.005 ||
+        params.effectiveColorBiasG.abs() > 0.005 ||
+        params.effectiveColorBiasB.abs() > 0.005) {
+      m = _multiply(m, _colorBiasMatrix(
+        params.effectiveColorBiasR,
+        params.effectiveColorBiasG,
+        params.effectiveColorBiasB,
+      ));
     }
 
     return m;
@@ -434,6 +475,83 @@ class CapturePipeline {
       }
     }
     return result;
+  }
+
+
+  List<double> _tintMatrix(double tint) {
+    final t = tint / 100.0;
+    final gShift = -t * 0.12;
+    final rbShift = t * 0.06;
+    return [
+      1 + rbShift, 0, 0, 0, 0,
+      0, 1 + gShift, 0, 0, 0,
+      0, 0, 1 + rbShift, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  List<double> _blacksWhitesMatrix(double blacks, double whites) {
+    final blacksOffset = blacks / 100.0 * 20.0;
+    final whitesScale = 1.0 + whites / 100.0 * 0.15;
+    return [
+      whitesScale, 0, 0, 0, blacksOffset,
+      0, whitesScale, 0, 0, blacksOffset,
+      0, 0, whitesScale, 0, blacksOffset,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  List<double> _highlightsShadowsMatrix(double highlights, double shadows) {
+    final hScale = 1.0 + highlights / 100.0 * 0.12;
+    final hOffset = -highlights / 100.0 * 0.12 * 191.0;
+    final sScale = 1.0 - shadows / 100.0 * 0.08;
+    final sOffset = shadows / 100.0 * 0.08 * 64.0 + shadows / 100.0 * 12.0;
+    final scale = hScale * sScale;
+    final offset = hOffset * sScale + sOffset;
+    return [
+      scale, 0, 0, 0, offset,
+      0, scale, 0, 0, offset,
+      0, 0, scale, 0, offset,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  List<double> _clarityMatrix(double clarity) {
+    final c = clarity / 100.0;
+    final boost = 1.0 + c * 0.15;
+    final offset = -c * 0.15 * 0.5 * 255;
+    return [
+      boost, 0, 0, 0, offset,
+      0, boost, 0, 0, offset,
+      0, 0, boost, 0, offset,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  List<double> _vibranceMatrix(double vibrance) {
+    final v = vibrance / 100.0 * 0.6;
+    final sat = 1.0 + v;
+    const lr = 0.2126;
+    const lg = 0.7152;
+    const lb = 0.0722;
+    final sr = (1 - sat) * lr;
+    final sg = (1 - sat) * lg;
+    final sb = (1 - sat) * lb;
+    return [
+      sr + sat, sg, sb, 0, 0,
+      sr, sg + sat, sb, 0, 0,
+      sr, sg, sb + sat, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  List<double> _colorBiasMatrix(double r, double g, double b) {
+    return [
+      1, 0, 0, 0, r * 30.0,
+      0, 1, 0, 0, g * 30.0,
+      0, 0, 1, 0, b * 30.0,
+      0, 0, 0, 1, 0,
+    ];
   }
 
   // ── 暗角（绘制在图片区域内）──────────────────────────────────────────────────
