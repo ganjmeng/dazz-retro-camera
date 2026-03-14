@@ -72,6 +72,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleSetZoom(call: call, result: result)
         case "setExposure":
             handleSetExposure(call: call, result: result)
+        case "setWhiteBalance":
+            handleSetWhiteBalance(call: call, result: result)
         case "saveToGallery":
             handleSaveToGallery(call: call, result: result)
         case "dispose":
@@ -189,6 +191,17 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             return
         }
         cameraManager?.setExposure(bias: Float(ev))
+        result(nil)
+    }
+
+    // ─────────────────────────────────────────────
+    // setWhiteBalance — 与 Android CameraX AWB 对等
+    // ─────────────────────────────────────────────
+    private func handleSetWhiteBalance(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any]
+        let mode = args?["mode"] as? String ?? "auto"
+        let tempK = args?["tempK"] as? Int ?? 5500
+        cameraManager?.setWhiteBalance(mode: mode, tempK: tempK)
         result(nil)
     }
 

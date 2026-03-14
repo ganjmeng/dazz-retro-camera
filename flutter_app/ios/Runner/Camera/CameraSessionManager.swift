@@ -132,6 +132,71 @@ class CameraSessionManager: NSObject {
         }
     }
 
+    // MARK: - White Balance
+
+    /// 设置白平衡模式（与 Android CameraX AWB 对等）
+    /// mode: "auto" | "daylight" | "incandescent" | "fluorescent" | "cloudy" | "manual"
+    /// tempK: 手动模式下的色温开尔文度（1800..8000）
+    func setWhiteBalance(mode: String, tempK: Int) {
+        guard let device = currentVideoInput?.device else { return }
+        sessionQueue.async {
+            do {
+                try device.lockForConfiguration()
+                switch mode {
+                case "auto":
+                    if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                        device.whiteBalanceMode = .continuousAutoWhiteBalance
+                    }
+                case "daylight", "cloudy":
+                    // 日光 ≈ 5500K，多云 ≈ 6500K
+                    let targetK: Float = (mode == "cloudy") ? 6500 : 5500
+                    if device.isWhiteBalanceModeSupported(.locked) {
+                        let gains = device.deviceWhiteBalanceGains(for:
+                            AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
+                                temperature: targetK, tint: 0))
+                        let clamped = device.clampedWhiteBalanceGains(gains)
+                        device.setWhiteBalanceModeLocked(with: clamped, completionHandler: nil)
+                    }
+                case "incandescent":
+                    // 白炽灯 ≈ 2700K
+                    if device.isWhiteBalanceModeSupported(.locked) {
+                        let gains = device.deviceWhiteBalanceGains(for:
+                            AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
+                                temperature: 2700, tint: 0))
+                        let clamped = device.clampedWhiteBalanceGains(gains)
+                        device.setWhiteBalanceModeLocked(with: clamped, completionHandler: nil)
+                    }
+                case "fluorescent":
+                    // 荧光灯 ≈ 4000K
+                    if device.isWhiteBalanceModeSupported(.locked) {
+                        let gains = device.deviceWhiteBalanceGains(for:
+                            AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
+                                temperature: 4000, tint: 0))
+                        let clamped = device.clampedWhiteBalanceGains(gains)
+                        device.setWhiteBalanceModeLocked(with: clamped, completionHandler: nil)
+                    }
+                case "manual":
+                    // 手动模式：使用 tempK 将开尔文度转换为增益
+                    let clampedK = Float(max(1800, min(8000, tempK)))
+                    if device.isWhiteBalanceModeSupported(.locked) {
+                        let gains = device.deviceWhiteBalanceGains(for:
+                            AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
+                                temperature: clampedK, tint: 0))
+                        let clamped = device.clampedWhiteBalanceGains(gains)
+                        device.setWhiteBalanceModeLocked(with: clamped, completionHandler: nil)
+                    }
+                default:
+                    if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                        device.whiteBalanceMode = .continuousAutoWhiteBalance
+                    }
+                }
+                device.unlockForConfiguration()
+            } catch {
+                print("[CameraSessionManager] setWhiteBalance error: \(error)")
+            }
+        }
+    }
+
     // MARK: - Capture Photo
 
     /// 高分辨率拍照（使用 AVCapturePhotoOutput，与 Android CameraX takePicture 对等）

@@ -8,6 +8,10 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
+import android.hardware.camera2.CaptureRequest
+import androidx.camera.camera2.interop.Camera2CameraControl
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.CaptureRequestOptions
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
@@ -131,6 +135,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "setZoom"         -> handleSetZoom(call, result)
             "setExposure"     -> handleSetExposure(call, result)
             "setFlash"        -> handleSetFlash(call, result)
+            "setWhiteBalance" -> handleSetWhiteBalance(call, result)
             "startRecording"  -> handleStartRecording(result)
             "stopRecording"   -> handleStopRecording(result)
             "saveToGallery"   -> handleSaveToGallery(call, result)
@@ -442,6 +447,35 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             result.success(null)
         } catch (e: Exception) {
             result.error("FLASH_FAILED", e.message, null)
+        }
+    }
+
+    private fun handleSetWhiteBalance(call: MethodCall, result: MethodChannel.Result) {
+        val mode = call.argument<String>("mode") ?: "auto"
+        val tempK = call.argument<Int>("tempK") ?: 5500
+        try {
+            val cam = camera
+            if (cam == null) {
+                result.error("NOT_INITIALIZED", "Camera not initialized", null)
+                return
+            }
+            // CameraX 通过 Camera2Interop 设置 AWB 模式
+            val awbMode = when (mode) {
+                "daylight"      -> CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT
+                "incandescent"  -> CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT
+                "fluorescent"   -> CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT
+                "cloudy"        -> CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT
+                "manual"        -> CaptureRequest.CONTROL_AWB_MODE_OFF
+                else            -> CaptureRequest.CONTROL_AWB_MODE_AUTO
+            }
+            val options = CaptureRequestOptions.Builder()
+                .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, awbMode)
+                .build()
+            Camera2CameraControl.from(cam.cameraControl).setCaptureRequestOptions(options)
+            result.success(null)
+        } catch (e: Exception) {
+            // 部分设备不支持 Camera2Interop，静默失败
+            result.success(null)
         }
     }
 
