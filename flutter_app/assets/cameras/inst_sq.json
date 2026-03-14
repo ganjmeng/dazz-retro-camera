@@ -1,0 +1,275 @@
+{
+  "id": "inst_sq",
+  "name": "INST SQ",
+  "category": "instant",
+  "mode": "photo",
+  "supportsPhoto": true,
+  "supportsVideo": false,
+  "focalLengthLabel": "35mm",
+
+  "sensor": {
+    "type": "instant",
+    "dynamicRange": 7,
+    "baseNoise": 0.22,
+    "colorDepth": 8
+  },
+
+  "defaultLook": {
+    "baseLut": "assets/lut/cameras/inst_sq.cube",
+    "temperature": 20,
+    "contrast": 0.95,
+    "saturation": 1.05,
+    "vignette": 0.04,
+    "distortion": 0.0,
+    "chromaticAberration": 0.02,
+    "bloom": 0.03,
+    "flare": 0.0
+  },
+
+  "modules": {
+    "filters": [
+      {
+        "id": "inst_classic",
+        "name": "经典",
+        "nameEn": "Classic",
+        "lut": "assets/lut/filters/inst_classic.cube",
+        "contrast": 0.95,
+        "saturation": 1.05,
+        "grain": "medium",
+        "thumbnail": "assets/thumbnails/filters/inst_classic.jpg"
+      },
+      {
+        "id": "inst_warm",
+        "name": "暖调",
+        "nameEn": "Warm",
+        "lut": "assets/lut/filters/inst_warm.cube",
+        "contrast": 0.92,
+        "saturation": 1.08,
+        "grain": "light",
+        "thumbnail": "assets/thumbnails/filters/inst_warm.jpg"
+      }
+    ],
+
+    "lenses": [
+      {
+        "id": "std",
+        "name": "标准",
+        "nameEn": "Std",
+        "vignette": 0.02,
+        "distortion": 0.0,
+        "chromaticAberration": 0.02,
+        "bloom": 0.03,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/std.jpg"
+      },
+      {
+        "id": "soft",
+        "name": "柔焦",
+        "nameEn": "Soft",
+        "vignette": 0.03,
+        "distortion": 0.0,
+        "chromaticAberration": 0.01,
+        "bloom": 0.05,
+        "flare": 0.02,
+        "softFocus": 0.08,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/soft.jpg"
+      },
+      {
+        "id": "dream",
+        "name": "梦幻",
+        "nameEn": "Dream",
+        "vignette": 0.03,
+        "distortion": 0.0,
+        "chromaticAberration": 0.02,
+        "bloom": 0.12,
+        "flare": 0.03,
+        "softFocus": 0.05,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/dream.jpg"
+      },
+      {
+        "id": "vintage",
+        "name": "复古",
+        "nameEn": "Vintage",
+        "vignette": 0.08,
+        "distortion": 0.005,
+        "chromaticAberration": 0.04,
+        "bloom": 0.03,
+        "flare": 0.01,
+        "softFocus": 0.02,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
+      },
+      {
+        "id": "light_leak",
+        "name": "漏光",
+        "nameEn": "Light Leak",
+        "vignette": 0.04,
+        "distortion": 0.0,
+        "chromaticAberration": 0.03,
+        "bloom": 0.08,
+        "flare": 0.15,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/light_leak.jpg"
+      }
+    ],
+
+    "ratios": [
+      {
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "width": 3,
+        "height": 4,
+        "supportsFrame": false
+      }
+    ],
+
+    "frames": [
+      {
+        "id": "polaroid_white",
+        "name": "白色拍立得",
+        "nameEn": "Polaroid White",
+        "asset": "assets/frames/polaroid_white.png",
+        "backgroundColor": "#FFFFFF",
+        "inset": {
+          "top": 60,
+          "right": 60,
+          "bottom": 120,
+          "left": 60
+        },
+        "supportedRatios": ["ratio_1_1"],
+        "thumbnail": "assets/thumbnails/frames/polaroid_white.jpg"
+      },
+      {
+        "id": "polaroid_cream",
+        "name": "奶油拍立得",
+        "nameEn": "Polaroid Cream",
+        "asset": "assets/frames/polaroid_cream.png",
+        "backgroundColor": "#F5F0E8",
+        "inset": {
+          "top": 60,
+          "right": 60,
+          "bottom": 120,
+          "left": 60
+        },
+        "supportedRatios": ["ratio_1_1"],
+        "thumbnail": "assets/thumbnails/frames/polaroid_cream.jpg"
+      }
+    ],
+
+    "watermarks": {
+      "presets": [
+        {
+          "id": "date_orange",
+          "name": "橙色日期",
+          "color": "#FF8A3D",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "date_white",
+          "name": "白色日期",
+          "color": "#FFFFFF",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "none",
+          "name": "无水印"
+        }
+      ],
+      "editor": {
+        "allowColorChange": true,
+        "allowPositionChange": true,
+        "allowSizeChange": true,
+        "allowOrientationChange": true
+      }
+    },
+
+    "extras": []
+  },
+
+  "defaultSelection": {
+    "filterId": "inst_classic",
+    "lensId": "std",
+    "ratioId": "ratio_1_1",
+    "frameId": "polaroid_white",
+    "watermarkPresetId": "date_orange",
+    "extraId": null
+  },
+
+  "uiCapabilities": {
+    "enableFilter": true,
+    "enableLens": true,
+    "enableRatio": true,
+    "enableFrame": true,
+    "enableWatermark": true,
+    "enableExtra": false
+  },
+
+  "previewCapabilities": {
+    "allowSmallViewport": true,
+    "allowGridOverlay": true,
+    "allowZoom": true,
+    "allowImportImage": true,
+    "allowTimer": true,
+    "allowFlash": true
+  },
+
+  "previewPolicy": {
+    "enableLut": true,
+    "enableTemperature": true,
+    "enableContrast": true,
+    "enableSaturation": true,
+    "enableVignette": true,
+    "enableLightLensEffect": true,
+    "enableGrain": false,
+    "enableBloom": true,
+    "enableChromaticAberration": true,
+    "enableFrameComposite": false,
+    "enableWatermarkComposite": true
+  },
+
+  "exportPolicy": {
+    "jpegQuality": 0.92,
+    "applyRatioCrop": true,
+    "applyFrameOnExport": true,
+    "applyWatermarkOnExport": true,
+    "preserveMetadata": true
+  },
+
+  "videoConfig": {
+    "enabled": false,
+    "fpsOptions": [24, 30],
+    "resolutionOptions": ["HD"],
+    "defaultFps": 30,
+    "defaultResolution": "HD",
+    "supportsAudio": false,
+    "videoBitrate": 8000000
+  },
+
+  "assets": {
+    "thumbnail": "assets/thumbnails/cameras/inst_sq.jpg",
+    "icon": "assets/thumbnails/cameras/inst_sq_icon.jpg"
+  },
+
+  "meta": {
+    "version": "final",
+    "premium": false,
+    "sortOrder": 20,
+    "tags": ["instant", "polaroid", "square", "35mm", "film"]
+  }
+}

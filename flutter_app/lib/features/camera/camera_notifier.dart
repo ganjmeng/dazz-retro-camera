@@ -44,6 +44,7 @@ class CameraAppState {
   final bool isFrontCamera;
   final bool isTakingPhoto;
   final bool showCaptureFlash;
+  final bool smallFrameMode;
 
   const CameraAppState({
     this.activeCameraId = 'grd_r',
@@ -66,6 +67,7 @@ class CameraAppState {
     this.isFrontCamera = false,
     this.isTakingPhoto = false,
     this.showCaptureFlash = false,
+    this.smallFrameMode = false,
   });
 
   CameraAppState copyWith({
@@ -89,6 +91,7 @@ class CameraAppState {
     bool? isFrontCamera,
     bool? isTakingPhoto,
     bool? showCaptureFlash,
+    bool? smallFrameMode,
     bool clearPanel = false,
     bool clearError = false,
   }) {
@@ -113,6 +116,7 @@ class CameraAppState {
       isFrontCamera: isFrontCamera ?? this.isFrontCamera,
       isTakingPhoto: isTakingPhoto ?? this.isTakingPhoto,
       showCaptureFlash: showCaptureFlash ?? this.showCaptureFlash,
+      smallFrameMode: smallFrameMode ?? this.smallFrameMode,
     );
   }
 
@@ -268,6 +272,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   void toggleGrid() {
     state = state.copyWith(gridEnabled: !state.gridEnabled);
+  }
+
+  void toggleSmallFrame() {
+    state = state.copyWith(smallFrameMode: !state.smallFrameMode);
   }
 
   void cycleFlash() {

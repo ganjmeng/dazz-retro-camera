@@ -38,6 +38,15 @@ const List<CameraEntry> kAllCameras = [
     sortOrder: 0,
   ),
   CameraEntry(
+    id: 'inst_sq',
+    name: 'INST SQ',
+    assetPath: 'assets/cameras/inst_sq.json',
+    category: 'instant',
+    focalLengthLabel: '35mm',
+    premium: false,
+    sortOrder: 20,
+  ),
+  CameraEntry(
     id: 'fxn_r',
     name: 'FXN R',
     assetPath: 'assets/cameras/fxn_r.json',

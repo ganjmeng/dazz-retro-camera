@@ -236,6 +236,7 @@ class LensDefinition {
   final String id;
   final String name;
   final String nameEn;
+  final double zoomFactor; // 光学倍率，例如 1.0=x1, 2.0=x2
   final double vignette;
   final double distortion;
   final double chromaticAberration;
@@ -245,12 +246,13 @@ class LensDefinition {
   final double refraction;
   final String? thumbnail;
 
-  const LensDefinition({required this.id, required this.name, required this.nameEn, required this.vignette, required this.distortion, required this.chromaticAberration, required this.bloom, required this.flare, required this.softFocus, required this.refraction, this.thumbnail});
+  const LensDefinition({required this.id, required this.name, required this.nameEn, this.zoomFactor = 1.0, required this.vignette, required this.distortion, required this.chromaticAberration, required this.bloom, required this.flare, required this.softFocus, required this.refraction, this.thumbnail});
 
   factory LensDefinition.fromJson(Map<String, dynamic> json) => LensDefinition(
     id: json['id'] as String,
     name: json['name'] as String,
     nameEn: json['nameEn'] as String? ?? json['name'] as String,
+    zoomFactor: (json['zoomFactor'] as num?)?.toDouble() ?? 1.0,
     vignette: (json['vignette'] as num?)?.toDouble() ?? 0.0,
     distortion: (json['distortion'] as num?)?.toDouble() ?? 0.0,
     chromaticAberration: (json['chromaticAberration'] as num?)?.toDouble() ?? 0.0,
