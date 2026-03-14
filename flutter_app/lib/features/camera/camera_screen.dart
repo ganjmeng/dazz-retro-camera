@@ -572,6 +572,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             },
             child: _OptionsSheet(
               onClose: _closeOptions,
+              onCameraTransition: _showCameraTransition,
             ),
           ),
         ],
@@ -1318,8 +1319,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 // ─────────────────────────────────────────────────────────────────────────────
 class _OptionsSheet extends ConsumerWidget {
   final VoidCallback onClose;
+  final void Function(VoidCallback action, {Duration duration}) onCameraTransition;
 
-  const _OptionsSheet({required this.onClose});
+  const _OptionsSheet({
+    required this.onClose,
+    required this.onCameraTransition,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1443,7 +1448,7 @@ class _OptionsSheet extends ConsumerWidget {
               final isActive = st.activeCameraId == cam.id;
               return GestureDetector(
                 onTap: () {
-                  _showCameraTransition(
+                  onCameraTransition(
                     () => ref.read(cameraAppProvider.notifier).switchToCamera(cam.id),
                     duration: const Duration(milliseconds: 500),
                   );
@@ -1672,7 +1677,7 @@ class _OptionsSheet extends ConsumerWidget {
         'ratio' => _RatioRow(
             ratios: camera.modules.ratios,
             activeId: st.activeRatioId,
-            onSelect: (id) => _showCameraTransition(
+            onSelect: (id) => onCameraTransition(
               () => ref.read(cameraAppProvider.notifier).selectRatio(id),
               duration: const Duration(milliseconds: 400),
             ),
@@ -1680,7 +1685,7 @@ class _OptionsSheet extends ConsumerWidget {
         'filter' => _FilterRow(
             filters: camera.modules.filters,
             activeId: st.activeFilterId,
-            onSelect: (id) => _showCameraTransition(
+            onSelect: (id) => onCameraTransition(
               () => ref.read(cameraAppProvider.notifier).selectFilter(id),
               duration: const Duration(milliseconds: 400),
             ),
