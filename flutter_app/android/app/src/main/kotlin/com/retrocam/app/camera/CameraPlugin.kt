@@ -365,6 +365,13 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                         context.contentResolver.openOutputStream(uri)?.use { os ->
                             sourceFile.inputStream().use { it.copyTo(os) }
                         }
+                        // CRITICAL: Clear IS_PENDING flag so photo_manager can see the file immediately
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            val updateValues = ContentValues().apply {
+                                put(MediaStore.Images.Media.IS_PENDING, 0)
+                            }
+                            context.contentResolver.update(uri, updateValues, null, null)
+                        }
                         Log.d(TAG, "Saved to gallery via MediaStore: $uri")
                         val mainExecutor = ContextCompat.getMainExecutor(context)
                         mainExecutor.execute { result.success(mapOf("success" to true, "uri" to uri.toString())) }
@@ -378,6 +385,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                     val destFile = File(dazzDir, displayName)
                     sourceFile.copyTo(destFile, overwrite = true)
                     Log.d(TAG, "Saved to gallery: ${destFile.absolutePath}")
+                    // Trigger MediaScanner so photo_manager can see the file immediately
+                    android.media.MediaScannerConnection.scanFile(
+                        context,
+                        arrayOf(destFile.absolutePath),
+                        arrayOf("image/jpeg")
+                    ) { _, _ -> }
                     val mainExecutor = ContextCompat.getMainExecutor(context)
                     mainExecutor.execute { result.success(mapOf("success" to true, "uri" to destFile.absolutePath)) }
                 }
