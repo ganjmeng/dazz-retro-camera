@@ -410,8 +410,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       viewfinderH = (viewfinderW / aspectRatio).clamp(viewfinderW * 0.5, maxViewfinderH);
     }
     // 取景框在顶部栏和底部面板之间的可用空间内垂直居中
+    // 注意：去掉 clamp 上限，确保 1:1/3:4 等比例下取景框能真正居中
     final availableH = maxViewfinderH;
-    final viewfinderTopOffset = statusBarH + kTopBarH + ((availableH - viewfinderH) / 2).clamp(0.0, 80.0);
+    final viewfinderTopOffset = statusBarH + kTopBarH + ((availableH - viewfinderH) / 2).clamp(0.0, availableH);
     // 取景框水平居中
     final viewfinderLeft = (screenW - viewfinderW) / 2;
 
@@ -464,12 +465,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               child: _buildViewfinderArea(st, camSvc, viewfinderH, viewfinderW),
             ),
           ),
-          // ── 控制胶囊：固定在取景框底部内侧，不随取景框大小变化 ──
-          // 位置 = 取景框底部 - 胶囊高度 - 内边距，与滤镜框无关
+          // ── 控制胶囊：固定浮层，与取景框大小/比例/缩放全部无关 ──
+          // 从底部往上算：底部面板 + 安全区 + 滑条区 + 内边距
+          // 视觉上贴着取景框底部内侧边缘，实际是独立浮层
           Positioned(
             left: viewfinderLeft,
             right: viewfinderLeft,
-            top: viewfinderTopOffset + viewfinderH - kCapsuleH - kCapsuleInsetBottom,
+            bottom: kBottomPanelH + bottomSafeH + kSliderAreaH + kCapsuleInsetBottom,
             height: kCapsuleH,
             child: Center(child: _buildControlCapsule(st)),
           ),
