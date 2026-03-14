@@ -137,10 +137,24 @@ class CapturePipeline {
           }
         } catch (_) {}
         if (bgColor != Colors.transparent) {
-          canvas.drawRect(
-            Rect.fromLTWH(frameOffsetX, frameOffsetY, frameCanvasW, frameCanvasH),
-            Paint()..color = bgColor,
-          );
+          // 如果有 cornerRadius，用圆角矩形绘制（拟物相纸边缘）
+          final refSize = math.min(outW, outH);
+          final frameScale = refSize / 1080.0;
+          final cornerRadiusPx = frameOpt!.cornerRadius * frameScale;
+          if (cornerRadiusPx > 0) {
+            canvas.drawRRect(
+              RRect.fromRectAndRadius(
+                Rect.fromLTWH(frameOffsetX, frameOffsetY, frameCanvasW, frameCanvasH),
+                Radius.circular(cornerRadiusPx),
+              ),
+              Paint()..color = bgColor,
+            );
+          } else {
+            canvas.drawRect(
+              Rect.fromLTWH(frameOffsetX, frameOffsetY, frameCanvasW, frameCanvasH),
+              Paint()..color = bgColor,
+            );
+          }
         }
       }
 
@@ -203,9 +217,14 @@ class CapturePipeline {
         );
       }
 
-      // ── 4c. 暗角（只在图片区域内绘制）──────────────────────────────────────────
+      // ── 4c. 暗角（只在图片区域内绘制）──────────────────────────────────────────────
       if (renderParams != null && renderParams.effectiveVignette > 0.01) {
         _drawVignette(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, renderParams.effectiveVignette);
+      }
+
+      // ── 4c2. 内嵌阴影（拟物相纸厚度感）──────────────────────────────────────
+      if (frameOpt != null && frameOpt.innerShadow) {
+        _drawInnerShadow(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
       }
 
       // ── 4d. 漏光效果（在图片区域内，角落径向渐变）──────────────────────────────
@@ -416,6 +435,46 @@ class CapturePipeline {
   }
 
   // ── 暗角（绘制在图片区域内）──────────────────────────────────────────────────
+
+  /// 内嵌阴影：在图片区域四边绘制渐变阴影，模拟相纸内凹厚度感
+  void _drawInnerShadow(
+      Canvas canvas, double ox, double oy, double w, double h) {
+    const shadowColor = Color(0x55000000); // 33% 黑色
+    const shadowWidth = 0.06; // 阴影宽度占图片短边的比例
+    final sw = math.min(w, h) * shadowWidth;
+    // 上边
+    canvas.drawRect(
+      Rect.fromLTWH(ox, oy, w, sw),
+      Paint()..shader = LinearGradient(
+        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        colors: [shadowColor, Colors.transparent],
+      ).createShader(Rect.fromLTWH(ox, oy, w, sw)),
+    );
+    // 下边
+    canvas.drawRect(
+      Rect.fromLTWH(ox, oy + h - sw, w, sw),
+      Paint()..shader = LinearGradient(
+        begin: Alignment.bottomCenter, end: Alignment.topCenter,
+        colors: [shadowColor, Colors.transparent],
+      ).createShader(Rect.fromLTWH(ox, oy + h - sw, w, sw)),
+    );
+    // 左边
+    canvas.drawRect(
+      Rect.fromLTWH(ox, oy, sw, h),
+      Paint()..shader = LinearGradient(
+        begin: Alignment.centerLeft, end: Alignment.centerRight,
+        colors: [shadowColor, Colors.transparent],
+      ).createShader(Rect.fromLTWH(ox, oy, sw, h)),
+    );
+    // 右边
+    canvas.drawRect(
+      Rect.fromLTWH(ox + w - sw, oy, sw, h),
+      Paint()..shader = LinearGradient(
+        begin: Alignment.centerRight, end: Alignment.centerLeft,
+        colors: [shadowColor, Colors.transparent],
+      ).createShader(Rect.fromLTWH(ox + w - sw, oy, sw, h)),
+    );
+  }
 
   void _drawVignette(
       Canvas canvas, double ox, double oy, double w, double h, double strength) {

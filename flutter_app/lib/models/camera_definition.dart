@@ -321,6 +321,10 @@ class FrameDefinition {
   final double outerPadding;
   /// 外层背景色（相框外面的背景，默认白色）
   final String outerBackgroundColor;
+  /// 相框圆角半径（相对于 1080px 参考宽度，0=无圆角）
+  final double cornerRadius;
+  /// 是否在图片区域边缘绘制内嵌阴影（增加拟物厚度感）
+  final bool innerShadow;
 
   const FrameDefinition({
     required this.id,
@@ -335,6 +339,8 @@ class FrameDefinition {
     this.shake = 0.0,
     this.outerPadding = 0.0,
     this.outerBackgroundColor = '#FFFFFF',
+    this.cornerRadius = 0.0,
+    this.innerShadow = false,
   });
 
   factory FrameDefinition.fromJson(Map<String, dynamic> json) => FrameDefinition(
@@ -350,6 +356,8 @@ class FrameDefinition {
     shake: (json['shake'] as num?)?.toDouble() ?? 0.0,
     outerPadding: (json['outerPadding'] as num?)?.toDouble() ?? 0.0,
     outerBackgroundColor: json['outerBackgroundColor'] as String? ?? '#FFFFFF',
+    cornerRadius: (json['cornerRadius'] as num?)?.toDouble() ?? 0.0,
+    innerShadow: json['innerShadow'] as bool? ?? false,
   );
 }
 

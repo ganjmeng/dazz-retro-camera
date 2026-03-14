@@ -148,12 +148,14 @@
         "id": "frame_clean_white",
         "name": "白边框",
         "nameEn": "Clean White",
-        "asset": "assets/frames/frame_clean_white.png",
+        "asset": null,
         "backgroundColor": "#F5F2EA",
+        "cornerRadius": 16,
+        "innerShadow": true,
         "inset": {
           "top": 80,
           "right": 80,
-          "bottom": 120,
+          "bottom": 240,
           "left": 80
         },
         "supportedRatios": [

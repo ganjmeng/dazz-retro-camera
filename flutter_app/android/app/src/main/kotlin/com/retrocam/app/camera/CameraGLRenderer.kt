@@ -39,14 +39,16 @@ class CameraGLRenderer(
     companion object {
         private const val TAG = "CameraGLRenderer"
 
-        // ── 顶点着色器 ──────────────────────────────────────────────────────────
+                // ── 顶点着色器 ──────────────────────────────────────────────
         private const val VERTEX_SHADER = """#version 300 es
 in vec4 aPosition;
 in vec2 aTexCoord;
 out vec2 vTexCoord;
+uniform mat4 uSTMatrix;
 void main() {
     gl_Position = aPosition;
-    vTexCoord   = aTexCoord;
+    // 使用 SurfaceTexture.getTransformMatrix() 修正 OES 纹理方向
+    vTexCoord = (uSTMatrix * vec4(aTexCoord, 0.0, 1.0)).xy;
 }"""
 
         // ── 片段着色器（OES 外部纹理 + CCD 效果 + Unsharp Mask 锐化）──────────
@@ -162,12 +164,12 @@ void main() {
 }"""
 
         // 全屏四边形顶点（位置 + UV）
-        // UV 的 Y 轴翻转（0→1 变为 1→0）以修正 OES 纹理方向
+        // UV 使用标准坐标（左下原点），方向修正由 uSTMatrix 处理
         private val QUAD_VERTICES = floatArrayOf(
-            -1f,  1f,  0f, 1f,   // 左上
-            -1f, -1f,  0f, 0f,   // 左下
-             1f,  1f,  1f, 1f,   // 右上
-             1f, -1f,  1f, 0f    // 右下
+            -1f,  1f,  0f, 0f,   // 左上
+            -1f, -1f,  0f, 1f,   // 左下
+             1f,  1f,  1f, 0f,   // 右上
+             1f, -1f,  1f, 1f    // 右下
         )
     }
 
@@ -192,6 +194,10 @@ void main() {
     private var uSharpen: Int = -1
     private var uTime: Int = -1
     private var uTexelSize: Int = -1
+    private var uSTMatrix: Int = -1
+
+    // SurfaceTexture 变换矩阵（修正 OES 纹理方向）
+    private val stMatrix = FloatArray(16)
 
     // ── 相机输入 SurfaceTexture ──────────────────────────────────────────────
     private var inputSurfaceTexture: SurfaceTexture? = null
@@ -346,6 +352,7 @@ void main() {
         uSharpen              = GLES30.glGetUniformLocation(programId, "uSharpen")
         uTime                 = GLES30.glGetUniformLocation(programId, "uTime")
         uTexelSize            = GLES30.glGetUniformLocation(programId, "uTexelSize")
+        uSTMatrix             = GLES30.glGetUniformLocation(programId, "uSTMatrix")
 
         // ── 11. 顶点缓冲 ─────────────────────────────────────────────────────
         vertexBuffer = ByteBuffer.allocateDirect(QUAD_VERTICES.size * 4)
@@ -371,6 +378,8 @@ void main() {
         // 更新相机帧纹理
         try {
             inputSurfaceTexture?.updateTexImage()
+            // 获取 SurfaceTexture 变换矩阵（必须在 updateTexImage 后立即调用）
+            inputSurfaceTexture?.getTransformMatrix(stMatrix)
         } catch (e: Exception) {
             Log.w(TAG, "updateTexImage failed: ${e.message}")
             return
@@ -400,6 +409,8 @@ void main() {
         GLES30.glUniform2f(uTexelSize,
             1f / previewWidth.toFloat(),
             1f / previewHeight.toFloat())
+        // 传入 SurfaceTexture 变换矩阵（修正 OES 纹理方向）
+        GLES30.glUniformMatrix4fv(uSTMatrix, 1, false, stMatrix, 0)
         time += 0.016f
 
         // 顶点属性
