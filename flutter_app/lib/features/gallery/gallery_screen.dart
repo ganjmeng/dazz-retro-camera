@@ -481,19 +481,14 @@ class _RetroPhotoCellState extends State<_RetroPhotoCell> {
 
   @override
   Widget build(BuildContext context) {
-    // 截图中照片有黄色边框（类似胶片相框）
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFD4C84A), // 黄色边框
-      ),
-      padding: const EdgeInsets.all(3), // 边框宽度
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // 照片内容
-          _thumb != null
-              ? Image.memory(_thumb!, fit: BoxFit.cover)
-              : Container(color: const Color(0xFF1C1C1E)),
+    // 截图 12915.jpg：直接显示原图，无边框装饰
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // 照片内容
+        _thumb != null
+            ? Image.memory(_thumb!, fit: BoxFit.cover)
+            : Container(color: const Color(0xFF1C1C1E)),
           // 视频时长标记
           if (widget.asset.type == AssetType.video)
             Positioned(
@@ -530,7 +525,6 @@ class _RetroPhotoCellState extends State<_RetroPhotoCell> {
               ),
             ),
         ],
-      ),
     );
   }
 
@@ -797,44 +791,20 @@ class _PhotoFrameState extends State<_PhotoFrame> {
   }
 
   Widget _buildFramedPhoto() {
-    // 截图 12916.jpg：照片有白色相框，相框外有花纹背景（粉色+黑色斑点图案）
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        // 花纹背景（截图中是奶牛纹/斑点图案，用渐变近似）
-        color: const Color(0xFFF5F0E8),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 白色相框内的照片
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(60),
-                    blurRadius: 8,
-                    offset: const Offset(2, 4),
-                  ),
-                ],
-              ),
-              child: _data != null
-                  ? Image.memory(_data!, fit: BoxFit.cover, width: double.infinity)
-                  : Container(
-                      color: const Color(0xFF1C1C1E),
-                      child: const Center(
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      ),
-                    ),
-            ),
-          ),
-          // 相框底部留白（Polaroid 风格）
-          const SizedBox(height: 12),
-        ],
-      ),
+    // 截图 12916.jpg：直接显示成片原图（成片本身已带相框/滤镜效果，不需要再套框）
+    if (_data == null) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+        ),
+      );
+    }
+    return Image.memory(
+      _data!,
+      fit: BoxFit.contain,
+      width: double.infinity,
+      height: double.infinity,
     );
   }
 }

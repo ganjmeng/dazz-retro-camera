@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../models/camera_definition.dart';
 import '../../services/camera_service.dart';
@@ -71,9 +72,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _optionsAnim, curve: Curves.easeOutCubic));
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(cameraAppProvider.notifier).initialize();
-      _loadLatestThumb();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // 先请求相机权限，再初始化相机和相册
+      await _requestCameraPermission();
+      if (mounted) {
+        ref.read(cameraAppProvider.notifier).initialize();
+        _loadLatestThumb();
+      }
     });
   }
 
@@ -82,6 +87,47 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _countdownTimer?.cancel();
     _optionsAnim.dispose();
     super.dispose();
+  }
+
+  /// 请求相机权限（Android/iOS）
+  Future<void> _requestCameraPermission() async {
+    // 请求相机权限
+    final cameraStatus = await Permission.camera.request();
+    // 请求麦克风权限（这样原生层就不用再请求）
+    await Permission.microphone.request();
+    // Android 13+ 使用 photos，旧版本使用 storage
+    if (await Permission.photos.request().isGranted) {
+      // OK
+    } else {
+      await Permission.storage.request();
+    }
+    if (!cameraStatus.isGranted && mounted) {
+      // 弹出提示，引导用户去设置开启权限
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1C1C1E),
+          title: const Text('需要相机权限', style: TextStyle(color: Colors.white)),
+          content: const Text(
+            '请在设置中开启相机权限以使用拍照功能',
+            style: TextStyle(color: Colors.grey),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消', style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                openAppSettings();
+              },
+              child: const Text('去设置', style: TextStyle(color: Color(0xFFFF9500))),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _loadLatestThumb() async {
