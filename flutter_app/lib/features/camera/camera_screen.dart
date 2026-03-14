@@ -448,42 +448,35 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               ),
             ),
           ),
-          // ── 取景框（圆角，垂直居中，水平居中）+ 胶囊叠加在内底部 ──
+          // ── 取景框（圆角，垂直居中，水平居中）──
           Positioned(
             top: viewfinderTopOffset,
             left: viewfinderLeft,
             child: SizedBox(
               width: viewfinderW,
               height: viewfinderH,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // 取景框主体
-                  Positioned.fill(
-                    child: _buildViewfinderArea(st, camSvc, viewfinderH, viewfinderW),
-                  ),
-                  // ── 控制胶囊：叠加在取景框内底部（最高层）──
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: kCapsuleInsetBottom,
-                    height: kCapsuleH,
-                    child: Center(child: _buildControlCapsule(st)),
-                  ),
-                ],
-              ),
+              child: _buildViewfinderArea(st, camSvc, viewfinderH, viewfinderW),
             ),
           ),
+          // ── 控制胶囊：固定在取景框底部内侧，不随取景框大小变化 ──
+          // 位置 = 取景框底部 - 胶囊高度 - 内边距，与滤镜框无关
+          Positioned(
+            left: viewfinderLeft,
+            right: viewfinderLeft,
+            top: viewfinderTopOffset + viewfinderH - kCapsuleH - kCapsuleInsetBottom,
+            height: kCapsuleH,
+            child: Center(child: _buildControlCapsule(st)),
+          ),
 
-          // ── 曝光水平滑动条（取景框和工具栏之间黑色区域垂直居中）──
+          // ── 三个拉条：固定在取景框底部和底部面板之间的 kSliderAreaH 区域内 ──
+          // 使用固定高度 Positioned，避免 top/bottom 同时指定导致的 OVERFLOW 报错
+          // 三者完全互斥：同一时刻只显示一个
           if (_showExposureSlider)
             Positioned(
               left: 0,
               right: 0,
-              // top = 取景框底部，bottom = 底部面板顶部
-              // Flutter 将自动在这个区间内居中显示内容
-              top: viewfinderTopOffset + viewfinderH,
               bottom: kBottomPanelH + bottomSafeH,
+              height: kSliderAreaH,
               child: Center(
                 child: _ExposureHorizontalSlider(
                   value: st.exposureValue,
@@ -496,13 +489,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
-          // ── 缩放水平滑动条（取景框和工具栏之间黑色区域垂直居中）──
-          if (st.showZoomSlider)
+          if (st.showZoomSlider && !_showExposureSlider && !_showWbPanel)
             Positioned(
               left: 0,
               right: 0,
-              top: viewfinderTopOffset + viewfinderH,
               bottom: kBottomPanelH + bottomSafeH,
+              height: kSliderAreaH,
               child: Center(
                 child: _ZoomHorizontalSlider(
                   value: st.zoomLevel,
@@ -513,32 +505,30 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
-          // ── 色温控制面板（取景框和工具栏之间黑色区域垂直居中）──
-          if (_showWbPanel)
+          if (_showWbPanel && !_showExposureSlider)
             Positioned(
               left: 0,
               right: 0,
-              top: viewfinderTopOffset + viewfinderH,
               bottom: kBottomPanelH + bottomSafeH,
+              height: kSliderAreaH,
               child: Center(
                 child: _WbControlPanel(
-                colorTempK: st.colorTempK,
-                wbMode: st.wbMode,
-                onTempChanged: (k) =>
-                    ref.read(cameraAppProvider.notifier).setColorTempK(k),
-                onPreset: (mode) {
-                  ref.read(cameraAppProvider.notifier).setWhiteBalance(mode);
-                  // 切换色温预设时显示取景框提示
-                  final labels = {
-                    'auto': '自动',
-                    'daylight': '日光',
-                    'incandescent': '白炎灯',
-                  };
-                  _showViewfinderHint(labels[mode] ?? mode);
-                },
+                  colorTempK: st.colorTempK,
+                  wbMode: st.wbMode,
+                  onTempChanged: (k) =>
+                      ref.read(cameraAppProvider.notifier).setColorTempK(k),
+                  onPreset: (mode) {
+                    ref.read(cameraAppProvider.notifier).setWhiteBalance(mode);
+                    final labels = {
+                      'auto': '自动',
+                      'daylight': '日光',
+                      'incandescent': '白炎灯',
+                    };
+                    _showViewfinderHint(labels[mode] ?? mode);
+                  },
+                ),
               ),
-            ),  // Center
-            ),  // Positioned
+            ),
           // ── 右上角菜单弹框 ── ──
           if (st.showTopMenu) _buildTopMenuOverlay(st),
           // ── 倒计时蒙层 ──
@@ -715,10 +705,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // 工具图标行（4个图标+文字标签）
           // 点击曝光胶囊或色温胶囊时隐藏工具栏
           AnimatedOpacity(
-            opacity: (_showExposureSlider || _showWbPanel) ? 0.0 : 1.0,
+            opacity: (_showExposureSlider || _showWbPanel || st.showZoomSlider) ? 0.0 : 1.0,
             duration: const Duration(milliseconds: 200),
             child: IgnorePointer(
-              ignoring: _showExposureSlider || _showWbPanel,
+              ignoring: _showExposureSlider || _showWbPanel || st.showZoomSlider,
               child: _buildToolbar(st),
             ),
           ),
