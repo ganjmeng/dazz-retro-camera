@@ -182,10 +182,17 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
     // 3. 比例
     if (uiCap.enableRatio) {
       final ratio = st.activeRatio;
+      // 如果 activeRatioId 与默认比例相同，显示原比例；否则显示选中的比例标签
+      final isDefaultRatio = st.activeRatioId == null ||
+          st.activeRatioId == cam.defaultSelection.ratioId;
+      final ratioLabel = ratio?.label ?? '3:4';
       items.add(_FuncBtn(
-        label: ratio?.label ?? '3:4',
-        child: _RatioIcon(label: ratio?.label ?? '3:4'),
-        isActive: true,
+        label: isDefaultRatio ? '原比例' : ratioLabel,
+        child: _RatioIcon(
+          label: isDefaultRatio ? '原比例' : ratioLabel,
+          isDefault: isDefaultRatio,
+        ),
+        isActive: !isDefaultRatio, // 非默认比例时高亮
         onTap: () => _openSubPanel(context, _SubPanelType.ratio),
       ));
     }
@@ -583,41 +590,67 @@ class _SubPanelState extends ConsumerState<_SubPanel>
   // ── 比例内容 ────────────────────────────────────────────────────────────────
   Widget _buildRatioContent(CameraAppState st) {
     final ratios = widget.camera.modules.ratios;
-    return SizedBox(
-      height: 80,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        itemCount: ratios.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (_, i) {
-          final r = ratios[i];
-          final isActive = st.activeRatioId == r.id;
-          return GestureDetector(
-            onTap: () {
-              HapticFeedback.selectionClick();
-              ref.read(cameraAppProvider.notifier).selectRatio(r.id);
-            },
-            child: Container(
-              width: 64,
-              decoration: BoxDecoration(
-                color: isActive ? Colors.black : const Color(0xFFE5E5EA),
-                borderRadius: BorderRadius.circular(10),
-                border: isActive ? Border.all(color: Colors.black, width: 2) : null,
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                r.label,
-                style: TextStyle(
-                  color: isActive ? Colors.white : Colors.black,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
+    // 检查是否有任何不支持边框的比例（展示提示文字）
+    final hasFrameRestriction = ratios.any((r) => !r.supportsFrame);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 提示文字：仅1:1和4:3支持边框
+        if (hasFrameRestriction)
+          Padding(
+            padding: const EdgeInsets.only(left: 20, right: 20, bottom: 4),
+            child: Text(
+              '仅1:1和4:3支持显示边框',
+              style: const TextStyle(
+                color: Color(0xFF8E8E93),
+                fontSize: 13,
               ),
             ),
-          );
-        },
-      ),
+          ),
+        // 比例选项行
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: ratios.asMap().entries.map((entry) {
+              final r = entry.value;
+              final isActive = st.activeRatioId == r.id;
+              return GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  ref.read(cameraAppProvider.notifier).selectRatio(r.id);
+                  Navigator.of(context).pop();
+                },
+                child: Container(
+                  margin: EdgeInsets.only(right: entry.key < ratios.length - 1 ? 28 : 0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 比例图标（空心矩形，宽高比例匹配）
+                      _RatioShapeIcon(
+                        widthRatio: r.width.toDouble(),
+                        heightRatio: r.height.toDouble(),
+                        selected: isActive,
+                      ),
+                      const SizedBox(height: 8),
+                      // 比例文字
+                      Text(
+                        r.label,
+                        style: TextStyle(
+                          color: isActive ? Colors.black : const Color(0xFF8E8E93),
+                          fontSize: 13,
+                          fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
     );
   }
 
@@ -967,25 +1000,72 @@ class _FrameIcon extends StatelessWidget {
   }
 }
 
-/// 比例图标（显示比例文字）
+/// 比例图标（显示比例文字，复刻截图 13088）
 class _RatioIcon extends StatelessWidget {
   final String label;
-  const _RatioIcon({required this.label});
+  final bool isDefault;
+  const _RatioIcon({required this.label, this.isDefault = true});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: _kSurface,
+        border: isDefault
+            ? Border.all(color: _kTextSecondary.withValues(alpha: 0.3), width: 1.5)
+            : Border.all(color: _kOrange, width: 2),
       ),
       child: Center(
         child: Text(
           label,
-          style: const TextStyle(
-            color: _kTextPrimary,
-            fontSize: 11,
+          style: TextStyle(
+            color: isDefault ? _kTextPrimary : _kOrange,
+            fontSize: label.length > 3 ? 9 : 11,
             fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 比例形状图标（空心矩形，宽高比例匹配，复刻截图 13087）
+class _RatioShapeIcon extends StatelessWidget {
+  final double widthRatio;
+  final double heightRatio;
+  final bool selected;
+  const _RatioShapeIcon({
+    required this.widthRatio,
+    required this.heightRatio,
+    required this.selected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 根据比例计算图标宽高（在 40x50 的容器内缩放）
+    const maxW = 36.0;
+    const maxH = 44.0;
+    double w, h;
+    if (widthRatio / heightRatio > maxW / maxH) {
+      w = maxW;
+      h = maxW * heightRatio / widthRatio;
+    } else {
+      h = maxH;
+      w = maxH * widthRatio / heightRatio;
+    }
+    return SizedBox(
+      width: maxW,
+      height: maxH,
+      child: Center(
+        child: Container(
+          width: w,
+          height: h,
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: selected ? Colors.black : const Color(0xFF8E8E93),
+              width: selected ? 2.5 : 1.5,
+            ),
           ),
         ),
       ),
