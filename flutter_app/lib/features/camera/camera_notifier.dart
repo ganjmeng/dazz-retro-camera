@@ -52,6 +52,11 @@ class CameraAppState {
   final bool smallFrameMode;
   final int sharpenLevel; // 0=低, 1=中, 2=高
 
+  // Zoom & Minimap
+  final double zoomLevel;      // 0.6 ~ 20.0, default 1.0
+  final bool showZoomSlider;   // 胶囊点击后展开缩放滑动条
+  final bool minimapEnabled;   // 小窗模式开关
+
   const CameraAppState({
     this.activeCameraId = 'grd_r',
     this.camera,
@@ -79,6 +84,9 @@ class CameraAppState {
     this.showCaptureFlash = false,
     this.smallFrameMode = false,
     this.sharpenLevel = 1, // 默认中
+    this.zoomLevel = 1.0,
+    this.showZoomSlider = false,
+    this.minimapEnabled = false,
   });
 
   CameraAppState copyWith({
@@ -108,6 +116,9 @@ class CameraAppState {
     bool? showCaptureFlash,
     bool? smallFrameMode,
     int? sharpenLevel,
+    double? zoomLevel,
+    bool? showZoomSlider,
+    bool? minimapEnabled,
     bool clearPanel = false,
     bool clearError = false,
   }) {
@@ -138,6 +149,9 @@ class CameraAppState {
       showCaptureFlash: showCaptureFlash ?? this.showCaptureFlash,
       smallFrameMode: smallFrameMode ?? this.smallFrameMode,
       sharpenLevel: sharpenLevel ?? this.sharpenLevel,
+      zoomLevel: zoomLevel ?? this.zoomLevel,
+      showZoomSlider: showZoomSlider ?? this.showZoomSlider,
+      minimapEnabled: minimapEnabled ?? this.minimapEnabled,
     );
   }
 
@@ -332,6 +346,35 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     state = state.copyWith(smallFrameMode: !state.smallFrameMode);
   }
 
+  // ── Zoom & Minimap ──
+
+  /// 设置缩放倍率（x0.6 ~ x20）并通知原生层
+  void setZoom(double zoom) {
+    final clamped = zoom.clamp(0.6, 20.0);
+    state = state.copyWith(zoomLevel: clamped);
+    _ref.read(cameraServiceProvider.notifier).setZoom(clamped);
+  }
+
+  /// 切换缩放滑动条显示/隐藏
+  void toggleZoomSlider() {
+    state = state.copyWith(showZoomSlider: !state.showZoomSlider);
+  }
+
+  /// 关闭缩放滑动条
+  void hideZoomSlider() {
+    state = state.copyWith(showZoomSlider: false);
+  }
+
+  /// 切换小窗模式（开关时同步将缩放重置为 x1.0）
+  void toggleMinimap() {
+    state = state.copyWith(
+      minimapEnabled: !state.minimapEnabled,
+      zoomLevel: 1.0,
+      showZoomSlider: false,
+    );
+    _ref.read(cameraServiceProvider.notifier).setZoom(1.0);
+  }
+
   void cycleSharpen() {
     final next = (state.sharpenLevel + 1) % 3;
     state = state.copyWith(sharpenLevel: next);
@@ -364,7 +407,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   /// 拍照并保存到相册。
   /// 返回 [TakePhotoResult]，包含缓存文件路径和 MediaStore 资产 ID。
   /// galleryAssetId 可直接用于 AssetEntity.fromId()，完全绕开相册查询逻辑。
-  Future<TakePhotoResult?> takePhoto() async {
+  /// [minimapNormalizedRect] 小窗归一化裁剪区域（在取景框内的相对坐标 0.0~1.0）
+  Future<TakePhotoResult?> takePhoto({Rect? minimapNormalizedRect}) async {
     if (state.isTakingPhoto) return null;
     state = state.copyWith(isTakingPhoto: true);
     HapticFeedback.mediumImpact();
@@ -390,6 +434,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
               selectedWatermarkId: state.activeWatermarkId ?? '',
               frameBackgroundColor: state.frameBackgroundColor, // 用户选择的背景色
               renderParams: state.renderParams,
+              minimapNormalizedRect: minimapNormalizedRect, // 小窗模式裁剪区域
             );
             if (processed != null) {
               await File(path).writeAsBytes(processed);

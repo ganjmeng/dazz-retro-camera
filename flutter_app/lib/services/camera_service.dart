@@ -136,6 +136,15 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
+  /// 设置缩放倍率（x0.6 ~ x20）
+  Future<void> setZoom(double zoom) async {
+    try {
+      await _channel.invokeMethod('setZoom', {'zoom': zoom});
+    } catch (e) {
+      print('Error setting zoom: $e');
+    }
+  }
+
   /// 设置清晰度（锐化强度）
   /// [level] 0.0=低, 0.5=中, 1.0=高
   Future<void> setSharpen(double level) async {

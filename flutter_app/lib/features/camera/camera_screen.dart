@@ -13,6 +13,7 @@
 // └──────────────────────────────────────────────────────────────────────────┘
 
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -90,6 +91,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _showExposureSlider = false;
   // 色温面板是否展开（点击色温胶囊触发）
   bool _showWbPanel = false;
+  // ── 捏合缩放 ──────────────────────────────────────────────────────────────
+  // 捏合开始时的缩放值（用于计算相对缩放量）
+  double _pinchStartZoom = 1.0;
   // 耗时操作过渡动画（换相机/切滤镜/切比例/切清晰度）
   bool _showTransition = false;
   Timer? _transitionTimer;
@@ -339,7 +343,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Future<void> _doTakePhoto() async {
-    final result = await ref.read(cameraAppProvider.notifier).takePhoto();
+    final st = ref.read(cameraAppProvider);
+    // 小窗模式开启时，计算小窗在取景框内的归一化坐标
+    Rect? minimapRect;
+    if (st.minimapEnabled) {
+      minimapRect = _MinimapOverlay.calcNormalizedRect(st.zoomLevel);
+    }
+    final result = await ref.read(cameraAppProvider.notifier).takePhoto(
+      minimapNormalizedRect: minimapRect,
+    );
     if (result != null && mounted) {
       // 优先用 galleryAssetId 直接查资产（绕开相册查询，100% 可靠）
       if (result.galleryAssetId != null) {
@@ -480,6 +492,23 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
+          // ── 缩放水平滑动条（取景框和工具栏之间黑色区域垂直居中）──
+          if (st.showZoomSlider)
+            Positioned(
+              left: 0,
+              right: 0,
+              top: viewfinderTopOffset + viewfinderH,
+              bottom: kBottomPanelH + bottomSafeH,
+              child: Center(
+                child: _ZoomHorizontalSlider(
+                  value: st.zoomLevel,
+                  onChanged: (v) =>
+                      ref.read(cameraAppProvider.notifier).setZoom(v),
+                  onReset: () =>
+                      ref.read(cameraAppProvider.notifier).setZoom(1.0),
+                ),
+              ),
+            ),
           // ── 色温控制面板（取景框和工具栏之间黑色区域垂直居中）──
           if (_showWbPanel)
             Positioned(
@@ -606,10 +635,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // ── 色温滤色叠加层（根据 colorTempK 叠加半透明暖/冷色调）──
           if (st.wbMode != 'auto')
             _WbColorOverlay(colorTempK: st.colorTempK),
-          // ── 取景框点击手势：对焦 + 曝光 ──
+          // ── 取景框手势：对焦 + 曝光 + 捏合缩放 ──
           GestureDetector(
             behavior: HitTestBehavior.translucent,
             onTapDown: (d) => _onViewfinderTap(d, areaH),
+            onScaleStart: (d) {
+              _pinchStartZoom = ref.read(cameraAppProvider).zoomLevel;
+            },
+            onScaleUpdate: (d) {
+              if (d.pointerCount < 2) return;
+              final newZoom = (_pinchStartZoom * d.scale).clamp(0.6, 20.0);
+              ref.read(cameraAppProvider.notifier).setZoom(newZoom);
+            },
           ),
           // ── 对焦圈 + 曝光太阳 overlay ──
           if (_showFocusRing && _focusPoint != null)
@@ -649,10 +686,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
+          // ── 小窗 overlay（小窗模式开启时显示）──
+          if (st.minimapEnabled)
+            _MinimapOverlay(
+              zoomLevel: st.zoomLevel,
+              gridEnabled: st.gridEnabled,
+              areaW: screenW,
+              areaH: areaH,
+            ),
         ],
       ),
     );
-  } // ── 底部面板（下段）────────────────────────────────────────────
+  } // ── 底部面板（下段）──────────────────────────────────────────────────────────────────
   // 布局：深灰色圆角面板，[照片/视频 tab] + [样图/管理] → 相机列表 → 工具栏 → 快门行
   Widget _buildBottomPanel(CameraAppState st) {
     // 底部面板：纯黑背景
@@ -868,17 +913,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ── 控制胶囊 ──────────────────────────────────────────────────────────────
   // 截图精确复刻：深色半透明背景，白色文字，[🌡] [x1] [☀ 0.0]
   Widget _buildControlCapsule(CameraAppState st) {
-    // 截图精确复刻：3个独立圆形/胶囊按钮 [🌡] [x1] [☀ 0.0]
-    final lens = st.activeLens;
-    final zoomFactor = lens?.zoomFactor ?? 1.0;
-    final zoomLabel = zoomFactor == zoomFactor.roundToDouble()
-        ? 'x${zoomFactor.toInt()}'
-        : 'x${zoomFactor.toStringAsFixed(1)}';
-
+    // 截图精确复刻：3个独立圆形/胶囊按鈕 [🌡] [x1] [☀ 0.0]
+    // 倒率按鈕显示实时 zoomLevel
+    final zoom = st.zoomLevel;
+    final zoomLabel = zoom == zoom.roundToDouble()
+        ? 'x${zoom.toInt()}'
+        : 'x${zoom.toStringAsFixed(1)}';
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 色温按钮（圆形，点击弹出色温面板）
+        // 色温按鈕（圆形，点击弹出色温面板）
         // 高亮条件：面板展开 OR 色温不为自动
         GestureDetector(
           onTap: () {
@@ -908,21 +952,34 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           ),
         ),
         const SizedBox(width: 10),
-        // 倍率按钮（胶囊形，中间）
-        Container(
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            color: Colors.black.withAlpha(160),
-          ),
-          child: Center(
-            child: Text(
-              zoomLabel,
-              style: const TextStyle(
-                color: _kWhite,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
+        // 倍率按鈕（胶囊形，中间）—— 点击展开/收起缩放滑动条
+        GestureDetector(
+          onTap: () {
+            ref.read(cameraAppProvider.notifier).toggleZoomSlider();
+            // 与曝光、色温互斥
+            setState(() {
+              _showExposureSlider = false;
+              _showWbPanel = false;
+            });
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              color: st.showZoomSlider
+                  ? Colors.white.withAlpha(230)
+                  : Colors.black.withAlpha(160),
+            ),
+            child: Center(
+              child: Text(
+                zoomLabel,
+                style: TextStyle(
+                  color: st.showZoomSlider ? Colors.black : _kWhite,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -1218,13 +1275,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                               duration: const Duration(milliseconds: 350),
                             ),
                           ),
-                          // 3. 小框模式
+                          // 3. 小窗模式
                           _TopMenuBtn(
-                            icon: st.smallFrameMode
-                                ? Icons.crop_square
-                                : Icons.crop_square_outlined,
-                            label: st.smallFrameMode ? '小框模式开启' : '小框模式关闭',
-                            onTap: () => ref.read(cameraAppProvider.notifier).toggleSmallFrame(),
+                            icon: st.minimapEnabled
+                                ? Icons.picture_in_picture
+                                : Icons.picture_in_picture_outlined,
+                            label: st.minimapEnabled ? '小窗开启' : '小窗关闭',
+                            onTap: () {
+                              final willEnable = !st.minimapEnabled;
+                              ref.read(cameraAppProvider.notifier).toggleMinimap();
+                              ref.read(cameraAppProvider.notifier).toggleTopMenu();
+                              _showViewfinderHint(willEnable ? '小窗模式已开启' : '小窗模式已关闭');
+                            },
                           ),
                           // 4. 双重曝光
                           _TopMenuBtn(
@@ -2997,4 +3059,327 @@ class _WbColorOverlay extends StatelessWidget {
 
     return Container(color: overlayColor);
   }
+}
+
+// ─── 缩放水平滑动条（点击胶囊倍率按钮后弹出）────────────────────────────────────
+// 范围 x0.6 ~ x20，默认 x1.0，左侧重置按钮，右侧显示当前倍率
+class _ZoomHorizontalSlider extends StatelessWidget {
+  final double value; // 0.6 .. 20.0
+  final ValueChanged<double> onChanged;
+  final VoidCallback onReset;
+
+  const _ZoomHorizontalSlider({
+    required this.value,
+    required this.onChanged,
+    required this.onReset,
+  });
+
+  // 将线性滑动值（0.0~1.0）映射到对数缩放（x0.6~x20）
+  // 使用对数刻度让低倍率区间更精细
+  static double _sliderToZoom(double t) {
+    const minZ = 0.6;
+    const maxZ = 20.0;
+    // 对数插倦：t=0 → 0.6，t=1 → 20
+    return minZ * math.pow(maxZ / minZ, t);
+  }
+
+  static double _zoomToSlider(double zoom) {
+    const minZ = 0.6;
+    const maxZ = 20.0;
+    return math.log(zoom / minZ) / math.log(maxZ / minZ);
+  }
+
+  // 根据缩放倍率计算等效焦距（行业标准：x1.0 ≈ 28mm 全画幅等效）
+  // 参考：手机主摄 26-28mm，x0.6 ≈ 16mm，x2 ≈ 56mm，x5 ≈ 130mm，x10 ≈ 260mm，x20 ≈ 520mm
+  static String _focalLabel(double zoom) {
+    final mm = (26.0 * zoom).round();
+    return '${mm}mm';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sliderVal = _zoomToSlider(value).clamp(0.0, 1.0);
+    final zoomLabel = value == value.roundToDouble()
+        ? 'x${value.toInt()}'
+        : 'x${value.toStringAsFixed(1)}';
+    final focalLabel = _focalLabel(value);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          // 重置按钮（点击归 x1.0）
+          GestureDetector(
+            onTap: onReset,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black.withAlpha(180),
+                border: Border.all(
+                  color: Colors.white.withAlpha(60),
+                  width: 1,
+                ),
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.refresh,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // 水平滑动轨道
+          Expanded(
+            child: SliderTheme(
+              data: SliderThemeData(
+                trackHeight: 3,
+                activeTrackColor: Colors.white,
+                inactiveTrackColor: Colors.white.withAlpha(80),
+                thumbColor: Colors.white,
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: 10,
+                  elevation: 0,
+                ),
+                overlayShape: SliderComponentShape.noOverlay,
+              ),
+              child: Slider(
+                value: sliderVal,
+                min: 0.0,
+                max: 1.0,
+                onChanged: (t) => onChanged(_sliderToZoom(t)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // 当前倍率 + 等效焦距标签
+          SizedBox(
+            width: 68,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  zoomLabel,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  focalLabel,
+                  style: TextStyle(
+                    color: Colors.white.withAlpha(160),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── 小窗 overlay（小窗模式开启时显示在取景框内）────────────────────────────────
+// 小窗大小随缩放反比变化：
+//   x1.0 → 小窗刚好在取景框边缘（宽度 = 取景框宽度）
+//   x20  → 最小（约 1/20 取景框宽）
+//   x0.6 → 比 x1.0 还大（但不超过取景框）
+// 小窗内显示网格线（当 gridEnabled 时）
+// 小窗内显示等效焦距标签
+class _MinimapOverlay extends StatelessWidget {
+  final double zoomLevel;
+  final bool gridEnabled;
+  final double areaW;
+  final double areaH;
+
+  const _MinimapOverlay({
+    required this.zoomLevel,
+    required this.gridEnabled,
+    required this.areaW,
+    required this.areaH,
+  });
+
+  /// 计算小窗在取景框内的归一化 Rect（用于拍照时裁剪）
+  /// 小窗始终居中，宽高比 = 取景框宽高比
+  static Rect calcNormalizedRect(double zoomLevel) {
+    // x1.0 时小窗占满取景框（归一化 = 整个画面）
+    // 随缩放增大，小窗缩小（反比）
+    final scale = (1.0 / zoomLevel).clamp(0.05, 1.0);
+    final left = (1.0 - scale) / 2;
+    final top = (1.0 - scale) / 2;
+    return Rect.fromLTWH(left, top, scale, scale);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = (1.0 / zoomLevel).clamp(0.05, 1.0);
+    final boxW = areaW * scale;
+    final boxH = areaH * scale;
+
+    // 等效焦距标签
+    final mm = (26.0 * zoomLevel).round();
+    final focalLabel = '${mm}mm';
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Center(
+          child: SizedBox(
+            width: boxW,
+            height: boxH,
+            child: Stack(
+              children: [
+                // 小窗边框
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: Colors.white.withAlpha(200),
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                ),
+                // 四角装饰（L 形角标）
+                ..._buildCorners(boxW, boxH),
+                // 网格线（仅在 gridEnabled 时显示）
+                if (gridEnabled)
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _GridPainter(),
+                    ),
+                  ),
+                // 焦距标签（右下角）
+                Positioned(
+                  right: 6,
+                  bottom: 4,
+                  child: Text(
+                    focalLabel,
+                    style: TextStyle(
+                      color: Colors.white.withAlpha(200),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      shadows: const [
+                        Shadow(
+                          color: Colors.black,
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildCorners(double w, double h) {
+    const len = 12.0;
+    const thick = 2.0;
+    const color = Colors.white;
+    return [
+      // 左上
+      Positioned(
+        left: 0, top: 0,
+        child: _Corner(len: len, thick: thick, color: color,
+            showRight: true, showBottom: true),
+      ),
+      // 右上
+      Positioned(
+        right: 0, top: 0,
+        child: _Corner(len: len, thick: thick, color: color,
+            showLeft: true, showBottom: true),
+      ),
+      // 左下
+      Positioned(
+        left: 0, bottom: 0,
+        child: _Corner(len: len, thick: thick, color: color,
+            showRight: true, showTop: true),
+      ),
+      // 右下
+      Positioned(
+        right: 0, bottom: 0,
+        child: _Corner(len: len, thick: thick, color: color,
+            showLeft: true, showTop: true),
+      ),
+    ];
+  }
+}
+
+class _Corner extends StatelessWidget {
+  final double len;
+  final double thick;
+  final Color color;
+  final bool showTop;
+  final bool showBottom;
+  final bool showLeft;
+  final bool showRight;
+
+  const _Corner({
+    required this.len,
+    required this.thick,
+    required this.color,
+    this.showTop = false,
+    this.showBottom = false,
+    this.showLeft = false,
+    this.showRight = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: len,
+      height: len,
+      child: CustomPaint(
+        painter: _CornerPainter(
+          color: color,
+          thick: thick,
+          showTop: showTop,
+          showBottom: showBottom,
+          showLeft: showLeft,
+          showRight: showRight,
+        ),
+      ),
+    );
+  }
+}
+
+class _CornerPainter extends CustomPainter {
+  final Color color;
+  final double thick;
+  final bool showTop, showBottom, showLeft, showRight;
+
+  const _CornerPainter({
+    required this.color,
+    required this.thick,
+    this.showTop = false,
+    this.showBottom = false,
+    this.showLeft = false,
+    this.showRight = false,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = thick
+      ..style = PaintingStyle.stroke;
+    if (showTop) canvas.drawLine(Offset(0, 0), Offset(size.width, 0), paint);
+    if (showBottom) canvas.drawLine(Offset(0, size.height), Offset(size.width, size.height), paint);
+    if (showLeft) canvas.drawLine(Offset(0, 0), Offset(0, size.height), paint);
+    if (showRight) canvas.drawLine(Offset(size.width, 0), Offset(size.width, size.height), paint);
+  }
+
+  @override
+  bool shouldRepaint(_CornerPainter old) =>
+      old.color != color || old.thick != thick;
 }

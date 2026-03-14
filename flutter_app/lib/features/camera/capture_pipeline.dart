@@ -24,6 +24,7 @@ class CapturePipeline {
     required String selectedWatermarkId,
     String? frameBackgroundColor, // 用户选择的背景色（覆盖 JSON 默认值）
     PreviewRenderParams? renderParams,
+    Rect? minimapNormalizedRect, // 小窗模式裁剪区域（归一化 0.0~1.0）
   }) async {
     try {
       // ── 1. 读取原始图片 ──────────────────────────────────────────────────────
@@ -35,16 +36,23 @@ class CapturePipeline {
       final srcW = srcImage.width.toDouble();
       final srcH = srcImage.height.toDouble();
 
-      debugPrint('[CapturePipeline] src: ${srcW}x${srcH}, ratio=$selectedRatioId, frame=$selectedFrameId, wm=$selectedWatermarkId');
-
-      // ── 2. 计算裁剪区域（保持中心裁剪）────────────────────────────────────────
-      final cropRect = _calcCropRect(srcW, srcH, selectedRatioId);
+      debugPrint('[CapturePipeline] src: ${srcW}x${srcH}, ratio=$selectedRatioId, frame=$selectedFrameId, wm=$selectedWatermarkId');      // ── 2. 计算裁剪区域（保持中心裁剪）────────────────────────────────────────────
+      Rect cropRect = _calcCropRect(srcW, srcH, selectedRatioId);
+      // ── 2b. 小窗模式：将裁剪区域进一步缩小到小窗内容 ──────────────────────────────
+      if (minimapNormalizedRect != null) {
+        // minimapNormalizedRect 是小窗在取景框内的归一化坐标（left/top/right/bottom 均 0~1）
+        // 将其映射到 cropRect 内的实际像素坐标
+        final mmLeft   = cropRect.left   + minimapNormalizedRect.left   * cropRect.width;
+        final mmTop    = cropRect.top    + minimapNormalizedRect.top    * cropRect.height;
+        final mmRight  = cropRect.left   + minimapNormalizedRect.right  * cropRect.width;
+        final mmBottom = cropRect.top    + minimapNormalizedRect.bottom * cropRect.height;
+        cropRect = Rect.fromLTRB(mmLeft, mmTop, mmRight, mmBottom);
+        debugPrint('[CapturePipeline] minimap crop: ${cropRect.width}x${cropRect.height}@(${cropRect.left},${cropRect.top})');
+      }
       double outW = cropRect.width;
       double outH = cropRect.height;
 
-      debugPrint('[CapturePipeline] crop: ${outW}x${outH}');
-
-      // ── 3. 边框 inset 计算（在裁剪后尺寸上扩展画布）──────────────────────────
+      debugPrint('[CapturePipeline] crop: ${outW}x${outH}');      // ── 3. 边框 inset 计算（在裁剪后尺寸上扩展画布）──────────────────────────
       // inset 值是像素，相对于 1080px 参考宽度
       double topPx = 0, rightPx = 0, bottomPx = 0, leftPx = 0;
       FrameDefinition? frameOpt;
