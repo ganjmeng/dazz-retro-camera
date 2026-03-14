@@ -305,37 +305,41 @@ class _ChromaticAberrationLayer extends StatelessWidget {
   });
 
   @override
+  @override
   Widget build(BuildContext context) {
-    final offset = strength * 8.0; // pixels
-
+    // offset: 边缘色差偏移量
+    final offset = strength * 6.0; // pixels
+    // alpha 随 strength 线性缩放，避免固定 alpha 导致全局偏紫色
+    // strength=0.1(max) → alpha=0.25; strength=0.025 → alpha=0.06
+    final alpha = (strength / 0.1 * 0.25).clamp(0.0, 0.25);
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Red channel shifted left
+        // Red channel shifted left (alpha scales with strength)
         Positioned.fill(
           child: Transform.translate(
             offset: Offset(-offset, 0),
             child: ColorFiltered(
-              colorFilter: const ColorFilter.matrix([
+              colorFilter: ColorFilter.matrix([
                 1, 0, 0, 0, 0,
                 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0,
-                0, 0, 0, 0.35, 0,
+                0, 0, 0, alpha, 0,
               ]),
               child: Texture(textureId: textureId),
             ),
           ),
         ),
-        // Blue channel shifted right
+        // Blue channel shifted right (alpha scales with strength)
         Positioned.fill(
           child: Transform.translate(
             offset: Offset(offset, 0),
             child: ColorFiltered(
-              colorFilter: const ColorFilter.matrix([
+              colorFilter: ColorFilter.matrix([
                 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0,
                 0, 0, 1, 0, 0,
-                0, 0, 0, 0.35, 0,
+                0, 0, 0, alpha, 0,
               ]),
               child: Texture(textureId: textureId),
             ),

@@ -6,26 +6,23 @@
   "supportsPhoto": true,
   "supportsVideo": false,
   "focalLengthLabel": "28mm",
-
   "sensor": {
     "type": "ccd",
     "dynamicRange": 10,
     "baseNoise": 0.06,
     "colorDepth": 8
   },
-
   "defaultLook": {
     "baseLut": "assets/lut/cameras/grd_r.cube",
-    "temperature": -30,
-    "contrast": 1.12,
-    "saturation": 0.88,
-    "vignette": 0.40,
+    "temperature": -35,
+    "contrast": 1.15,
+    "saturation": 0.82,
+    "vignette": 0.45,
     "distortion": 0.0,
-    "chromaticAberration": 0.015,
+    "chromaticAberration": 0.0,
     "bloom": 0.0,
     "flare": 0.0
   },
-
   "modules": {
     "filters": [
       {
@@ -49,7 +46,6 @@
         "thumbnail": "assets/thumbnails/filters/grd_high_contrast.jpg"
       }
     ],
-
     "lenses": [
       {
         "id": "std",
@@ -117,7 +113,6 @@
         "thumbnail": "assets/thumbnails/lenses/prism.jpg"
       }
     ],
-
     "ratios": [
       {
         "id": "ratio_1_1",
@@ -148,7 +143,6 @@
         "supportsFrame": false
       }
     ],
-
     "frames": [
       {
         "id": "frame_clean_white",
@@ -162,11 +156,13 @@
           "bottom": 120,
           "left": 80
         },
-        "supportedRatios": ["ratio_1_1", "ratio_3_4"],
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
         "thumbnail": "assets/thumbnails/frames/frame_clean_white.jpg"
       }
     ],
-
     "watermarks": {
       "presets": [
         {
@@ -197,10 +193,8 @@
         "allowOrientationChange": true
       }
     },
-
     "extras": []
   },
-
   "defaultSelection": {
     "filterId": "grd_standard",
     "lensId": "std",
@@ -209,7 +203,6 @@
     "watermarkPresetId": "date_orange",
     "extraId": null
   },
-
   "uiCapabilities": {
     "enableFilter": true,
     "enableLens": true,
@@ -218,7 +211,6 @@
     "enableWatermark": true,
     "enableExtra": false
   },
-
   "previewCapabilities": {
     "allowSmallViewport": true,
     "allowGridOverlay": true,
@@ -227,7 +219,6 @@
     "allowTimer": true,
     "allowFlash": true
   },
-
   "previewPolicy": {
     "enableLut": true,
     "enableTemperature": true,
@@ -237,11 +228,10 @@
     "enableLightLensEffect": true,
     "enableGrain": false,
     "enableBloom": false,
-    "enableChromaticAberration": true,
+    "enableChromaticAberration": false,
     "enableFrameComposite": false,
     "enableWatermarkComposite": true
   },
-
   "exportPolicy": {
     "jpegQuality": 0.92,
     "applyRatioCrop": true,
@@ -249,26 +239,37 @@
     "applyWatermarkOnExport": true,
     "preserveMetadata": true
   },
-
   "videoConfig": {
     "enabled": false,
-    "fpsOptions": [24, 30, 60],
-    "resolutionOptions": ["SD", "HD", "4K"],
+    "fpsOptions": [
+      24,
+      30,
+      60
+    ],
+    "resolutionOptions": [
+      "SD",
+      "HD",
+      "4K"
+    ],
     "defaultFps": 30,
     "defaultResolution": "HD",
     "supportsAudio": true,
     "videoBitrate": 12000000
   },
-
   "assets": {
     "thumbnail": "assets/thumbnails/cameras/grd_r.jpg",
     "icon": "assets/thumbnails/cameras/grd_r_icon.jpg"
   },
-
   "meta": {
     "version": "final",
     "premium": false,
     "sortOrder": 0,
-    "tags": ["street", "ccd", "ricoh", "28mm", "high-contrast"]
+    "tags": [
+      "street",
+      "ccd",
+      "ricoh",
+      "28mm",
+      "high-contrast"
+    ]
   }
 }

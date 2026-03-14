@@ -6,26 +6,23 @@
   "supportsPhoto": true,
   "supportsVideo": false,
   "focalLengthLabel": "35mm",
-
   "sensor": {
     "type": "instant",
     "dynamicRange": 7,
     "baseNoise": 0.22,
     "colorDepth": 8
   },
-
   "defaultLook": {
     "baseLut": "assets/lut/cameras/inst_sq.cube",
-    "temperature": 25,
-    "contrast": 0.90,
-    "saturation": 1.10,
-    "vignette": 0.08,
+    "temperature": 20,
+    "contrast": 0.88,
+    "saturation": 1.05,
+    "vignette": 0.1,
     "distortion": 0.0,
-    "chromaticAberration": 0.02,
-    "bloom": 0.05,
+    "chromaticAberration": 0.0,
+    "bloom": 0.0,
     "flare": 0.0
   },
-
   "modules": {
     "filters": [
       {
@@ -49,7 +46,6 @@
         "thumbnail": "assets/thumbnails/filters/inst_warm.jpg"
       }
     ],
-
     "lenses": [
       {
         "id": "std",
@@ -117,7 +113,6 @@
         "thumbnail": "assets/thumbnails/lenses/light_leak.jpg"
       }
     ],
-
     "ratios": [
       {
         "id": "ratio_1_1",
@@ -134,7 +129,6 @@
         "supportsFrame": false
       }
     ],
-
     "frames": [
       {
         "id": "polaroid_white",
@@ -148,7 +142,9 @@
           "bottom": 120,
           "left": 60
         },
-        "supportedRatios": ["ratio_1_1"],
+        "supportedRatios": [
+          "ratio_1_1"
+        ],
         "thumbnail": "assets/thumbnails/frames/polaroid_white.jpg"
       },
       {
@@ -163,11 +159,12 @@
           "bottom": 120,
           "left": 60
         },
-        "supportedRatios": ["ratio_1_1"],
+        "supportedRatios": [
+          "ratio_1_1"
+        ],
         "thumbnail": "assets/thumbnails/frames/polaroid_cream.jpg"
       }
     ],
-
     "watermarks": {
       "presets": [
         {
@@ -198,10 +195,8 @@
         "allowOrientationChange": true
       }
     },
-
     "extras": []
   },
-
   "defaultSelection": {
     "filterId": "inst_classic",
     "lensId": "std",
@@ -210,7 +205,6 @@
     "watermarkPresetId": "date_orange",
     "extraId": null
   },
-
   "uiCapabilities": {
     "enableFilter": true,
     "enableLens": true,
@@ -219,7 +213,6 @@
     "enableWatermark": true,
     "enableExtra": false
   },
-
   "previewCapabilities": {
     "allowSmallViewport": true,
     "allowGridOverlay": true,
@@ -228,7 +221,6 @@
     "allowTimer": true,
     "allowFlash": true
   },
-
   "previewPolicy": {
     "enableLut": true,
     "enableTemperature": true,
@@ -237,12 +229,11 @@
     "enableVignette": true,
     "enableLightLensEffect": true,
     "enableGrain": false,
-    "enableBloom": true,
-    "enableChromaticAberration": true,
+    "enableBloom": false,
+    "enableChromaticAberration": false,
     "enableFrameComposite": false,
     "enableWatermarkComposite": true
   },
-
   "exportPolicy": {
     "jpegQuality": 0.92,
     "applyRatioCrop": true,
@@ -250,26 +241,34 @@
     "applyWatermarkOnExport": true,
     "preserveMetadata": true
   },
-
   "videoConfig": {
     "enabled": false,
-    "fpsOptions": [24, 30],
-    "resolutionOptions": ["HD"],
+    "fpsOptions": [
+      24,
+      30
+    ],
+    "resolutionOptions": [
+      "HD"
+    ],
     "defaultFps": 30,
     "defaultResolution": "HD",
     "supportsAudio": false,
     "videoBitrate": 8000000
   },
-
   "assets": {
     "thumbnail": "assets/thumbnails/cameras/inst_sq.jpg",
     "icon": "assets/thumbnails/cameras/inst_sq_icon.jpg"
   },
-
   "meta": {
     "version": "final",
     "premium": false,
     "sortOrder": 20,
-    "tags": ["instant", "polaroid", "square", "35mm", "film"]
+    "tags": [
+      "instant",
+      "polaroid",
+      "square",
+      "35mm",
+      "film"
+    ]
   }
 }
