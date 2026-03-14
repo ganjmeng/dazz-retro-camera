@@ -60,30 +60,60 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         }
         
         // Initialize default parameters
-        ccdParams.contrast = 1.0
-        ccdParams.saturation = 1.0
-        ccdParams.temperatureShift = 0.0
-        ccdParams.tintShift = 0.0
-        ccdParams.grainAmount = 0.0
-        ccdParams.noiseAmount = 0.0
-        ccdParams.vignetteAmount = 0.0
+        // ── 基础色彩
+        ccdParams.contrast          = 1.0
+        ccdParams.saturation        = 1.0
+        ccdParams.temperatureShift  = 0.0
+        ccdParams.tintShift         = 0.0
+        // ── Lightroom 风格曲线
+        ccdParams.highlights        = 0.0
+        ccdParams.shadows           = 0.0
+        ccdParams.whites            = 0.0
+        ccdParams.blacks            = 0.0
+        ccdParams.clarity           = 0.0
+        ccdParams.vibrance          = 0.0
+        // ── RGB 通道偏移
+        ccdParams.colorBiasR        = 0.0
+        ccdParams.colorBiasG        = 0.0
+        ccdParams.colorBiasB        = 0.0
+        // ── 胶片效果
+        ccdParams.grainAmount       = 0.0
+        ccdParams.noiseAmount       = 0.0
+        ccdParams.vignetteAmount    = 0.0
         ccdParams.chromaticAberration = 0.0
-        ccdParams.bloomAmount = 0.0
-        ccdParams.halationAmount = 0.0
-        ccdParams.sharen = 0.0
-        ccdParams.blurRadius = 0.0
-        ccdParams.jpegArtifacts = 0.0
-        ccdParams.time = 0.0
+        ccdParams.bloomAmount       = 0.0
+        ccdParams.halationAmount    = 0.0
+        ccdParams.sharen            = 0.0
+        ccdParams.blurRadius        = 0.0
+        ccdParams.jpegArtifacts     = 0.0
+        ccdParams.time              = 0.0
     }
     
     func updateParams(_ params: [String: Any]) {
-        // Parse dictionary and update ccdParams
-        if let contrast = params["contrast"] as? Float { ccdParams.contrast = contrast }
-        if let saturation = params["saturation"] as? Float { ccdParams.saturation = saturation }
-        if let ca = params["chromaticAberration"] as? Float { ccdParams.chromaticAberration = ca }
-        if let noise = params["noise"] as? Float { ccdParams.noiseAmount = noise }
-        if let vignette = params["vignette"] as? Float { ccdParams.vignetteAmount = vignette }
-        if let bloom = params["bloom"] as? Float { ccdParams.bloomAmount = bloom }
+        // ── 基础色彩 ─────────────────────────────────────────────
+        if let contrast    = params["contrast"]         as? Float { ccdParams.contrast         = contrast }
+        if let saturation  = params["saturation"]       as? Float { ccdParams.saturation       = saturation }
+        if let temperature = params["temperatureShift"] as? Float { ccdParams.temperatureShift = temperature }
+        if let tint        = params["tintShift"]        as? Float { ccdParams.tintShift        = tint }
+        // ── Lightroom 风格曲线 ──────────────────────────────────────
+        if let highlights  = params["highlights"]       as? Float { ccdParams.highlights       = highlights }
+        if let shadows     = params["shadows"]          as? Float { ccdParams.shadows          = shadows }
+        if let whites      = params["whites"]           as? Float { ccdParams.whites           = whites }
+        if let blacks      = params["blacks"]           as? Float { ccdParams.blacks           = blacks }
+        if let clarity     = params["clarity"]          as? Float { ccdParams.clarity          = clarity }
+        if let vibrance    = params["vibrance"]         as? Float { ccdParams.vibrance         = vibrance }
+        // ── RGB 通道偏移 ────────────────────────────────────────────
+        if let cb = params["colorBias"] as? [String: Any] {
+            if let r = cb["r"] as? Float { ccdParams.colorBiasR = r }
+            if let g = cb["g"] as? Float { ccdParams.colorBiasG = g }
+            if let b = cb["b"] as? Float { ccdParams.colorBiasB = b }
+        }
+        // ── 胶片效果 ──────────────────────────────────────────────────
+        if let ca      = params["chromaticAberration"] as? Float { ccdParams.chromaticAberration = ca }
+        if let noise   = params["noise"]               as? Float { ccdParams.noiseAmount         = noise }
+        if let vignette = params["vignette"]           as? Float { ccdParams.vignetteAmount      = vignette }
+        if let bloom   = params["bloom"]               as? Float { ccdParams.bloomAmount         = bloom }
+        if let grain   = params["grain"]               as? Float { ccdParams.grainAmount         = grain }
         
         // In a real implementation, we would load the textures from Flutter assets here
         // using FlutterPluginRegistrar.lookupKey(forAsset:) and MTKTextureLoader

@@ -8,16 +8,32 @@ uniform sampler2D uLutTexture;
 // 胶片颗粒纹理
 uniform sampler2D uGrainTexture;
 
-// CCD 效果参数 Uniforms
-uniform float uContrast;
-uniform float uSaturation;
-uniform float uTemperatureShift; // 负数偏冷
-uniform float uGrainAmount;
-uniform float uNoiseAmount;
-uniform float uVignetteAmount;
-uniform float uChromaticAberration;
-uniform float uBloomAmount;
-uniform float uTime; // 用于动态噪点的时间种子
+// ── 基础色彩参数 ──────────────────────────────────────────────
+uniform float uContrast;           // 对比度乘数，1.0 = 原始
+uniform float uSaturation;         // 饱和度乘数，1.0 = 原始；0.0 = 黑白
+uniform float uTemperatureShift;   // 色温偏移（负数偏冷/蓝，正数偏暖/橙）
+uniform float uTintShift;          // 绿/洋红偏色（负数偏绿，正数偏洋红）
+
+// ── Lightroom 风格曲线参数（-100 ~ +100）─────────────────────
+uniform float uHighlights;         // 高光压缩/提亮
+uniform float uShadows;            // 阴影压缩/提亮
+uniform float uWhites;             // 白场偏移
+uniform float uBlacks;             // 黑场偏移
+uniform float uClarity;            // 中间调微对比度（Clarity）
+uniform float uVibrance;           // 智能饱和度（低饱和区域优先）
+
+// ── RGB 通道独立偏移（-1.0 ~ +1.0）──────────────────────────
+uniform float uColorBiasR;
+uniform float uColorBiasG;
+uniform float uColorBiasB;
+
+// ── 胶片效果参数 ──────────────────────────────────────────────
+uniform float uGrainAmount;        // 颗粒强度 0~1
+uniform float uNoiseAmount;        // 数字噪点强度 0~1
+uniform float uVignetteAmount;     // 暗角强度 0~1
+uniform float uChromaticAberration;// 色差强度
+uniform float uBloomAmount;        // 高光光晕强度
+uniform float uTime;               // 动态噪点时间种子
 
 varying vec2 vTexCoord;
 
@@ -36,23 +52,80 @@ float random(vec2 st, float seed) {
     return fract(sin(dot(st + seed, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
-// 色温偏移（简化版）
+// 色温偏移：负值偏冷（蓝），正值偏暖（橙）
 vec3 applyTemperatureShift(vec3 color, float shift) {
-    float normalizedShift = shift / 1000.0;
-    color.r = clamp(color.r - normalizedShift * 0.3, 0.0, 1.0);
-    color.b = clamp(color.b + normalizedShift * 0.3, 0.0, 1.0);
+    float s = shift / 1000.0;
+    color.r = clamp(color.r - s * 0.3, 0.0, 1.0);
+    color.b = clamp(color.b + s * 0.3, 0.0, 1.0);
     return color;
 }
 
-// 对比度调整
+// Tint 偏色：负值偏绿，正值偏洋红
+vec3 applyTint(vec3 color, float tint) {
+    float t = tint / 100.0;
+    color.g = clamp(color.g - t * 0.12, 0.0, 1.0);
+    color.r = clamp(color.r + t * 0.06, 0.0, 1.0);
+    color.b = clamp(color.b + t * 0.06, 0.0, 1.0);
+    return color;
+}
+
+// 对比度调整（围绕 0.5 缩放）
 vec3 applyContrast(vec3 color, float contrast) {
     return clamp((color - 0.5) * contrast + 0.5, 0.0, 1.0);
 }
 
-// 饱和度调整
+// 饱和度调整（BT.709 亮度权重）
 vec3 applySaturation(vec3 color, float saturation) {
-    float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
-    return mix(vec3(luminance), color, saturation);
+    float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    return mix(vec3(lum), color, saturation);
+}
+
+// 黑场/白场偏移
+vec3 applyBlacksWhites(vec3 color, float blacks, float whites) {
+    float blacksOffset = blacks / 100.0 * (20.0 / 255.0);
+    float whitesScale  = 1.0 + whites / 100.0 * 0.15;
+    return clamp(color * whitesScale + blacksOffset, 0.0, 1.0);
+}
+
+// 高光/阴影压缩（非线性曲线模拟）
+vec3 applyHighlightsShadows(vec3 color, float highlights, float shadows) {
+    float hScale  = 1.0 + highlights / 100.0 * 0.12;
+    float hOffset = -highlights / 100.0 * 0.12 * (191.0 / 255.0);
+    float sScale  = 1.0 - shadows / 100.0 * 0.08;
+    float sOffset = shadows / 100.0 * 0.08 * (64.0 / 255.0) + shadows / 100.0 * (12.0 / 255.0);
+    float scale   = hScale * sScale;
+    float offset  = hOffset * sScale + sOffset;
+    return clamp(color * scale + offset, 0.0, 1.0);
+}
+
+// Clarity：中间调微对比度
+vec3 applyClarity(vec3 color, float clarity) {
+    float c      = clarity / 100.0;
+    float boost  = 1.0 + c * 0.15;
+    float offset = -c * 0.15 * 0.5;
+    return clamp(color * boost + offset, 0.0, 1.0);
+}
+
+// Vibrance：智能饱和度（低饱和区域优先提升）
+vec3 applyVibrance(vec3 color, float vibrance) {
+    float v   = vibrance / 100.0 * 0.6;
+    float sat = 1.0 + v;
+    const float lr = 0.2126;
+    const float lg = 0.7152;
+    const float lb = 0.0722;
+    float sr = (1.0 - sat) * lr;
+    float sg = (1.0 - sat) * lg;
+    float sb = (1.0 - sat) * lb;
+    return clamp(vec3(
+        color.r * (sr + sat) + color.g * sg + color.b * sb,
+        color.r * sr + color.g * (sg + sat) + color.b * sb,
+        color.r * sr + color.g * sg + color.b * (sb + sat)
+    ), 0.0, 1.0);
+}
+
+// RGB 通道偏移
+vec3 applyColorBias(vec3 color, float r, float g, float b) {
+    return clamp(color + vec3(r * (30.0/255.0), g * (30.0/255.0), b * (30.0/255.0)), 0.0, 1.0);
 }
 
 // ============================================================
@@ -69,32 +142,56 @@ void main() {
     float b = texture2D(uCameraTexture, uv - vec2(ca, 0.0)).b;
     vec3 color = vec3(r, g, b);
 
-    // === Pass 2: 基础色彩调整 ===
+    // === Pass 2: 色温 + Tint ===
     color = applyTemperatureShift(color, uTemperatureShift);
-    color = applyContrast(color, uContrast);
-    color = applySaturation(color, uSaturation);
+    color = applyTint(color, uTintShift);
 
-    // === Pass 3: 高光溢出 (Bloom) ===
+    // === Pass 3: 黑场/白场 ===
+    color = applyBlacksWhites(color, uBlacks, uWhites);
+
+    // === Pass 4: 高光/阴影压缩 ===
+    color = applyHighlightsShadows(color, uHighlights, uShadows);
+
+    // === Pass 5: 对比度 ===
+    color = applyContrast(color, uContrast);
+
+    // === Pass 6: Clarity（中间调微对比度）===
+    if (abs(uClarity) > 0.5) {
+        color = applyClarity(color, uClarity);
+    }
+
+    // === Pass 7: 饱和度 + Vibrance ===
+    color = applySaturation(color, uSaturation);
+    if (abs(uVibrance) > 0.5) {
+        color = applyVibrance(color, uVibrance);
+    }
+
+    // === Pass 8: RGB 通道偏移 ===
+    if (abs(uColorBiasR) + abs(uColorBiasG) + abs(uColorBiasB) > 0.001) {
+        color = applyColorBias(color, uColorBiasR, uColorBiasG, uColorBiasB);
+    }
+
+    // === Pass 9: 高光溢出 (Bloom) ===
     float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
     if (luminance > 0.8 && uBloomAmount > 0.0) {
         float bloom = (luminance - 0.8) * uBloomAmount * 2.0;
         color = clamp(color + vec3(bloom * 0.8, bloom * 0.7, bloom * 0.5), 0.0, 1.0);
     }
 
-    // === Pass 4: 胶片颗粒 (Grain) ===
+    // === Pass 10: 胶片颗粒 (Grain) ===
     if (uGrainAmount > 0.0) {
         vec3 grain = texture2D(uGrainTexture, uv * 2.0).rgb;
         color = clamp(color + (grain - 0.5) * uGrainAmount * 0.3, 0.0, 1.0);
     }
 
-    // === Pass 5: 动态数字噪点 (Noise) ===
+    // === Pass 11: 动态数字噪点 (Noise) ===
     if (uNoiseAmount > 0.0) {
         float noise = random(uv, uTime) - 0.5;
         float darkMask = 1.0 - luminance;
         color = clamp(color + noise * uNoiseAmount * 0.2 * darkMask, 0.0, 1.0);
     }
 
-    // === Pass 6: 暗角 (Vignette) ===
+    // === Pass 12: 暗角 (Vignette) ===
     float vignette = vignetteEffect(uv, uVignetteAmount);
     color *= vignette;
 

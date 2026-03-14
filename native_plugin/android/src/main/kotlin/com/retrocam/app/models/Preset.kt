@@ -21,7 +21,8 @@ data class Preset(
                 val resourcesMap = json["resources"] as Map<String, Any>
                 val paramsMap = json["params"] as Map<String, Any>
                 val dateStampMap = paramsMap["dateStamp"] as? Map<String, Any> ?: emptyMap()
-                
+                val colorBiasMap = paramsMap["colorBias"] as? Map<String, Any> ?: emptyMap()
+
                 Preset(
                     id = json["id"] as String,
                     name = json["name"] as String,
@@ -37,25 +38,34 @@ data class Preset(
                         frameOverlayName = resourcesMap["frameOverlayName"] as? String
                     ),
                     params = PresetParams(
-                        exposureBias = (paramsMap["exposureBias"] as? Number)?.toFloat() ?: 0f,
-                        contrast = (paramsMap["contrast"] as? Number)?.toFloat() ?: 1f,
-                        saturation = (paramsMap["saturation"] as? Number)?.toFloat() ?: 1f,
-                        temperatureShift = (paramsMap["temperatureShift"] as? Number)?.toFloat() ?: 0f,
-                        tintShift = (paramsMap["tintShift"] as? Number)?.toFloat() ?: 0f,
-                        sharpen = (paramsMap["sharpen"] as? Number)?.toFloat() ?: 0f,
-                        blurRadius = (paramsMap["blurRadius"] as? Number)?.toFloat() ?: 0f,
-                        grainAmount = (paramsMap["grainAmount"] as? Number)?.toFloat() ?: 0f,
-                        noiseAmount = (paramsMap["noiseAmount"] as? Number)?.toFloat() ?: 0f,
-                        vignetteAmount = (paramsMap["vignetteAmount"] as? Number)?.toFloat() ?: 0f,
-                        chromaticAberration = (paramsMap["chromaticAberration"] as? Number)?.toFloat() ?: 0f,
-                        bloomAmount = (paramsMap["bloomAmount"] as? Number)?.toFloat() ?: 0f,
-                        halationAmount = (paramsMap["halationAmount"] as? Number)?.toFloat() ?: 0f,
-                        jpegArtifacts = (paramsMap["jpegArtifacts"] as? Number)?.toFloat() ?: 0f,
-                        scanlineAmount = (paramsMap["scanlineAmount"] as? Number)?.toFloat() ?: 0f,
+                        exposureBias         = (paramsMap["exposureBias"] as? Number)?.toFloat() ?: 0f,
+                        contrast             = (paramsMap["contrast"] as? Number)?.toFloat() ?: 1f,
+                        saturation           = (paramsMap["saturation"] as? Number)?.toFloat() ?: 1f,
+                        temperatureShift     = (paramsMap["temperatureShift"] as? Number)?.toFloat() ?: 0f,
+                        tintShift            = (paramsMap["tintShift"] as? Number)?.toFloat() ?: 0f,
+                        highlights           = (paramsMap["highlights"] as? Number)?.toFloat() ?: 0f,
+                        shadows              = (paramsMap["shadows"] as? Number)?.toFloat() ?: 0f,
+                        whites               = (paramsMap["whites"] as? Number)?.toFloat() ?: 0f,
+                        blacks               = (paramsMap["blacks"] as? Number)?.toFloat() ?: 0f,
+                        clarity              = (paramsMap["clarity"] as? Number)?.toFloat() ?: 0f,
+                        vibrance             = (paramsMap["vibrance"] as? Number)?.toFloat() ?: 0f,
+                        colorBiasR           = (colorBiasMap["r"] as? Number)?.toFloat() ?: 0f,
+                        colorBiasG           = (colorBiasMap["g"] as? Number)?.toFloat() ?: 0f,
+                        colorBiasB           = (colorBiasMap["b"] as? Number)?.toFloat() ?: 0f,
+                        sharpen              = (paramsMap["sharpen"] as? Number)?.toFloat() ?: 0f,
+                        blurRadius           = (paramsMap["blurRadius"] as? Number)?.toFloat() ?: 0f,
+                        grainAmount          = (paramsMap["grainAmount"] as? Number)?.toFloat() ?: 0f,
+                        noiseAmount          = (paramsMap["noiseAmount"] as? Number)?.toFloat() ?: 0f,
+                        vignetteAmount       = (paramsMap["vignetteAmount"] as? Number)?.toFloat() ?: 0f,
+                        chromaticAberration  = (paramsMap["chromaticAberration"] as? Number)?.toFloat() ?: 0f,
+                        bloomAmount          = (paramsMap["bloomAmount"] as? Number)?.toFloat() ?: 0f,
+                        halationAmount       = (paramsMap["halationAmount"] as? Number)?.toFloat() ?: 0f,
+                        jpegArtifacts        = (paramsMap["jpegArtifacts"] as? Number)?.toFloat() ?: 0f,
+                        scanlineAmount       = (paramsMap["scanlineAmount"] as? Number)?.toFloat() ?: 0f,
                         dateStamp = DateStampConfig(
-                            enabled = dateStampMap["enabled"] as? Boolean ?: false,
-                            format = dateStampMap["format"] as? String ?: "yyyy MM dd",
-                            color = dateStampMap["color"] as? String ?: "#FFFFA500",
+                            enabled  = dateStampMap["enabled"] as? Boolean ?: false,
+                            format   = dateStampMap["format"] as? String ?: "yyyy MM dd",
+                            color    = dateStampMap["color"] as? String ?: "#FFFFA500",
                             position = dateStampMap["position"] as? String ?: "bottomRight"
                         )
                     )
@@ -83,10 +93,23 @@ data class DateStampConfig(
 
 data class PresetParams(
     val exposureBias: Float,
+    // ── 基础色彩 ──────────────────────────────────────────────
     val contrast: Float,
     val saturation: Float,
     val temperatureShift: Float,
     val tintShift: Float,
+    // ── Lightroom 风格曲线（-100 ~ +100）─────────────────────
+    val highlights: Float,
+    val shadows: Float,
+    val whites: Float,
+    val blacks: Float,
+    val clarity: Float,
+    val vibrance: Float,
+    // ── RGB 通道独立偏移（-1.0 ~ +1.0）──────────────────────
+    val colorBiasR: Float,
+    val colorBiasG: Float,
+    val colorBiasB: Float,
+    // ── 胶片效果 ──────────────────────────────────────────────
     val sharpen: Float,
     val blurRadius: Float,
     val grainAmount: Float,
