@@ -40,11 +40,11 @@ const _kRed = Color(0xFFFF3B30);
 // ─── 布局常量（提升为顶层常量，供多个方法共享）─────────────────────────────────────────────────────────────────────────────
 const kToolbarH = 52.0;          // 工具栏高度（参考图约52px）
 const kShutterH = 88.0;           // 快门行高度（参考图约88px）
-const kBottomPanelTopPad = 12.0;  // 工具栏上方间距
-const kToolbarShutterGap = 20.0;  // 工具栏和快门行间距
+const kBottomPanelTopPad = 6.0;   // 工具栏上方间距（整体上移）
+const kToolbarShutterGap = 16.0;  // 工具栏和快门行间距
 const kBottomPanelH = kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
 const kCapsuleH = 40.0;           // 胶囊高度（参考图约40px）
-const kCapsuleInsetBottom = 16.0; // 胶囊距取景框底部的内边距
+const kCapsuleInsetBottom = 8.0;  // 胶囊距取景框底部的内边距（胶囊下移8px）
 const kSliderAreaH = 72.0;        // 胶囊下方滑条展开区域预留高度
 const kViewfinderHPadding = 8.0;  // 取景框左右边距（参考图约8px，贴边显示）
 const kTopBarH = 44.0;
@@ -1087,9 +1087,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return SizedBox(
       height: 52,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             // 1. 导入图片
             _ToolbarBtn(
@@ -2413,7 +2413,9 @@ class _ToolbarBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Column(
+      child: SizedBox(
+        width: 68,
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -2445,6 +2447,7 @@ class _ToolbarBtn extends StatelessWidget {
             Text(label!, style: const TextStyle(color: Colors.white70, fontSize: 10)),
           ],
         ],
+        ),
       ),
     );
   }
@@ -2462,7 +2465,9 @@ class _FlashBtn extends StatelessWidget {
     final isOff = mode == 'off';
     return GestureDetector(
       onTap: onTap,
-      child: Column(
+      child: SizedBox(
+        width: 68,
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -2490,6 +2495,7 @@ class _FlashBtn extends StatelessWidget {
             Text(label!, style: const TextStyle(color: Colors.white70, fontSize: 10)),
           ],
         ],
+        ),
       ),
     );
   }
