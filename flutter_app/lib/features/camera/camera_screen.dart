@@ -37,12 +37,12 @@ const _kRed = Color(0xFFFF3B30);
 // ─── 布局常量（提升为顶层常量，供多个方法共享）─────────────────────────────────────────────────────────────────────────────
 const kToolbarH = 64.0;
 const kShutterH = 96.0;
-const kBottomPanelTopPad = 12.0; // 减小顶部间距，让快门行整体上移
-const kToolbarShutterGap = 32.0; // 加大工具栏和快门行间距
+const kBottomPanelTopPad = 16.0; // 工具栏上方间距
+const kToolbarShutterGap = 28.0; // 工具栏和快门行间距
 const kBottomPanelH = kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
-const kCapsuleH = 40.0;
-const kCapsuleBottomOffset = kBottomPanelH + 16.0; // 距屏幕底部的距离
-const kViewfinderHPadding = 12.0;
+const kCapsuleH = 48.0; // 胶囊高度（对应截图中的按钮高度）
+const kCapsuleInsetBottom = 20.0; // 胶囊距取景框底部的内边距
+const kViewfinderHPadding = 16.0; // 取景框左右边距
 const kTopBarH = 44.0;
 
 class CameraScreen extends ConsumerStatefulWidget {
@@ -234,11 +234,27 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 底部面板常量已提升为顶层常量（文件顶部定义）
     // kToolbarH=64, kShutterH=96, kBottomPanelTopPad=12, kToolbarShutterGap=32
     // kBottomPanelH=204, kCapsuleH=40, kCapsuleBottomOffset=220
-    final viewfinderW = screenW - kViewfinderHPadding * 2;
-    final maxViewfinderH = mq.size.height - statusBarH - kTopBarH - kBottomPanelH - bottomSafeH - 8;
-    final ratioViewfinderH = viewfinderW / st.previewAspectRatio;
-    // 限制在合理范围内
-    final viewfinderH = ratioViewfinderH.clamp(viewfinderW * 0.75, maxViewfinderH);
+    // 取景框宽度：按比例决定
+    // 对于 9:16（竖向比例 < 0.75），取景框宽度缩窄以居中显示
+    // 对于 1:1、3:4、2:3，取景框宽度 = 全屏宽 - 边距
+    final maxViewfinderH = mq.size.height - statusBarH - kTopBarH - kBottomPanelH - bottomSafeH - 16;
+    final aspectRatio = st.previewAspectRatio; // width/height
+    double viewfinderW;
+    double viewfinderH;
+    if (aspectRatio < 0.75) {
+      // 竖向比例（如 9:16 = 0.5625）：高度撑满可用空间，宽度按比例缩窄
+      viewfinderH = maxViewfinderH;
+      viewfinderW = (viewfinderH * aspectRatio).clamp(0.0, screenW - kViewfinderHPadding * 2);
+    } else {
+      // 横向或方形比例（1:1, 3:4, 2:3）：宽度撑满，高度按比例
+      viewfinderW = screenW - kViewfinderHPadding * 2;
+      viewfinderH = (viewfinderW / aspectRatio).clamp(viewfinderW * 0.5, maxViewfinderH);
+    }
+    // 取景框在顶部栏和底部面板之间的可用空间内垂直居中
+    final availableH = maxViewfinderH;
+    final viewfinderTopOffset = statusBarH + kTopBarH + ((availableH - viewfinderH) / 2).clamp(0.0, 80.0);
+    // 取景框水平居中
+    final viewfinderLeft = (screenW - viewfinderW) / 2;
 
     return Scaffold(
       backgroundColor: _kBlack,
@@ -279,26 +295,31 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               ),
             ),
           ),
-          // ── 取景框（有圆角+左右边距，在顶部按鈕行下方）──
+          // ── 取景框（圆角，垂直居中，水平居中）+ 胶囊叠加在内底部 ──
           Positioned(
-            top: statusBarH + kTopBarH,
-            left: kViewfinderHPadding,
-            right: kViewfinderHPadding,
+            top: viewfinderTopOffset,
+            left: viewfinderLeft,
             child: SizedBox(
               width: viewfinderW,
               height: viewfinderH,
-              child: _buildViewfinderArea(st, camSvc, viewfinderH, viewfinderW),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // 取景框主体
+                  Positioned.fill(
+                    child: _buildViewfinderArea(st, camSvc, viewfinderH, viewfinderW),
+                  ),
+                  // ── 控制胶囊：叠加在取景框内底部（最高层）──
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: kCapsuleInsetBottom,
+                    height: kCapsuleH,
+                    child: Center(child: _buildControlCapsule(st)),
+                  ),
+                ],
+              ),
             ),
-          ),
-
-          // ── 控制胶囊：固定在工具栏上方，不随取景框高度变化──
-          // 视觉上会浮在取景框画面上（最高层）
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: kCapsuleBottomOffset + bottomSafeH,
-            height: kCapsuleH,
-            child: Center(child: _buildControlCapsule(st)),
           ),
 
           // ── 右上角菜单弹框 ── ──
@@ -582,8 +603,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ref.read(cameraAppProvider.notifier).setTemperature(newTemp);
           },
           child: Container(
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.black.withAlpha(160),
@@ -596,7 +617,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         const SizedBox(width: 10),
         // 倍率按钮（胶囊形，中间）
         Container(
-          height: 48,
+          height: 44,
           padding: const EdgeInsets.symmetric(horizontal: 18),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
@@ -607,7 +628,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               zoomLabel,
               style: const TextStyle(
                 color: _kWhite,
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -626,7 +647,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ref.read(cameraAppProvider.notifier).setExposure(newExp);
           },
           child: Container(
-            height: 48,
+            height: 44,
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
@@ -641,7 +662,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   st.exposureValue == 0 ? '0.0' : st.exposureValue.toStringAsFixed(1),
                   style: const TextStyle(
                     color: _kWhite,
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -698,7 +719,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return SizedBox(
       height: 96,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 28),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -708,26 +729,26 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               onTap: _openGallery,
               onLongPress: _openLatestPhotoDetail,
               child: Container(
-                width: 72,
-                height: 72,
+                width: 60,
+                height: 60,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   color: _kDarkGray,
                 ),
                 child: _latestThumb != null
                     ? ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                         child: Image.memory(_latestThumb!, fit: BoxFit.cover),
                       )
-                    : const Icon(Icons.photo_outlined, color: Colors.grey, size: 30),
+                    : const Icon(Icons.photo_outlined, color: Colors.grey, size: 26),
               ),
             ),
             // 中间: 快门按钮（外圈白色线圈，内圆白色实心）
             GestureDetector(
               onTap: st.isTakingPhoto ? null : _handleShutter,
               child: Container(
-                width: 88,
-                height: 88,
+                width: 76,
+                height: 76,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: Colors.transparent,
@@ -735,8 +756,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
                 child: Center(
                   child: Container(
-                    width: 74,
-                    height: 74,
+                    width: 62,
+                    height: 62,
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
                       color: _kWhite,
@@ -749,14 +770,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             GestureDetector(
               onTap: () => showCameraConfigSheet(context),
               child: SizedBox(
-                width: 72,
-                height: 72,
+                width: 60,
+                height: 60,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
                     // 虚线圆圈背景
                     CustomPaint(
-                      size: const Size(72, 72),
+                      size: const Size(60, 60),
                       painter: _DashedCirclePainter(),
                     ),
                     // 相机图标 + 名称
