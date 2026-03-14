@@ -68,9 +68,12 @@ class _GalleryScreenState extends State<GalleryScreen> {
       return;
     }
 
-    // 查找 DAZZ 专属相册（相册名包含 "DAZZ" 或 "dazz"）
+    // 策略：查询所有图片（根相册 hasAll=true），然后按文件名 DAZZ_ 前缀过滤
+    // 不依赖相册名匹配，避免 BUCKET_DISPLAY_NAME 在不同厂商 ROM 上的差异
     final allPaths = await PhotoManager.getAssetPathList(
       type: RequestType.image,
+      hasAll: true,
+      onlyAll: true, // 只返回根相册（所有照片），不返回子相册
       filterOption: FilterOptionGroup(
         orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
       ),
@@ -81,17 +84,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
       return;
     }
 
-    // 优先尝试找 DAZZ 相册，找不到则用第一个相册
-    AssetPathEntity? dazzPath;
-    for (final p in allPaths) {
-      if (p.name.toUpperCase().contains('DAZZ')) {
-        dazzPath = p;
-        break;
-      }
-    }
-    dazzPath ??= allPaths.first;
+    // 取根相册（所有照片）
+    final rootPath = allPaths.first;
+    final totalCount = await rootPath.assetCountAsync;
+    // 最多查最近 2000 张，避免全量扫描
+    final rawAssets = await rootPath.getAssetListRange(
+      start: 0,
+      end: totalCount.clamp(0, 2000),
+    );
 
-    final allAssets = await dazzPath.getAssetListRange(start: 0, end: 1000);
+    // 按文件名 DAZZ_ 前缀过滤（文件命名格式: DAZZ_{cameraId}_{timestamp}.jpg）
+    final allAssets = rawAssets
+        .where((a) => (a.title ?? '').toUpperCase().startsWith('DAZZ_'))
+        .toList();
 
     // 按文件名中的 cameraId 动态统计各相机成片数量
     // 文件命名格式: DAZZ_{cameraId}_{timestamp}.jpg

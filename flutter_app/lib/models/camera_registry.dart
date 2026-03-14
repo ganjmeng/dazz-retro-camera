@@ -14,6 +14,8 @@ class CameraEntry {
   final String? focalLengthLabel;
   final bool premium;
   final int sortOrder;
+  /// 相机图标 asset 路径（用于相机选择器和快门行）
+  final String? iconPath;
 
   const CameraEntry({
     required this.id,
@@ -23,6 +25,7 @@ class CameraEntry {
     this.focalLengthLabel,
     this.premium = false,
     this.sortOrder = 0,
+    this.iconPath,
   });
 }
 
@@ -36,6 +39,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '28mm',
     premium: false,
     sortOrder: 0,
+    iconPath: 'assets/thumbnails/cameras/grd_r_icon.png',
   ),
   CameraEntry(
     id: 'inst_sq',
@@ -45,6 +49,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '35mm',
     premium: false,
     sortOrder: 20,
+    iconPath: 'assets/thumbnails/cameras/inst_sq_icon.png',
   ),
   CameraEntry(
     id: 'fxn_r',
@@ -54,6 +59,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '35mm',
     premium: false,
     sortOrder: 30,
+    iconPath: 'assets/thumbnails/cameras/fxn_r_icon.png',
   ),
   CameraEntry(
     id: 'bw_classic',
@@ -63,6 +69,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '35mm',
     premium: false,
     sortOrder: 40,
+    iconPath: 'assets/thumbnails/cameras/bw_classic_icon.png',
   ),
 ];
 

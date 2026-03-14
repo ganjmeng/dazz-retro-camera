@@ -789,7 +789,21 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 24),
+                          // 优先使用真实相机图标，如果没有则用系统图标
+                          if (entry.iconPath != null)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: Image.asset(
+                                entry.iconPath!,
+                                width: 32,
+                                height: 32,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 24),
+                              ),
+                            )
+                          else
+                            const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 24),
                           const SizedBox(height: 3),
                           Text(
                             entry.name,

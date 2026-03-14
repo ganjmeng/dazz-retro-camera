@@ -818,13 +818,30 @@ class _CameraCell extends StatelessWidget {
                     ? Border.all(color: _kOrange, width: 2.5)
                     : null,
               ),
-              child: Center(
-                child: Icon(
-                  Icons.camera_alt_outlined,
-                  color: isActive ? _kOrange : _kTextSecondary,
-                  size: 28,
-                ),
-              ),
+              child: entry.iconPath != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.asset(
+                        entry.iconPath!,
+                        width: 64,
+                        height: 64,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Center(
+                          child: Icon(
+                            Icons.camera_alt_outlined,
+                            color: isActive ? _kOrange : _kTextSecondary,
+                            size: 28,
+                          ),
+                        ),
+                      ),
+                    )
+                  : Center(
+                      child: Icon(
+                        Icons.camera_alt_outlined,
+                        color: isActive ? _kOrange : _kTextSecondary,
+                        size: 28,
+                      ),
+                    ),
             ),
             const SizedBox(height: 4),
             Text(
