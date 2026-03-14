@@ -38,15 +38,15 @@ const _kBlue = Color(0xFF007AFF);
 const _kRed = Color(0xFFFF3B30);
 
 // ─── 布局常量（提升为顶层常量，供多个方法共享）─────────────────────────────────────────────────────────────────────────────
-const kToolbarH = 64.0;
-const kShutterH = 96.0;
-const kBottomPanelTopPad = 16.0; // 工具栏上方间距
-const kToolbarShutterGap = 28.0; // 工具栏和快门行间距
+const kToolbarH = 52.0;          // 工具栏高度（参考图约52px）
+const kShutterH = 88.0;           // 快门行高度（参考图约88px）
+const kBottomPanelTopPad = 12.0;  // 工具栏上方间距
+const kToolbarShutterGap = 20.0;  // 工具栏和快门行间距
 const kBottomPanelH = kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
-const kCapsuleH = 48.0; // 胶囊高度（对应截图中的按钮高度）
-const kCapsuleInsetBottom = 20.0; // 胶囊距取景框底部的内边距
-const kSliderAreaH = 80.0; // 胶囊下方滑条展开区域预留高度
-const kViewfinderHPadding = 16.0; // 取景框左右边距
+const kCapsuleH = 40.0;           // 胶囊高度（参考图约40px）
+const kCapsuleInsetBottom = 16.0; // 胶囊距取景框底部的内边距
+const kSliderAreaH = 72.0;        // 胶囊下方滑条展开区域预留高度
+const kViewfinderHPadding = 8.0;  // 取景框左右边距（参考图约8px，贴边显示）
 const kTopBarH = 44.0;
 
 class CameraScreen extends ConsumerStatefulWidget {
@@ -979,8 +979,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            width: 44,
-            height: 44,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: (_showWbPanel || st.wbMode != 'auto')
@@ -991,7 +991,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               child: Icon(
                 // 展开时显示向下箭头，收起时显示温度计
                 _showWbPanel ? Icons.keyboard_arrow_down : Icons.thermostat_outlined,
-                size: 20,
+                size: 17,
                 color: (_showWbPanel || st.wbMode != 'auto') ? Colors.black : _kWhite,
               ),
             ),
@@ -1010,10 +1010,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 18),
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
               color: st.showZoomSlider
                   ? Colors.white.withAlpha(230)
                   : Colors.black.withAlpha(160),
@@ -1023,7 +1023,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 zoomLabel,
                 style: TextStyle(
                   color: st.showZoomSlider ? Colors.black : _kWhite,
-                  fontSize: 15,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1042,10 +1042,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(20),
               color: (_showExposureSlider || st.exposureValue != 0)
                   ? Colors.white.withAlpha(230)
                   : Colors.black.withAlpha(160),
@@ -1056,10 +1056,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 Icon(
                   // 展开时显示向下箭头，收起时显示太阳
                   _showExposureSlider ? Icons.keyboard_arrow_down : Icons.wb_sunny_outlined,
-                  size: 16,
+                  size: 14,
                   color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : _kWhite,
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Text(
                   st.exposureValue == 0
                       ? '0.0'
@@ -1067,7 +1067,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           st.exposureValue.toStringAsFixed(1),
                   style: TextStyle(
                     color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : _kWhite,
-                    fontSize: 15,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1081,9 +1081,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ── 工具栏（5个图标）────────────────────────────────────────────────────────
   Widget _buildToolbar(CameraAppState st) {
     return SizedBox(
-      height: 64,
+      height: 52,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -1146,12 +1146,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   // ── 快门行 ──────────────────────────────────────────────────────────────────
-  // 截图布局：[缩略图 72×72] [快门 88×88] [相机图标 72×72]
+  // 截图布局：[缩略图 72×72] [快门 80×80] [相机图标 72×72]
   Widget _buildShutterRow(CameraAppState st) {
     return SizedBox(
-      height: 96,
+      height: 88,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 28),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -1161,35 +1161,35 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               onTap: _openGallery,
               onLongPress: _openLatestPhotoDetail,
               child: Container(
-                width: 60,
-                height: 60,
+                width: 72,
+                height: 72,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                   color: _kDarkGray,
                 ),
                 child: _latestThumb != null
                     ? ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                         child: Image.memory(_latestThumb!, fit: BoxFit.cover),
                       )
-                    : const Icon(Icons.photo_outlined, color: Colors.grey, size: 26),
+                    : const Icon(Icons.photo_outlined, color: Colors.grey, size: 28),
               ),
             ),
             // 中间: 快门按钮（外圈白色线圈，内圆白色实心）
             GestureDetector(
               onTap: st.isTakingPhoto ? null : _handleShutter,
               child: Container(
-                width: 76,
-                height: 76,
+                width: 80,
+                height: 80,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: Colors.transparent,
-                  border: Border.all(color: _kWhite, width: 3),
+                  border: Border.all(color: _kWhite, width: 3.5),
                 ),
                 child: Center(
                   child: Container(
-                    width: 62,
-                    height: 62,
+                    width: 66,
+                    height: 66,
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
                       color: _kWhite,
@@ -1202,14 +1202,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             GestureDetector(
               onTap: () => showCameraConfigSheet(context),
               child: SizedBox(
-                width: 60,
-                height: 60,
+                width: 72,
+                height: 72,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
                     // 虚线圆圈背景
                     CustomPaint(
-                      size: const Size(60, 60),
+                      size: const Size(72, 72),
                       painter: _DashedCirclePainter(),
                     ),
                     // 相机图标 + 名称
@@ -1227,15 +1227,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                               borderRadius: BorderRadius.circular(6),
                               child: Image.asset(
                                 entry.iconPath!,
-                                width: 32,
-                                height: 32,
+                                width: 36,
+                                height: 36,
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) =>
-                                    const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 24),
+                                    const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 26),
                               ),
                             )
                           else
-                            const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 24),
+                            const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 26),
                           const SizedBox(height: 3),
                           Text(
                             entry.name,
@@ -2398,12 +2398,12 @@ class _ToolbarBtn extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           SizedBox(
-            width: 36,
-            height: 36,
+            width: 28,
+            height: 28,
             child: Stack(
               alignment: Alignment.center,
               children: [
-                Icon(icon, color: _kWhite, size: 28),
+                Icon(icon, color: _kWhite, size: 22),
                 if (badge != null)
                   Positioned(
                     bottom: 0,
@@ -2421,8 +2421,8 @@ class _ToolbarBtn extends StatelessWidget {
             ),
           ),
           if (label != null) ...[  
-            const SizedBox(height: 4),
-            Text(label!, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+            const SizedBox(height: 3),
+            Text(label!, style: const TextStyle(color: Colors.white70, fontSize: 10)),
           ],
         ],
       ),
@@ -2447,27 +2447,27 @@ class _FlashBtn extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           SizedBox(
-            width: 36,
-            height: 36,
+            width: 28,
+            height: 28,
             child: Stack(
               alignment: Alignment.center,
               children: [
                 Icon(
                   Icons.flash_on,
                   color: isOff ? _kWhite : _kRed,
-                  size: 28,
+                  size: 22,
                 ),
                 if (isOff)
                   CustomPaint(
-                    size: const Size(28, 28),
+                    size: const Size(22, 22),
                     painter: _StrikethroughPainter(),
                   ),
               ],
             ),
           ),
           if (label != null) ...[  
-            const SizedBox(height: 4),
-            Text(label!, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+            const SizedBox(height: 3),
+            Text(label!, style: const TextStyle(color: Colors.white70, fontSize: 10)),
           ],
         ],
       ),
