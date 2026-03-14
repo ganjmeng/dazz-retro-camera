@@ -306,6 +306,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         HapticFeedback.lightImpact();
 
         // Post-process: color effects + ratio crop + frame + watermark
+        // path is in app cache dir (absolute file path), readable by dart:io File
         if (state.camera != null) {
           try {
             debugPrint('[CameraNotifier] Starting post-process: ratio=${state.activeRatioId}, frame=${state.activeFrameId}, wm=${state.activeWatermarkId}');
@@ -318,6 +319,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
               renderParams: state.renderParams,
             );
             if (processed != null) {
+              // Write processed bytes back to the cache file
               await File(path).writeAsBytes(processed);
               debugPrint('[CameraNotifier] Post-process done, wrote ${processed.length} bytes to $path');
             } else {
@@ -327,6 +329,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             // Post-processing failed, keep original
             debugPrint('[CameraNotifier] Post-process error: $e\n$st');
           }
+        }
+        // Save processed file to gallery (DCIM/DAZZ) via native MediaStore
+        try {
+          final galleryUri = await _ref.read(cameraServiceProvider.notifier).saveToGallery(path);
+          debugPrint('[CameraNotifier] Saved to gallery: $galleryUri');
+        } catch (e) {
+          debugPrint('[CameraNotifier] saveToGallery error: $e');
         }
       }
 

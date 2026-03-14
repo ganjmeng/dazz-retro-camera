@@ -133,6 +133,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "setFlash"        -> handleSetFlash(call, result)
             "startRecording"  -> handleStartRecording(result)
             "stopRecording"   -> handleStopRecording(result)
+            "saveToGallery"   -> handleSaveToGallery(call, result)
             "dispose"         -> handleDispose(result)
             else              -> result.notImplemented()
         }
@@ -278,7 +279,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     }
 
     // ─────────────────────────────────────────────
-    // takePhoto — saves to public DCIM/DAZZ via MediaStore
+    // takePhoto — saves to app cache first (so Flutter can read/process it),
+    // then Flutter calls saveToGallery to copy to MediaStore
     // ─────────────────────────────────────────────
 
     private fun handleTakePhoto(call: MethodCall, result: MethodChannel.Result) {
@@ -292,39 +294,24 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val displayName = "DAZZ_${timestamp}.jpg"
 
-        val outputOptions: ImageCapture.OutputFileOptions
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Android 10+ — use MediaStore (no WRITE_EXTERNAL_STORAGE needed)
-            val contentValues = ContentValues().apply {
-                put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
-                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_DCIM}/$DAZZ_ALBUM")
-            }
-            outputOptions = ImageCapture.OutputFileOptions.Builder(
-                context.contentResolver,
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                contentValues
-            ).build()
-        } else {
-            // Android 9 and below — write to DCIM/DAZZ directly
-            val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
-            val dazzDir = File(dcimDir, DAZZ_ALBUM).apply { mkdirs() }
-            val photoFile = File(dazzDir, displayName)
-            outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-        }
+        // Save to app-private cache dir so Flutter Dart code can read/process the file
+        // via dart:io File. After Flutter post-processing, the file is saved to gallery
+        // by the saveToGallery method call from Dart.
+        val cacheDir = File(context.cacheDir, "dazz_captures").apply { mkdirs() }
+        val cacheFile = File(cacheDir, displayName)
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(cacheFile).build()
 
         capture.takePicture(
             outputOptions,
             cameraExecutor,
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    val savedUri = output.savedUri?.toString() ?: ""
-                    Log.d(TAG, "Photo saved: $savedUri")
+                    val filePath = cacheFile.absolutePath
+                    Log.d(TAG, "Photo saved to cache: $filePath")
                     val mainExecutor = ContextCompat.getMainExecutor(context)
                     mainExecutor.execute {
-                        sendEvent("onPhotoCaptured", mapOf("filePath" to savedUri))
-                        result.success(mapOf("filePath" to savedUri))
+                        sendEvent("onPhotoCaptured", mapOf("filePath" to filePath))
+                        result.success(mapOf("filePath" to filePath))
                     }
                 }
                 override fun onError(exception: ImageCaptureException) {
@@ -336,6 +323,65 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 }
             }
         )
+    }
+
+    // ─────────────────────────────────────────────
+    // saveToGallery — called from Dart after post-processing
+    // Copies processed file from cache to DCIM/DAZZ MediaStore
+    // ─────────────────────────────────────────────
+
+    private fun handleSaveToGallery(call: MethodCall, result: MethodChannel.Result) {
+        val filePath = call.argument<String>("filePath")
+        if (filePath == null) {
+            result.error("INVALID_ARG", "filePath is required", null)
+            return
+        }
+        val context = flutterPluginBinding.applicationContext
+        val sourceFile = File(filePath)
+        if (!sourceFile.exists()) {
+            result.error("FILE_NOT_FOUND", "File not found: $filePath", null)
+            return
+        }
+        bgExecutor.execute {
+            try {
+                val displayName = sourceFile.name
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+                        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                        put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_DCIM}/$DAZZ_ALBUM")
+                    }
+                    val uri = context.contentResolver.insert(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues
+                    )
+                    if (uri != null) {
+                        context.contentResolver.openOutputStream(uri)?.use { os ->
+                            sourceFile.inputStream().use { it.copyTo(os) }
+                        }
+                        Log.d(TAG, "Saved to gallery via MediaStore: $uri")
+                        val mainExecutor = ContextCompat.getMainExecutor(context)
+                        mainExecutor.execute { result.success(mapOf("success" to true, "uri" to uri.toString())) }
+                    } else {
+                        val mainExecutor = ContextCompat.getMainExecutor(context)
+                        mainExecutor.execute { result.error("GALLERY_SAVE_FAILED", "ContentResolver insert returned null", null) }
+                    }
+                } else {
+                    val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
+                    val dazzDir = File(dcimDir, DAZZ_ALBUM).apply { mkdirs() }
+                    val destFile = File(dazzDir, displayName)
+                    sourceFile.copyTo(destFile, overwrite = true)
+                    Log.d(TAG, "Saved to gallery: ${destFile.absolutePath}")
+                    val mainExecutor = ContextCompat.getMainExecutor(context)
+                    mainExecutor.execute { result.success(mapOf("success" to true, "uri" to destFile.absolutePath)) }
+                }
+                // Clean up cache file
+                sourceFile.delete()
+            } catch (e: Exception) {
+                Log.e(TAG, "saveToGallery failed", e)
+                val mainExecutor = ContextCompat.getMainExecutor(context)
+                mainExecutor.execute { result.error("GALLERY_SAVE_FAILED", e.message, null) }
+            }
+        }
     }
 
     // ─────────────────────────────────────────────
