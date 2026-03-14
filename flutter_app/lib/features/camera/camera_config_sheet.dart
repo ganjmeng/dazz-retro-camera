@@ -578,13 +578,20 @@ class _SubPanelState extends ConsumerState<_SubPanel>
       ];
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: GridView.count(
-          crossAxisCount: 3,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          children: allCells,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            const itemMinWidth = 100.0;
+            const spacing = 12.0;
+            final cols = ((constraints.maxWidth + spacing) / (itemMinWidth + spacing)).floor().clamp(2, 8);
+            return GridView.count(
+              crossAxisCount: cols,
+              crossAxisSpacing: spacing,
+              mainAxisSpacing: spacing,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              children: allCells,
+            );
+          },
         ),
       );
     }
@@ -618,13 +625,20 @@ class _SubPanelState extends ConsumerState<_SubPanel>
         ignoring: !frameEnabled,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: GridView.count(
-            crossAxisCount: 3,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            children: bgCells,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              const itemMinWidth = 100.0;
+              const spacing = 12.0;
+              final cols = ((constraints.maxWidth + spacing) / (itemMinWidth + spacing)).floor().clamp(2, 8);
+              return GridView.count(
+                crossAxisCount: cols,
+                crossAxisSpacing: spacing,
+                mainAxisSpacing: spacing,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: bgCells,
+              );
+            },
           ),
         ),
       ),
