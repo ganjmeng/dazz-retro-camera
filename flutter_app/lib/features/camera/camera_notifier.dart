@@ -143,12 +143,12 @@ class CameraAppState {
   }
 
   String get lensLabel {
+    // Use the camera's focalLengthLabel (e.g. "28mm"), falling back to lens nameEn
+    final fll = camera?.focalLengthLabel;
+    if (fll != null && fll.isNotEmpty) return fll;
     final lens = activeLens;
-    if (lens == null) return 'x1';
-    switch (lens.id) {
-      case 'wide': return 'x2';
-      default: return 'x1';
-    }
+    if (lens == null) return '35mm';
+    return lens.nameEn;
   }
 }
 

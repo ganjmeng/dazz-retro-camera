@@ -150,7 +150,23 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 _buildTopBar(st),
                 const SizedBox(height: 8),
                 // 取景框区域
-                Expanded(child: _buildViewfinder(st, camSvc)),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (ctx, constraints) {
+                      // Constrain viewfinder so it never overflows
+                      final maxH = constraints.maxHeight;
+                      final maxW = constraints.maxWidth - 32; // horizontal padding
+                      final ratio = st.previewAspectRatio; // w/h e.g. 3/4=0.75
+                      // Height needed for full width
+                      final neededH = maxW / ratio + 30; // +30 for label above
+                      final useH = neededH < maxH ? neededH : maxH;
+                      return SizedBox(
+                        height: useH,
+                        child: _buildViewfinder(st, camSvc),
+                      );
+                    },
+                  ),
+                ),
                 const SizedBox(height: 8),
                 // 控制胶囊
                 _buildControlCapsule(st),
@@ -196,10 +212,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (st.showCaptureFlash)
             Container(color: Colors.white.withAlpha(200)),
           // ── Options 全屏弹框 ──
-          SlideTransition(
-            position: _optionsSlide,
+          AnimatedBuilder(
+            animation: _optionsAnim,
+            builder: (ctx, child) {
+              final isHidden = _optionsAnim.value == 0;
+              return IgnorePointer(
+                ignoring: isHidden,
+                child: SlideTransition(
+                  position: _optionsSlide,
+                  child: child,
+                ),
+              );
+            },
             child: _OptionsSheet(
-              st: st,
               onClose: _closeOptions,
             ),
           ),
@@ -241,7 +266,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         children: [
           // 焦距标签（取景框上方）
           Text(
-            '${lensLabel}mm',
+            lensLabel,
             style: const TextStyle(
               color: _kWhite,
               fontSize: 13,
@@ -641,10 +666,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   // ── 相册弹框（左下角缩略图点击）────────────────────────────────────────────
   void _showGallerySheet() {
-    showDialog(
-      context: context,
-      barrierColor: Colors.transparent,
-      builder: (ctx) => const _GallerySheet(),
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.transparent,
+        pageBuilder: (ctx, anim, _) => FadeTransition(
+          opacity: anim,
+          child: const _GallerySheet(),
+        ),
+      ),
     );
   }
 
@@ -670,13 +700,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 // Options 全屏弹框（从底部滑入）
 // ─────────────────────────────────────────────────────────────────────────────
 class _OptionsSheet extends ConsumerWidget {
-  final CameraAppState st;
   final VoidCallback onClose;
 
-  const _OptionsSheet({required this.st, required this.onClose});
+  const _OptionsSheet({required this.onClose});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final st = ref.watch(cameraAppProvider);
     final camera = st.camera;
 
     return Container(
@@ -694,12 +724,12 @@ class _OptionsSheet extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildCameraSection(context, ref, 'Video', _kVideoCameras),
+                    _buildCameraSection(context, ref, st, 'Video', _kVideoCameras),
                     const SizedBox(height: 8),
-                    _buildCameraSection(context, ref, 'Photo', _kPhotoCameras),
+                    _buildCameraSection(context, ref, st, 'Photo', _kPhotoCameras),
                     const SizedBox(height: 16),
                     // Option 行
-                    _buildOptionRow(context, ref, camera),
+                    _buildOptionRow(context, ref, st, camera),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -770,7 +800,7 @@ class _OptionsSheet extends ConsumerWidget {
     );
   }
 
-  Widget _buildCameraSection(BuildContext context, WidgetRef ref, String label, List<_CameraItem> cameras) {
+  Widget _buildCameraSection(BuildContext context, WidgetRef ref, CameraAppState st, String label, List<_CameraItem> cameras) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -845,7 +875,7 @@ class _OptionsSheet extends ConsumerWidget {
     );
   }
 
-  Widget _buildOptionRow(BuildContext context, WidgetRef ref, CameraDefinition? camera) {
+  Widget _buildOptionRow(BuildContext context, WidgetRef ref, CameraAppState st, CameraDefinition? camera) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1048,9 +1078,35 @@ class _OptionsSheet extends ConsumerWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // 相册弹框（左下角缩略图点击）
 // ─────────────────────────────────────────────────────────────────────────────
-class _GallerySheet extends StatelessWidget {
+class _GallerySheet extends StatefulWidget {
   const _GallerySheet();
-
+  @override
+  State<_GallerySheet> createState() => _GallerySheetState();
+}
+class _GallerySheetState extends State<_GallerySheet> {
+  List<AssetEntity> _allPhotos = [];
+  bool _loading = true;
+  @override
+  void initState() {
+    super.initState();
+    _loadPhotos();
+  }
+  Future<void> _loadPhotos() async {
+    final perm = await PhotoManager.requestPermissionExtend();
+    if (!perm.isAuth) { if (mounted) setState(() => _loading = false); return; }
+    final albums = await PhotoManager.getAssetPathList(
+      type: RequestType.image,
+      filterOption: FilterOptionGroup(
+        orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
+      ),
+    );
+    if (albums.isNotEmpty) {
+      final assets = await albums.first.getAssetListRange(start: 0, end: 200);
+      if (mounted) setState(() { _allPhotos = assets; _loading = false; });
+    } else {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -1078,22 +1134,20 @@ class _GallerySheet extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // 左上角齿轮按鈕
                       Container(
                         width: 40,
                         height: 40,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3A3A3C),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF3A3A3C),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.settings_outlined, color: _kWhite, size: 22),
                       ),
-                      // 右上角勾选按鈕
                       Container(
                         width: 40,
                         height: 40,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3A3A3C),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF3A3A3C),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.check_box_outlined, color: _kWhite, size: 22),
@@ -1102,27 +1156,21 @@ class _GallerySheet extends StatelessWidget {
                   ),
                 ),
                 const Divider(color: Colors.white12, height: 1),
-                _GalleryItem(icon: Icons.grid_view, label: '全部照片', count: 3),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => _PhotoGridPage(photos: _allPhotos),
+                    ));
+                  },
+                  child: _GalleryItem(
+                    icon: Icons.grid_view,
+                    label: '全部照片',
+                    count: _loading ? 0 : _allPhotos.length,
+                  ),
+                ),
                 _GalleryItem(icon: Icons.favorite_outline, label: '喜好项目', count: 0),
                 _GalleryItem(icon: Icons.video_file_outlined, label: '底片', count: 0),
-                _GalleryItem(
-                  customIcon: Image.asset('assets/cameras/grd_r_icon.png',
-                    width: 28, height: 28,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.camera_alt_outlined, color: Colors.white70, size: 24),
-                  ),
-                  label: 'CT2F',
-                  count: 1,
-                ),
-                _GalleryItem(
-                  customIcon: const Icon(Icons.camera_alt_outlined, color: Colors.white70, size: 24),
-                  label: 'Inst C',
-                  count: 1,
-                ),
-                _GalleryItem(
-                  customIcon: const Icon(Icons.camera_alt_outlined, color: Colors.white70, size: 24),
-                  label: 'Inst SQC',
-                  count: 1,
-                ),
               ],
             ),
           ),
@@ -1131,17 +1179,189 @@ class _GallerySheet extends StatelessWidget {
         Positioned(
           bottom: 40,
           left: 24,
-          child: Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: const Color(0xFF3A3A3C),
-              shape: BoxShape.circle,
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: const BoxDecoration(
+                color: Color(0xFF3A3A3C),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 26),
             ),
-            child: const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 26),
           ),
         ),
       ],
+    );
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// Asset Thumbnail Widget
+// ─────────────────────────────────────────────────────────────────────────────
+class _AssetThumb extends StatefulWidget {
+  final AssetEntity asset;
+  const _AssetThumb({required this.asset});
+  @override
+  State<_AssetThumb> createState() => _AssetThumbState();
+}
+class _AssetThumbState extends State<_AssetThumb> {
+  Uint8List? _thumb;
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+  Future<void> _load() async {
+    final data = await widget.asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
+    if (mounted && data != null) setState(() => _thumb = data);
+  }
+  @override
+  Widget build(BuildContext context) {
+    if (_thumb == null) {
+      return Container(color: const Color(0xFF1C1C1E));
+    }
+    return Image.memory(_thumb!, fit: BoxFit.cover);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Photo Grid Page
+// ─────────────────────────────────────────────────────────────────────────────
+class _PhotoGridPage extends StatelessWidget {
+  final List<AssetEntity> photos;
+  const _PhotoGridPage({required this.photos});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _kBlack,
+      appBar: AppBar(
+        backgroundColor: _kBlack,
+        foregroundColor: _kWhite,
+        title: const Text('全部照片', style: TextStyle(color: _kWhite, fontSize: 17, fontWeight: FontWeight.w600)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: _kWhite),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: photos.isEmpty
+          ? const Center(child: Text('暂无照片', style: TextStyle(color: Colors.white54)))
+          : GridView.builder(
+              padding: const EdgeInsets.all(2),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 2,
+                mainAxisSpacing: 2,
+              ),
+              itemCount: photos.length,
+              itemBuilder: (ctx, i) {
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => _PhotoDetailPage(asset: photos[i]),
+                    ));
+                  },
+                  child: _AssetThumb(asset: photos[i]),
+                );
+              },
+            ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Photo Detail Page
+// ─────────────────────────────────────────────────────────────────────────────
+class _PhotoDetailPage extends StatefulWidget {
+  final AssetEntity asset;
+  const _PhotoDetailPage({required this.asset});
+  @override
+  State<_PhotoDetailPage> createState() => _PhotoDetailPageState();
+}
+class _PhotoDetailPageState extends State<_PhotoDetailPage> {
+  Uint8List? _fullData;
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+  Future<void> _load() async {
+    final data = await widget.asset.originBytes;
+    if (mounted && data != null) setState(() => _fullData = data);
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Center(
+            child: _fullData == null
+                ? const CircularProgressIndicator(color: Colors.white)
+                : Image.memory(_fullData!, fit: BoxFit.contain),
+          ),
+          // Bottom toolbar
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              color: const Color(0xFF1C1C1E),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).padding.bottom + 8,
+                top: 12,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.ios_share, color: _kWhite),
+                    onPressed: () {},
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.nightlight_round, color: _kWhite),
+                    onPressed: () {},
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.movie_outlined, color: _kWhite),
+                    onPressed: () {},
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.favorite_border, color: _kWhite),
+                    onPressed: () {},
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: _kWhite),
+                    onPressed: () async {
+                      await PhotoManager.editor.deleteWithIds([widget.asset.id]);
+                      if (context.mounted) Navigator.of(context).pop();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Top back button
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            right: 16,
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  '#${widget.asset.title ?? "Photo"}',
+                  style: const TextStyle(color: _kWhite, fontSize: 13),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
