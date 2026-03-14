@@ -616,8 +616,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         children: [
           // 相机预览
           _buildPreview(st, camSvc),
-          // 三等分网格线
-          if (st.gridEnabled) _buildGrid(),
+          // 三等分网格线：小窗开启时网格移入小窗内部，小窗关闭时全局显示
+          if (st.gridEnabled && !st.minimapEnabled) _buildGrid(),
           // 拍摄中黑色半透明蒙层
           if (st.isTakingPhoto)
             Container(
@@ -3216,6 +3216,7 @@ class _MinimapOverlay extends StatelessWidget {
     final scale = (1.0 / zoomLevel).clamp(0.05, 1.0);
     final boxW = areaW * scale;
     final boxH = areaH * scale;
+    const radius = 12.0; // 小窗圆角半径
 
     // 等效焦距标签
     final mm = (26.0 * zoomLevel).round();
@@ -3223,54 +3224,72 @@ class _MinimapOverlay extends StatelessWidget {
 
     return Positioned.fill(
       child: IgnorePointer(
-        child: Center(
-          child: SizedBox(
-            width: boxW,
-            height: boxH,
-            child: Stack(
-              children: [
-                // 小窗边框
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: Colors.white.withAlpha(200),
-                        width: 1.5,
+        child: Stack(
+          children: [
+            // ── 小窗外部暗化遗罩：用 CustomPaint 绘制“挖空”效果 ──
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _MinimapDimPainter(
+                  boxW: boxW,
+                  boxH: boxH,
+                  radius: radius,
+                  areaW: areaW,
+                  areaH: areaH,
+                ),
+              ),
+            ),
+            // ── 小窗主体：圆角边框 + 内部网格 + 焦距标签 ──
+            Center(
+              child: SizedBox(
+                width: boxW,
+                height: boxH,
+                child: Stack(
+                  children: [
+                    // 圆角边框
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(radius),
+                          border: Border.all(
+                            color: Colors.white.withAlpha(220),
+                            width: 1.5,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                // 四角装饰（L 形角标）
-                ..._buildCorners(boxW, boxH),
-                // 网格线（仅在 gridEnabled 时显示）
-                if (gridEnabled)
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: _GridPainter(),
-                    ),
-                  ),
-                // 焦距标签（右下角）
-                Positioned(
-                  right: 6,
-                  bottom: 4,
-                  child: Text(
-                    focalLabel,
-                    style: TextStyle(
-                      color: Colors.white.withAlpha(200),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      shadows: const [
-                        Shadow(
-                          color: Colors.black,
-                          blurRadius: 4,
+                    // 圆角裁剪的网格线（仅在 gridEnabled 时显示）
+                    if (gridEnabled)
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(radius),
+                          child: CustomPaint(
+                            painter: _GridPainter(),
+                          ),
                         ),
-                      ],
+                      ),
+                    // 四角 L 形角标
+                    ..._buildCorners(boxW, boxH),
+                    // 焦距标签（右下角）
+                    Positioned(
+                      right: 8,
+                      bottom: 6,
+                      child: Text(
+                        focalLabel,
+                        style: TextStyle(
+                          color: Colors.white.withAlpha(220),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          shadows: const [
+                            Shadow(color: Colors.black, blurRadius: 4),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -3376,4 +3395,51 @@ class _CornerPainter extends CustomPainter {
   @override
   bool shouldRepaint(_CornerPainter old) =>
       old.color != color || old.thick != thick;
+}
+
+// ─── 小窗外部暗化遮罩 Painter ─────────────────────────────────────────────────
+// 在整个取景框上绘制半透明黑色，中央挖出圆角矩形（小窗区域保持透明）
+class _MinimapDimPainter extends CustomPainter {
+  final double boxW;
+  final double boxH;
+  final double radius;
+  final double areaW;
+  final double areaH;
+
+  const _MinimapDimPainter({
+    required this.boxW,
+    required this.boxH,
+    required this.radius,
+    required this.areaW,
+    required this.areaH,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 小窗居中的 Rect
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final boxRect = Rect.fromCenter(
+      center: Offset(cx, cy),
+      width: boxW,
+      height: boxH,
+    );
+    final rrect = RRect.fromRectAndRadius(boxRect, Radius.circular(radius));
+
+    // 用 EvenOdd 填充规则：外部矩形 - 内部圆角矩形 = 遮罩区域
+    final path = Path()
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..addRRect(rrect)
+      ..fillType = PathFillType.evenOdd;
+
+    final paint = Paint()
+      ..color = Colors.black.withAlpha(110) // 约 43% 透明度，外部暗化
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_MinimapDimPainter old) =>
+      old.boxW != boxW || old.boxH != boxH || old.radius != radius;
 }
