@@ -81,6 +81,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Timer? _focusFadeTimer;
   // 对焦圈是否可见
   bool _showFocusRing = false;
+  // 是否正在拖动太阳（控制竖轨道线显示）
+  bool _isDraggingSun = false;
+  // 取景框中央文字提示（闪光灯/倒计时切换时显示）
+  String? _viewfinderHint;
+  Timer? _hintTimer;
   // 曝光水平滑动条是否展开（点击胶囊触发）
   bool _showExposureSlider = false;
   // 色温面板是否展开（点击色温胶囊触发）
@@ -119,8 +124,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void dispose() {
     _countdownTimer?.cancel();
     _focusFadeTimer?.cancel();
+    _hintTimer?.cancel();
     _optionsAnim.dispose();
     super.dispose();
+  }
+
+  // ── 取景框中央文字提示（1.5秒后自动消失）────────────────────────────────────
+  void _showViewfinderHint(String text) {
+    _hintTimer?.cancel();
+    setState(() => _viewfinderHint = text);
+    _hintTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _viewfinderHint = null);
+    });
   }
 
   // ── 点击取景框：设置对焦点，显示对焦圈+曝光太阳 ────────────────────────────
@@ -151,6 +166,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _sunDragStartY = d.localPosition.dy;
     _sunOffsetAtDragStart = _sunOffsetY;
     _focusFadeTimer?.cancel(); // 拖动时不淡出
+    setState(() => _isDraggingSun = true);
   }
 
   void _onSunDragUpdate(DragUpdateDetails d, double viewfinderH) {
@@ -164,6 +180,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   void _onSunDragEnd(DragEndDetails d, double viewfinderH) {
+    setState(() => _isDraggingSun = false);
     // 拖动结束后 3 秒淡出
     _focusFadeTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) setState(() => _showFocusRing = false);
@@ -483,9 +500,37 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               focusPoint: _focusPoint!,
               sunOffsetY: _sunOffsetY,
               viewfinderH: areaH,
+              isDragging: _isDraggingSun,
               onSunDragStart: (d) => _onSunDragStart(d, areaH),
               onSunDragUpdate: (d) => _onSunDragUpdate(d, areaH),
               onSunDragEnd: (d) => _onSunDragEnd(d, areaH),
+            ),
+          // ── 取景框中央文字提示（闪光灯/倒计时）──
+          if (_viewfinderHint != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Center(
+                  child: AnimatedOpacity(
+                    opacity: _viewfinderHint != null ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withAlpha(160),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _viewfinderHint!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
         ],
       ),
@@ -818,13 +863,37 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               icon: Icons.timer_outlined,
               label: '倒计时',
               badge: st.timerSeconds > 0 ? '${st.timerSeconds}s' : null,
-              onTap: () => ref.read(cameraAppProvider.notifier).cycleTimer(),
+              onTap: () {
+                // 先读当前状态，计算切换后的值，再执行切换
+                final cur = ref.read(cameraAppProvider).timerSeconds;
+                final options = [0, 3, 10];
+                final next = options[(options.indexOf(cur) + 1) % options.length];
+                ref.read(cameraAppProvider.notifier).cycleTimer();
+                if (next == 0) {
+                  _showViewfinderHint('倒计时关闭');
+                } else {
+                  _showViewfinderHint('倒计时 ${next}s');
+                }
+              },
             ),
             // 3. 闪光灯
             _FlashBtn(
               mode: st.flashMode,
               label: '闪光灯',
-              onTap: () => ref.read(cameraAppProvider.notifier).cycleFlash(),
+              onTap: () {
+                // 先读当前状态，计算切换后的值，再执行切换
+                final cur = ref.read(cameraAppProvider).flashMode;
+                final modes = ['off', 'on', 'auto'];
+                final next = modes[(modes.indexOf(cur) + 1) % modes.length];
+                ref.read(cameraAppProvider.notifier).cycleFlash();
+                if (next == 'off') {
+                  _showViewfinderHint('闪光灯已关闭');
+                } else if (next == 'on') {
+                  _showViewfinderHint('闪光灯已开启');
+                } else {
+                  _showViewfinderHint('闪光灯自动');
+                }
+              },
             ),
             // 4. 前置/后置切换
             _ToolbarBtn(
@@ -2393,6 +2462,7 @@ class _FocusExposureOverlay extends StatelessWidget {
   final Offset focusPoint;
   final double sunOffsetY;
   final double viewfinderH;
+  final bool isDragging;
   final GestureDragStartCallback onSunDragStart;
   final GestureDragUpdateCallback onSunDragUpdate;
   final GestureDragEndCallback onSunDragEnd;
@@ -2401,6 +2471,7 @@ class _FocusExposureOverlay extends StatelessWidget {
     required this.focusPoint,
     required this.sunOffsetY,
     required this.viewfinderH,
+    required this.isDragging,
     required this.onSunDragStart,
     required this.onSunDragUpdate,
     required this.onSunDragEnd,
@@ -2424,16 +2495,21 @@ class _FocusExposureOverlay extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 垂直轨道线（白色细线，从太阳上方延伸到下方）
-        Positioned(
-          left: sunCenterX - 0.5,
-          top: sunCenterY - trackH / 2,
-          child: Container(
-            width: 1,
-            height: trackH,
-            color: Colors.white.withAlpha(180),
+        // 垂直轨道线（白色细线，仅在拖动太阳时显示）
+        if (isDragging)
+          Positioned(
+            left: sunCenterX - 0.5,
+            top: sunCenterY - trackH / 2,
+            child: AnimatedOpacity(
+              opacity: isDragging ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 150),
+              child: Container(
+                width: 1,
+                height: trackH,
+                color: Colors.white.withAlpha(200),
+              ),
+            ),
           ),
-        ),
         // 对焦圈（白色空心圆，点击位置居中）
         Positioned(
           left: focusPoint.dx - ringR,
@@ -2447,7 +2523,7 @@ class _FocusExposureOverlay extends StatelessWidget {
             ),
           ),
         ),
-        // 曝光太阳（可拖动）
+        // 曝光太阳（可拖动，拖动时高亮）
         Positioned(
           left: sunCenterX - sunSize / 2,
           top: sunCenterY - sunSize / 2,
@@ -2459,9 +2535,10 @@ class _FocusExposureOverlay extends StatelessWidget {
             child: SizedBox(
               width: sunSize,
               height: sunSize,
-              child: const Icon(
+              child: Icon(
                 Icons.wb_sunny_outlined,
-                color: Colors.white,
+                // 拖动时太阳图标变为黄色，对齐参考截图
+                color: isDragging ? const Color(0xFFFFD60A) : Colors.white,
                 size: sunSize,
               ),
             ),
