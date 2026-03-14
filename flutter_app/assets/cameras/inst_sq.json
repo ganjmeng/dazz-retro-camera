@@ -16,13 +16,13 @@
 
   "defaultLook": {
     "baseLut": "assets/lut/cameras/inst_sq.cube",
-    "temperature": 20,
-    "contrast": 0.95,
-    "saturation": 1.05,
-    "vignette": 0.04,
+    "temperature": 25,
+    "contrast": 0.90,
+    "saturation": 1.10,
+    "vignette": 0.08,
     "distortion": 0.0,
     "chromaticAberration": 0.02,
-    "bloom": 0.03,
+    "bloom": 0.05,
     "flare": 0.0
   },
 
@@ -33,8 +33,8 @@
         "name": "经典",
         "nameEn": "Classic",
         "lut": "assets/lut/filters/inst_classic.cube",
-        "contrast": 0.95,
-        "saturation": 1.05,
+        "contrast": 1.0,
+        "saturation": 1.0,
         "grain": "medium",
         "thumbnail": "assets/thumbnails/filters/inst_classic.jpg"
       },
@@ -43,8 +43,8 @@
         "name": "暖调",
         "nameEn": "Warm",
         "lut": "assets/lut/filters/inst_warm.cube",
-        "contrast": 0.92,
-        "saturation": 1.08,
+        "contrast": 0.95,
+        "saturation": 1.12,
         "grain": "light",
         "thumbnail": "assets/thumbnails/filters/inst_warm.jpg"
       }

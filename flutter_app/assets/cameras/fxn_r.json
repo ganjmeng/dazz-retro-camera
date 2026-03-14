@@ -16,13 +16,13 @@
 
   "defaultLook": {
     "baseLut": null,
-    "temperature": 35,
-    "contrast": 0.95,
-    "saturation": 1.05,
-    "vignette": 0.12,
+    "temperature": 45,
+    "contrast": 0.92,
+    "saturation": 1.15,
+    "vignette": 0.18,
     "distortion": 0.01,
     "chromaticAberration": 0.05,
-    "bloom": 0.03,
+    "bloom": 0.04,
     "flare": 0.02
   },
 
@@ -33,8 +33,8 @@
         "name": "Retro",
         "nameEn": "Retro",
         "lut": null,
-        "contrast": 0.95,
-        "saturation": 1.05,
+        "contrast": 1.0,
+        "saturation": 1.0,
         "grain": "heavy",
         "thumbnail": null
       },
@@ -43,8 +43,8 @@
         "name": "Faded",
         "nameEn": "Faded",
         "lut": null,
-        "contrast": 0.88,
-        "saturation": 0.95,
+        "contrast": 0.90,
+        "saturation": 0.88,
         "grain": "heavy",
         "thumbnail": null
       }

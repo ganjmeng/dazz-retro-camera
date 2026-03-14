@@ -16,12 +16,12 @@
 
   "defaultLook": {
     "baseLut": "assets/lut/cameras/grd_r.cube",
-    "temperature": -40,
-    "contrast": 1.08,
-    "saturation": 0.96,
-    "vignette": 0.35,
+    "temperature": -30,
+    "contrast": 1.12,
+    "saturation": 0.88,
+    "vignette": 0.40,
     "distortion": 0.0,
-    "chromaticAberration": 0.01,
+    "chromaticAberration": 0.015,
     "bloom": 0.0,
     "flare": 0.0
   },
@@ -33,8 +33,8 @@
         "name": "标准",
         "nameEn": "Standard",
         "lut": "assets/lut/filters/grd_standard.cube",
-        "contrast": 1.08,
-        "saturation": 0.92,
+        "contrast": 1.0,
+        "saturation": 1.0,
         "grain": "light",
         "thumbnail": "assets/thumbnails/filters/grd_standard.jpg"
       },
@@ -43,8 +43,8 @@
         "name": "高对比",
         "nameEn": "High Contrast",
         "lut": "assets/lut/filters/grd_high_contrast.cube",
-        "contrast": 1.22,
-        "saturation": 0.78,
+        "contrast": 1.15,
+        "saturation": 0.85,
         "grain": "medium",
         "thumbnail": "assets/thumbnails/filters/grd_high_contrast.jpg"
       }

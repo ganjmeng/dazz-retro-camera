@@ -229,23 +229,25 @@ class _ColorCorrectedTexture extends StatelessWidget {
   ];
 
   /// Temperature: warm = more red/yellow, cool = more blue/cyan
+  /// Green channel stays neutral to avoid purple/magenta cast on cool temperatures.
   static List<double> _temperatureMatrix(double temp) {
     // temp: -100 (cool) to +100 (warm)
     final t = temp / 100.0;
-    final rShift = t * 0.15;
-    final bShift = -t * 0.15;
-    final gShift = t * 0.05;
+    final rShift = t * 0.20;   // warm: +red, cool: -red
+    final bShift = -t * 0.20;  // warm: -blue, cool: +blue
+    // Green is intentionally kept at 1.0 to avoid purple/magenta tint
     return [
       1 + rShift, 0, 0, 0, 0,
-      0, 1 + gShift, 0, 0, 0,
+      0, 1.0, 0, 0, 0,
       0, 0, 1 + bShift, 0, 0,
       0, 0, 0, 1, 0,
     ];
   }
 
   /// Contrast: pivot at 0.5
+  /// Flutter ColorFilter.matrix offset column is in 0-255 range (not 0-1).
   static List<double> _contrastMatrix(double contrast) {
-    final offset = 0.5 * (1 - contrast);
+    final offset = 0.5 * (1 - contrast) * 255;
     return [
       contrast, 0, 0, 0, offset,
       0, contrast, 0, 0, offset,

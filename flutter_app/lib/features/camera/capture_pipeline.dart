@@ -218,12 +218,12 @@ class CapturePipeline {
 
   List<double> _temperatureMatrix(double temp) {
     final t = temp / 100.0;
-    final rShift = t * 0.15;
-    final bShift = -t * 0.15;
-    final gShift = t * 0.05;
+    final rShift = t * 0.20;   // warm: +red, cool: -red
+    final bShift = -t * 0.20;  // warm: -blue, cool: +blue
+    // Green stays neutral to avoid purple/magenta cast on cool temperatures
     return [
       1 + rShift, 0, 0, 0, 0,
-      0, 1 + gShift, 0, 0, 0,
+      0, 1.0, 0, 0, 0,
       0, 0, 1 + bShift, 0, 0,
       0, 0, 0, 1, 0,
     ];
