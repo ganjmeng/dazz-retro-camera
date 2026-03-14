@@ -3222,6 +3222,10 @@ class _MinimapOverlay extends StatelessWidget {
     final mm = (26.0 * zoomLevel).round();
     final focalLabel = '${mm}mm';
 
+    // 小窗顶部外侧居中的 Y 坐标：取景框垂直中心 - boxH/2 - 标签高度 - 间距
+    // 在 Positioned.fill 的 Stack 中，居中小窗的 top = areaH/2 - boxH/2
+    final labelTopOffset = (areaH - boxH) / 2 - 24.0; // 24 = 标签高度+间距
+
     return Positioned.fill(
       child: IgnorePointer(
         child: Stack(
@@ -3238,7 +3242,26 @@ class _MinimapOverlay extends StatelessWidget {
                 ),
               ),
             ),
-            // ── 小窗主体：圆角边框 + 内部网格 + 焦距标签 ──
+            // ── 焦距标签：小窗顶部外侧正上方居中 ──
+            Positioned(
+              top: labelTopOffset.clamp(4.0, areaH),
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Text(
+                  focalLabel,
+                  style: TextStyle(
+                    color: Colors.white.withAlpha(230),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    shadows: const [
+                      Shadow(color: Colors.black54, blurRadius: 6),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // ── 小窗主体：圆角边框 + 内部网格 ──
             Center(
               child: SizedBox(
                 width: boxW,
@@ -3269,22 +3292,6 @@ class _MinimapOverlay extends StatelessWidget {
                       ),
                     // 四角 L 形角标
                     ..._buildCorners(boxW, boxH),
-                    // 焦距标签（右下角）
-                    Positioned(
-                      right: 8,
-                      bottom: 6,
-                      child: Text(
-                        focalLabel,
-                        style: TextStyle(
-                          color: Colors.white.withAlpha(220),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          shadows: const [
-                            Shadow(color: Colors.black, blurRadius: 4),
-                          ],
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
