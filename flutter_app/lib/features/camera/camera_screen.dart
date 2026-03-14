@@ -40,8 +40,8 @@ const _kRed = Color(0xFFFF3B30);
 // ─── 布局常量（提升为顶层常量，供多个方法共享）─────────────────────────────────────────────────────────────────────────────
 const kToolbarH = 52.0;          // 工具栏高度（参考图约52px）
 const kShutterH = 88.0;           // 快门行高度（参考图约88px）
-const kBottomPanelTopPad = 6.0;   // 工具栏上方间距（整体上移）
-const kToolbarShutterGap = 16.0;  // 工具栏和快门行间距
+const kBottomPanelTopPad = 0.0;   // 工具栏上方间距（整体上移）
+const kToolbarShutterGap = 10.0;  // 工具栏和快门行间距
 const kBottomPanelH = kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
 const kCapsuleH = 40.0;           // 胶囊高度（参考图约40px）
 const kCapsuleInsetBottom = 8.0;  // 胶囊距取景框底部的内边距（胶囊下移8px）
@@ -983,8 +983,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            width: 36,
-            height: 36,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: (_showWbPanel || st.wbMode != 'auto')
@@ -995,7 +995,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               child: Icon(
                 // 展开时显示向下箭头，收起时显示温度计
                 _showWbPanel ? Icons.keyboard_arrow_down : Icons.thermostat_outlined,
-                size: 17,
+                size: 16,
                 color: (_showWbPanel || st.wbMode != 'auto') ? Colors.black : _kWhite,
               ),
             ),
@@ -1014,8 +1014,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            height: 36,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               color: st.showZoomSlider
@@ -1046,8 +1046,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            height: 36,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               color: (_showExposureSlider || st.exposureValue != 0)
