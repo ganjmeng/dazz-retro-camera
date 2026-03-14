@@ -179,32 +179,53 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       setState(() => _showExposureSlider = false);
       return;
     }
+    // 如果已有对焦点且点击的不是太阳区域（距太阳中心 > 40px），则太阳复位到中间
+    if (_showFocusRing && _focusPoint != null) {
+      final sunCenterX = _focusPoint!.dx + 48.0;
+      final sunCenterY = _focusPoint!.dy + _sunOffsetY;
+      final dx = d.localPosition.dx - sunCenterX;
+      final dy = d.localPosition.dy - sunCenterY;
+      final dist = (dx * dx + dy * dy);
+      if (dist > 40 * 40) {
+        // 点击了太阳以外的地方：太阳复位到中间（偏移清零，曝光值也清零）
+        setState(() {
+          _focusPoint = d.localPosition;
+          _sunOffsetY = 0;
+        });
+        ref.read(cameraAppProvider.notifier).setExposure(0);
+        _focusFadeTimer?.cancel();
+        _focusFadeTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) setState(() => _showFocusRing = false);
+        });
+        return;
+      }
+    }
     setState(() {
       _focusPoint = d.localPosition;
       _showFocusRing = true;
-      // 重置太阳到中间（对应当前曝光值）
-      _sunOffsetY = -ref.read(cameraAppProvider).exposureValue * (viewfinderH * 0.2);
+      // 新对焦点时太阳从中间开始（偏移清零）
+      _sunOffsetY = 0;
     });
+    // 新对焦点时曝光也重置为 0（从中间开始拖）
+    ref.read(cameraAppProvider.notifier).setExposure(0);
     // 3秒后淡出对焦圈
     _focusFadeTimer?.cancel();
     _focusFadeTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) setState(() => _showFocusRing = false);
     });
-    // 通知原生对焦（通过 setExposure 间接触发对焦，如果原生支持对焦点可后续扩展）
-    // TODO: 如需精确对焦坐标，在 CameraService 中添加 setFocusPoint 方法
-    // 目前仅更新 UI 对焦圈位置，原生对焦通过设备自动对焦实现
   }
 
   // ── 拖动曝光太阳：上下滑动调整曝光 ─────────────────────────────────────────
   void _onSunDragStart(DragStartDetails d, double viewfinderH) {
-    _sunDragStartY = d.localPosition.dy;
+    // 拖动从当前位置开始（不重置到中间，保留已有偏移）
+    _sunDragStartY = d.globalPosition.dy;
     _sunOffsetAtDragStart = _sunOffsetY;
     _focusFadeTimer?.cancel(); // 拖动时不淡出
     setState(() => _isDraggingSun = true);
   }
 
   void _onSunDragUpdate(DragUpdateDetails d, double viewfinderH) {
-    final delta = d.localPosition.dy - _sunDragStartY;
+    final delta = d.globalPosition.dy - _sunDragStartY;
     final newOffset = (_sunOffsetAtDragStart + delta)
         .clamp(-viewfinderH * 0.35, viewfinderH * 0.35);
     setState(() => _sunOffsetY = newOffset);
@@ -440,23 +461,28 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ),
           ),
 
-          // ── 曝光水平滑动条（取景框和工具栏之间）──
+          // ── 曝光水平滑动条（取景框和工具栏之间，垂直居中）──
           if (_showExposureSlider)
             Positioned(
               left: 0,
               right: 0,
-              bottom: kBottomPanelH + bottomSafeH + 16,
-              child: _ExposureHorizontalSlider(
-                value: st.exposureValue,
-                onChanged: (v) =>
-                    ref.read(cameraAppProvider.notifier).setExposure(v),
-                onReset: () {
-                  ref.read(cameraAppProvider.notifier).setExposure(0);
-                  setState(() => _sunOffsetY = 0);
-                },
+              // 居中在黑色区域：底部面板顶部 + 黑色区域高度/2 - 自身高度/2
+              // 黑色区域 = kBottomPanelH + bottomSafeH（底部面板），上方是取景框
+              // 用 bottom 定位：距底部面板顶部居中
+              bottom: kBottomPanelH + bottomSafeH + 8,
+              child: Center(
+                child: _ExposureHorizontalSlider(
+                  value: st.exposureValue,
+                  onChanged: (v) =>
+                      ref.read(cameraAppProvider.notifier).setExposure(v),
+                  onReset: () {
+                    ref.read(cameraAppProvider.notifier).setExposure(0);
+                    setState(() => _sunOffsetY = 0);
+                  },
+                ),
               ),
             ),
-          // ── 色温控制面板（取景框和工具栏之间）──
+          // ── 色温控制面板（取景框和工具栏之间，垂直居中）──
           if (_showWbPanel)
             Positioned(
               left: 0,
@@ -851,6 +877,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       mainAxisSize: MainAxisSize.min,
       children: [
         // 色温按钮（圆形，点击弹出色温面板）
+        // 高亮条件：面板展开 OR 色温不为自动
         GestureDetector(
           onTap: () {
             setState(() {
@@ -864,15 +891,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             height: 44,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: _showWbPanel
+              color: (_showWbPanel || st.wbMode != 'auto')
                   ? Colors.white.withAlpha(230)
                   : Colors.black.withAlpha(160),
             ),
             child: Center(
               child: Icon(
-                Icons.thermostat_outlined,
+                // 展开时显示向下箭头，收起时显示温度计
+                _showWbPanel ? Icons.keyboard_arrow_down : Icons.thermostat_outlined,
                 size: 20,
-                color: _showWbPanel ? Colors.black : _kWhite,
+                color: (_showWbPanel || st.wbMode != 'auto') ? Colors.black : _kWhite,
               ),
             ),
           ),
@@ -898,7 +926,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           ),
         ),
         const SizedBox(width: 10),
-        // 曝光按鈕（胶囊形，点击展开水平滑动条）
+        // 曝光按钮（胶囊形，点击展开水平滑动条）
+        // 高亮条件：面板展开 OR 曝光值不为 0
         GestureDetector(
           onTap: () {
             setState(() {
@@ -912,7 +941,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
-              color: _showExposureSlider
+              color: (_showExposureSlider || st.exposureValue != 0)
                   ? Colors.white.withAlpha(230)
                   : Colors.black.withAlpha(160),
             ),
@@ -920,9 +949,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.wb_sunny_outlined,
+                  // 展开时显示向下箭头，收起时显示太阳
+                  _showExposureSlider ? Icons.keyboard_arrow_down : Icons.wb_sunny_outlined,
                   size: 16,
-                  color: _showExposureSlider ? Colors.black : _kWhite,
+                  color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : _kWhite,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -931,7 +961,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                       : (st.exposureValue > 0 ? '+' : '') +
                           st.exposureValue.toStringAsFixed(1),
                   style: TextStyle(
-                    color: _showExposureSlider ? Colors.black : _kWhite,
+                    color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : _kWhite,
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
                   ),
