@@ -318,7 +318,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   // ── Take photo ──
 
-  Future<String?> takePhoto() async {
+  /// 拍照并保存到相册。
+  /// 返回 [TakePhotoResult]，包含缓存文件路径和 MediaStore 资产 ID。
+  /// galleryAssetId 可直接用于 AssetEntity.fromId()，完全绕开相册查询逻辑。
+  Future<TakePhotoResult?> takePhoto() async {
     if (state.isTakingPhoto) return null;
     state = state.copyWith(isTakingPhoto: true);
     HapticFeedback.mediumImpact();
@@ -333,7 +336,6 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         HapticFeedback.lightImpact();
 
         // Post-process: color effects + ratio crop + frame + watermark
-        // path is in app cache dir (absolute file path), readable by dart:io File
         if (state.camera != null) {
           try {
             debugPrint('[CameraNotifier] Starting post-process: ratio=${state.activeRatioId}, frame=${state.activeFrameId}, wm=${state.activeWatermarkId}');
@@ -346,35 +348,53 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
               renderParams: state.renderParams,
             );
             if (processed != null) {
-              // Write processed bytes back to the cache file
               await File(path).writeAsBytes(processed);
               debugPrint('[CameraNotifier] Post-process done, wrote ${processed.length} bytes to $path');
             } else {
               debugPrint('[CameraNotifier] Post-process returned null, keeping original');
             }
           } catch (e, st) {
-            // Post-processing failed, keep original
             debugPrint('[CameraNotifier] Post-process error: $e\n$st');
           }
         }
-        // Save processed file to gallery (DCIM/DAZZ) via native MediaStore
-        // 文件名含 cameraId，使相册可按相机分类
+
+        // 保存到相册，获取 MediaStore URI 并提取 _id
+        String? galleryAssetId;
         try {
           final galleryUri = await _ref.read(cameraServiceProvider.notifier).saveToGallery(
             path,
             cameraId: state.activeCameraId,
           );
           debugPrint('[CameraNotifier] Saved to gallery: $galleryUri');
+          // URI 格式： content://media/external/images/media/{id}
+          if (galleryUri != null) {
+            final uri = Uri.tryParse(galleryUri);
+            galleryAssetId = uri?.pathSegments.lastOrNull;
+            debugPrint('[CameraNotifier] galleryAssetId=$galleryAssetId');
+          }
         } catch (e) {
           debugPrint('[CameraNotifier] saveToGallery error: $e');
         }
+
+        return TakePhotoResult(path: path, galleryAssetId: galleryAssetId);
       }
 
-      return path;
+      return null;
     } finally {
       state = state.copyWith(isTakingPhoto: false);
     }
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+/// 拍照结果数据类
+/// path: 缓存文件路径（处理后）
+/// galleryAssetId: MediaStore _id，可直接用于 AssetEntity.fromId()查询
+// ─────────────────────────────────────────────────────────────────────────────
+class TakePhotoResult {
+  final String path;
+  final String? galleryAssetId;
+  const TakePhotoResult({required this.path, this.galleryAssetId});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

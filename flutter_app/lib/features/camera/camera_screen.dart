@@ -141,74 +141,49 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
   }
 
-  Future<void> _loadLatestThumb({bool afterCapture = false}) async {
-    // 拍照后分段重试：先等 500ms，查不到再等 1000ms/2000ms，最多重试 3 次
-    if (afterCapture) {
-      await PhotoManager.clearFileCache();
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
-    // 每次都重新请求权限以强制 photo_manager 刷新内部资产缓存
+  /// App 启动时加载最新缩略图（不用于拍照后刷新）
+  Future<void> _loadLatestThumb() async {
     final perm = await PhotoManager.requestPermissionExtend();
     if (!perm.isAuth) return;
-
-    // afterCapture 时最多重试 3 次，普通加载只查 1 次
-    final maxRetries = afterCapture ? 3 : 1;
-    final retryDelays = [1000, 2000]; // 第 2、3 次重试前额外等待 ms
-
-    for (int attempt = 0; attempt < maxRetries; attempt++) {
-      if (attempt > 0) {
-        // 重试前清缓存并等待
-        await PhotoManager.clearFileCache();
-        await Future.delayed(Duration(milliseconds: retryDelays[attempt - 1]));
-        if (!mounted) return;
-      }
-
-      // 获取所有相册（含 DAZZ）
-      final albums = await PhotoManager.getAssetPathList(
-        type: RequestType.image,
-        filterOption: FilterOptionGroup(
-          orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
-        ),
-      );
-      if (albums.isEmpty) continue;
-
-      // 优先从 DAZZ 专属相册读取最新照片
-      AssetPathEntity? dazzAlbum;
-      AssetPathEntity? recentAlbum; // "最近项目" 或 "所有照片" 相册
-      for (final album in albums) {
-        final name = album.name.toUpperCase();
-        if (name == 'DAZZ') {
-          dazzAlbum = album;
-          break;
-        }
-        // Android: "Recent" / iOS: "Recents" / 中文: "最近项目"
-        if (recentAlbum == null &&
-            (name.contains('RECENT') || name.contains('最近') || album.isAll)) {
-          recentAlbum = album;
-        }
-      }
-
-      // DAZZ 相册 > 最近项目 > 第一个相册
-      final targetAlbum = dazzAlbum ?? recentAlbum ?? albums.first;
-      final assets = await targetAlbum.getAssetListRange(start: 0, end: 1);
-      if (assets.isNotEmpty && mounted) {
-        final thumb = await assets.first.thumbnailDataWithSize(
-          const ThumbnailSize(120, 120),
-        );
-        if (mounted) {
-          setState(() {
-            _latestThumb = thumb;
-            _latestAsset = assets.first;
-          });
-          debugPrint('[CameraScreen] _loadLatestThumb OK on attempt ${attempt + 1}, id=${assets.first.id}');
-          return; // 成功，不再重试
-        }
-      } else {
-        debugPrint('[CameraScreen] _loadLatestThumb attempt ${attempt + 1}: no assets in ${targetAlbum.name}');
-      }
+    final albums = await PhotoManager.getAssetPathList(
+      type: RequestType.image,
+      filterOption: FilterOptionGroup(
+        orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
+      ),
+    );
+    if (albums.isEmpty) return;
+    AssetPathEntity? target;
+    for (final a in albums) {
+      if (a.name.toUpperCase().contains('DAZZ')) { target = a; break; }
+    }
+    target ??= albums.firstWhere((a) => a.isAll, orElse: () => albums.first);
+    final assets = await target.getAssetListRange(start: 0, end: 1);
+    if (assets.isNotEmpty && mounted) {
+      await _applyThumbFromAsset(assets.first);
     }
   }
 
+  /// 拍照后直接用 MediaStore ID 查询资产，完全绕开相册查询
+  Future<void> _loadThumbFromGalleryId(String assetId) async {
+    final asset = await AssetEntity.fromId(assetId);
+    if (asset != null && mounted) {
+      await _applyThumbFromAsset(asset);
+      debugPrint('[CameraScreen] _loadThumbFromGalleryId OK, id=$assetId');
+    } else {
+      debugPrint('[CameraScreen] _loadThumbFromGalleryId: asset not found for id=$assetId');
+    }
+  }
+
+  /// 生成缩略图并更新状态
+  Future<void> _applyThumbFromAsset(AssetEntity asset) async {
+    final thumb = await asset.thumbnailDataWithSize(const ThumbnailSize(120, 120));
+    if (mounted) {
+      setState(() {
+        _latestThumb = thumb;
+        _latestAsset = asset;
+      });
+    }
+  }
   Future<void> _handleShutter() async {
     final st = ref.read(cameraAppProvider);
     final timer = st.timerSeconds;
@@ -227,10 +202,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Future<void> _doTakePhoto() async {
-    final path = await ref.read(cameraAppProvider.notifier).takePhoto();
-    if (path != null && mounted) {
-      // afterCapture=true 确保先清除缓存再读取，避免读到旧缩略图
-      _loadLatestThumb(afterCapture: true);
+    final result = await ref.read(cameraAppProvider.notifier).takePhoto();
+    if (result != null && mounted) {
+      // 优先用 galleryAssetId 直接查资产（绕开相册查询，100% 可靠）
+      if (result.galleryAssetId != null) {
+        _loadThumbFromGalleryId(result.galleryAssetId!);
+      } else {
+        // fallback: 相册查询（仅当 saveToGallery 未返回 URI 时）
+        _loadLatestThumb();
+      }
     }
   }
 
