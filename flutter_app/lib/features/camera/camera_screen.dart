@@ -132,13 +132,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Future<void> _loadLatestThumb({bool afterCapture = false}) async {
-    // 拍照后先清除 photo_manager 缓存，再稍延读取，确保新照片已写入相册
+    // 拍照后先清除 photo_manager 全部缓存，等待系统写入完成，再重新查询
     if (afterCapture) {
       await PhotoManager.clearFileCache();
-      await Future.delayed(const Duration(milliseconds: 600));
+      // 等待 Android MediaStore 扫描完成（1.2s 比 600ms 更可靠）
+      await Future.delayed(const Duration(milliseconds: 1200));
     }
+    // 每次都重新请求权限以强制 photo_manager 刷新内部资产缓存
     final perm = await PhotoManager.requestPermissionExtend();
     if (!perm.isAuth) return;
+    // 获取所有相册（含 DAZZ）
     final albums = await PhotoManager.getAssetPathList(
       type: RequestType.image,
       filterOption: FilterOptionGroup(
@@ -148,13 +151,21 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (albums.isEmpty) return;
     // 优先从 DAZZ 专属相册读取最新照片
     AssetPathEntity? dazzAlbum;
+    AssetPathEntity? recentAlbum; // "最近项目" 或 "所有照片" 相册
     for (final album in albums) {
-      if (album.name.toUpperCase() == 'DAZZ') {
+      final name = album.name.toUpperCase();
+      if (name == 'DAZZ') {
         dazzAlbum = album;
         break;
       }
+      // Android: "Recent" / iOS: "Recents" / 中文: "最近项目"
+      if (recentAlbum == null &&
+          (name.contains('RECENT') || name.contains('最近') || album.isAll)) {
+        recentAlbum = album;
+      }
     }
-    final targetAlbum = dazzAlbum ?? albums.first;
+    // DAZZ 相册 > 最近项目 > 第一个相册
+    final targetAlbum = dazzAlbum ?? recentAlbum ?? albums.first;
     final assets = await targetAlbum.getAssetListRange(start: 0, end: 1);
     if (assets.isNotEmpty && mounted) {
       final thumb = await assets.first.thumbnailDataWithSize(
@@ -209,13 +220,20 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final screenW = mq.size.width;
     final statusBarH = mq.padding.top;
     final bottomSafeH = mq.padding.bottom;
-    // 底部面板固定高度：工具栏(60) + 快门行(80) + 间距(40) + 底部安全区
-    final kBottomPanelH = 220.0 + bottomSafeH;
-    // 取景框左右边距（参考截图：约 16px 边距）
-    const kViewfinderHPadding = 16.0;
+    // 底部面板固定高度（精确复刻截图）:
+    // 胶囊行(48) + 间距(12) + 工具栏(60) + 间距(12) + 快门行(88) + 底部安全区
+    const kCapsuleH = 48.0;
+    const kToolbarH = 60.0;
+    const kShutterH = 88.0;
+    const kBottomSpacing = 12.0 * 3; // 3 个间距
+    final kBottomPanelH = kCapsuleH + kToolbarH + kShutterH + kBottomSpacing + bottomSafeH;
+    // 取景框左右边距（参考截图：约 12px 边距）
+    const kViewfinderHPadding = 12.0;
     final viewfinderW = screenW - kViewfinderHPadding * 2;
     // 取景框高度根据比例动态计算（宽度=屏幕宽-边距，高度=宽/比例）
-    final maxViewfinderH = mq.size.height - statusBarH - kBottomPanelH - 8;
+    // 顶部：状态栏 + 8px 间距 + 44px（"..."按钮区域）
+    const kTopBarH = 44.0;
+    final maxViewfinderH = mq.size.height - statusBarH - kTopBarH - kBottomPanelH - 8;
     final ratioViewfinderH = viewfinderW / st.previewAspectRatio;
     // 限制在合理范围内
     final viewfinderH = ratioViewfinderH.clamp(viewfinderW * 0.75, maxViewfinderH);
@@ -231,9 +249,37 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             bottom: 0,
             child: _buildBottomPanel(st),
           ),
-          // ── 取景框（有圆角+左右边距，居中在状态栏下方）──
+          // ── 顶部按钮行：状态栏下方的纯黑色区域，只有 "..." 按钮──
           Positioned(
-            top: statusBarH + 8,
+            top: statusBarH,
+            left: 0,
+            right: 0,
+            height: kTopBarH,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: () => ref.read(cameraAppProvider.notifier).toggleTopMenu(),
+                child: const SizedBox(
+                  width: 56,
+                  height: kTopBarH,
+                  child: Center(
+                    child: Text(
+                      '•••',
+                      style: TextStyle(
+                        color: _kWhite,
+                        fontSize: 18,
+                        letterSpacing: 4,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // ── 取景框（有圆角+左右边距，在顶部按钮行下方）──
+          Positioned(
+            top: statusBarH + kTopBarH,
             left: kViewfinderHPadding,
             right: kViewfinderHPadding,
             child: SizedBox(
@@ -241,6 +287,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               height: viewfinderH,
               child: _buildViewfinderArea(st, camSvc, viewfinderH, viewfinderW),
             ),
+          ),
+          // ── 控制胶囊：取景框底部与底部面板之间的黑色区域──
+          Positioned(
+            top: statusBarH + kTopBarH + viewfinderH,
+            left: 0,
+            right: 0,
+            height: kCapsuleH + kBottomSpacing / 3,
+            child: Center(child: _buildControlCapsule(st)),
           ),
           // ── 右上角菜单弹框 ──
           if (st.showTopMenu) _buildTopMenuOverlay(st),
@@ -271,66 +325,27 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     );
   }
 
-  // ── 取景框区域（上段）──────────────────────────────────────────────────────
-  // 布局：黑色背景，右上角 "•••" 按钮，取景框（含焦距文字+预览+控制胶囊）
+  // ─  // ── 取景框区域（上段）──────────────────────────────────────────────
+  // 布局：圆角取景框，内部只有预览画面和网格线（控制胶囊已移到取景框外部）
   Widget _buildViewfinderArea(CameraAppState st, CameraState camSvc, double areaH, double screenW) {
-    // 取景框：圆角 + 左右边距（参考截图 13104/13105）
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: Stack(
-      fit: StackFit.expand,
-      children: [
-        // 预览全屏铺满（无边框无圆角）
-        Positioned.fill(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // 相机预览
-              _buildPreview(st, camSvc),
-              // 三等分网格线
-              if (st.gridEnabled) _buildGrid(),
-              // 取景框内底部：控制胶囊（3个独立圆形按钮）
-              Positioned(
-                bottom: 20,
-                left: 0,
-                right: 0,
-                child: Center(child: _buildControlCapsule(st)),
-              ),
-              // 拍摄中指示
-              if (st.isTakingPhoto)
-                Container(
-                  color: Colors.black.withAlpha(80),
-                  child: const Center(
-                    child: CircularProgressIndicator(color: _kWhite, strokeWidth: 2),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        // 右上角 "•••" 按钮（浮在预览上方，在状态栏下方黑色区域）
-        Positioned(
-          top: 8,
-          right: 16,
-          child: GestureDetector(
-            onTap: () => ref.read(cameraAppProvider.notifier).toggleTopMenu(),
-            child: const SizedBox(
-              width: 44,
-              height: 44,
-              child: Center(
-                child: Text(
-                  '•••',
-                  style: TextStyle(
-                    color: _kWhite,
-                    fontSize: 18,
-                    letterSpacing: 4,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+        fit: StackFit.expand,
+        children: [
+          // 相机预览
+          _buildPreview(st, camSvc),
+          // 三等分网格线
+          if (st.gridEnabled) _buildGrid(),
+          // 拍摄中黑色半透明蒙层
+          if (st.isTakingPhoto)
+            Container(
+              color: Colors.black.withAlpha(80),
+              child: const Center(
+                child: CircularProgressIndicator(color: _kWhite, strokeWidth: 2),
               ),
             ),
-          ),
-        ),
-      ],
+        ],
       ),
     );
   }
@@ -338,15 +353,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // 布局：深灰色圆角面板，[照片/视频 tab] + [样图/管理] → 相机列表 → 工具栏 → 快门行
   Widget _buildBottomPanel(CameraAppState st) {
     // 截图精确复刻：纯黑背景，无圆角，无 Tab 行，无相机列表
+    // 布局：工具栏 + 间距 + 快门行 + 底部安全区（控制胶囊已移到取景框外部）
     return Container(
       color: _kBlack,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           // 工具图标行（4个图标+文字标签）
           _buildToolbar(st),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           // 快门行
           _buildShutterRow(st),
           // 底部安全区域
@@ -668,98 +684,103 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   // ── 快门行 ──────────────────────────────────────────────────────────────────
+  // 截图布局：[缩略图 64×64] [快门 80×80] [相机图标 64×64]
   Widget _buildShutterRow(CameraAppState st) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // 左侧: 图库缩略图（单击→相册列表，长按→直接打开最新相片详情）
-          GestureDetector(
-            onTap: _openGallery,
-            onLongPress: _openLatestPhotoDetail,
-            child: Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: _kDarkGray,
+    return SizedBox(
+      height: 88,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // 左侧: 图库缩略图（单击→相册列表，长按→直接打开最新相片详情）
+            GestureDetector(
+              onTap: _openGallery,
+              onLongPress: _openLatestPhotoDetail,
+              child: Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  color: _kDarkGray,
+                ),
+                child: _latestThumb != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.memory(_latestThumb!, fit: BoxFit.cover),
+                      )
+                    : const Icon(Icons.photo_outlined, color: Colors.grey, size: 28),
               ),
-              child: _latestThumb != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.memory(_latestThumb!, fit: BoxFit.cover),
-                    )
-                  : const Icon(Icons.photo_outlined, color: Colors.grey, size: 28),
             ),
-          ),
-          // 中间: 快门按鈕（大圆，白色，外圈深色）
-          GestureDetector(
-            onTap: st.isTakingPhoto ? null : _handleShutter,
-            child: Container(
-              width: 76,
-              height: 76,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.transparent,
-                border: Border.all(color: _kWhite, width: 3),
-              ),
-              child: Center(
-                child: Container(
-                  width: 62,
-                  height: 62,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _kWhite,
+            // 中间: 快门按钮（外圈白色线圈，内圆白色实心）
+            GestureDetector(
+              onTap: st.isTakingPhoto ? null : _handleShutter,
+              child: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.transparent,
+                  border: Border.all(color: _kWhite, width: 3),
+                ),
+                child: Center(
+                  child: Container(
+                    width: 66,
+                    height: 66,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _kWhite,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          // 右侧: 当前已选相机图标（虚线圆圈背景，点击打开相机配置菜单）
-          GestureDetector(
-            onTap: () => showCameraConfigSheet(context),
-            child: SizedBox(
-              width: 70,
-              height: 70,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // 虚线圆圈背景
-                  CustomPaint(
-                    size: const Size(70, 70),
-                    painter: _DashedCirclePainter(),
-                  ),
-                  // 当前相机名称（简短显示）
-                  Builder(builder: (ctx) {
-                    final entry = kAllCameras.firstWhere(
-                      (e) => e.id == st.activeCameraId,
-                      orElse: () => kAllCameras.first,
-                    );
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 24),
-                        const SizedBox(height: 2),
-                        Text(
-                          entry.name,
-                          style: const TextStyle(
-                            color: _kWhite,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
+            // 右侧: 相机图标（虚线圆圈背景，点击打开相机配置）
+            GestureDetector(
+              onTap: () => showCameraConfigSheet(context),
+              child: SizedBox(
+                width: 64,
+                height: 64,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // 虚线圆圈背景
+                    CustomPaint(
+                      size: const Size(64, 64),
+                      painter: _DashedCirclePainter(),
+                    ),
+                    // 相机图标 + 名称
+                    Builder(builder: (ctx) {
+                      final entry = kAllCameras.firstWhere(
+                        (e) => e.id == st.activeCameraId,
+                        orElse: () => kAllCameras.first,
+                      );
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 22),
+                          const SizedBox(height: 2),
+                          Text(
+                            entry.name,
+                            style: const TextStyle(
+                              color: _kWhite,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    );
-                  }),
-                ],
+                        ],
+                      );
+                    }),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
