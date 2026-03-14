@@ -138,8 +138,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final st = ref.watch(cameraAppProvider);
     final camSvc = ref.watch(cameraServiceProvider);
     final mq = MediaQuery.of(context);
-    // 底部面板高度：约 320px（tab+相机列表+工具栏+快门行）
-    const kBottomPanelH = 310.0;
+    // 底部面板高度：工具栏(60) + 快门行(80) + 间距(40) + 底部安全区 ≈ 220px
+    const kBottomPanelH = 220.0;
     // 取景框区域高度 = 屏幕高度 - 状态栏 - 底部面板
     final topAreaH = mq.size.height - mq.padding.top - kBottomPanelH;
 
@@ -196,20 +196,39 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ── 取景框区域（上段）──────────────────────────────────────────────────────
   // 布局：黑色背景，右上角 "•••" 按钮，取景框（含焦距文字+预览+控制胶囊）
   Widget _buildViewfinderArea(CameraAppState st, CameraState camSvc, double areaH, double screenW) {
-    final camera = st.camera;
-    final lensLabel = camera?.focalLengthLabel ?? st.lensLabel;
-    // 取景框尺寸计算：左右各 16px margin
-    final vfW = screenW - 32.0;
-    final ratio = st.previewAspectRatio; // w/h
-    final vfH = vfW / ratio;
-    // 如果高度超出可用区域，按高度缩放
-    final maxVfH = areaH - 56.0; // 留出 56px 给顶部 "•••" 按钮和焦距文字
-    final finalVfH = vfH > maxVfH ? maxVfH : vfH;
-    final finalVfW = finalVfH * ratio;
-
+    // 截图精确复刻：预览全屏铺满，无边框，无圆角，无焦距文字
+    // 右上角 "•••" 按钮浮在预览上方黑色区域
     return Stack(
+      fit: StackFit.expand,
       children: [
-        // 右上角 "•••" 按钮
+        // 预览全屏铺满（无边框无圆角）
+        Positioned.fill(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // 相机预览
+              _buildPreview(st, camSvc),
+              // 三等分网格线
+              if (st.gridEnabled) _buildGrid(),
+              // 取景框内底部：控制胶囊（3个独立圆形按钮）
+              Positioned(
+                bottom: 20,
+                left: 0,
+                right: 0,
+                child: Center(child: _buildControlCapsule(st)),
+              ),
+              // 拍摄中指示
+              if (st.isTakingPhoto)
+                Container(
+                  color: Colors.black.withAlpha(80),
+                  child: const Center(
+                    child: CircularProgressIndicator(color: _kWhite, strokeWidth: 2),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        // 右上角 "•••" 按钮（浮在预览上方，在状态栏下方黑色区域）
         Positioned(
           top: 8,
           right: 16,
@@ -232,98 +251,22 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ),
           ),
         ),
-        // 取景框（居中，带焦距文字）
-        Positioned(
-          top: 52,
-          left: (screenW - finalVfW) / 2,
-          child: SizedBox(
-            width: finalVfW,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 焦距文字（取景框上方居中）
-                Text(
-                  lensLabel,
-                  style: const TextStyle(
-                    color: _kWhite,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                // 取景框本体
-                SizedBox(
-                  width: finalVfW,
-                  height: finalVfH,
-                  child: Stack(
-                    children: [
-                      // 相机预览
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: _buildPreview(st, camSvc),
-                      ),
-                      // 白色边框
-                      Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: Colors.white, width: 1.5),
-                        ),
-                      ),
-                      // 三等分网格线
-                      if (st.gridEnabled) _buildGrid(),
-                      // 取景框内底部：控制胶囊
-                      Positioned(
-                        bottom: 14,
-                        left: 0,
-                        right: 0,
-                        child: Center(child: _buildControlCapsule(st)),
-                      ),
-                      // 拍摄中指示
-                      if (st.isTakingPhoto)
-                        Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            color: Colors.black.withAlpha(80),
-                          ),
-                          child: const Center(
-                            child: CircularProgressIndicator(color: _kWhite, strokeWidth: 2),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ],
     );
   }
-
   // ── 底部面板（下段）──────────────────────────────────────────────────────────
   // 布局：深灰色圆角面板，[照片/视频 tab] + [样图/管理] → 相机列表 → 工具栏 → 快门行
   Widget _buildBottomPanel(CameraAppState st) {
+    // 截图精确复刻：纯黑背景，无圆角，无 Tab 行，无相机列表
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-      ),
+      color: _kBlack,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 12),
-          // Tab 行：[照片] [视频] + [样图] [管理]
-          _buildTabRow(st),
-          const SizedBox(height: 10),
-          // 相机列表（横向滚动）
-          _buildCameraList(st),
-          const SizedBox(height: 10),
-          // 工具图标行（含文字标签）
+          const SizedBox(height: 16),
+          // 工具图标行（4个图标+文字标签）
           _buildToolbar(st),
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
           // 快门行
           _buildShutterRow(st),
           // 底部安全区域
@@ -503,91 +446,98 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ── 控制胶囊 ──────────────────────────────────────────────────────────────
   // 截图精确复刻：深色半透明背景，白色文字，[🌡] [x1] [☀ 0.0]
   Widget _buildControlCapsule(CameraAppState st) {
-    // 计算倍率标签：使用 activeLens 的 zoomFactor，或默认 x1
+    // 截图精确复刻：3个独立圆形/胶囊按钮 [🌡] [x1] [☀ 0.0]
     final lens = st.activeLens;
     final zoomFactor = lens?.zoomFactor ?? 1.0;
     final zoomLabel = zoomFactor == zoomFactor.roundToDouble()
         ? 'x${zoomFactor.toInt()}'
         : 'x${zoomFactor.toStringAsFixed(1)}';
 
-    return Container(
-      height: 36,
-      decoration: BoxDecoration(
-        color: Colors.black.withAlpha(160),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: IntrinsicWidth(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 温度图标（左滑动调整）
-            GestureDetector(
-              onHorizontalDragStart: (d) {
-                _tempDragStart = d.localPosition.dx;
-                _tempAtDragStart = st.temperatureOffset;
-              },
-              onHorizontalDragUpdate: (d) {
-                final delta = d.localPosition.dx - _tempDragStart;
-                final newTemp = (_tempAtDragStart + delta * 0.8).clamp(-100.0, 100.0);
-                ref.read(cameraAppProvider.notifier).setTemperature(newTemp);
-              },
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 14),
-                child: Icon(Icons.thermostat_outlined, size: 16, color: _kWhite),
-              ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 温度按钮（圆形，左滑动调整）
+        GestureDetector(
+          onHorizontalDragStart: (d) {
+            _tempDragStart = d.localPosition.dx;
+            _tempAtDragStart = st.temperatureOffset;
+          },
+          onHorizontalDragUpdate: (d) {
+            final delta = d.localPosition.dx - _tempDragStart;
+            final newTemp = (_tempAtDragStart + delta * 0.8).clamp(-100.0, 100.0);
+            ref.read(cameraAppProvider.notifier).setTemperature(newTemp);
+          },
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.black.withAlpha(160),
             ),
-            // 分隔线
-            Container(width: 0.5, height: 18, color: Colors.white24),
-            // 倍率（中间）
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                zoomLabel,
-                style: const TextStyle(
-                  color: _kWhite,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+            child: const Center(
+              child: Icon(Icons.thermostat_outlined, size: 20, color: _kWhite),
             ),
-            // 分隔线
-            Container(width: 0.5, height: 18, color: Colors.white24),
-            // 曝光图标+数字（上下滑动调整）
-            GestureDetector(
-              onVerticalDragStart: (d) {
-                _exposureDragStart = d.localPosition.dy;
-                _exposureAtDragStart = st.exposureValue;
-              },
-              onVerticalDragUpdate: (d) {
-                final delta = d.localPosition.dy - _exposureDragStart;
-                final newExp = (_exposureAtDragStart - delta * 0.02).clamp(-2.0, 2.0);
-                ref.read(cameraAppProvider.notifier).setExposure(newExp);
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.wb_sunny_outlined, size: 14, color: _kWhite),
-                    const SizedBox(width: 4),
-                    Text(
-                      st.exposureValue == 0 ? '0.0' : st.exposureValue.toStringAsFixed(1),
-                      style: const TextStyle(
-                        color: _kWhite,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(width: 10),
+        // 倍率按钮（胶囊形，中间）
+        Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            color: Colors.black.withAlpha(160),
+          ),
+          child: Center(
+            child: Text(
+              zoomLabel,
+              style: const TextStyle(
+                color: _kWhite,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        // 曝光按钮（胶囊形，上下滑动调整）
+        GestureDetector(
+          onVerticalDragStart: (d) {
+            _exposureDragStart = d.localPosition.dy;
+            _exposureAtDragStart = st.exposureValue;
+          },
+          onVerticalDragUpdate: (d) {
+            final delta = d.localPosition.dy - _exposureDragStart;
+            final newExp = (_exposureAtDragStart - delta * 0.02).clamp(-2.0, 2.0);
+            ref.read(cameraAppProvider.notifier).setExposure(newExp);
+          },
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              color: Colors.black.withAlpha(160),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.wb_sunny_outlined, size: 16, color: _kWhite),
+                const SizedBox(width: 6),
+                Text(
+                  st.exposureValue == 0 ? '0.0' : st.exposureValue.toStringAsFixed(1),
+                  style: const TextStyle(
+                    color: _kWhite,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
-
   // ── 工具栏（5个图标）────────────────────────────────────────────────────────
   Widget _buildToolbar(CameraAppState st) {
     return SizedBox(
@@ -673,19 +623,23 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               ),
             ),
           ),
-          // 右侧: 相机切换图标（复古相机图标，点击打开Options）
+          // 右侧: 相机切换图标（虚线圆圈背景，点击打开Options）
           GestureDetector(
             onTap: _openOptions,
-            child: Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                color: const Color(0xFF2C2C2E),
-                border: Border.all(color: Colors.white24, width: 1),
-              ),
-              child: const Center(
-                child: Icon(Icons.photo_camera_outlined, color: _kWhite, size: 30),
+            child: SizedBox(
+              width: 70,
+              height: 70,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // 虚线圆圈背景
+                  CustomPaint(
+                    size: const Size(70, 70),
+                    painter: _DashedCirclePainter(),
+                  ),
+                  // 复古相机图标
+                  const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 32),
+                ],
               ),
             ),
           ),
@@ -698,7 +652,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Widget _buildTopMenuOverlay(CameraAppState st) {
     final mq = MediaQuery.of(context);
     // 菜单覆盖在取景框内部上方（截图中菜单从取景框顶部开始）
-    final menuTop = mq.padding.top + 52.0;
+    final menuTop = mq.padding.top + 50.0; // 截图：菜单从预览顶部展开
     return GestureDetector(
       onTap: () => ref.read(cameraAppProvider.notifier).toggleTopMenu(),
       child: Container(
@@ -1951,6 +1905,36 @@ const _kPhotoCameras = [
 // ─────────────────────────────────────────────────────────────────────────────
 // 自定义 Painter
 // ─────────────────────────────────────────────────────────────────────────────
+
+class _DashedCirclePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white54
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width - 4) / 2;
+    // 绘制虚线圆圈
+    const dashCount = 20;
+    const dashAngle = 3.14159 * 2 / dashCount;
+    const gapRatio = 0.4; // 间隙占比
+    for (int i = 0; i < dashCount; i++) {
+      final startAngle = i * dashAngle;
+      final sweepAngle = dashAngle * (1 - gapRatio);
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        sweepAngle,
+        false,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedCirclePainter old) => false;
+}
 
 class _GridPainter extends CustomPainter {
   @override
