@@ -60,17 +60,12 @@ class CameraService extends StateNotifier<CameraState> {
   Future<void> initCamera() async {
     state = state.copyWith(isLoading: true, error: null);
     
-    // 检查并请求权限
-    final statuses = await [
-      Permission.camera,
-      Permission.microphone,
-      Permission.storage,
-    ].request();
-    
-    final hasPermissions = statuses[Permission.camera]?.isGranted == true;
-    if (!hasPermissions) {
+    // 相机权限已在 CameraScreen._requestPermissions() 中一次性请求
+    // 这里只检查相机权限是否已授予，不再重复弹出权限对话框
+    final cameraGranted = await Permission.camera.isGranted;
+    if (!cameraGranted) {
       state = state.copyWith(
-        isLoading: false, 
+        isLoading: false,
         error: 'Camera permission denied. Please grant permission in settings.',
       );
       return;

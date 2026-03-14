@@ -23,13 +23,23 @@ class PreviewRenderParams {
   final PreviewPolicy policy;
 
   const PreviewRenderParams({
-    required this.defaultLook,
+    DefaultLook? defaultLook,
     this.activeFilter,
     this.activeLens,
     this.temperatureOffset = 0,
     this.exposureOffset = 0,
-    required this.policy,
-  });
+    PreviewPolicy? policy,
+  }) : defaultLook = defaultLook ?? const DefaultLook(
+         temperature: 0, contrast: 0, saturation: 0,
+         vignette: 0, distortion: 0, chromaticAberration: 0,
+         bloom: 0, flare: 0,
+       ),
+       policy = policy ?? const PreviewPolicy(
+         enableLut: false, enableTemperature: false, enableContrast: false,
+         enableSaturation: false, enableVignette: false, enableLightLensEffect: false,
+         enableGrain: false, enableBloom: false, enableChromaticAberration: false,
+         enableFrameComposite: false, enableWatermarkComposite: false,
+       );
 
   // Effective vignette = defaultLook + lens override
   double get effectiveVignette {

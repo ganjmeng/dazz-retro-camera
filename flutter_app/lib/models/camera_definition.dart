@@ -163,6 +163,18 @@ class DefaultLook {
     required this.flare,
   });
 
+  /// 占位默认値（相机 JSON 未加载时使用）
+  factory DefaultLook.empty() => const DefaultLook(
+    temperature: 0,
+    contrast: 0,
+    saturation: 0,
+    vignette: 0,
+    distortion: 0,
+    chromaticAberration: 0,
+    bloom: 0,
+    flare: 0,
+  );
+
   factory DefaultLook.fromJson(Map<String, dynamic> json) => DefaultLook(
     baseLut: json['baseLut'] as String?,
     temperature: (json['temperature'] as num).toDouble(),
@@ -468,6 +480,21 @@ class PreviewPolicy {
   final bool enableWatermarkComposite;
 
   const PreviewPolicy({required this.enableLut, required this.enableTemperature, required this.enableContrast, required this.enableSaturation, required this.enableVignette, required this.enableLightLensEffect, required this.enableGrain, required this.enableBloom, required this.enableChromaticAberration, required this.enableFrameComposite, required this.enableWatermarkComposite});
+
+  /// 占位默认値（相机 JSON 未加载时使用）
+  factory PreviewPolicy.empty() => const PreviewPolicy(
+    enableLut: false,
+    enableTemperature: false,
+    enableContrast: false,
+    enableSaturation: false,
+    enableVignette: false,
+    enableLightLensEffect: false,
+    enableGrain: false,
+    enableBloom: false,
+    enableChromaticAberration: false,
+    enableFrameComposite: false,
+    enableWatermarkComposite: false,
+  );
 
   factory PreviewPolicy.fromJson(Map<String, dynamic> json) => PreviewPolicy(
     enableLut: json['enableLut'] as bool? ?? true,

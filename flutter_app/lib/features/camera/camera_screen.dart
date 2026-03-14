@@ -73,10 +73,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     ).animate(CurvedAnimation(parent: _optionsAnim, curve: Curves.easeOutCubic));
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // 先请求相机权限，再初始化相机和相册
-      await _requestCameraPermission();
+      // 一次性请求所有权限（相机 + 相册），再初始化
+      await _requestPermissions();
       if (mounted) {
+        // 加载相机 JSON 配置
         ref.read(cameraAppProvider.notifier).initialize();
+        // 初始化原生相机硬件（获取 textureId，开始预览）
+        ref.read(cameraServiceProvider.notifier).initCamera();
         _loadLatestThumb();
       }
     });
@@ -89,20 +92,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     super.dispose();
   }
 
-  /// 请求相机权限（Android/iOS）
-  Future<void> _requestCameraPermission() async {
-    // 请求相机权限
-    final cameraStatus = await Permission.camera.request();
-    // 请求麦克风权限（这样原生层就不用再请求）
-    await Permission.microphone.request();
-    // Android 13+ 使用 photos，旧版本使用 storage
-    if (await Permission.photos.request().isGranted) {
-      // OK
-    } else {
-      await Permission.storage.request();
-    }
-    if (!cameraStatus.isGranted && mounted) {
-      // 弹出提示，引导用户去设置开启权限
+  /// 一次性请求所有权限（相机 + 相册，不含麦克风）
+  Future<void> _requestPermissions() async {
+    // 一次性弹出所有权限请求
+    final statuses = await [
+      Permission.camera,
+      Permission.photos,   // Android 13+ / iOS
+      Permission.storage,  // Android 12 及以下
+    ].request();
+
+    final cameraGranted = statuses[Permission.camera]?.isGranted == true;
+    if (!cameraGranted && mounted) {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -479,14 +479,26 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         ),
       );
     }
-    if (camSvc.textureId != null && st.renderParams != null) {
+    // 只要 textureId 就绪，即可显示预览；
+    // renderParams 为 null 时（JSON 尚未加载）用默认空参数，避免黑屏
+    if (camSvc.textureId != null) {
+      final params = st.renderParams ?? const PreviewRenderParams();
       return PreviewFilterWidget(
         textureId: camSvc.textureId!,
-        params: st.renderParams!,
+        params: params,
         aspectRatio: st.previewAspectRatio,
       );
     }
-    return Container(color: Colors.black);
+    // 未初始化时显示占位提示
+    return Container(
+      color: Colors.black,
+      child: const Center(
+        child: Text(
+          '相机初始化中...',
+          style: TextStyle(color: Colors.white54, fontSize: 14),
+        ),
+      ),
+    );
   }
 
   Widget _buildGrid() {
