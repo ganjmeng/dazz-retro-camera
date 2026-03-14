@@ -22,6 +22,7 @@ import '../../models/camera_definition.dart';
 import '../../services/camera_service.dart';
 import 'camera_notifier.dart';
 import 'preview_renderer.dart';
+import '../gallery/gallery_screen.dart';
 
 // ─── 颜色常量 ─────────────────────────────────────────────────────────────────
 const _kBlack = Color(0xFF000000);
@@ -42,6 +43,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     with TickerProviderStateMixin {
 
   Uint8List? _latestThumb;
+  AssetEntity? _latestAsset; // 最新照片 entity（长按直接打开详情用）
   int _timerCountdown = 0;
   Timer? _countdownTimer;
 
@@ -96,7 +98,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       final thumb = await assets.first.thumbnailDataWithSize(
         const ThumbnailSize(120, 120),
       );
-      if (mounted) setState(() => _latestThumb = thumb);
+      if (mounted) setState(() {
+        _latestThumb = thumb;
+        _latestAsset = assets.first;
+      });
     }
   }
 
@@ -582,9 +587,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // 左侧: 图库缩略图（点击打开相册）
+          // 左侧: 图库缩略图（单击→相册列表，长按→直接打开最新相片详情）
           GestureDetector(
-            onTap: _showGallerySheet,
+            onTap: _openGallery,
+            onLongPress: _openLatestPhotoDetail,
             child: Container(
               width: 60,
               height: 60,
@@ -735,19 +741,33 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     );
   }
 
-  // ── 相册弹框（左下角缩略图点击）────────────────────────────────────────────
-  void _showGallerySheet() {
+  // ── 单击：打开相册列表页 ─────────────────────────────────────────────────
+  void _openGallery() {
+    HapticFeedback.selectionClick();
     Navigator.of(context).push(
-      PageRouteBuilder(
-        opaque: false,
-        barrierColor: Colors.transparent,
-        pageBuilder: (ctx, anim, _) => FadeTransition(
-          opacity: anim,
-          child: const _GallerySheet(),
-        ),
+      MaterialPageRoute(
+        builder: (_) => const GalleryScreen(),
       ),
     );
   }
+
+  // ── 长按：直接打开最新相片详情，返回后回到相册列表 ─────────────────────────
+  void _openLatestPhotoDetail() {
+    if (_latestAsset == null) {
+      // 没有照片时，单纯打开相册
+      _openGallery();
+      return;
+    }
+    HapticFeedback.mediumImpact();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GalleryScreen(initialAsset: _latestAsset),
+      ),
+    );
+  }
+
+  // ── 保留旧方法名以防其他地方引用 ─────────────────────────────────────────
+  void _showGallerySheet() => _openGallery();
 
   // ── 倒计时遮罩 ──────────────────────────────────────────────────────────────
   Widget _buildCountdownOverlay() {

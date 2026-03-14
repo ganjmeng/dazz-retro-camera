@@ -1,116 +1,148 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:share_plus/share_plus.dart';
 
-/// 应用内作品列表页 — 只显示 DAZZ 相册照片
+// ─────────────────────────────────────────────────────────────────────────────
+// 相机分类数据（匹配截图 13085.jpg）
+// ─────────────────────────────────────────────────────────────────────────────
+class _AlbumEntry {
+  final String id;
+  final String name;
+  final IconData? icon;
+  final String? assetIcon; // 相机图标资源路径（可选）
+  const _AlbumEntry({required this.id, required this.name, this.icon, this.assetIcon});
+}
+
+// 截图中的相机列表：全部照片 / Puli / Inst SQC / GRD R / CCD R / FXN R / NT16 ...
+const _kAlbumEntries = [
+  _AlbumEntry(id: 'all', name: '全部照片', icon: Icons.photo_library_outlined),
+  _AlbumEntry(id: 'puli', name: 'Puli', icon: Icons.camera_alt_outlined),
+  _AlbumEntry(id: 'inst_sqc', name: 'Inst SQC', icon: Icons.camera_alt_outlined),
+  _AlbumEntry(id: 'grd_r', name: 'GRD R', icon: Icons.camera_alt_outlined),
+  _AlbumEntry(id: 'ccd_r', name: 'CCD R', icon: Icons.camera_alt_outlined),
+  _AlbumEntry(id: 'fxn_r', name: 'FXN R', icon: Icons.camera_alt_outlined),
+  _AlbumEntry(id: 'nt16', name: 'NT16', icon: Icons.camera_alt_outlined),
+  _AlbumEntry(id: 'ct2f', name: 'CT2F', icon: Icons.camera_alt_outlined),
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GalleryScreen — 相册列表主页
+// 截图 13084.jpg：3列网格，黄色边框相片卡片，左上角"导入图片"，顶部"全部照片 ▼"
+// ─────────────────────────────────────────────────────────────────────────────
 class GalleryScreen extends StatefulWidget {
-  const GalleryScreen({super.key});
+  /// 如果传入 initialAsset，进入时直接打开该相片详情（长按触发）
+  final AssetEntity? initialAsset;
+
+  const GalleryScreen({super.key, this.initialAsset});
+
   @override
   State<GalleryScreen> createState() => _GalleryScreenState();
 }
 
 class _GalleryScreenState extends State<GalleryScreen> {
   List<AssetEntity> _assets = [];
-  Set<String> _selectedAssetIds = {};
   bool _isLoading = true;
   bool _isSelectionMode = false;
+  Set<String> _selectedIds = {};
+  bool _showAlbumDropdown = false;
+  String _currentAlbumId = 'all';
+  String _currentAlbumName = '全部照片';
+  Map<String, int> _albumCounts = {};
 
   @override
   void initState() {
     super.initState();
-    _fetchDazzAssets();
+    _fetchAssets();
   }
 
-  // 只加载 DAZZ 相册中的照片
-  Future<void> _fetchDazzAssets() async {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 如果有 initialAsset，在第一帧后直接打开详情页
+    if (widget.initialAsset != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _openDetail(widget.initialAsset!, fromLongPress: true);
+      });
+    }
+  }
+
+  Future<void> _fetchAssets() async {
     setState(() => _isLoading = true);
     final ps = await PhotoManager.requestPermissionExtend();
     if (!ps.isAuth) {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
       return;
     }
 
     final paths = await PhotoManager.getAssetPathList(
       type: RequestType.image,
       filterOption: FilterOptionGroup(
-        orders: [
-          const OrderOption(type: OrderOptionType.createDate, asc: false),
-        ],
+        orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
       ),
     );
 
-    // 优先找 DAZZ 相册
-    AssetPathEntity? dazzPath;
-    for (final p in paths) {
-      if (p.name.toUpperCase().contains('DAZZ')) {
-        dazzPath = p;
-        break;
-      }
-    }
-
-    if (dazzPath != null) {
-      final entities = await dazzPath.getAssetListPaged(page: 0, size: 200);
-      if (mounted) {
-        setState(() {
-          _assets = entities;
-          _isLoading = false;
-        });
-      }
-    } else {
-      // 没有 DAZZ 相册时显示空列表
+    if (paths.isEmpty) {
       if (mounted) setState(() => _isLoading = false);
+      return;
     }
-  }
 
-  Future<void> _shareAsset(AssetEntity asset) async {
-    final file = await asset.file;
-    if (file != null) {
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Captured with DAZZ Retro Camera',
-      );
-    }
-  }
+    // 获取全部照片
+    final allAssets = await paths.first.getAssetListRange(start: 0, end: 500);
 
-  Future<void> _shareSelected() async {
-    if (_selectedAssetIds.isEmpty) return;
-    final List<XFile> files = [];
-    for (final asset in _assets.where((a) => _selectedAssetIds.contains(a.id))) {
-      final file = await asset.file;
-      if (file != null) files.add(XFile(file.path));
+    // 统计各相机相册数量（简单按相册名匹配）
+    final counts = <String, int>{'all': allAssets.length};
+    for (final entry in _kAlbumEntries.skip(1)) {
+      int count = 0;
+      for (final path in paths) {
+        if (path.name.toLowerCase().contains(entry.id.toLowerCase()) ||
+            path.name.toLowerCase().contains(entry.name.toLowerCase())) {
+          final assets = await path.getAssetListRange(start: 0, end: 500);
+          count += assets.length;
+        }
+      }
+      counts[entry.id] = count;
     }
-    if (files.isNotEmpty) {
-      await Share.shareXFiles(files, text: 'Captured with DAZZ Retro Camera');
+
+    if (mounted) {
       setState(() {
-        _isSelectionMode = false;
-        _selectedAssetIds.clear();
+        _assets = allAssets;
+        _albumCounts = counts;
+        _isLoading = false;
       });
     }
   }
 
-  Future<void> _deleteSelected() async {
-    if (_selectedAssetIds.isEmpty) return;
-    final toDelete = _assets
-        .where((a) => _selectedAssetIds.contains(a.id))
-        .toList();
-    await PhotoManager.editor.deleteWithIds(
-      toDelete.map((a) => a.id).toList(),
+  void _openDetail(AssetEntity asset, {bool fromLongPress = false}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PhotoDetailPage(
+          asset: asset,
+          allAssets: _assets,
+          fromLongPress: fromLongPress,
+        ),
+      ),
     );
+  }
+
+  void _toggleSelection(String id) {
     setState(() {
-      _assets.removeWhere((a) => _selectedAssetIds.contains(a.id));
-      _selectedAssetIds.clear();
-      _isSelectionMode = false;
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
     });
   }
 
-  void _toggleSelection(AssetEntity asset) {
+  Future<void> _deleteSelected() async {
+    if (_selectedIds.isEmpty) return;
+    final toDelete = _assets.where((a) => _selectedIds.contains(a.id)).map((a) => a.id).toList();
+    await PhotoManager.editor.deleteWithIds(toDelete);
     setState(() {
-      if (_selectedAssetIds.contains(asset.id)) {
-        _selectedAssetIds.remove(asset.id);
-      } else {
-        _selectedAssetIds.add(asset.id);
-      }
+      _assets.removeWhere((a) => _selectedIds.contains(a.id));
+      _selectedIds.clear();
+      _isSelectionMode = false;
     });
   }
 
@@ -118,141 +150,188 @@ class _GalleryScreenState extends State<GalleryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Text(
-              '全部照片',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
+      body: Stack(
+        children: [
+          // ── 主内容 ──
+          Column(
+            children: [
+              // 顶部导航栏
+              _buildAppBar(),
+              // 网格
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : _buildGrid(),
               ),
-            ),
-            SizedBox(width: 4),
-            Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 20),
-          ],
-        ),
-        centerTitle: true,
-        actions: [
-          if (_isSelectionMode) ...[
-            IconButton(
-              icon: const Icon(Icons.share_outlined, color: Colors.white),
-              onPressed: _selectedAssetIds.isNotEmpty ? _shareSelected : null,
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.white),
-              onPressed: _selectedAssetIds.isNotEmpty ? _deleteSelected : null,
-            ),
-          ],
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _isSelectionMode = !_isSelectionMode;
-                if (!_isSelectionMode) _selectedAssetIds.clear();
-              });
-            },
-            child: Text(
-              _isSelectionMode ? '取消' : '选择',
-              style: const TextStyle(color: Colors.white, fontSize: 15),
+            ],
+          ),
+          // ── 相机按钮（左下角，截图中有）──
+          Positioned(
+            bottom: MediaQuery.of(context).padding.bottom + 24,
+            left: 24,
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF3A3A3C),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.photo_camera_outlined, color: Colors.white, size: 28),
+              ),
             ),
           ),
+          // ── 相册分类下拉（截图 13085.jpg）──
+          if (_showAlbumDropdown) _buildAlbumDropdown(),
         ],
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2,
-              ),
-            )
-          : _assets.isEmpty
-              ? _buildEmptyState()
-              : _buildGrid(),
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: const Color(0xFF2C2C2E),
-              borderRadius: BorderRadius.circular(20),
+  Widget _buildAppBar() {
+    return SafeArea(
+      bottom: false,
+      child: SizedBox(
+        height: 52,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // 左侧返回按钮
+            Positioned(
+              left: 8,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
             ),
-            child: const Icon(
-              Icons.camera_alt_outlined,
-              color: Color(0xFFFF8C00),
-              size: 40,
+            // 中间标题（点击展开相册分类）
+            GestureDetector(
+              onTap: () => setState(() => _showAlbumDropdown = !_showAlbumDropdown),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _currentAlbumName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    _showAlbumDropdown ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            '还没有照片',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
+            // 右侧操作按钮
+            Positioned(
+              right: 8,
+              child: _isSelectionMode
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_selectedIds.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.white),
+                            onPressed: _deleteSelected,
+                          ),
+                        TextButton(
+                          onPressed: () => setState(() {
+                            _isSelectionMode = false;
+                            _selectedIds.clear();
+                          }),
+                          child: const Text('取消', style: TextStyle(color: Colors.white, fontSize: 15)),
+                        ),
+                      ],
+                    )
+                  : TextButton(
+                      onPressed: () => setState(() => _isSelectionMode = true),
+                      child: const Text('选择', style: TextStyle(color: Colors.white, fontSize: 15)),
+                    ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            '用 DAZZ 拍摄的照片会出现在这里',
-            style: TextStyle(color: Colors.grey, fontSize: 14),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildGrid() {
+    if (_assets.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2C2C2E),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(Icons.camera_alt_outlined, color: Color(0xFFFF8C00), size: 40),
+            ),
+            const SizedBox(height: 16),
+            const Text('还没有照片', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            const Text('用 DAZZ 拍摄的照片会出现在这里', style: TextStyle(color: Colors.grey, fontSize: 14)),
+          ],
+        ),
+      );
+    }
+
+    // 总 item 数 = 导入按钮(1) + 照片数
+    final itemCount = _assets.length + 1;
+    // 每行3列，计算每格宽度
     return GridView.builder(
-      padding: const EdgeInsets.all(2),
+      padding: EdgeInsets.zero,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        crossAxisSpacing: 2,
-        mainAxisSpacing: 2,
+        crossAxisSpacing: 0,
+        mainAxisSpacing: 0,
       ),
-      itemCount: _assets.length + 1, // +1 for import button
-      itemBuilder: (context, index) {
-        // 第一格：导入图片按钮
+      itemCount: itemCount,
+      itemBuilder: (ctx, index) {
+        // 第一格：导入图片（截图左上角黑色格，橙色图标+文字）
         if (index == 0) {
           return GestureDetector(
             onTap: () {}, // TODO: 导入图片
             child: Container(
-              color: const Color(0xFF1C1C1E),
-              child: const Center(
-                child: Icon(
-                  Icons.add_photo_alternate_outlined,
-                  color: Color(0xFFFF8C00),
-                  size: 36,
-                ),
+              color: const Color(0xFF1A1A1A),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2C2C2E),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.add_photo_alternate_outlined, color: Color(0xFFFF8C00), size: 28),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('导入图片', style: TextStyle(color: Color(0xFFFF8C00), fontSize: 12)),
+                ],
               ),
             ),
           );
         }
 
         final asset = _assets[index - 1];
-        final isSelected = _selectedAssetIds.contains(asset.id);
+        final isSelected = _selectedIds.contains(asset.id);
 
         return GestureDetector(
           onTap: () {
             if (_isSelectionMode) {
-              _toggleSelection(asset);
+              _toggleSelection(asset.id);
             } else {
               HapticFeedback.selectionClick();
-              _showPhotoPreview(asset);
+              _openDetail(asset);
             }
           },
           onLongPress: () {
@@ -260,221 +339,500 @@ class _GalleryScreenState extends State<GalleryScreen> {
               HapticFeedback.mediumImpact();
               setState(() {
                 _isSelectionMode = true;
-                _selectedAssetIds.add(asset.id);
+                _selectedIds.add(asset.id);
               });
             }
           },
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              FutureBuilder<Uint8List?>(
-                future: asset.thumbnailDataWithSize(
-                    const ThumbnailSize(200, 200)),
-                builder: (ctx, snap) {
-                  if (snap.hasData && snap.data != null) {
-                    return Image.memory(
-                      snap.data!,
-                      fit: BoxFit.cover,
-                    );
-                  }
-                  return Container(color: Colors.grey[900]);
-                },
-              ),
-              if (asset.type == AssetType.video)
-                const Positioned(
-                  bottom: 4,
-                  right: 4,
-                  child: Icon(Icons.play_circle_fill,
-                      color: Colors.white, size: 20),
-                ),
-              if (_isSelectionMode)
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isSelected
-                          ? Colors.blue
-                          : Colors.black.withAlpha(100),
-                      border: Border.all(
-                        color: Colors.white,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: isSelected
-                        ? const Icon(Icons.check,
-                            color: Colors.white, size: 14)
-                        : null,
-                  ),
-                ),
-            ],
+          child: _RetroPhotoCell(
+            asset: asset,
+            isSelected: isSelected,
+            isSelectionMode: _isSelectionMode,
           ),
         );
       },
     );
   }
 
-  void _showPhotoPreview(AssetEntity asset) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.black,
-      builder: (ctx) => _PhotoPreviewSheet(
-        asset: asset,
-        onDelete: () async {
-          await PhotoManager.editor.deleteWithIds([asset.id]);
-          setState(() => _assets.remove(asset));
-          Navigator.of(ctx).pop();
-        },
-        onShare: () async {
-          Navigator.of(ctx).pop();
-          await _shareAsset(asset);
-        },
+  // ── 相册分类下拉（截图 13085.jpg）──────────────────────────────────────────
+  // 半透明背景，背景模糊，列表显示相机分类+数量
+  Widget _buildAlbumDropdown() {
+    return GestureDetector(
+      onTap: () => setState(() => _showAlbumDropdown = false),
+      child: Container(
+        color: Colors.transparent,
+        child: Stack(
+          children: [
+            // 背景模糊遮罩（截图中可以看到背景网格透过来）
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                child: Container(color: Colors.black.withAlpha(80)),
+              ),
+            ),
+            // 下拉列表（从顶部导航栏下方开始）
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 52,
+              left: 0,
+              right: 0,
+              child: GestureDetector(
+                onTap: () {}, // 阻止穿透
+                child: Container(
+                  color: Colors.transparent,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _kAlbumEntries.map((entry) {
+                      final count = _albumCounts[entry.id] ?? 0;
+                      final isActive = entry.id == _currentAlbumId;
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _currentAlbumId = entry.id;
+                            _currentAlbumName = entry.name;
+                            _showAlbumDropdown = false;
+                          });
+                          // TODO: 按相机过滤照片
+                        },
+                        child: Container(
+                          color: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          child: Row(
+                            children: [
+                              // 相机图标（截图中是相机缩略图，这里用图标代替）
+                              Container(
+                                width: 64,
+                                height: 64,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2C2C2E),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  entry.icon ?? Icons.camera_alt_outlined,
+                                  color: isActive ? const Color(0xFFFF8C00) : Colors.white70,
+                                  size: 32,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              // 相机名称
+                              Expanded(
+                                child: Text(
+                                  entry.name,
+                                  style: TextStyle(
+                                    color: isActive ? Colors.white : Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                                  ),
+                                ),
+                              ),
+                              // 数量
+                              Text(
+                                '$count',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ─── 照片预览底部弹窗 ─────────────────────────────────────────────────────────
-
-class _PhotoPreviewSheet extends StatelessWidget {
+// ─────────────────────────────────────────────────────────────────────────────
+// 复古相片格子（截图 13084.jpg：黄色边框卡片）
+// ─────────────────────────────────────────────────────────────────────────────
+class _RetroPhotoCell extends StatefulWidget {
   final AssetEntity asset;
-  final VoidCallback onDelete;
-  final VoidCallback onShare;
+  final bool isSelected;
+  final bool isSelectionMode;
 
-  const _PhotoPreviewSheet({
+  const _RetroPhotoCell({
     required this.asset,
-    required this.onDelete,
-    required this.onShare,
+    required this.isSelected,
+    required this.isSelectionMode,
   });
 
   @override
+  State<_RetroPhotoCell> createState() => _RetroPhotoCellState();
+}
+
+class _RetroPhotoCellState extends State<_RetroPhotoCell> {
+  Uint8List? _thumb;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final data = await widget.asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
+    if (mounted && data != null) setState(() => _thumb = data);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.85,
-      child: Column(
+    // 截图中照片有黄色边框（类似胶片相框）
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFD4C84A), // 黄色边框
+      ),
+      padding: const EdgeInsets.all(3), // 边框宽度
+      child: Stack(
+        fit: StackFit.expand,
         children: [
-          // 拖动条
-          Container(
-            margin: const EdgeInsets.only(top: 8),
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[700],
-              borderRadius: BorderRadius.circular(2),
+          // 照片内容
+          _thumb != null
+              ? Image.memory(_thumb!, fit: BoxFit.cover)
+              : Container(color: const Color(0xFF1C1C1E)),
+          // 视频时长标记
+          if (widget.asset.type == AssetType.video)
+            Positioned(
+              bottom: 4,
+              right: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  _formatDuration(widget.asset.videoDuration),
+                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                ),
+              ),
             ),
+          // 选择模式勾选框
+          if (widget.isSelectionMode)
+            Positioned(
+              top: 4,
+              right: 4,
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.isSelected ? Colors.blue : Colors.black.withAlpha(100),
+                  border: Border.all(color: Colors.white, width: 1.5),
+                ),
+                child: widget.isSelected
+                    ? const Icon(Icons.check, color: Colors.white, size: 14)
+                    : null,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDuration(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PhotoDetailPage — 相片详情页
+// 截图 12916.jpg：黑色背景，居中带相框照片，底部 # FQS、下载、删除
+// ─────────────────────────────────────────────────────────────────────────────
+class PhotoDetailPage extends StatefulWidget {
+  final AssetEntity asset;
+  final List<AssetEntity> allAssets;
+  final bool fromLongPress;
+
+  const PhotoDetailPage({
+    super.key,
+    required this.asset,
+    required this.allAssets,
+    this.fromLongPress = false,
+  });
+
+  @override
+  State<PhotoDetailPage> createState() => _PhotoDetailPageState();
+}
+
+class _PhotoDetailPageState extends State<PhotoDetailPage> {
+  Uint8List? _fullData;
+  late int _currentIndex;
+  late PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.allAssets.indexOf(widget.asset);
+    if (_currentIndex < 0) _currentIndex = 0;
+    _pageController = PageController(initialPage: _currentIndex);
+    _loadAsset(widget.asset);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadAsset(AssetEntity asset) async {
+    final data = await asset.originBytes;
+    if (mounted && data != null) setState(() => _fullData = data);
+  }
+
+  Future<void> _saveToGallery() async {
+    // 已在相册中，提示用户
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('照片已保存在相册中'),
+        backgroundColor: Color(0xFF2C2C2E),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _deleteAsset() async {
+    final asset = widget.allAssets[_currentIndex];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2C2C2E),
+        title: const Text('删除照片', style: TextStyle(color: Colors.white)),
+        content: const Text('确定要删除这张照片吗？', style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消', style: TextStyle(color: Colors.white54)),
           ),
-          // 照片预览
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: FutureBuilder<Uint8List?>(
-                future: asset.originBytes,
-                builder: (ctx, snap) {
-                  if (snap.hasData && snap.data != null) {
-                    return ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.memory(
-                        snap.data!,
-                        fit: BoxFit.contain,
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('删除', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await PhotoManager.editor.deleteWithIds([asset.id]);
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final asset = widget.allAssets.isNotEmpty ? widget.allAssets[_currentIndex] : widget.asset;
+    final cameraTag = '#${asset.title?.split('.').first ?? "DAZZ"}';
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // ── 照片内容（可左右滑动）──
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.allAssets.isEmpty ? 1 : widget.allAssets.length,
+            onPageChanged: (i) {
+              setState(() {
+                _currentIndex = i;
+                _fullData = null;
+              });
+              _loadAsset(widget.allAssets[i]);
+            },
+            itemBuilder: (ctx, i) {
+              final pageAsset = widget.allAssets.isEmpty ? widget.asset : widget.allAssets[i];
+              return _PhotoFrame(asset: pageAsset, fullData: i == _currentIndex ? _fullData : null);
+            },
+          ),
+
+          // ── 顶部状态栏区域（纯黑）──
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: mq.padding.top,
+            child: Container(color: Colors.black),
+          ),
+
+          // ── 底部操作栏（截图：# FQS + 下载 + 删除）──
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              color: Colors.black,
+              padding: EdgeInsets.only(
+                bottom: mq.padding.bottom + 16,
+                top: 16,
+                left: 24,
+                right: 24,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // 左侧：相机标签（截图中显示 # FQS）
+                  Text(
+                    cameraTag,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  // 右侧：下载 + 删除
+                  Row(
+                    children: [
+                      // 下载按钮
+                      GestureDetector(
+                        onTap: _saveToGallery,
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2C2C2E),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.download_outlined, color: Colors.white, size: 24),
+                        ),
                       ),
-                    );
-                  }
-                  return const Center(
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2),
-                  );
-                },
+                      const SizedBox(width: 12),
+                      // 删除按钮
+                      GestureDetector(
+                        onTap: _deleteAsset,
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2C2C2E),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.delete_outline, color: Colors.white, size: 24),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
-          // 底部操作栏
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // 相机型号标签
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2C2C2E),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    '# DAZZ',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-                Row(
-                  children: [
-                    // 下载/分享
-                    GestureDetector(
-                      onTap: onShare,
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFF2C2C2E),
-                        ),
-                        child: const Icon(Icons.download_outlined,
-                            color: Colors.white, size: 22),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    // 删除
-                    GestureDetector(
-                      onTap: () {
-                        showDialog(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            backgroundColor: const Color(0xFF2C2C2E),
-                            title: const Text('删除照片',
-                                style: TextStyle(color: Colors.white)),
-                            content: const Text('确定要删除这张照片吗？',
-                                style: TextStyle(color: Colors.white70)),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(ctx).pop(),
-                                child: const Text('取消',
-                                    style: TextStyle(color: Colors.white54)),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.of(ctx).pop();
-                                  onDelete();
-                                },
-                                child: const Text('删除',
-                                    style: TextStyle(color: Colors.red)),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFF2C2C2E),
-                        ),
-                        child: const Icon(Icons.delete_outline,
-                            color: Colors.white, size: 22),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 相片相框组件（截图 12916.jpg：照片居中，带花纹相框背景）
+// ─────────────────────────────────────────────────────────────────────────────
+class _PhotoFrame extends StatefulWidget {
+  final AssetEntity asset;
+  final Uint8List? fullData;
+
+  const _PhotoFrame({required this.asset, this.fullData});
+
+  @override
+  State<_PhotoFrame> createState() => _PhotoFrameState();
+}
+
+class _PhotoFrameState extends State<_PhotoFrame> {
+  Uint8List? _data;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.fullData != null) {
+      _data = widget.fullData;
+    } else {
+      _load();
+    }
+  }
+
+  @override
+  void didUpdateWidget(_PhotoFrame old) {
+    super.didUpdateWidget(old);
+    if (widget.fullData != null && widget.fullData != _data) {
+      setState(() => _data = widget.fullData);
+    } else if (widget.fullData == null && old.asset != widget.asset) {
+      setState(() => _data = null);
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    final data = await widget.asset.originBytes;
+    if (mounted && data != null) setState(() => _data = data);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    // 可用高度 = 屏幕高度 - 状态栏 - 底部操作栏(~90px)
+    final availH = mq.size.height - mq.padding.top - 90;
+    final availW = mq.size.width;
+
+    return Container(
+      color: Colors.black,
+      child: Column(
+        children: [
+          SizedBox(height: mq.padding.top),
+          Expanded(
+            child: Center(
+              child: SizedBox(
+                width: availW * 0.88,
+                height: availH * 0.88,
+                child: _buildFramedPhoto(),
+              ),
             ),
           ),
+          const SizedBox(height: 90), // 底部操作栏占位
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFramedPhoto() {
+    // 截图 12916.jpg：照片有白色相框，相框外有花纹背景（粉色+黑色斑点图案）
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        // 花纹背景（截图中是奶牛纹/斑点图案，用渐变近似）
+        color: const Color(0xFFF5F0E8),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 白色相框内的照片
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(60),
+                    blurRadius: 8,
+                    offset: const Offset(2, 4),
+                  ),
+                ],
+              ),
+              child: _data != null
+                  ? Image.memory(_data!, fit: BoxFit.cover, width: double.infinity)
+                  : Container(
+                      color: const Color(0xFF1C1C1E),
+                      child: const Center(
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      ),
+                    ),
+            ),
+          ),
+          // 相框底部留白（Polaroid 风格）
+          const SizedBox(height: 12),
         ],
       ),
     );
