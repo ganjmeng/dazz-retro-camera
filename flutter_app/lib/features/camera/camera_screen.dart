@@ -456,13 +456,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ),
           ),
           // ── 取景框（圆角，垂直居中，水平居中）──
+          // PhysicalModel 强制 GPU 层圆角裁剪，解决 Android Texture 直角问题
           Positioned(
             top: viewfinderTopOffset,
             left: viewfinderLeft,
-            child: SizedBox(
-              width: viewfinderW,
-              height: viewfinderH,
-              child: _buildViewfinderArea(st, camSvc, viewfinderH, viewfinderW),
+            child: PhysicalModel(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(16),
+              clipBehavior: Clip.hardEdge,
+              child: SizedBox(
+                width: viewfinderW,
+                height: viewfinderH,
+                child: _buildViewfinderArea(st, camSvc, viewfinderH, viewfinderW),
+              ),
             ),
           ),
           // ── 控制胶囊：固定浮层，与取景框大小/比例/缩放全部无关 ──
@@ -1273,7 +1279,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final sharpenLabels = ['低', '中', '高'];
     // 按鈕实际宽度 = (屏幕宽 - 左右padding) / 4
     final screenW = mq.size.width;
-    final btnW = (screenW - 32) / 4; // 32 = 左右16 + 右右16
+    final btnW = (screenW - 48) / 4; // 48 = 卡片左右margin(8+8) + 卡片内padding(16+16)
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => ref.read(cameraAppProvider.notifier).toggleTopMenu(),
@@ -1289,7 +1295,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 child: Container(
                   decoration: BoxDecoration(
                     // 深棕色半透明背景（对齐截图中的深色卡片）
-                    color: const Color(0xCC1A1008),
+                    color: const Color(0xE5202020),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
@@ -3362,9 +3368,10 @@ class _MinimapOverlay extends StatelessWidget {
                 height: boxH,
                 child: Stack(
                   children: [
-                    // 圆角边框
+                    // 圆角边框（clipBehavior 确保内容不溢出圆角外）
                     Positioned.fill(
                       child: Container(
+                        clipBehavior: Clip.hardEdge,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(radius),
                           border: Border.all(
