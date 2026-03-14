@@ -239,8 +239,8 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
   }
 
   // ── 打开子面板 ──────────────────────────────────────────────────────────────
+  // 子面板弹出时主面板保持在后面，关闭子面板后主面板仍可见
   void _openSubPanel(BuildContext ctx, _SubPanelType type) {
-    Navigator.of(ctx).pop(); // 先关闭主面板
     final st = ref.read(cameraAppProvider);
     final cam = st.camera;
     if (cam == null) return;
@@ -249,8 +249,9 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
       context: ctx,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.transparent,
-        builder: (_) => _SubPanel(type: type, camera: cam),
+      // 透明遮罩，让主面板在后面可见
+      barrierColor: Colors.black26,
+      builder: (_) => _SubPanel(type: type, camera: cam),
     );
   }
 }
@@ -359,9 +360,19 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                     onTap: () => ref.read(cameraAppProvider.notifier).selectWatermark('none'),
                   ),
                 if (widget.type == _SubPanelType.frame)
-                  _ActionPill(
-                    label: '无边框',
-                    onTap: () => ref.read(cameraAppProvider.notifier).selectFrame('none'),
+                  _FrameToggleSwitch(
+                    enabled: ref.watch(cameraAppProvider).activeFrameId != null,
+                    onChanged: (v) {
+                      if (!v) {
+                        ref.read(cameraAppProvider.notifier).selectFrame('none');
+                      } else {
+                        // 重新开启时选第一个可用相框
+                        final frames = widget.camera.modules.frames;
+                        if (frames.isNotEmpty) {
+                          ref.read(cameraAppProvider.notifier).selectFrame(frames.first.id);
+                        }
+                      }
+                    },
                   ),
               ],
             ),
@@ -565,24 +576,34 @@ class _SubPanelState extends ConsumerState<_SubPanel>
         ),
       );
     }
-    // 背景 Tab：颜色块选择
+    // 背景 Tab：颜色块选择（含透明选项）
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Wrap(
         spacing: 12,
         runSpacing: 12,
-        children: _kFrameBgColors.map((c) {
-          final r = c.r.toInt().toRadixString(16).padLeft(2, '0');
-          final g = c.g.toInt().toRadixString(16).padLeft(2, '0');
-          final b = c.b.toInt().toRadixString(16).padLeft(2, '0');
-          final hex = '#${r}${g}${b}'.toUpperCase();
-          final isSelected = st.activeFrame?.backgroundColor.toUpperCase() == hex;
-          return _BgColorCell(
-            color: c,
-            selected: isSelected,
-            onTap: () => ref.read(cameraAppProvider.notifier).selectFrameBackground(hex),
-          );
-        }).toList(),
+        children: [
+          // 透明背景（棋盘格图案）
+          _BgColorCell(
+            color: Colors.transparent,
+            isTransparent: true,
+            selected: st.activeFrame?.backgroundColor.toUpperCase() == 'TRANSPARENT' ||
+                      st.activeFrame?.backgroundColor == '#00000000',
+            onTap: () => ref.read(cameraAppProvider.notifier).selectFrameBackground('transparent'),
+          ),
+          ..._kFrameBgColors.map((c) {
+            final r = c.r.toInt().toRadixString(16).padLeft(2, '0');
+            final g = c.g.toInt().toRadixString(16).padLeft(2, '0');
+            final b = c.b.toInt().toRadixString(16).padLeft(2, '0');
+            final hex = '#${r}${g}${b}'.toUpperCase();
+            final isSelected = st.activeFrame?.backgroundColor.toUpperCase() == hex;
+            return _BgColorCell(
+              color: c,
+              selected: isSelected,
+              onTap: () => ref.read(cameraAppProvider.notifier).selectFrameBackground(hex),
+            );
+          }),
+        ],
       ),
     );
   }
@@ -1272,14 +1293,20 @@ class _FrameStyleCell extends StatelessWidget {
   }
 }
 
-// ─── 边框背景颜色单元格 ────────────────────────────────────────────────────────
+// ─── // ─── 边框背景颜色单元格 ────────────────────────────────────────────
 
 class _BgColorCell extends StatelessWidget {
   final Color color;
+  final bool isTransparent;
   final bool selected;
   final VoidCallback onTap;
 
-  const _BgColorCell({required this.color, required this.selected, required this.onTap});
+  const _BgColorCell({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+    this.isTransparent = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1291,9 +1318,17 @@ class _BgColorCell extends StatelessWidget {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: color,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.black12, width: 1),
+              border: Border.all(
+                color: selected ? Colors.black : Colors.black12,
+                width: selected ? 2.5 : 1,
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(9),
+              child: isTransparent
+                  ? CustomPaint(painter: _CheckerPainter())
+                  : ColoredBox(color: color),
             ),
           ),
           if (selected)
@@ -1303,8 +1338,8 @@ class _BgColorCell extends StatelessWidget {
               child: Container(
                 width: 18,
                 height: 18,
-                decoration: const BoxDecoration(
-                  color: Colors.black,
+                decoration: BoxDecoration(
+                  color: isTransparent ? Colors.black54 : Colors.black,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.check, color: Colors.white, size: 12),
@@ -1314,6 +1349,67 @@ class _BgColorCell extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 棋盘格透明背景画笔
+class _CheckerPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    const cellSize = 9.0;
+    final paint1 = Paint()..color = const Color(0xFFCCCCCC);
+    final paint2 = Paint()..color = Colors.white;
+    final cols = (size.width / cellSize).ceil();
+    final rows = (size.height / cellSize).ceil();
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < cols; c++) {
+        final isLight = (r + c) % 2 == 0;
+        canvas.drawRect(
+          Rect.fromLTWH(c * cellSize, r * cellSize, cellSize, cellSize),
+          isLight ? paint2 : paint1,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CheckerPainter old) => false;
+}
+
+/// 无边框开关
+class _FrameToggleSwitch extends StatelessWidget {
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  const _FrameToggleSwitch({required this.enabled, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '无边框',
+          style: TextStyle(
+            color: enabled ? const Color(0xFF8E8E93) : Colors.black,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Transform.scale(
+          scale: 0.8,
+          child: Switch.adaptive(
+            value: !enabled, // 开关开 = 无边框
+            onChanged: (v) => onChanged(!v), // 反转传递
+            activeColor: Colors.black,
+            inactiveThumbColor: const Color(0xFF8E8E93),
+            inactiveTrackColor: const Color(0xFFD1D1D6),
+          ),
+        ),
+      ],
+    );
+  }
+}  }
 }
 
 // ─── 胶卷图标单元格（滤镜列表）────────────────────────────────────────────────
@@ -1433,9 +1529,13 @@ const _kWatermarkColors = [
 ];
 
 const _kFrameBgColors = [
-  Color(0xFFD4C84A), // 黄绿（选中）
+  Color(0xFFE8D84B), // 拍立得黄
   Color(0xFFF5F2EA), // 奶白
+  Color(0xFFFFFFFF), // 纯白
   Color(0xFF6B8E5A), // 草绿
+  Color(0xFFD4A5A5), // 粉红
+  Color(0xFF7B9EC7), // 天蓝
+  Color(0xFF5C4033), // 深棕
   Color(0xFF1C1C1E), // 黑
 ];
 

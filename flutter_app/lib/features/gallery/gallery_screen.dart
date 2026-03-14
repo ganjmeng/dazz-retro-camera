@@ -68,14 +68,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
       return;
     }
 
-    // 标准方案：强制刷新 MediaStore 缓存，然后查 DAZZ 专属子相册
-    // BUCKET_DISPLAY_NAME 对 DCIM/DAZZ/ 路径返回 "DAZZ"（Android MediaStore 标准行为）
+    // 刷新 MediaStore 缓存
     await PhotoManager.clearFileCache();
 
+    // 同时获取所有子相册 + 虚拟根相册，确保能找到 DAZZ
     final allPaths = await PhotoManager.getAssetPathList(
       type: RequestType.image,
-      hasAll: false,   // 不包含虚拟的"所有照片"根相册
-      onlyAll: false,  // 返回所有子相册
+      hasAll: true,   // 包含虚拟根相册（小米 MIUI 需要此选项）
+      onlyAll: false,
       filterOption: FilterOptionGroup(
         orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
       ),
@@ -97,8 +97,53 @@ class _GalleryScreenState extends State<GalleryScreen> {
     }
 
     if (dazzPath == null) {
-      // 找不到 DAZZ 相册（可能还没拍过照），显示空状态
-      if (mounted) setState(() => _isLoading = false);
+      // 找不到 DAZZ 相册：尝试从根相册过滤文件名包含 dazz 的照片
+      final rootPath = allPaths.firstWhere(
+        (p) => p.isAll,
+        orElse: () => allPaths.first,
+      );
+      final rootCount = await rootPath.assetCountAsync;
+      final rootAssets = await rootPath.getAssetListRange(start: 0, end: rootCount.clamp(0, 5000));
+      final dazzAssets = rootAssets.where((a) {
+        final title = (a.title ?? '').toLowerCase();
+        return title.startsWith('dazz_') || title.contains('dazz');
+      }).toList();
+
+      if (dazzAssets.isEmpty) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      // 找到了，用这些照片作为 DAZZ 相册内容
+      final counts = <String, int>{'all': dazzAssets.length};
+      final cameraIdsFound = <String>{};
+      for (final asset in dazzAssets) {
+        final title = (asset.title ?? '').toLowerCase();
+        for (final cam in kAllCameras) {
+          if (title.contains(cam.id.toLowerCase())) {
+            cameraIdsFound.add(cam.id);
+            counts[cam.id] = (counts[cam.id] ?? 0) + 1;
+            break;
+          }
+        }
+      }
+      final entries = <_AlbumEntry>[
+        const _AlbumEntry(id: 'all', name: '全部照片', icon: Icons.photo_library_outlined),
+      ];
+      for (final cam in kAllCameras) {
+        if (cameraIdsFound.contains(cam.id)) {
+          entries.add(_AlbumEntry(id: cam.id, name: cam.name, icon: Icons.camera_alt_outlined));
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _allDazzAssets = dazzAssets;
+          _assets = dazzAssets;
+          _albumCounts = counts;
+          _cameraAlbumEntries = entries;
+          _isLoading = false;
+        });
+      }
       return;
     }
 
@@ -244,70 +289,69 @@ class _GalleryScreenState extends State<GalleryScreen> {
       bottom: false,
       child: SizedBox(
         height: 52,
-        child: Stack(
-          alignment: Alignment.center,
+        child: Row(
           children: [
-            // 左侧返回按钮
-            Positioned(
-              left: 8,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
+            // 左侧返回按鈕
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+              onPressed: () => Navigator.of(context).pop(),
             ),
-            // 中间标题（只有多个相机分类时才显示下拉箭头）
-            GestureDetector(
-              onTap: _cameraAlbumEntries.length > 1
-                  ? () => setState(() => _showAlbumDropdown = !_showAlbumDropdown)
-                  : null,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _currentAlbumName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (_cameraAlbumEntries.length > 1) ...[
-                    const SizedBox(width: 4),
-                    Icon(
-                      _showAlbumDropdown ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            // 右侧操作按钮
-            Positioned(
-              right: 8,
-              child: _isSelectionMode
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_selectedIds.isNotEmpty)
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.white),
-                            onPressed: _deleteSelected,
-                          ),
-                        TextButton(
-                          onPressed: () => setState(() {
-                            _isSelectionMode = false;
-                            _selectedIds.clear();
-                          }),
-                          child: const Text('取消', style: TextStyle(color: Colors.white, fontSize: 15)),
+            // 中间标题（Expanded 占满剩余空间）
+            Expanded(
+              child: GestureDetector(
+                onTap: _cameraAlbumEntries.length > 1
+                    ? () => setState(() => _showAlbumDropdown = !_showAlbumDropdown)
+                    : null,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _currentAlbumName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
-                    )
-                  : TextButton(
-                      onPressed: () => setState(() => _isSelectionMode = true),
-                      child: const Text('选择', style: TextStyle(color: Colors.white, fontSize: 15)),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
+                    if (_cameraAlbumEntries.length > 1) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        _showAlbumDropdown ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
+            // 右侧操作按鈕
+            _isSelectionMode
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_selectedIds.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.white),
+                          onPressed: _deleteSelected,
+                        ),
+                      TextButton(
+                        onPressed: () => setState(() {
+                          _isSelectionMode = false;
+                          _selectedIds.clear();
+                        }),
+                        child: const Text('取消', style: TextStyle(color: Colors.white, fontSize: 15)),
+                      ),
+                    ],
+                  )
+                : TextButton(
+                    onPressed: () => setState(() => _isSelectionMode = true),
+                    child: const Text('选择', style: TextStyle(color: Colors.white, fontSize: 15)),
+                  ),
           ],
         ),
       ),
