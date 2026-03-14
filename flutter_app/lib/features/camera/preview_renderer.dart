@@ -101,42 +101,61 @@ class PreviewFilterWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: AspectRatio(
-        aspectRatio: aspectRatio,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Layer 1: Raw camera texture with color correction
-            _ColorCorrectedTexture(textureId: textureId, params: params),
+    // 预览始终充满容器（BoxFit.cover 效果）
+    // 不用 AspectRatio 限制大小，避免黑边
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final containerW = constraints.maxWidth;
+        final containerH = constraints.maxHeight;
+        // 相机传感器比例（默认 3:4 竖屏）
+        final sensorAspect = aspectRatio; // width/height
+        // 计算 cover 比例：选择让内容充满容器的最小缩放
+        final scaleByW = containerW / (containerH * sensorAspect);
+        final scaleByH = containerH / (containerW / sensorAspect);
+        final scale = math.max(scaleByW, scaleByH);
+        final scaledW = containerH * sensorAspect * scale;
+        final scaledH = containerW / sensorAspect * scale;
+        final overflowW = math.max(scaledW, containerW);
+        final overflowH = math.max(scaledH, containerH);
+        return ClipRect(
+          child: OverflowBox(
+            maxWidth: overflowW,
+            maxHeight: overflowH,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Layer 1: Raw camera texture with color correction
+                _ColorCorrectedTexture(textureId: textureId, params: params),
 
-            // Layer 2: Chromatic aberration (color fringing)
-            if (params.policy.enableChromaticAberration &&
-                params.effectiveChromaticAberration > 0.001)
-              _ChromaticAberrationLayer(
-                textureId: textureId,
-                strength: params.effectiveChromaticAberration,
-              ),
+                // Layer 2: Chromatic aberration (color fringing)
+                if (params.policy.enableChromaticAberration &&
+                    params.effectiveChromaticAberration > 0.001)
+                  _ChromaticAberrationLayer(
+                    textureId: textureId,
+                    strength: params.effectiveChromaticAberration,
+                  ),
 
-            // Layer 3: Bloom / soft glow
-            if (params.policy.enableBloom && params.effectiveBloom > 0.01)
-              _BloomLayer(
-                textureId: textureId,
-                strength: params.effectiveBloom,
-                softFocus: params.effectiveSoftFocus,
-              ),
+                // Layer 3: Bloom / soft glow
+                if (params.policy.enableBloom && params.effectiveBloom > 0.01)
+                  _BloomLayer(
+                    textureId: textureId,
+                    strength: params.effectiveBloom,
+                    softFocus: params.effectiveSoftFocus,
+                  ),
 
-            // Layer 4: Vignette overlay
-            if (params.policy.enableVignette && params.effectiveVignette > 0.01)
-              _VignetteLayer(strength: params.effectiveVignette),
+                // Layer 4: Vignette overlay
+                if (params.policy.enableVignette && params.effectiveVignette > 0.01)
+                  _VignetteLayer(strength: params.effectiveVignette),
 
-            // Layer 5: Lens distortion indicator (visual only, subtle)
-            if (params.activeLens?.distortion != null &&
-                (params.activeLens!.distortion).abs() > 0.01)
-              _DistortionIndicator(distortion: params.activeLens!.distortion),
-          ],
-        ),
-      ),
+                // Layer 5: Lens distortion indicator (visual only, subtle)
+                if (params.activeLens?.distortion != null &&
+                    (params.activeLens!.distortion).abs() > 0.01)
+                  _DistortionIndicator(distortion: params.activeLens!.distortion),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

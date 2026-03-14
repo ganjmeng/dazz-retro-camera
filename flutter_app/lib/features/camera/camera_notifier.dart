@@ -358,8 +358,12 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           }
         }
         // Save processed file to gallery (DCIM/DAZZ) via native MediaStore
+        // 文件名含 cameraId，使相册可按相机分类
         try {
-          final galleryUri = await _ref.read(cameraServiceProvider.notifier).saveToGallery(path);
+          final galleryUri = await _ref.read(cameraServiceProvider.notifier).saveToGallery(
+            path,
+            cameraId: state.activeCameraId,
+          );
           debugPrint('[CameraNotifier] Saved to gallery: $galleryUri');
         } catch (e) {
           debugPrint('[CameraNotifier] saveToGallery error: $e');

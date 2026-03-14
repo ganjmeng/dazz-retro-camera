@@ -178,10 +178,21 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             result(FlutterError(code: "INVALID_ARG", message: "filePath required", details: nil))
             return
         }
-        let fileURL = URL(fileURLWithPath: filePath)
+        let cameraId = args["cameraId"] as? String ?? ""
+        var fileURL = URL(fileURLWithPath: filePath)
         guard FileManager.default.fileExists(atPath: filePath) else {
             result(FlutterError(code: "FILE_NOT_FOUND", message: "File not found: \(filePath)", details: nil))
             return
+        }
+        // 如果有 cameraId，将文件重命名为 DAZZ_{cameraId}_{timestamp}.jpg
+        if !cameraId.isEmpty {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyyMMdd_HHmmss"
+            let timestamp = formatter.string(from: Date())
+            let newName = "DAZZ_\(cameraId)_\(timestamp).jpg"
+            let newURL = fileURL.deletingLastPathComponent().appendingPathComponent(newName)
+            try? FileManager.default.moveItem(at: fileURL, to: newURL)
+            fileURL = newURL
         }
         PHPhotoLibrary.requestAuthorization { status in
             guard status == .authorized || status == .limited else {
@@ -197,7 +208,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
                 DispatchQueue.main.async {
                     if success {
                         try? FileManager.default.removeItem(at: fileURL)
-                        result(["success": true, "uri": filePath])
+                        result(["success": true, "uri": fileURL.path])
                     } else {
                         result(FlutterError(code: "SAVE_FAILED", message: error?.localizedDescription, details: nil))
                     }

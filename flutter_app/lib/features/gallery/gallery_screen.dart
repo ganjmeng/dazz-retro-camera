@@ -2,29 +2,17 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
+import '../../models/camera_registry.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 相机分类数据（匹配截图 13085.jpg）
+// 相机分类数据（动态根据实际有成片的相机生成）
 // ─────────────────────────────────────────────────────────────────────────────
 class _AlbumEntry {
   final String id;
   final String name;
   final IconData? icon;
-  final String? assetIcon; // 相机图标资源路径（可选）
-  const _AlbumEntry({required this.id, required this.name, this.icon, this.assetIcon});
+  const _AlbumEntry({required this.id, required this.name, this.icon});
 }
-
-// 截图中的相机列表：全部照片 / Puli / Inst SQC / GRD R / CCD R / FXN R / NT16 ...
-const _kAlbumEntries = [
-  _AlbumEntry(id: 'all', name: '全部照片', icon: Icons.photo_library_outlined),
-  _AlbumEntry(id: 'puli', name: 'Puli', icon: Icons.camera_alt_outlined),
-  _AlbumEntry(id: 'inst_sqc', name: 'Inst SQC', icon: Icons.camera_alt_outlined),
-  _AlbumEntry(id: 'grd_r', name: 'GRD R', icon: Icons.camera_alt_outlined),
-  _AlbumEntry(id: 'ccd_r', name: 'CCD R', icon: Icons.camera_alt_outlined),
-  _AlbumEntry(id: 'fxn_r', name: 'FXN R', icon: Icons.camera_alt_outlined),
-  _AlbumEntry(id: 'nt16', name: 'NT16', icon: Icons.camera_alt_outlined),
-  _AlbumEntry(id: 'ct2f', name: 'CT2F', icon: Icons.camera_alt_outlined),
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GalleryScreen — 相册列表主页
@@ -41,7 +29,8 @@ class GalleryScreen extends StatefulWidget {
 }
 
 class _GalleryScreenState extends State<GalleryScreen> {
-  List<AssetEntity> _assets = [];
+  List<AssetEntity> _allDazzAssets = []; // DAZZ 相册所有照片
+  List<AssetEntity> _assets = [];        // 当前显示的照片（已按相机过滤）
   bool _isLoading = true;
   bool _isSelectionMode = false;
   Set<String> _selectedIds = {};
@@ -49,6 +38,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
   String _currentAlbumId = 'all';
   String _currentAlbumName = '全部照片';
   Map<String, int> _albumCounts = {};
+  // 动态相机分类列表（只包含实际有成片的相机）
+  List<_AlbumEntry> _cameraAlbumEntries = [
+    const _AlbumEntry(id: 'all', name: '全部照片', icon: Icons.photo_library_outlined),
+  ];
 
   @override
   void initState() {
@@ -75,42 +68,87 @@ class _GalleryScreenState extends State<GalleryScreen> {
       return;
     }
 
-    final paths = await PhotoManager.getAssetPathList(
+    // 查找 DAZZ 专属相册（相册名包含 "DAZZ" 或 "dazz"）
+    final allPaths = await PhotoManager.getAssetPathList(
       type: RequestType.image,
       filterOption: FilterOptionGroup(
         orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
       ),
     );
 
-    if (paths.isEmpty) {
+    if (allPaths.isEmpty) {
       if (mounted) setState(() => _isLoading = false);
       return;
     }
 
-    // 获取全部照片
-    final allAssets = await paths.first.getAssetListRange(start: 0, end: 500);
+    // 优先尝试找 DAZZ 相册，找不到则用第一个相册
+    AssetPathEntity? dazzPath;
+    for (final p in allPaths) {
+      if (p.name.toUpperCase().contains('DAZZ')) {
+        dazzPath = p;
+        break;
+      }
+    }
+    dazzPath ??= allPaths.first;
 
-    // 统计各相机相册数量（简单按相册名匹配）
+    final allAssets = await dazzPath.getAssetListRange(start: 0, end: 1000);
+
+    // 按文件名中的 cameraId 动态统计各相机成片数量
+    // 文件命名格式: DAZZ_{cameraId}_{timestamp}.jpg
     final counts = <String, int>{'all': allAssets.length};
-    for (final entry in _kAlbumEntries.skip(1)) {
-      int count = 0;
-      for (final path in paths) {
-        if (path.name.toLowerCase().contains(entry.id.toLowerCase()) ||
-            path.name.toLowerCase().contains(entry.name.toLowerCase())) {
-          final assets = await path.getAssetListRange(start: 0, end: 500);
-          count += assets.length;
+    final cameraIdsFound = <String>{};
+
+    for (final asset in allAssets) {
+      final title = (asset.title ?? '').toLowerCase();
+      for (final cam in kAllCameras) {
+        if (title.contains(cam.id.toLowerCase())) {
+          cameraIdsFound.add(cam.id);
+          counts[cam.id] = (counts[cam.id] ?? 0) + 1;
+          break;
         }
       }
-      counts[entry.id] = count;
+    }
+
+    // 构建动态相机分类列表：全部照片 + 有成片的相机
+    final entries = <_AlbumEntry>[
+      const _AlbumEntry(id: 'all', name: '全部照片', icon: Icons.photo_library_outlined),
+    ];
+    // 按 kAllCameras 顺序添加有成片的相机
+    for (final cam in kAllCameras) {
+      if (cameraIdsFound.contains(cam.id)) {
+        entries.add(_AlbumEntry(id: cam.id, name: cam.name, icon: Icons.camera_alt_outlined));
+      }
     }
 
     if (mounted) {
       setState(() {
+        _allDazzAssets = allAssets;
         _assets = allAssets;
         _albumCounts = counts;
+        _cameraAlbumEntries = entries;
         _isLoading = false;
       });
     }
+  }
+
+  // 按当前选中的相机 ID 过滤照片
+  void _filterByCamera(String cameraId) {
+    setState(() {
+      _currentAlbumId = cameraId;
+      _currentAlbumName = _cameraAlbumEntries
+          .firstWhere((e) => e.id == cameraId,
+              orElse: () => const _AlbumEntry(id: 'all', name: '全部照片'))
+          .name;
+      _showAlbumDropdown = false;
+      if (cameraId == 'all') {
+        _assets = _allDazzAssets;
+      } else {
+        _assets = _allDazzAssets.where((asset) {
+          final title = (asset.title ?? '').toLowerCase();
+          return title.contains(cameraId.toLowerCase());
+        }).toList();
+      }
+    });
   }
 
   void _openDetail(AssetEntity asset, {bool fromLongPress = false}) {
@@ -205,9 +243,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),
-            // 中间标题（点击展开相册分类）
+            // 中间标题（只有多个相机分类时才显示下拉箭头）
             GestureDetector(
-              onTap: () => setState(() => _showAlbumDropdown = !_showAlbumDropdown),
+              onTap: _cameraAlbumEntries.length > 1
+                  ? () => setState(() => _showAlbumDropdown = !_showAlbumDropdown)
+                  : null,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -219,12 +259,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    _showAlbumDropdown ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                    color: Colors.white,
-                    size: 20,
-                  ),
+                  if (_cameraAlbumEntries.length > 1) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      _showAlbumDropdown ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -380,18 +422,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   color: Colors.transparent,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: _kAlbumEntries.map((entry) {
+                    children: _cameraAlbumEntries.map((entry) {
                       final count = _albumCounts[entry.id] ?? 0;
                       final isActive = entry.id == _currentAlbumId;
                       return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _currentAlbumId = entry.id;
-                            _currentAlbumName = entry.name;
-                            _showAlbumDropdown = false;
-                          });
-                          // TODO: 按相机过滤照片
-                        },
+                        onTap: () => _filterByCamera(entry.id),
                         child: Container(
                           color: Colors.transparent,
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),

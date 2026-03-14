@@ -342,9 +342,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             result.error("FILE_NOT_FOUND", "File not found: $filePath", null)
             return
         }
+        val cameraId = call.argument<String>("cameraId") ?: ""
         bgExecutor.execute {
             try {
-                val displayName = sourceFile.name
+                // 文件名含 cameraId，使相册可按相机分类
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                val displayName = if (cameraId.isNotEmpty()) {
+                    "DAZZ_${cameraId}_${timestamp}.jpg"
+                } else {
+                    sourceFile.name
+                }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     val contentValues = ContentValues().apply {
                         put(MediaStore.Images.Media.DISPLAY_NAME, displayName)

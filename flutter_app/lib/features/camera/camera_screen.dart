@@ -20,6 +20,7 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../models/camera_definition.dart';
+import '../../models/camera_registry.dart';
 import '../../services/camera_service.dart';
 import 'camera_notifier.dart';
 import 'preview_renderer.dart';
@@ -140,7 +141,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       ),
     );
     if (albums.isEmpty) return;
-    final assets = await albums.first.getAssetListRange(start: 0, end: 1);
+    // 优先从 DAZZ 专属相册读取最新照片
+    AssetPathEntity? dazzAlbum;
+    for (final album in albums) {
+      if (album.name.toUpperCase() == 'DAZZ') {
+        dazzAlbum = album;
+        break;
+      }
+    }
+    final targetAlbum = dazzAlbum ?? albums.first;
+    final assets = await targetAlbum.getAssetListRange(start: 0, end: 1);
     if (assets.isNotEmpty && mounted) {
       final thumb = await assets.first.thumbnailDataWithSize(
         const ThumbnailSize(120, 120),
@@ -190,10 +200,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final st = ref.watch(cameraAppProvider);
     final camSvc = ref.watch(cameraServiceProvider);
     final mq = MediaQuery.of(context);
-    // 底部面板高度：工具栏(60) + 快门行(80) + 间距(40) + 底部安全区 ≈ 220px
-    const kBottomPanelH = 220.0;
-    // 取景框区域高度 = 屏幕高度 - 状态栏 - 底部面板
-    final topAreaH = mq.size.height - mq.padding.top - kBottomPanelH;
+    final screenW = mq.size.width;
+    final statusBarH = mq.padding.top;
+    final bottomSafeH = mq.padding.bottom;
+    // 底部面板高度：工具栏(60) + 快门行(80) + 间距(40) + 底部安全区
+    final kBottomPanelH = 220.0 + bottomSafeH;
+    // 取景框高度根据比例动态计算（宽度固定=屏幕宽，高度=宽/比例）
+    final maxViewfinderH = mq.size.height - statusBarH - kBottomPanelH;
+    final ratioViewfinderH = screenW / st.previewAspectRatio;
+    // 限制在合理范围内（不超过可用高度，不小于屏幕宽度）
+    final viewfinderH = ratioViewfinderH.clamp(screenW * 0.75, maxViewfinderH);
 
     return Scaffold(
       backgroundColor: _kBlack,
@@ -202,13 +218,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // ── 主内容（两段式布局）──
           Column(
             children: [
-              // 上段：取景框区域（黑色背景）
+              // 状态栏占位
+              SizedBox(height: statusBarH),
+              // 取景框（精确高度，按比例裁剪）
               SizedBox(
-                height: mq.padding.top + topAreaH,
-                child: SafeArea(
-                  bottom: false,
-                  child: _buildViewfinderArea(st, camSvc, topAreaH, mq.size.width),
-                ),
+                width: screenW,
+                height: viewfinderH,
+                child: _buildViewfinderArea(st, camSvc, viewfinderH, screenW),
               ),
               // 下段：底部面板（深灰色圆角）
               Expanded(
@@ -688,7 +704,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               ),
             ),
           ),
-          // 右侧: 相机切换图标（虚线圆圈背景，点击打开相机配置菜单）
+          // 右侧: 当前已选相机图标（虚线圆圈背景，点击打开相机配置菜单）
           GestureDetector(
             onTap: () => showCameraConfigSheet(context),
             child: SizedBox(
@@ -702,8 +718,31 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     size: const Size(70, 70),
                     painter: _DashedCirclePainter(),
                   ),
-                  // 复古相机图标
-                  const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 32),
+                  // 当前相机名称（简短显示）
+                  Builder(builder: (ctx) {
+                    final entry = kAllCameras.firstWhere(
+                      (e) => e.id == st.activeCameraId,
+                      orElse: () => kAllCameras.first,
+                    );
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 24),
+                        const SizedBox(height: 2),
+                        Text(
+                          entry.name,
+                          style: const TextStyle(
+                            color: _kWhite,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    );
+                  }),
                 ],
               ),
             ),

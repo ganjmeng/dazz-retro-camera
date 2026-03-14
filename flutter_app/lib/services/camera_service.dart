@@ -188,10 +188,12 @@ class CameraService extends StateNotifier<CameraState> {
 
   /// 将处理后的图片文件保存到相册（DCIM/DAZZ）
   /// [filePath] 必须是 dart:io File 可读的绝对路径（cache dir）
-  Future<String?> saveToGallery(String filePath) async {
+  /// [cameraId] 相机 ID，用于文件命名，使相册可按相机分类
+  Future<String?> saveToGallery(String filePath, {String cameraId = ''}) async {
     try {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('saveToGallery', {
         'filePath': filePath,
+        if (cameraId.isNotEmpty) 'cameraId': cameraId,
       });
       return result?['uri'] as String?;
     } catch (e) {
