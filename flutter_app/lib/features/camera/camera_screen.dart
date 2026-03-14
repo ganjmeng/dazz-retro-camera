@@ -1268,9 +1268,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ── 右上角菜单弹框（"..."展开）──────────────────────────────────────────────
   Widget _buildTopMenuOverlay(CameraAppState st) {
     final mq = MediaQuery.of(context);
-    // 复刻截图样式：图标直接浮在顶部栏正下方，无卡片容器背景
+    // 复刻截图样式：深棕色半透明圆角卡片，覆盖取景框顶部
     final menuTop = mq.padding.top + kTopBarH;
     final sharpenLabels = ['低', '中', '高'];
+    // 按鈕实际宽度 = (屏幕宽 - 左右padding) / 4
+    final screenW = mq.size.width;
+    final btnW = (screenW - 32) / 4; // 32 = 左右16 + 右右16
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => ref.read(cameraAppProvider.notifier).toggleTopMenu(),
@@ -1279,12 +1282,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           children: [
             Positioned(
               top: menuTop,
-              left: 0,
-              right: 0,
+              left: 8,
+              right: 8,
               child: GestureDetector(
                 onTap: () {}, // 阻止穿透
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Container(
+                  decoration: BoxDecoration(
+                    // 深棕色半透明背景（对齐截图中的深色卡片）
+                    color: const Color(0xCC1A1008),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1296,23 +1304,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           _TopMenuBtn(
                             icon: st.gridEnabled ? Icons.grid_on : Icons.grid_off,
                             label: st.gridEnabled ? '网格线开启' : '网格线关闭',
+                            btnW: btnW,
                             onTap: () => ref.read(cameraAppProvider.notifier).toggleGrid(),
                           ),
                           // 2. 清晰度（循环切换 低/中/高）
                           _TopMenuBtn(
                             customIcon: Container(
-                              width: 28,
-                              height: 28,
+                              width: 32,
+                              height: 32,
                               decoration: BoxDecoration(
                                 border: Border.all(color: Colors.white, width: 1.5),
-                                borderRadius: BorderRadius.circular(4),
+                                borderRadius: BorderRadius.circular(5),
                               ),
                               child: Center(
                                 child: Text(
                                   sharpenLabels[st.sharpenLevel],
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontSize: 12,
+                                    fontSize: 13,
                                     fontWeight: FontWeight.w700,
                                     height: 1,
                                   ),
@@ -1320,17 +1329,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                               ),
                             ),
                             label: '清晰度',
+                            btnW: btnW,
                             onTap: () => _showCameraTransition(
                               () => ref.read(cameraAppProvider.notifier).cycleSharpen(),
                               duration: const Duration(milliseconds: 350),
                             ),
                           ),
-                          // 3. 小窗模式
+                          // 3. 小框模式
                           _TopMenuBtn(
                             icon: st.minimapEnabled
                                 ? Icons.picture_in_picture
                                 : Icons.picture_in_picture_outlined,
-                            label: st.minimapEnabled ? '小窗开启' : '小窗关闭',
+                            label: st.minimapEnabled ? '小框模式开启' : '小框模式关闭',
+                            btnW: btnW,
                             onTap: () {
                               final willEnable = !st.minimapEnabled;
                               ref.read(cameraAppProvider.notifier).toggleMinimap();
@@ -1342,12 +1353,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           _TopMenuBtn(
                             icon: Icons.exposure,
                             label: '双重曝光关闭',
+                            btnW: btnW,
                             onTap: () {},
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      // 第二行: 2个图标 + 2个占位（保持对齐）
+                      const SizedBox(height: 24),
+                      // 第二行: 2个图标 + 2个占位（保持等宽对齐）
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -1355,21 +1367,22 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           _TopMenuBtn(
                             icon: Icons.burst_mode_outlined,
                             label: '连拍关闭',
+                            btnW: btnW,
                             onTap: () {},
                           ),
                           // 6. 设置
                           _TopMenuBtn(
                             icon: Icons.settings_outlined,
                             label: '设置',
+                            btnW: btnW,
                             onTap: () {
-                              // 先关闭顶部菜单，再跳转设置界面
                               ref.read(cameraAppProvider.notifier).toggleTopMenu();
                               context.push(AppRoutes.settings);
                             },
                           ),
-                          // 占位空白（保持对齐）
-                          const SizedBox(width: 56),
-                          const SizedBox(width: 56),
+                          // 占位空白（保持等宽对齐）
+                          SizedBox(width: btnW),
+                          SizedBox(width: btnW),
                         ],
                       ),
                     ],
@@ -2485,12 +2498,14 @@ class _TopMenuBtn extends StatelessWidget {
   final Widget? customIcon;
   final String label;
   final VoidCallback onTap;
+  final double btnW;
 
   const _TopMenuBtn({
     this.icon,
     this.customIcon,
     required this.label,
     required this.onTap,
+    this.btnW = 72,
   }) : assert(icon != null || customIcon != null);
 
   @override
@@ -2498,26 +2513,40 @@ class _TopMenuBtn extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
-        width: 56,
+        width: btnW,
+        // 固定总高度：图标区(32) + 间距(8) + 文字区(36) = 76
+        // 文字区固定高度确保所有按鈕图标对齐
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            // 图标区域：固定 32×32，始终居中
             SizedBox(
-              width: 28,
-              height: 28,
-              child: customIcon ?? Icon(icon!, color: _kWhite, size: 28),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
+              width: 32,
+              height: 32,
+              child: Center(
+                child: customIcon ?? Icon(icon!, color: _kWhite, size: 30),
               ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            // 文字区域：固定高度 36px，防止换行时高度变化导致图标错位
+            SizedBox(
+              height: 36,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
+                    height: 1.3,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
           ],
         ),
