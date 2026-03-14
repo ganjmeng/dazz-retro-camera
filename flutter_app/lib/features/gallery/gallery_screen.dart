@@ -12,7 +12,8 @@ class _AlbumEntry {
   final String id;
   final String name;
   final IconData? icon;
-  const _AlbumEntry({required this.id, required this.name, this.icon});
+  final String? iconPath; // 相机缩略图路径（assets/thumbnails/cameras/xxx_icon.png）
+  const _AlbumEntry({required this.id, required this.name, this.icon, this.iconPath});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -169,7 +170,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       ];
       for (final cam in kAllCameras) {
         if (cameraIdsFound.contains(cam.id)) {
-          entries.add(_AlbumEntry(id: cam.id, name: cam.name, icon: Icons.camera_alt_outlined));
+          entries.add(_AlbumEntry(id: cam.id, name: cam.name, icon: Icons.camera_alt_outlined, iconPath: cam.iconPath));
         }
       }
       if (mounted) {
@@ -207,10 +208,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final entries = <_AlbumEntry>[
       const _AlbumEntry(id: 'all', name: '全部照片', icon: Icons.photo_library_outlined),
     ];
-    // 按 kAllCameras 顺序添加有成片的相机
+    // 按 kAllCameras 顺序添加有成片的相机，带上真实图标路径
     for (final cam in kAllCameras) {
       if (cameraIdsFound.contains(cam.id)) {
-        entries.add(_AlbumEntry(id: cam.id, name: cam.name, icon: Icons.camera_alt_outlined));
+        entries.add(_AlbumEntry(id: cam.id, name: cam.name, icon: Icons.camera_alt_outlined, iconPath: cam.iconPath));
       }
     }
 
@@ -488,86 +489,109 @@ class _GalleryScreenState extends State<GalleryScreen> {
     );
   }
 
-  // ── 相册分类下拉（截图 13085.jpg）──────────────────────────────────────────
-  // 半透明背景，背景模糊，列表显示相机分类+数量
+  // ── 相册分类下拉（参考截图 13085.jpg）──────────────────────────────────────
+  // 背景模糊，深色卡片列表，每行显示真实相机图标+名称+数量
   Widget _buildAlbumDropdown() {
     return GestureDetector(
       onTap: () => setState(() => _showAlbumDropdown = false),
-      child: Container(
-        color: Colors.transparent,
-        child: Stack(
-          children: [
-            // 背景模糊遮罩（截图中可以看到背景网格透过来）
-            Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                child: Container(color: Colors.black.withAlpha(80)),
+      child: Stack(
+        children: [
+          // 全屏模糊背景遮罩
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Container(color: Colors.black.withAlpha(100)),
+            ),
+          ),
+          // 下拉列表（从顶部导航栏下方开始）
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 52,
+            left: 0,
+            right: 0,
+            child: GestureDetector(
+              onTap: () {}, // 阻止点击穿透
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (int i = 0; i < _cameraAlbumEntries.length; i++) ...
+                  [
+                    _buildDropdownItem(_cameraAlbumEntries[i]),
+                    if (i < _cameraAlbumEntries.length - 1)
+                      Divider(
+                        height: 1,
+                        thickness: 0.5,
+                        color: Colors.white.withAlpha(20),
+                        indent: 100,
+                        endIndent: 20,
+                      ),
+                  ],
+                ],
               ),
             ),
-            // 下拉列表（从顶部导航栏下方开始）
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 52,
-              left: 0,
-              right: 0,
-              child: GestureDetector(
-                onTap: () {}, // 阻止穿透
-                child: Container(
-                  color: Colors.transparent,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: _cameraAlbumEntries.map((entry) {
-                      final count = _albumCounts[entry.id] ?? 0;
-                      final isActive = entry.id == _currentAlbumId;
-                      return GestureDetector(
-                        onTap: () => _filterByCamera(entry.id),
-                        child: Container(
-                          color: Colors.transparent,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                          child: Row(
-                            children: [
-                              // 相机图标（截图中是相机缩略图，这里用图标代替）
-                              Container(
-                                width: 64,
-                                height: 64,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF2C2C2E),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  entry.icon ?? Icons.camera_alt_outlined,
-                                  color: isActive ? const Color(0xFFFF8C00) : Colors.white70,
-                                  size: 32,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              // 相机名称
-                              Expanded(
-                                child: Text(
-                                  entry.name,
-                                  style: TextStyle(
-                                    color: isActive ? Colors.white : Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                                  ),
-                                ),
-                              ),
-                              // 数量
-                              Text(
-                                '$count',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDropdownItem(_AlbumEntry entry) {
+    final count = _albumCounts[entry.id] ?? 0;
+    final isActive = entry.id == _currentAlbumId;
+    return GestureDetector(
+      onTap: () => _filterByCamera(entry.id),
+      child: Container(
+        color: Colors.transparent,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        child: Row(
+          children: [
+            // 相机图标容器（64×64 圆角）
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2C2C2E),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: entry.iconPath != null
+                  ? Image.asset(
+                      entry.iconPath!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Icon(
+                        entry.icon ?? Icons.camera_alt_outlined,
+                        color: isActive ? const Color(0xFFFF8C00) : Colors.white54,
+                        size: 32,
+                      ),
+                    )
+                  : Icon(
+                      entry.icon ?? Icons.photo_library_outlined,
+                      color: isActive ? const Color(0xFFFF8C00) : Colors.white54,
+                      size: 32,
+                    ),
+            ),
+            const SizedBox(width: 16),
+            // 相机名称
+            Expanded(
+              child: Text(
+                entry.name,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                  letterSpacing: 0.2,
                 ),
               ),
             ),
+            // 数量
+            Text(
+              '$count',
+              style: TextStyle(
+                color: isActive ? Colors.white : Colors.white54,
+                fontSize: 17,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+            const SizedBox(width: 4),
           ],
         ),
       ),

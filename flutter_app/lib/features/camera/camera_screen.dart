@@ -3095,12 +3095,12 @@ class _WbColorOverlay extends StatelessWidget {
       // 偏暖：橙色叠加
       final t = (neutralK - colorTempK) / (neutralK - maxWarm);
       opacity = (t * 0.22).clamp(0.0, 0.22);
-      overlayColor = const Color(0xFFE8A05A).withOpacity(opacity);
+      overlayColor = Color(0xFFE8A05A).withValues(alpha: opacity);
     } else {
       // 偏冷：蓝色叠加
       final t = (colorTempK - neutralK) / (maxCool - neutralK);
       opacity = (t * 0.18).clamp(0.0, 0.18);
-      overlayColor = const Color(0xFF6B8FE8).withOpacity(opacity);
+      overlayColor = Color(0xFF6B8FE8).withValues(alpha: opacity);
     }
 
     return Container(color: overlayColor);

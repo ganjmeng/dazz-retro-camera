@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../router/app_router.dart';
 import '../../services/subscription_service.dart';
 
 // ─── 设置状态 Provider ────────────────────────────────────────────────────────
@@ -89,7 +90,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final st = ref.watch(_settingsProvider);
     final notifier = ref.read(_settingsProvider.notifier);
-    final isPro = ref.watch(subscriptionServiceProvider);
+    ref.watch(subscriptionServiceProvider); // 订阅状态（未来功能用）
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light, // 白色状态栏图标（黑色背景）
       child: Scaffold(
@@ -107,7 +108,7 @@ class SettingsScreen extends ConsumerWidget {
                   Positioned(
                     left: 16,
                     child: GestureDetector(
-                      onTap: () => context.pop(),
+                      onTap: () => context.go(AppRoutes.camera),
                       child: Container(
                         width: 36,
                         height: 36,
@@ -485,8 +486,8 @@ class _RedSwitch extends StatelessWidget {
     return CupertinoSwitch(
       value: value,
       onChanged: onChanged,
-      activeColor: _kRed,
-      trackColor: const Color(0xFF3A3A3C),
+      activeTrackColor: _kRed,
+      inactiveTrackColor: const Color(0xFF3A3A3C),
     );
   }
 }

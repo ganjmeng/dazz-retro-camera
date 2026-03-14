@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -140,7 +139,7 @@ class CapturePipeline {
           // 如果有 cornerRadius，用圆角矩形绘制（拟物相纸边缘）
           final refSize = math.min(outW, outH);
           final frameScale = refSize / 1080.0;
-          final cornerRadiusPx = frameOpt!.cornerRadius * frameScale;
+          final cornerRadiusPx = frameOpt.cornerRadius * frameScale;
           if (cornerRadiusPx > 0) {
             canvas.drawRRect(
               RRect.fromRectAndRadius(
