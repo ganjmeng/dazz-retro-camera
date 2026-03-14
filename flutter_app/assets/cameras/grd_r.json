@@ -19,7 +19,7 @@
     "temperature": -40,
     "contrast": 1.08,
     "saturation": 0.96,
-    "vignette": 0.02,
+    "vignette": 0.35,
     "distortion": 0.0,
     "chromaticAberration": 0.01,
     "bloom": 0.0,
@@ -33,8 +33,8 @@
         "name": "标准",
         "nameEn": "Standard",
         "lut": "assets/lut/filters/grd_standard.cube",
-        "contrast": 1.02,
-        "saturation": 1.0,
+        "contrast": 1.08,
+        "saturation": 0.92,
         "grain": "light",
         "thumbnail": "assets/thumbnails/filters/grd_standard.jpg"
       },
@@ -43,8 +43,8 @@
         "name": "高对比",
         "nameEn": "High Contrast",
         "lut": "assets/lut/filters/grd_high_contrast.cube",
-        "contrast": 1.12,
-        "saturation": 0.92,
+        "contrast": 1.22,
+        "saturation": 0.78,
         "grain": "medium",
         "thumbnail": "assets/thumbnails/filters/grd_high_contrast.jpg"
       }
@@ -157,10 +157,10 @@
         "asset": "assets/frames/frame_clean_white.png",
         "backgroundColor": "#F5F2EA",
         "inset": {
-          "top": 20,
-          "right": 20,
-          "bottom": 20,
-          "left": 20
+          "top": 80,
+          "right": 80,
+          "bottom": 120,
+          "left": 80
         },
         "supportedRatios": ["ratio_1_1", "ratio_3_4"],
         "thumbnail": "assets/thumbnails/frames/frame_clean_white.jpg"
@@ -205,7 +205,7 @@
     "filterId": "grd_standard",
     "lensId": "std",
     "ratioId": "ratio_3_4",
-    "frameId": null,
+    "frameId": "frame_clean_white",
     "watermarkPresetId": "date_orange",
     "extraId": null
   },
@@ -237,7 +237,7 @@
     "enableLightLensEffect": true,
     "enableGrain": false,
     "enableBloom": false,
-    "enableChromaticAberration": false,
+    "enableChromaticAberration": true,
     "enableFrameComposite": false,
     "enableWatermarkComposite": true
   },

@@ -4,6 +4,7 @@
 // Loads any camera from the registry and manages all UI state.
 
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/camera_definition.dart';
@@ -307,6 +308,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         // Post-process: color effects + ratio crop + frame + watermark
         if (state.camera != null) {
           try {
+            debugPrint('[CameraNotifier] Starting post-process: ratio=${state.activeRatioId}, frame=${state.activeFrameId}, wm=${state.activeWatermarkId}');
             final pipeline = CapturePipeline(camera: state.camera!);
             final processed = await pipeline.process(
               imagePath: path,
@@ -317,9 +319,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             );
             if (processed != null) {
               await File(path).writeAsBytes(processed);
+              debugPrint('[CameraNotifier] Post-process done, wrote ${processed.length} bytes to $path');
+            } else {
+              debugPrint('[CameraNotifier] Post-process returned null, keeping original');
             }
-          } catch (e) {
+          } catch (e, st) {
             // Post-processing failed, keep original
+            debugPrint('[CameraNotifier] Post-process error: $e\n$st');
           }
         }
       }
