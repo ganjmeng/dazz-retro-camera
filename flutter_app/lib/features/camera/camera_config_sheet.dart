@@ -287,6 +287,10 @@ class _SubPanelState extends ConsumerState<_SubPanel>
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
   int _tabIndex = 0;
+  bool _showColorPicker = false; // 彩虹圆圈点击后展开 HSV 色盘
+  double _pickerHue = 30.0;        // HSV 色相 0~360
+  double _pickerSaturation = 1.0;  // HSV 饱和度 0~1
+  double _pickerValue = 1.0;       // HSV 亮度 0~1
 
   @override
   void initState() {
@@ -362,12 +366,38 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                     ),
                   ),
                   const Spacer(),
-                  // 右上角操作按鈕（无水印 / 无边框）
-                  if (widget.type == _SubPanelType.watermark)
-                    _ActionPill(
-                      label: '无水印',
-                      onTap: () => ref.read(cameraAppProvider.notifier).selectWatermark('none'),
-                    ),
+                  // 右上角操作按鈕（无水印开关 / 无边框）
+                  if (widget.type == _SubPanelType.watermark) (() {
+                    final isNone = st.activeWatermark?.isNone ?? st.activeWatermarkId == null;
+                    return GestureDetector(
+                      onTap: () {
+                        if (isNone) {
+                          // 当前无水印 → 切回第一个非-none 预设
+                          final presets = widget.camera.modules.watermarks.presets;
+                          final first = presets.firstWhere((p) => !p.isNone, orElse: () => presets.first);
+                          ref.read(cameraAppProvider.notifier).selectWatermark(first.id);
+                        } else {
+                          // 当前有水印 → 切换到 none
+                          ref.read(cameraAppProvider.notifier).selectWatermark('none');
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isNone ? const Color(0xFFFF9500) : const Color(0xFFE5E5EA),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '无水印',
+                          style: TextStyle(
+                            color: isNone ? Colors.white : Colors.black,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    );
+                  })(),
                   if (widget.type == _SubPanelType.frame)
                     _FrameToggleSwitch(
                       enabled: ref.watch(cameraAppProvider).activeFrameId != null,
@@ -387,13 +417,32 @@ class _SubPanelState extends ConsumerState<_SubPanel>
               ),
             ),
             // 子 Tab 行（水印/边框有多 Tab）
-            if (widget.type == _SubPanelType.watermark) _buildWatermarkTabs(),
+            if (widget.type == _SubPanelType.watermark) (() {
+              final isNone = st.activeWatermark?.isNone ?? st.activeWatermarkId == null;
+              return Opacity(
+                opacity: isNone ? 0.35 : 1.0,
+                child: AbsorbPointer(
+                  absorbing: isNone,
+                  child: _buildWatermarkTabs(),
+                ),
+              );
+            })(),
             if (widget.type == _SubPanelType.frame) _buildFrameTabs(),
             // 内容区（可滚动）
             Flexible(
-              child: SingleChildScrollView(
-                child: _buildContent(st),
-              ),
+              child: (() {
+                final isNone = widget.type == _SubPanelType.watermark &&
+                    (st.activeWatermark?.isNone ?? st.activeWatermarkId == null);
+                return Opacity(
+                  opacity: isNone ? 0.35 : 1.0,
+                  child: AbsorbPointer(
+                    absorbing: isNone,
+                    child: SingleChildScrollView(
+                      child: _buildContent(st),
+                    ),
+                  ),
+                );
+              })(),
             ),
             SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
           ],
@@ -497,9 +546,21 @@ class _SubPanelState extends ConsumerState<_SubPanel>
   }
 
   // ── 水印内容 ────────────────────────────────────────────────────────────────
+  // 将 HSV 转为 hex 字符串
+  String _hsvToHex(double h, double s, double v) {
+    final color = HSVColor.fromAHSV(1.0, h, s, v).toColor();
+    final r = color.r.toInt().toRadixString(16).padLeft(2, '0');
+    final g = color.g.toInt().toRadixString(16).padLeft(2, '0');
+    final b = color.b.toInt().toRadixString(16).padLeft(2, '0');
+    return '#$r$g$b'.toUpperCase();
+  }
+
   Widget _buildWatermarkContent(CameraAppState st) {
     if (_tabIndex == 0) {
-      // 颜色 Tab：预览 + 颜色选择器
+      // 解析当前颜色，用于预览
+      final currentColor = _parseColor(st.watermarkColor ?? st.activeWatermark?.color ?? '#FF8A3D');
+
+      // 颜色 Tab：预览 + 彩虹圆圈（点击展开 HSV 色盘）
       return Column(
         children: [
           const SizedBox(height: 12),
@@ -515,7 +576,7 @@ class _SubPanelState extends ConsumerState<_SubPanel>
             child: Text(
               '2 25 \'22',
               style: TextStyle(
-                color: _parseColor(st.activeWatermark?.color ?? '#FF8A3D'),
+                color: currentColor,
                 fontSize: 28,
                 fontFamily: 'monospace',
                 letterSpacing: 2,
@@ -523,34 +584,42 @@ class _SubPanelState extends ConsumerState<_SubPanel>
             ),
           ),
           const SizedBox(height: 16),
-          // 颜色选择器
+          // 彩虹圆圈 + 预设颜色圆圈
           SizedBox(
             height: 52,
             child: ListView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               children: [
-                // 彩虹（随机）
+                // 彩虹圆圈：点击展开 HSV 色盘
                 _ColorDot(
                   isRainbow: true,
-                  selected: false,
-                  onTap: () {},
+                  selected: _showColorPicker,
+                  onTap: () => setState(() => _showColorPicker = !_showColorPicker),
                 ),
                 ..._kWatermarkColors.map((c) {
                   final r = c.r.toInt().toRadixString(16).padLeft(2, '0');
                   final g = c.g.toInt().toRadixString(16).padLeft(2, '0');
                   final b = c.b.toInt().toRadixString(16).padLeft(2, '0');
-                  final hex = '#${r}${g}${b}'.toUpperCase();
-                  final isSelected = st.activeWatermark?.color?.toUpperCase() == hex;
+                  final hex = '#$r$g$b'.toUpperCase();
+                  // 预设颜色选中时关闭 HSV 色盘
+                  final isSelected = !_showColorPicker &&
+                      (st.watermarkColor?.toUpperCase() == hex ||
+                       (st.watermarkColor == null && st.activeWatermark?.color?.toUpperCase() == hex));
                   return _ColorDot(
                     color: c,
                     selected: isSelected,
-                    onTap: () => ref.read(cameraAppProvider.notifier).selectWatermarkColor(hex),
+                    onTap: () {
+                      setState(() => _showColorPicker = false);
+                      ref.read(cameraAppProvider.notifier).selectWatermarkColor(hex);
+                    },
                   );
                 }),
               ],
             ),
           ),
+          // HSV 色盘（彩虹圆圈展开时显示）
+          if (_showColorPicker) ..._buildHsvPicker(),
           const SizedBox(height: 8),
         ],
       );
@@ -799,7 +868,91 @@ class _SubPanelState extends ConsumerState<_SubPanel>
     return const SizedBox.shrink();
   }
 
-  // ── 边框内容 ────────────────────────────────────────────────────────────────
+  // ── HSV 色盘（彩虹圆圈展开时显示）─────────────────────────────────────────────────────────
+  List<Widget> _buildHsvPicker() {
+    return [
+      const SizedBox(height: 12),
+      // 色相+饱和度二维色盘
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final pickerW = constraints.maxWidth;
+            const pickerH = 200.0;
+            return GestureDetector(
+              onPanUpdate: (d) {
+                final dx = d.localPosition.dx.clamp(0.0, pickerW);
+                final dy = d.localPosition.dy.clamp(0.0, pickerH);
+                final newH = _pickerHue;
+                final newS = dx / pickerW;
+                final newV = 1.0 - dy / pickerH;
+                setState(() {
+                  _pickerSaturation = newS;
+                  _pickerValue = newV;
+                });
+                ref.read(cameraAppProvider.notifier)
+                    .selectWatermarkColor(_hsvToHex(newH, newS, newV));
+              },
+              onTapDown: (d) {
+                final dx = d.localPosition.dx.clamp(0.0, pickerW);
+                final dy = d.localPosition.dy.clamp(0.0, pickerH);
+                final newS = dx / pickerW;
+                final newV = 1.0 - dy / pickerH;
+                setState(() {
+                  _pickerSaturation = newS;
+                  _pickerValue = newV;
+                });
+                ref.read(cameraAppProvider.notifier)
+                    .selectWatermarkColor(_hsvToHex(_pickerHue, newS, newV));
+              },
+              child: CustomPaint(
+                size: Size(pickerW, pickerH),
+                painter: _HsvSVPainter(
+                  hue: _pickerHue,
+                  saturation: _pickerSaturation,
+                  value: _pickerValue,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+      const SizedBox(height: 12),
+      // 色相滑块
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final sliderW = constraints.maxWidth;
+            const sliderH = 28.0;
+            return GestureDetector(
+              onPanUpdate: (d) {
+                final dx = d.localPosition.dx.clamp(0.0, sliderW);
+                final newH = dx / sliderW * 360;
+                setState(() => _pickerHue = newH);
+                ref.read(cameraAppProvider.notifier)
+                    .selectWatermarkColor(_hsvToHex(newH, _pickerSaturation, _pickerValue));
+              },
+              onTapDown: (d) {
+                final dx = d.localPosition.dx.clamp(0.0, sliderW);
+                final newH = dx / sliderW * 360;
+                setState(() => _pickerHue = newH);
+                ref.read(cameraAppProvider.notifier)
+                    .selectWatermarkColor(_hsvToHex(newH, _pickerSaturation, _pickerValue));
+              },
+              child: CustomPaint(
+                size: Size(sliderW, sliderH),
+                painter: _HueSliderPainter(hue: _pickerHue),
+              ),
+            );
+          },
+        ),
+      ),
+      const SizedBox(height: 8),
+    ];
+  }
+
+  // ── 边框内容 ──────────────────────────────────────────────────────────────────────────
   Widget _buildFrameContent(CameraAppState st) {
     final frameEnabled = st.activeFrameId != null;
 
@@ -1866,4 +2019,106 @@ Color _parseColor(String hex) {
     if (h.length == 8) return Color(int.parse(h, radix: 16));
   } catch (_) {}
   return const Color(0xFFFF8A3D);
+}
+
+// ─── HSV 色盘 Painter（饱和度-亮度二维色盘）────────────────────────────────────
+
+class _HsvSVPainter extends CustomPainter {
+  final double hue;
+  final double saturation;
+  final double value;
+
+  const _HsvSVPainter({required this.hue, required this.saturation, required this.value});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final radius = const Radius.circular(8);
+    final rrect = RRect.fromRectAndRadius(rect, radius);
+
+    // 底色：纯色（当前色相，饱和度=1，亮度=1）
+    final baseColor = HSVColor.fromAHSV(1.0, hue, 1.0, 1.0).toColor();
+    canvas.drawRRect(rrect, Paint()..color = baseColor);
+
+    // 水平渐变：从白（左）到透明（右）
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..shader = LinearGradient(
+          colors: [Colors.white, Colors.white.withValues(alpha: 0)],
+        ).createShader(rect),
+    );
+
+    // 垂直渐变：从透明（上）到黑（下）
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.transparent, Colors.black],
+        ).createShader(rect),
+    );
+
+    // 选择指示器
+    final cx = saturation * size.width;
+    final cy = (1.0 - value) * size.height;
+    final indicatorPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+    canvas.drawCircle(Offset(cx, cy), 10, indicatorPaint);
+    canvas.drawCircle(
+      Offset(cx, cy),
+      8,
+      Paint()..color = HSVColor.fromAHSV(1.0, hue, saturation, value).toColor(),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_HsvSVPainter old) =>
+      old.hue != hue || old.saturation != saturation || old.value != value;
+}
+
+// ─── 色相滑块 Painter ──────────────────────────────────────────────────────────
+
+class _HueSliderPainter extends CustomPainter {
+  final double hue; // 0~360
+
+  const _HueSliderPainter({required this.hue});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(14));
+
+    // 彩虹渐变
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..shader = LinearGradient(
+          colors: List.generate(37, (i) => HSVColor.fromAHSV(1.0, i * 10.0, 1.0, 1.0).toColor()),
+        ).createShader(rect),
+    );
+
+    // 指示器（白色圆圈）
+    final cx = hue / 360 * size.width;
+    final cy = size.height / 2;
+    canvas.drawCircle(
+      Offset(cx, cy),
+      size.height / 2 + 2,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5,
+    );
+    canvas.drawCircle(
+      Offset(cx, cy),
+      size.height / 2 - 1,
+      Paint()..color = HSVColor.fromAHSV(1.0, hue, 1.0, 1.0).toColor(),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_HueSliderPainter old) => old.hue != hue;
 }
