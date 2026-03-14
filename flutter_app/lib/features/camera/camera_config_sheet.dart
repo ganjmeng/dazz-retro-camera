@@ -623,7 +623,9 @@ class _SubPanelState extends ConsumerState<_SubPanel>
         final b = c.b.toInt().toRadixString(16).padLeft(2, '0');
         final hex = '#${r}${g}${b}'.toUpperCase();
         // 匹配用户选择的背景色（frameBackgroundColor）
-        final isSelected = (st.frameBackgroundColor?.toUpperCase() == hex);
+        // 初始状态 frameBackgroundColor==null 时，默认白色被选中（对应 outerBackgroundColor #FFFFFF）
+        final effectiveBg = st.frameBackgroundColor ?? '#FFFFFF';
+        final isSelected = effectiveBg.toUpperCase() == hex;
         return _BgColorCell(
           color: c,
           selected: isSelected,

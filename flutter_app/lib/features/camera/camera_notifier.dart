@@ -121,6 +121,7 @@ class CameraAppState {
     bool? minimapEnabled,
     bool clearPanel = false,
     bool clearError = false,
+    bool clearFrameId = false, // 用于将 activeFrameId 清空为 null
   }) {
     return CameraAppState(
       activeCameraId: activeCameraId ?? this.activeCameraId,
@@ -130,7 +131,7 @@ class CameraAppState {
       activeFilterId: activeFilterId ?? this.activeFilterId,
       activeLensId: activeLensId ?? this.activeLensId,
       activeRatioId: activeRatioId ?? this.activeRatioId,
-      activeFrameId: activeFrameId ?? this.activeFrameId,
+      activeFrameId: clearFrameId ? null : (activeFrameId ?? this.activeFrameId),
       activeWatermarkId: activeWatermarkId ?? this.activeWatermarkId,
       temperatureOffset: temperatureOffset ?? this.temperatureOffset,
       exposureValue: exposureValue ?? this.exposureValue,
@@ -284,9 +285,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   void selectFrame(String id) {
-    // 'none' 和 'frame_none' 都表示无边框，清空 activeFrameId
+    // 'none' 和 'frame_none' 都表示无边框，用 clearFrameId=true 真正清空 activeFrameId
     if (id == 'frame_none' || id == 'none') {
-      state = state.copyWith(activeFrameId: null, clearPanel: false);
+      state = state.copyWith(clearFrameId: true);
     } else {
       state = state.copyWith(activeFrameId: id);
     }

@@ -101,20 +101,21 @@ class CapturePipeline {
       // ── 4a. 先填充外层背景（如果有 outerPadding）──────────────────────────────
       if (frameOpt != null && outerPadPx > 0) {
         // 外层背景色：用户在"背景"Tab 选择的颜色，否则用 outerBackgroundColor
-        Color outerBgColor = Colors.white;
         final outerHexSrc = (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
             ? frameBackgroundColor
             : frameOpt.outerBackgroundColor;
-        try {
-          if (outerHexSrc.toLowerCase() != 'transparent') {
+        // 透明时不绘制任何背景
+        if (outerHexSrc.toLowerCase() != 'transparent') {
+          Color outerBgColor = Colors.white;
+          try {
             final hex = outerHexSrc.replaceAll('#', '');
             outerBgColor = Color(int.parse('FF$hex', radix: 16));
-          }
-        } catch (_) {}
-        canvas.drawRect(
-          Rect.fromLTWH(0, 0, canvasW, canvasH),
-          Paint()..color = outerBgColor,
-        );
+          } catch (_) {}
+          canvas.drawRect(
+            Rect.fromLTWH(0, 0, canvasW, canvasH),
+            Paint()..color = outerBgColor,
+          );
+        }
       }
 
       // ── 4b. 填充相框背景色（相框层区域）────────────────────────────────────────

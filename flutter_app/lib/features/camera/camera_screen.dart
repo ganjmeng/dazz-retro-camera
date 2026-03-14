@@ -1629,6 +1629,8 @@ class _OptionsSheet extends ConsumerWidget {
   }
 
   Widget _buildOptionRow(BuildContext context, WidgetRef ref, CameraAppState st, CameraDefinition? camera) {
+    // 当前比例是否支持边框
+    final currentRatioSupportsFrame = camera?.ratioById(st.activeRatioId)?.supportsFrame ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1692,7 +1694,8 @@ class _OptionsSheet extends ConsumerWidget {
                 label: '暗角',
                 onTap: () {},
               ),
-              // 边框
+              // 边框（仅在当前比例支持边框时显示）
+              if (currentRatioSupportsFrame)
               _OptionIconBtn(
                 child: Container(
                   width: 44,
