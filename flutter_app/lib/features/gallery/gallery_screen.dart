@@ -68,12 +68,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
       return;
     }
 
-    // 策略：查询所有图片（根相册 hasAll=true），然后按文件名 DAZZ_ 前缀过滤
-    // 不依赖相册名匹配，避免 BUCKET_DISPLAY_NAME 在不同厂商 ROM 上的差异
+    // 标准方案：强制刷新 MediaStore 缓存，然后查 DAZZ 专属子相册
+    // BUCKET_DISPLAY_NAME 对 DCIM/DAZZ/ 路径返回 "DAZZ"（Android MediaStore 标准行为）
+    await PhotoManager.clearFileCache();
+
     final allPaths = await PhotoManager.getAssetPathList(
       type: RequestType.image,
-      hasAll: true,
-      onlyAll: true, // 只返回根相册（所有照片），不返回子相册
+      hasAll: false,   // 不包含虚拟的"所有照片"根相册
+      onlyAll: false,  // 返回所有子相册
       filterOption: FilterOptionGroup(
         orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
       ),
@@ -84,19 +86,24 @@ class _GalleryScreenState extends State<GalleryScreen> {
       return;
     }
 
-    // 取根相册（所有照片）
-    final rootPath = allPaths.first;
-    final totalCount = await rootPath.assetCountAsync;
-    // 最多查最近 2000 张，避免全量扫描
-    final rawAssets = await rootPath.getAssetListRange(
-      start: 0,
-      end: totalCount.clamp(0, 2000),
-    );
+    // 查找 DAZZ 相册：兼容 "DAZZ"、"DCIM/DAZZ"、"dazz" 等变体
+    AssetPathEntity? dazzPath;
+    for (final p in allPaths) {
+      final upper = p.name.toUpperCase();
+      if (upper == 'DAZZ' || upper.endsWith('/DAZZ') || upper.contains('DAZZ')) {
+        dazzPath = p;
+        break;
+      }
+    }
 
-    // 按文件名 DAZZ_ 前缀过滤（文件命名格式: DAZZ_{cameraId}_{timestamp}.jpg）
-    final allAssets = rawAssets
-        .where((a) => (a.title ?? '').toUpperCase().startsWith('DAZZ_'))
-        .toList();
+    if (dazzPath == null) {
+      // 找不到 DAZZ 相册（可能还没拍过照），显示空状态
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    final count = await dazzPath.assetCountAsync;
+    final allAssets = await dazzPath.getAssetListRange(start: 0, end: count.clamp(0, 5000));
 
     // 按文件名中的 cameraId 动态统计各相机成片数量
     // 文件命名格式: DAZZ_{cameraId}_{timestamp}.jpg
