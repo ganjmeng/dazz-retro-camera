@@ -284,7 +284,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   void selectFrame(String id) {
-    if (id == 'frame_none') {
+    // 'none' 和 'frame_none' 都表示无边框，清空 activeFrameId
+    if (id == 'frame_none' || id == 'none') {
       state = state.copyWith(activeFrameId: null, clearPanel: false);
     } else {
       state = state.copyWith(activeFrameId: id);

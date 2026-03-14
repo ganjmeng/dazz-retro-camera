@@ -240,9 +240,23 @@ class CapturePipeline {
         }
       }
 
-      // ── 4g. 水印（在相框纹理之后绘制，确保始终在最上层不被遮挡）────────────────
+      // ── 4g. 水印（在相框纹理之后绘制，确保始终在最上层不被遮挡）────
       if (selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none') {
-        _drawWatermark(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, selectedWatermarkId);
+        // 当有相框底部涂层时（bottomPx > 0），水印绘制在涂层区域内（图片底边下方）
+        // 否则绘制在图片内部底部
+        if (bottomPx > 4) {
+          // 水印区域：从图片底边到相框底边（底部涂层内）
+          _drawWatermark(
+            canvas,
+            frameOffsetX + leftPx,
+            frameOffsetY + topPx + outH, // 涂层局域的顶部
+            outW,
+            bottomPx,                   // 涂层高度
+            selectedWatermarkId,
+          );
+        } else {
+          _drawWatermark(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, selectedWatermarkId);
+        }
       }
 
       // ── 5. 输出为 PNG ────────────────────────────────────────────────────────
