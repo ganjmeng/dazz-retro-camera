@@ -358,7 +358,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           }
         }
 
-        // 保存到相册，获取 MediaStore URI 并提取 _id
+        // 保存到相册，获取资产 ID
+        // Android: content://media/external/images/media/{_id} → 提取末段数字
+        // iOS:    PHAsset.localIdentifier（直接使用，无需解析 URI）
         String? galleryAssetId;
         try {
           final galleryUri = await _ref.read(cameraServiceProvider.notifier).saveToGallery(
@@ -366,10 +368,15 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             cameraId: state.activeCameraId,
           );
           debugPrint('[CameraNotifier] Saved to gallery: $galleryUri');
-          // URI 格式： content://media/external/images/media/{id}
-          if (galleryUri != null) {
-            final uri = Uri.tryParse(galleryUri);
-            galleryAssetId = uri?.pathSegments.lastOrNull;
+          if (galleryUri != null && galleryUri.isNotEmpty) {
+            if (galleryUri.startsWith('content://')) {
+              // Android: content://media/external/images/media/{_id}
+              final uri = Uri.tryParse(galleryUri);
+              galleryAssetId = uri?.pathSegments.lastOrNull;
+            } else {
+              // iOS: PHAsset.localIdentifier 直接使用
+              galleryAssetId = galleryUri;
+            }
             debugPrint('[CameraNotifier] galleryAssetId=$galleryAssetId');
           }
         } catch (e) {

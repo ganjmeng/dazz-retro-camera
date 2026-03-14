@@ -2,10 +2,18 @@ import Flutter
 import UIKit
 import AVFoundation
 import Photos
+import MetalKit
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RetroCamPlugin — iOS 相机 MethodChannel 插件
 // Channel: com.retrocam.app/camera_control
+//
+// 与 Android 对等功能：
+// - takePhoto: 使用 AVCapturePhotoOutput 高分辨率拍照（非预览帧截图）
+// - saveToGallery: 保存到 DAZZ 专属相册，返回 PHAsset.localIdentifier
+// - setZoom: AVCaptureDevice videoZoomFactor
+// - setExposure: AVCaptureDevice exposureTargetBias
+// - setFlash: AVCaptureFlashMode
 // ─────────────────────────────────────────────────────────────────────────────
 public class RetroCamPlugin: NSObject, FlutterPlugin {
 
@@ -14,6 +22,12 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     private var eventSink: FlutterEventSink?
     private var textureRegistry: FlutterTextureRegistry?
     private var registeredTextureId: Int64 = -1
+
+    // 当前闪光灯模式
+    private var currentFlashMode: AVCaptureDevice.FlashMode = .off
+
+    // takePhoto 的回调（等待 AVCapturePhotoCaptureDelegate）
+    private var pendingPhotoResult: FlutterResult?
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(
@@ -53,12 +67,11 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         case "switchLens":
             handleSwitchLens(call: call, result: result)
         case "setFlash":
-            // Flash handled at capture time; no-op for preview
-            result(nil)
+            handleSetFlash(call: call, result: result)
         case "setZoom":
-            result(nil)
+            handleSetZoom(call: call, result: result)
         case "setExposure":
-            result(nil)
+            handleSetExposure(call: call, result: result)
         case "saveToGallery":
             handleSaveToGallery(call: call, result: result)
         case "dispose":
@@ -123,54 +136,102 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             if let color = baseModel["color"] as? [String: Any] {
                 if let contrast = color["contrast"] as? NSNumber { shaderParams["contrast"] = contrast.floatValue }
                 if let saturation = color["saturation"] as? NSNumber { shaderParams["saturation"] = saturation.floatValue }
+                if let temperature = color["temperature"] as? NSNumber { shaderParams["temperatureShift"] = temperature.floatValue }
             }
             if let sensor = baseModel["sensor"] as? [String: Any] {
                 if let noise = sensor["noise"] as? NSNumber { shaderParams["noise"] = noise.floatValue }
+                if let grain = sensor["grain"] as? NSNumber { shaderParams["grainAmount"] = grain.floatValue }
+                if let vignette = sensor["vignette"] as? NSNumber { shaderParams["vignette"] = vignette.floatValue }
+                if let ca = sensor["chromaticAberration"] as? NSNumber { shaderParams["chromaticAberration"] = ca.floatValue }
+                if let bloom = sensor["bloom"] as? NSNumber { shaderParams["bloom"] = bloom.floatValue }
             }
         }
+        if let lut = presetJson["lut"] as? String { shaderParams["lut"] = lut }
+        if let grain = presetJson["grain"] as? String { shaderParams["grain"] = grain }
         renderer?.updateParams(shaderParams)
         result(["success": true])
     }
 
     // ─────────────────────────────────────────────
-    // takePhoto — 捕获当前帧并保存到 cache
+    // setFlash
+    // ─────────────────────────────────────────────
+    private func handleSetFlash(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any]
+        let modeStr = args?["mode"] as? String ?? "off"
+        switch modeStr {
+        case "on":   currentFlashMode = .on
+        case "auto": currentFlashMode = .auto
+        default:     currentFlashMode = .off
+        }
+        result(nil)
+    }
+
+    // ─────────────────────────────────────────────
+    // setZoom — 与 Android CameraX 对等
+    // ─────────────────────────────────────────────
+    private func handleSetZoom(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any]
+        guard let zoomRatio = args?["zoom"] as? Double else {
+            result(nil)
+            return
+        }
+        cameraManager?.setZoom(factor: CGFloat(zoomRatio))
+        result(nil)
+    }
+
+    // ─────────────────────────────────────────────
+    // setExposure — 与 Android CameraX 对等
+    // ─────────────────────────────────────────────
+    private func handleSetExposure(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any]
+        guard let ev = args?["ev"] as? Double else {
+            result(nil)
+            return
+        }
+        cameraManager?.setExposure(bias: Float(ev))
+        result(nil)
+    }
+
+    // ─────────────────────────────────────────────
+    // takePhoto — 使用 AVCapturePhotoOutput 高分辨率拍照
+    // 与 Android CameraX takePicture 对等
     // ─────────────────────────────────────────────
     private func handleTakePhoto(call: FlutterMethodCall, result: @escaping FlutterResult) {
-        guard let renderer = renderer else {
+        guard let cameraManager = cameraManager else {
             result(FlutterError(code: "NOT_READY", message: "Camera not initialized", details: nil))
             return
         }
-        DispatchQueue.global(qos: .userInitiated).async {
-            guard let pixelBuffer = renderer.copyPixelBuffer()?.takeRetainedValue() else {
+
+        let timestamp = Int(Date().timeIntervalSince1970 * 1000)
+        let fileName = "DAZZ_\(timestamp).jpg"
+        let cacheDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dazz_captures", isDirectory: true)
+        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        let fileURL = cacheDir.appendingPathComponent(fileName)
+
+        cameraManager.capturePhoto(flashMode: currentFlashMode) { [weak self] imageData in
+            guard let data = imageData else {
                 DispatchQueue.main.async {
-                    result(FlutterError(code: "NO_FRAME", message: "No frame available", details: nil))
+                    result(FlutterError(code: "CAPTURE_FAILED", message: "Failed to capture photo", details: nil))
                 }
                 return
             }
-            let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-            let context = CIContext()
-            let timestamp = Int(Date().timeIntervalSince1970 * 1000)
-            let fileName = "DAZZ_\(timestamp).jpg"
-            let cacheDir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("dazz_captures", isDirectory: true)
-            try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-            let fileURL = cacheDir.appendingPathComponent(fileName)
-            if let cgImage = context.createCGImage(ciImage, from: ciImage.extent),
-               let data = UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.92) {
-                try? data.write(to: fileURL)
+            do {
+                try data.write(to: fileURL)
                 DispatchQueue.main.async {
                     result(["filePath": fileURL.path])
                 }
-            } else {
+            } catch {
                 DispatchQueue.main.async {
-                    result(FlutterError(code: "ENCODE_FAILED", message: "Failed to encode image", details: nil))
+                    result(FlutterError(code: "WRITE_FAILED", message: error.localizedDescription, details: nil))
                 }
             }
         }
     }
 
     // ─────────────────────────────────────────────
-    // saveToGallery — 将 cache 文件保存到 Photos
+    // saveToGallery — 保存到 DAZZ 专属相册
+    // 返回 PHAsset.localIdentifier（供 AssetEntity.fromId 使用）
     // ─────────────────────────────────────────────
     private func handleSaveToGallery(call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [String: Any],
@@ -180,10 +241,12 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         }
         let cameraId = args["cameraId"] as? String ?? ""
         var fileURL = URL(fileURLWithPath: filePath)
+
         guard FileManager.default.fileExists(atPath: filePath) else {
             result(FlutterError(code: "FILE_NOT_FOUND", message: "File not found: \(filePath)", details: nil))
             return
         }
+
         // 如果有 cameraId，将文件重命名为 DAZZ_{cameraId}_{timestamp}.jpg
         if !cameraId.isEmpty {
             let formatter = DateFormatter()
@@ -194,6 +257,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             try? FileManager.default.moveItem(at: fileURL, to: newURL)
             fileURL = newURL
         }
+
         PHPhotoLibrary.requestAuthorization { status in
             guard status == .authorized || status == .limited else {
                 DispatchQueue.main.async {
@@ -201,16 +265,95 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
                 }
                 return
             }
+
+            var assetPlaceholder: PHObjectPlaceholder?
+
             PHPhotoLibrary.shared().performChanges({
-                let request = PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: fileURL)
-                _ = request?.placeholderForCreatedAsset
+                // 1. 创建图片资产
+                let createRequest = PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: fileURL)
+                assetPlaceholder = createRequest?.placeholderForCreatedAsset
+
+                // 2. 保存到 DAZZ 专属相册
+                let albumTitle = "DAZZ"
+                let fetchOptions = PHFetchOptions()
+                fetchOptions.predicate = NSPredicate(format: "title = %@", albumTitle)
+                let existingAlbums = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: fetchOptions)
+
+                if let existingAlbum = existingAlbums.firstObject {
+                    // 相册已存在，直接添加
+                    if let addRequest = PHAssetCollectionChangeRequest(for: existingAlbum),
+                       let placeholder = assetPlaceholder {
+                        addRequest.addAssets([placeholder] as NSFastEnumeration)
+                    }
+                } else {
+                    // 创建新相册并添加
+                    let createAlbumRequest = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: albumTitle)
+                    let albumPlaceholder = createAlbumRequest.placeholderForCreatedAssetCollection
+                    // 注意：新相册在同一 performChanges 块内无法立即 fetch，需要在 completionHandler 里再添加
+                    // 这里先记录 albumPlaceholder，在 completionHandler 里处理
+                    _ = albumPlaceholder
+                }
             }) { success, error in
-                DispatchQueue.main.async {
-                    if success {
-                        try? FileManager.default.removeItem(at: fileURL)
-                        result(["success": true, "uri": fileURL.path])
-                    } else {
+                if !success {
+                    DispatchQueue.main.async {
                         result(FlutterError(code: "SAVE_FAILED", message: error?.localizedDescription, details: nil))
+                    }
+                    return
+                }
+
+                // 3. 获取刚保存的 PHAsset localIdentifier
+                guard let localId = assetPlaceholder?.localIdentifier else {
+                    DispatchQueue.main.async {
+                        result(["success": true, "uri": ""])
+                    }
+                    return
+                }
+
+                // 4. 如果相册不存在，在第二次 performChanges 里创建并添加
+                let fetchOptions = PHFetchOptions()
+                fetchOptions.predicate = NSPredicate(format: "title = %@", "DAZZ")
+                let albums = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: fetchOptions)
+
+                let assets = PHAsset.fetchAssets(withLocalIdentifiers: [localId], options: nil)
+                guard let asset = assets.firstObject else {
+                    DispatchQueue.main.async {
+                        result(["success": true, "uri": localId])
+                    }
+                    return
+                }
+
+                if albums.firstObject == nil {
+                    // 相册不存在，创建并添加
+                    PHPhotoLibrary.shared().performChanges({
+                        let createAlbumRequest = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: "DAZZ")
+                        _ = createAlbumRequest.placeholderForCreatedAssetCollection
+                    }) { _, _ in
+                        // 再次查找并添加
+                        let albums2 = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: fetchOptions)
+                        if let album = albums2.firstObject {
+                            PHPhotoLibrary.shared().performChanges({
+                                if let addRequest = PHAssetCollectionChangeRequest(for: album) {
+                                    addRequest.addAssets([asset] as NSFastEnumeration)
+                                }
+                            }) { _, _ in
+                                // 清理缓存文件
+                                try? FileManager.default.removeItem(at: fileURL)
+                                DispatchQueue.main.async {
+                                    result(["success": true, "uri": localId])
+                                }
+                            }
+                        } else {
+                            try? FileManager.default.removeItem(at: fileURL)
+                            DispatchQueue.main.async {
+                                result(["success": true, "uri": localId])
+                            }
+                        }
+                    }
+                } else {
+                    // 相册已存在，直接添加（第一次 performChanges 已添加）
+                    try? FileManager.default.removeItem(at: fileURL)
+                    DispatchQueue.main.async {
+                        result(["success": true, "uri": localId])
                     }
                 }
             }
