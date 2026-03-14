@@ -55,7 +55,7 @@ class CameraScreen extends ConsumerStatefulWidget {
 }
 
 class _CameraScreenState extends ConsumerState<CameraScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
 
   Uint8List? _latestThumb;
   AssetEntity? _latestAsset; // 最新照片 entity（长按直接打开详情用）
@@ -101,6 +101,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _optionsAnim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 320),
@@ -125,12 +126,27 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _countdownTimer?.cancel();
     _focusFadeTimer?.cancel();
     _hintTimer?.cancel();
     _transitionTimer?.cancel();
     _optionsAnim.dispose();
     super.dispose();
+  }
+
+  /// App 生命周期监听：从后台切回前台时触发过渡动画
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      // App 从后台切回前台：黑屏 + App Icon 淡入淡出
+      _transitionTimer?.cancel();
+      setState(() => _showTransition = true);
+      _transitionTimer = Timer(const Duration(milliseconds: 600), () {
+        if (mounted) setState(() => _showTransition = false);
+      });
+    }
   }
 
   /// 耗时操作过渡：黑屏 + App Icon 淡入，执行 [action]，然后淡出。
