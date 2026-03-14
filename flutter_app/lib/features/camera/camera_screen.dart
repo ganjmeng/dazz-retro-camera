@@ -90,6 +90,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _showExposureSlider = false;
   // 色温面板是否展开（点击色温胶囊触发）
   bool _showWbPanel = false;
+  // 耗时操作过渡动画（换相机/切滤镜/切比例/切清晰度）
+  bool _showTransition = false;
+  Timer? _transitionTimer;
 
   // Options 弹框控制器
   late AnimationController _optionsAnim;
@@ -125,8 +128,23 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _countdownTimer?.cancel();
     _focusFadeTimer?.cancel();
     _hintTimer?.cancel();
+    _transitionTimer?.cancel();
     _optionsAnim.dispose();
     super.dispose();
+  }
+
+  /// 耗时操作过渡：黑屏 + App Icon 淡入，执行 [action]，然后淡出。
+  /// [duration] 是黑屏持续时间（不含淡入淡出动画时间）。
+  Future<void> _showCameraTransition(VoidCallback action, {Duration duration = const Duration(milliseconds: 400)}) async {
+    _transitionTimer?.cancel();
+    setState(() => _showTransition = true);
+    // 等待淡入动画完成再执行操作
+    await Future.delayed(const Duration(milliseconds: 200));
+    action();
+    // 持续黑屏一段时间，然后淡出
+    _transitionTimer = Timer(duration, () {
+      if (mounted) setState(() => _showTransition = false);
+    });
   }
 
   // ── 取景框中央文字提示（1.5秒后自动消失）────────────────────────────────────
@@ -452,6 +470,53 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // ── 拍摄闪光 ──
           if (st.showCaptureFlash)
             Container(color: Colors.white.withAlpha(200)),
+          // ── 耗时操作过渡动画（换相机/切滤镜/切比例/切清晰度）──
+          AnimatedOpacity(
+            opacity: _showTransition ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOut,
+            child: IgnorePointer(
+              ignoring: !_showTransition,
+              child: Container(
+                color: Colors.black,
+                alignment: Alignment.center,
+                child: AnimatedScale(
+                  scale: _showTransition ? 1.0 : 0.85,
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeOutBack,
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A1A),
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(120),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(28),
+                      child: Image.asset(
+                        'assets/images/app_icon.png',
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Center(
+                          child: Icon(
+                            Icons.camera_alt,
+                            color: Colors.white,
+                            size: 48,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
           // ── Options 全屏弹框 ──
           AnimatedBuilder(
             animation: _optionsAnim,
@@ -660,7 +725,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         children: _kPhotoCameras.map((cam) {
           final isActive = st.activeCameraId == cam.id;
           return GestureDetector(
-            onTap: () => ref.read(cameraAppProvider.notifier).switchToCamera(cam.id),
+            onTap: () => _showCameraTransition(
+              () => ref.read(cameraAppProvider.notifier).switchToCamera(cam.id),
+              duration: const Duration(milliseconds: 500),
+            ),
             child: Container(
               width: 76,
               margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -915,7 +983,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             _ToolbarBtn(
               icon: Icons.flip_camera_ios_outlined,
               label: '后置',
-              onTap: () => ref.read(cameraAppProvider.notifier).flipCamera(),
+              onTap: () => _showCameraTransition(
+                () => ref.read(cameraAppProvider.notifier).flipCamera(),
+                duration: const Duration(milliseconds: 500),
+              ),
             ),
           ],
         ),
@@ -1094,7 +1165,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                               ),
                             ),
                             label: '清晰度',
-                            onTap: () => ref.read(cameraAppProvider.notifier).cycleSharpen(),
+                            onTap: () => _showCameraTransition(
+                              () => ref.read(cameraAppProvider.notifier).cycleSharpen(),
+                              duration: const Duration(milliseconds: 350),
+                            ),
                           ),
                           // 3. 小框模式
                           _TopMenuBtn(
@@ -1325,7 +1399,10 @@ class _OptionsSheet extends ConsumerWidget {
               final isActive = st.activeCameraId == cam.id;
               return GestureDetector(
                 onTap: () {
-                  ref.read(cameraAppProvider.notifier).switchToCamera(cam.id);
+                  _showCameraTransition(
+                    () => ref.read(cameraAppProvider.notifier).switchToCamera(cam.id),
+                    duration: const Duration(milliseconds: 500),
+                  );
                   onClose();
                 },
                 child: Container(
@@ -1551,12 +1628,18 @@ class _OptionsSheet extends ConsumerWidget {
         'ratio' => _RatioRow(
             ratios: camera.modules.ratios,
             activeId: st.activeRatioId,
-            onSelect: (id) => ref.read(cameraAppProvider.notifier).selectRatio(id),
+            onSelect: (id) => _showCameraTransition(
+              () => ref.read(cameraAppProvider.notifier).selectRatio(id),
+              duration: const Duration(milliseconds: 400),
+            ),
           ),
         'filter' => _FilterRow(
             filters: camera.modules.filters,
             activeId: st.activeFilterId,
-            onSelect: (id) => ref.read(cameraAppProvider.notifier).selectFilter(id),
+            onSelect: (id) => _showCameraTransition(
+              () => ref.read(cameraAppProvider.notifier).selectFilter(id),
+              duration: const Duration(milliseconds: 400),
+            ),
           ),
         'frame' => _FrameGrid(
             frames: camera.modules.frames,
