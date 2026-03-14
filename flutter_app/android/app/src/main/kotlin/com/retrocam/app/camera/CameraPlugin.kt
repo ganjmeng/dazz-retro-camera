@@ -207,13 +207,34 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             .build()
 
         preview = Preview.Builder().build().also { prev ->
-            // 直通模式：相机帧直接输出到 Flutter SurfaceTexture（稳定预览）
-            prev.setSurfaceProvider { request ->
+            // GL 渲染模式：相机帧 → CameraGLRenderer（EGL + 着色器）→ Flutter SurfaceTexture
+            prev.setSurfaceProvider(cameraExecutor) { request ->
                 val w = request.resolution.width
                 val h = request.resolution.height
-                st.setDefaultBufferSize(w, h)
-                val surface = Surface(st)
-                request.provideSurface(surface, ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)) { }
+
+                // 在 cameraExecutor 上初始化 GL（initialize 内部用 glExecutor 异步完成，
+                // 并通过 CountDownLatch 同步等待，cameraExecutor 上阻塞是安全的）
+                val renderer = CameraGLRenderer(st)
+                renderer.initialize(w, h)
+                glRenderer = renderer
+
+                val inputSurface = renderer.getInputSurface()
+                if (inputSurface != null) {
+                    Log.d("CameraPlugin", "GL renderer ready, providing GL input surface")
+                    request.provideSurface(
+                        inputSurface,
+                        cameraExecutor
+                    ) { renderer.release(); glRenderer = null }
+                } else {
+                    // GL 初始化失败，降级到直通模式
+                    Log.w("CameraPlugin", "GL renderer init failed, falling back to direct mode")
+                    st.setDefaultBufferSize(w, h)
+                    val surface = Surface(st)
+                    request.provideSurface(
+                        surface,
+                        ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
+                    ) { }
+                }
             }
         }
 
