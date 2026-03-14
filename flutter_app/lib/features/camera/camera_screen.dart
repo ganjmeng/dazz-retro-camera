@@ -45,6 +45,7 @@ const kToolbarShutterGap = 28.0; // 工具栏和快门行间距
 const kBottomPanelH = kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
 const kCapsuleH = 48.0; // 胶囊高度（对应截图中的按钮高度）
 const kCapsuleInsetBottom = 20.0; // 胶囊距取景框底部的内边距
+const kSliderAreaH = 80.0; // 胶囊下方滑条展开区域预留高度
 const kViewfinderHPadding = 16.0; // 取景框左右边距
 const kTopBarH = 44.0;
 
@@ -386,7 +387,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 取景框宽度：按比例决定
     // 对于 9:16（竖向比例 < 0.75），取景框宽度缩窄以居中显示
     // 对于 1:1、3:4、2:3，取景框宽度 = 全屏宽 - 边距
-    final maxViewfinderH = mq.size.height - statusBarH - kTopBarH - kBottomPanelH - bottomSafeH - 16;
+    // kSliderAreaH: 预留胶囊下方滑条区域（曝光/色温/缩放滑条展开时显示在此区域）
+    final maxViewfinderH = mq.size.height - statusBarH - kTopBarH - kBottomPanelH - bottomSafeH - kSliderAreaH;
     final aspectRatio = st.previewAspectRatio; // width/height
     double viewfinderW;
     double viewfinderH;
