@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import '../../models/camera_registry.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -686,6 +687,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   Uint8List? _fullData;
   late int _currentIndex;
   late PageController _pageController;
+  String _deviceModel = '';
 
   @override
   void initState() {
@@ -694,6 +696,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     if (_currentIndex < 0) _currentIndex = 0;
     _pageController = PageController(initialPage: _currentIndex);
     _loadAsset(widget.asset);
+    _loadDeviceModel();
   }
 
   @override
@@ -702,8 +705,20 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     super.dispose();
   }
 
+  Future<void> _loadDeviceModel() async {
+    try {
+      final info = DeviceInfoPlugin();
+      final android = await info.androidInfo;
+      final model = android.model;
+      if (mounted) setState(() => _deviceModel = model);
+    } catch (_) {
+      // 获取失败时不显示机型
+    }
+  }
+
   Future<void> _loadAsset(AssetEntity asset) async {
     final data = await asset.originBytes;
+    // 不清空旧图片，加载完成后直接替换，避免切换时闪白
     if (mounted && data != null) setState(() => _fullData = data);
   }
 
@@ -748,8 +763,6 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    final asset = widget.allAssets.isNotEmpty ? widget.allAssets[_currentIndex] : widget.asset;
-    final cameraTag = '#${asset.title?.split('.').first ?? "DAZZ"}';
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -760,14 +773,13 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
             controller: _pageController,
             itemCount: widget.allAssets.isEmpty ? 1 : widget.allAssets.length,
             onPageChanged: (i) {
-              setState(() {
-                _currentIndex = i;
-                _fullData = null;
-              });
+              // 不清空 _fullData，保留旧图片直到新图加载完成，避免闪白
+              setState(() => _currentIndex = i);
               _loadAsset(widget.allAssets[i]);
             },
             itemBuilder: (ctx, i) {
               final pageAsset = widget.allAssets.isEmpty ? widget.asset : widget.allAssets[i];
+              // 当前页传入 fullData，非当前页传入 null（让 _PhotoFrame 自己加载缩略图预览）
               return _PhotoFrame(asset: pageAsset, fullData: i == _currentIndex ? _fullData : null);
             },
           ),
@@ -797,15 +809,17 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // 左侧：相机标签（截图中显示 # FQS）
-                  Text(
-                    cameraTag,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
+                  // 左侧：拍摄机型（从设备信息获取）
+                  if (_deviceModel.isNotEmpty)
+                    Text(
+                      _deviceModel,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: 0.3,
+                      ),
                     ),
-                  ),
                   // 右侧：下载 + 删除
                   Row(
                     children: [
@@ -878,9 +892,10 @@ class _PhotoFrameState extends State<_PhotoFrame> {
   void didUpdateWidget(_PhotoFrame old) {
     super.didUpdateWidget(old);
     if (widget.fullData != null && widget.fullData != _data) {
+      // 新的全尺寸图到位，直接替换
       setState(() => _data = widget.fullData);
     } else if (widget.fullData == null && old.asset != widget.asset) {
-      setState(() => _data = null);
+      // 资产切换时：不清空 _data，保留旧图直到新图加载完成，避免闪白闪动
       _load();
     }
   }
@@ -930,8 +945,7 @@ class _PhotoFrameState extends State<_PhotoFrame> {
     return Image.memory(
       _data!,
       fit: BoxFit.contain,
-      width: double.infinity,
-      height: double.infinity,
+      // 不指定 width/height，让外层 SizedBox 的约束自然传递，避免尺寸冲突报错
     );
   }
 }
