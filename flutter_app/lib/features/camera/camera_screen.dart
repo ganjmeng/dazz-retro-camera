@@ -433,8 +433,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 wbMode: st.wbMode,
                 onTempChanged: (k) =>
                     ref.read(cameraAppProvider.notifier).setColorTempK(k),
-                onPreset: (mode) =>
-                    ref.read(cameraAppProvider.notifier).setWhiteBalance(mode),
+                onPreset: (mode) {
+                  ref.read(cameraAppProvider.notifier).setWhiteBalance(mode);
+                  // 切换色温预设时显示取景框提示
+                  final labels = {
+                    'auto': '自动',
+                    'daylight': '日光',
+                    'incandescent': '白炎灯',
+                  };
+                  _showViewfinderHint(labels[mode] ?? mode);
+                },
               ),
             ),
           // ── 右上角菜单弹框 ── ──
@@ -547,7 +555,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         children: [
           const SizedBox(height: kBottomPanelTopPad),
           // 工具图标行（4个图标+文字标签）
-          _buildToolbar(st),
+          // 点击曝光胶囊或色温胶囊时隐藏工具栏
+          AnimatedOpacity(
+            opacity: (_showExposureSlider || _showWbPanel) ? 0.0 : 1.0,
+            duration: const Duration(milliseconds: 200),
+            child: IgnorePointer(
+              ignoring: _showExposureSlider || _showWbPanel,
+              child: _buildToolbar(st),
+            ),
+          ),
           const SizedBox(height: kToolbarShutterGap),
           // 快门行
           _buildShutterRow(st),
@@ -2483,31 +2499,29 @@ class _FocusExposureOverlay extends StatelessWidget {
     const ringR = 36.0;
     // 太阳图标尺寸
     const sunSize = 28.0;
-    // 太阳距对焦圈右侧的偏移
+    // 太阳距对焦圈右侧的水平偏移（固定，不随 Y 变化）
     const sunOffsetX = 48.0;
-    // 轨道高度（取景框高度的 70%）
-    final trackH = viewfinderH * 0.7;
-    // 太阳中心 Y（相对取景框）= 对焦点 Y + sunOffsetY
+    // 轨道高度：固定 160px，对齐参考截图中的短竖条
+    const trackH = 160.0;
+    // 太阳中心 Y（相对取景框）= 对焦点 Y + sunOffsetY（随拖动移动）
     final sunCenterY = focusPoint.dy + sunOffsetY;
-    // 太阳中心 X
+    // 太阳中心 X：固定在对焦点右侧
     final sunCenterX = focusPoint.dx + sunOffsetX;
+    // 轨道线的 X：与太阳同一列，但 top 固定在对焦点附近（不随太阳 Y 移动）
+    final trackTop = focusPoint.dy - trackH / 2;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 垂直轨道线（白色细线，仅在拖动太阳时显示）
+        // 垂直轨道线：拖动时才显示，位置固定在对焦点右侧（不随太阳移动）
         if (isDragging)
           Positioned(
             left: sunCenterX - 0.5,
-            top: sunCenterY - trackH / 2,
-            child: AnimatedOpacity(
-              opacity: isDragging ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 150),
-              child: Container(
-                width: 1,
-                height: trackH,
-                color: Colors.white.withAlpha(200),
-              ),
+            top: trackTop,
+            child: Container(
+              width: 1,
+              height: trackH,
+              color: Colors.white.withAlpha(200),
             ),
           ),
         // 对焦圈（白色空心圆，点击位置居中）
@@ -2765,19 +2779,28 @@ class _WbPresetBtn extends StatelessWidget {
         height: 44,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
+          // 激活时：白色实心圆（对齐截图中 A 按钮选中效果）
+          // 未激活：深灰色圆
           color: isActive
-              ? Colors.white.withAlpha(50)
-              : Colors.black.withAlpha(160),
-          border: isActive
-              ? Border.all(color: Colors.white.withAlpha(120), width: 1.5)
-              : null,
+              ? Colors.white
+              : const Color(0xFF3A3A3C),
         ),
         child: Center(
           child: label != null
-              ? Text(label!, style: labelStyle)
+              ? Text(
+                  label!,
+                  style: isActive
+                      ? TextStyle(
+                          color: const Color(0xFFE8A05A), // 激活时保留橙色 A
+                          fontSize: labelStyle?.fontSize ?? 16,
+                          fontWeight: labelStyle?.fontWeight ?? FontWeight.w700,
+                        )
+                      : labelStyle,
+                )
               : Icon(
                   icon,
-                  color: isActive ? Colors.white : Colors.white.withAlpha(160),
+                  // 激活时图标变黑色（白底黑字）
+                  color: isActive ? const Color(0xFF1C1C1E) : Colors.white.withAlpha(180),
                   size: 20,
                 ),
         ),

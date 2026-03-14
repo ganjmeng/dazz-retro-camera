@@ -206,29 +206,14 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             .requireLensFacing(lensFacing)
             .build()
 
-        // 初始化 GL 渲染器（如果尚未初始化）
-        val ctx = flutterPluginBinding.applicationContext
-        if (glRenderer == null) {
-            glRenderer = CameraGLRenderer(ctx, st)
-        }
-        val renderer = glRenderer!!
-
         preview = Preview.Builder().build().also { prev ->
-            // 在 cameraExecutor 上执行，避免主线程阻塞
-            prev.setSurfaceProvider(cameraExecutor) { request ->
+            // 直通模式：相机帧直接输出到 Flutter SurfaceTexture（稳定预览）
+            prev.setSurfaceProvider { request ->
                 val w = request.resolution.width
                 val h = request.resolution.height
-                // initialize() 内部会同步等待 GL 初始化完成（最多 1 秒）
-                renderer.initialize(w, h)
-                val inputSurface = renderer.getInputSurface()
-                if (inputSurface != null) {
-                    request.provideSurface(inputSurface, cameraExecutor) { }
-                } else {
-                    // 降级：直接输出到 Flutter SurfaceTexture（无 GL 滤镜）
-                    st.setDefaultBufferSize(w, h)
-                    val surface = Surface(st)
-                    request.provideSurface(surface, cameraExecutor) { }
-                }
+                st.setDefaultBufferSize(w, h)
+                val surface = Surface(st)
+                request.provideSurface(surface, ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)) { }
             }
         }
 
