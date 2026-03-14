@@ -9,7 +9,8 @@ import '../../models/camera_definition.dart';
 import 'preview_renderer.dart';
 
 /// 捕获后处理管线
-/// 顺序：比例裁剪 → 抖动模糊 → 颜色效果 → 暗角 → 漏光 → 水印 → 相框纹理PNG → 输出 PNG
+/// 顺序：比例裁剪 → 抖动模糊 → 颜色效果 → 暗角 → 漏光 → 相框纹理PNG → 水印 → 输出 PNG
+/// 注意：水印必须在相框纹理之后绘制，否则会被相框遮挡
 class CapturePipeline {
   final CameraDefinition camera;
 
@@ -155,10 +156,7 @@ class CapturePipeline {
         _drawLightLeak(canvas, leftPx, topPx, outW, outH, lightLeakStrength);
       }
 
-      // ── 4e. 水印（绘制在图片区域内，靠近边框内侧）──────────────────────────────
-      if (selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none') {
-        _drawWatermark(canvas, leftPx, topPx, outW, outH, selectedWatermarkId);
-      }
+      // ── 4e. 水印（移至4g，在相框纹理之后绘制）──────────────────────────────────
 
       // ── 4f. 相框纹理 PNG 叠加（绘制在最上层，覆盖整个画布）──────────────────────
       if (frameOpt != null && frameOpt.asset != null && frameOpt.asset!.isNotEmpty) {
@@ -182,6 +180,11 @@ class CapturePipeline {
         } catch (e) {
           debugPrint('[CapturePipeline] frame asset load error: $e');
         }
+      }
+
+      // ── 4g. 水印（在相框纹理之后绘制，确保始终在最上层不被遮挡）────────────────
+      if (selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none') {
+        _drawWatermark(canvas, leftPx, topPx, outW, outH, selectedWatermarkId);
       }
 
       // ── 5. 输出为 PNG ────────────────────────────────────────────────────────
