@@ -619,6 +619,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Widget _buildViewfinderArea(CameraAppState st, CameraState camSvc, double areaH, double screenW) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.hardEdge, // 强制裁剪，防止 OverflowBox 内容溢出圆角边界
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -683,7 +684,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               },
               onScaleUpdate: (d) {
                 if (d.pointerCount < 2) return;
-                final newZoom = (_pinchStartZoom * d.scale).clamp(0.6, 20.0);
+                // 小窗模式下最大缩放 10x（防止小窗缩到 120mm 以下）
+                // 正常模式最大 20x
+                final maxZoom = ref.read(cameraAppProvider).minimapEnabled ? 10.0 : 20.0;
+                final newZoom = (_pinchStartZoom * d.scale).clamp(0.6, maxZoom);
                 ref.read(cameraAppProvider.notifier).setZoom(newZoom);
               },
               onScaleEnd: (d) {
@@ -2898,20 +2902,20 @@ class _WbControlPanel extends StatelessWidget {
     final sliderVal = ((colorTempK - 1800) / (8000 - 1800)).clamp(0.0, 1.0);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // K 值数字（居中，白色）
+          // K 値数字（居中，白色）
           Text(
             '${colorTempK}K',
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Row(
             children: [
               // 渐变滑动条（蓝→橙，宽度约占 2/3）
@@ -2922,7 +2926,7 @@ class _WbControlPanel extends StatelessWidget {
                   children: [
                     // 渐变轨道背景
                     Container(
-                      height: 36,
+                      height: 30,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(18),
                         gradient: const LinearGradient(
@@ -2946,7 +2950,7 @@ class _WbControlPanel extends StatelessWidget {
                         inactiveTrackColor: Colors.transparent,
                         thumbColor: Colors.white,
                         thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 12,
+                          enabledThumbRadius: 10,
                           elevation: 2,
                         ),
                         overlayShape: SliderComponentShape.noOverlay,
@@ -3018,11 +3022,11 @@ class _WbPresetBtn extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        width: 44,
-        height: 44,
+        width: 38,
+        height: 38,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          // 激活时：白色实心圆（对齐截图中 A 按钮选中效果）
+          // 激活时：白色实心圆（对齐截图中 A 按鈕选中效果）
           // 未激活：深灰色圆
           color: isActive
               ? Colors.white

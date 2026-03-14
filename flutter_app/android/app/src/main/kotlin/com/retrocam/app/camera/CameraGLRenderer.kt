@@ -164,12 +164,13 @@ void main() {
 }"""
 
         // 全屏四边形顶点（位置 + UV）
-        // UV 使用标准坐标（左下原点），方向修正由 uSTMatrix 处理
+        // UV Y 轴翻转（0 在底部，1 在顶部），配合 uSTMatrix 修正 OES 纹理方向
+        // 注意：OES 纹理 + SurfaceTexture.getTransformMatrix() 需要 UV 从底部开始
         private val QUAD_VERTICES = floatArrayOf(
-            -1f,  1f,  0f, 0f,   // 左上
-            -1f, -1f,  0f, 1f,   // 左下
-             1f,  1f,  1f, 0f,   // 右上
-             1f, -1f,  1f, 1f    // 右下
+            -1f,  1f,  0f, 1f,   // 左上  → UV(0,1)
+            -1f, -1f,  0f, 0f,   // 左下  → UV(0,0)
+             1f,  1f,  1f, 1f,   // 右上  → UV(1,1)
+             1f, -1f,  1f, 0f    // 右下  → UV(1,0)
         )
     }
 
