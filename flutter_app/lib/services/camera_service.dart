@@ -132,6 +132,9 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
+  /// 切换前后置摄像头（switchCamera 为 switchLens 的别名）
+  Future<void> switchCamera() async => switchLens();
+
   /// 切换前后置摄像头
   Future<void> switchLens() async {
     final newLens = state.currentLens == 'back' ? 'front' : 'back';
