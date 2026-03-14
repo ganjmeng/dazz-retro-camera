@@ -135,34 +135,76 @@
         "name": "白色拍立得",
         "nameEn": "Polaroid White",
         "asset": "assets/frames/polaroid_white.png",
-        "backgroundColor": "#FFFFFF",
+        "backgroundColor": "#F8F6F1",
         "inset": {
-          "top": 60,
-          "right": 60,
-          "bottom": 120,
-          "left": 60
+          "top": 56,
+          "right": 56,
+          "bottom": 186,
+          "left": 56
         },
         "supportedRatios": [
           "ratio_1_1"
         ],
-        "thumbnail": "assets/thumbnails/frames/polaroid_white.jpg"
+        "thumbnail": "assets/thumbnails/frames/polaroid_white.jpg",
+        "lightLeak": 0.35,
+        "shake": 0.0
       },
       {
         "id": "polaroid_cream",
         "name": "奶油拍立得",
         "nameEn": "Polaroid Cream",
         "asset": "assets/frames/polaroid_cream.png",
-        "backgroundColor": "#F5F0E8",
+        "backgroundColor": "#F4EEDC",
         "inset": {
-          "top": 60,
-          "right": 60,
-          "bottom": 120,
-          "left": 60
+          "top": 56,
+          "right": 56,
+          "bottom": 186,
+          "left": 56
         },
         "supportedRatios": [
           "ratio_1_1"
         ],
-        "thumbnail": "assets/thumbnails/frames/polaroid_cream.jpg"
+        "thumbnail": "assets/thumbnails/frames/polaroid_cream.jpg",
+        "lightLeak": 0.5,
+        "shake": 0.3
+      },
+      {
+        "id": "polaroid_green",
+        "name": "绿色拍立得",
+        "nameEn": "Polaroid Green",
+        "asset": "assets/frames/polaroid_green.png",
+        "backgroundColor": "#6CA85F",
+        "inset": {
+          "top": 56,
+          "right": 56,
+          "bottom": 186,
+          "left": 56
+        },
+        "supportedRatios": [
+          "ratio_1_1"
+        ],
+        "thumbnail": "assets/thumbnails/frames/polaroid_green.jpg",
+        "lightLeak": 0.25,
+        "shake": 0.2
+      },
+      {
+        "id": "polaroid_purple",
+        "name": "紫色拍立得",
+        "nameEn": "Polaroid Purple",
+        "asset": "assets/frames/polaroid_purple.png",
+        "backgroundColor": "#8C4B6E",
+        "inset": {
+          "top": 56,
+          "right": 56,
+          "bottom": 186,
+          "left": 56
+        },
+        "supportedRatios": [
+          "ratio_1_1"
+        ],
+        "thumbnail": "assets/thumbnails/frames/polaroid_purple.jpg",
+        "lightLeak": 0.4,
+        "shake": 0.25
       }
     ],
     "watermarks": {

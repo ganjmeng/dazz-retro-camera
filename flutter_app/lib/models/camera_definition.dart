@@ -313,8 +313,12 @@ class FrameDefinition {
   final FrameInset inset;
   final List<String> supportedRatios;
   final String? thumbnail;
+  /// 漏光强度 0.0~1.0（0=无，1=最强）
+  final double lightLeak;
+  /// 抖动模糊强度 0.0~1.0（0=无，1=最强）
+  final double shake;
 
-  const FrameDefinition({required this.id, required this.name, required this.nameEn, this.asset, required this.backgroundColor, required this.inset, required this.supportedRatios, this.thumbnail});
+  const FrameDefinition({required this.id, required this.name, required this.nameEn, this.asset, required this.backgroundColor, required this.inset, required this.supportedRatios, this.thumbnail, this.lightLeak = 0.0, this.shake = 0.0});
 
   factory FrameDefinition.fromJson(Map<String, dynamic> json) => FrameDefinition(
     id: json['id'] as String,
@@ -325,6 +329,8 @@ class FrameDefinition {
     inset: FrameInset.fromJson(json['inset'] as Map<String, dynamic>? ?? {}),
     supportedRatios: (json['supportedRatios'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [],
     thumbnail: json['thumbnail'] as String?,
+    lightLeak: (json['lightLeak'] as num?)?.toDouble() ?? 0.0,
+    shake: (json['shake'] as num?)?.toDouble() ?? 0.0,
   );
 }
 

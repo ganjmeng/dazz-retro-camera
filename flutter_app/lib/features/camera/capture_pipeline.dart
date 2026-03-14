@@ -4,11 +4,12 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/camera_definition.dart';
 import 'preview_renderer.dart';
 
 /// 捕获后处理管线
-/// 顺序：比例裁剪 → 颜色效果 → 暗角 → 相纸边框 → 水印 → 输出 PNG
+/// 顺序：比例裁剪 → 抖动模糊 → 颜色效果 → 暗角 → 漏光 → 水印 → 相框纹理PNG → 输出 PNG
 class CapturePipeline {
   final CameraDefinition camera;
 
@@ -84,8 +85,46 @@ class CapturePipeline {
         );
       }
 
-      // ── 4b. 绘制裁剪后的图片（带颜色效果）到边框内区域 ─────────────────────────
+      // ── 4b. 绘制图片（抖动模糊 + 颜色效果）────────────────────────────────────
       final destRect = Rect.fromLTWH(leftPx, topPx, outW, outH);
+      final shakeStrength = frameOpt?.shake ?? 0.0;
+
+      // 抖动模糊：先绘制偏移的鬼影层（低透明度），再绘制主图
+      if (shakeStrength > 0.01) {
+        final rng = math.Random(DateTime.now().millisecondsSinceEpoch);
+        final maxOffset = outW * 0.015 * shakeStrength;
+        final dx1 = (rng.nextDouble() - 0.5) * 2 * maxOffset;
+        final dy1 = (rng.nextDouble() - 0.5) * 2 * maxOffset;
+        final dx2 = (rng.nextDouble() - 0.5) * 2 * maxOffset * 0.6;
+        final dy2 = (rng.nextDouble() - 0.5) * 2 * maxOffset * 0.6;
+        final ghostAlpha1 = (shakeStrength * 55).clamp(0, 55).toInt();
+        final ghostAlpha2 = (shakeStrength * 35).clamp(0, 35).toInt();
+        final shakeRect1 = Rect.fromLTWH(leftPx + dx1, topPx + dy1, outW, outH);
+        final shakeRect2 = Rect.fromLTWH(leftPx + dx2, topPx + dy2, outW, outH);
+
+        if (renderParams != null) {
+          final colorMatrix = _buildColorMatrix(renderParams);
+          canvas.drawImageRect(srcImage, cropRect, shakeRect1,
+            Paint()
+              ..filterQuality = FilterQuality.medium
+              ..colorFilter = ColorFilter.matrix(colorMatrix)
+              ..color = Colors.white.withAlpha(ghostAlpha1),
+          );
+          canvas.drawImageRect(srcImage, cropRect, shakeRect2,
+            Paint()
+              ..filterQuality = FilterQuality.medium
+              ..colorFilter = ColorFilter.matrix(colorMatrix)
+              ..color = Colors.white.withAlpha(ghostAlpha2),
+          );
+        } else {
+          canvas.drawImageRect(srcImage, cropRect, shakeRect1,
+            Paint()..filterQuality = FilterQuality.medium..color = Colors.white.withAlpha(ghostAlpha1));
+          canvas.drawImageRect(srcImage, cropRect, shakeRect2,
+            Paint()..filterQuality = FilterQuality.medium..color = Colors.white.withAlpha(ghostAlpha2));
+        }
+      }
+
+      // 主图（正常绘制）
       if (renderParams != null) {
         final colorMatrix = _buildColorMatrix(renderParams);
         canvas.drawImageRect(
@@ -110,9 +149,39 @@ class CapturePipeline {
         _drawVignette(canvas, leftPx, topPx, outW, outH, renderParams.effectiveVignette);
       }
 
-      // ── 4d. 水印（绘制在图片区域内，靠近边框内侧）──────────────────────────────
+      // ── 4d. 漏光效果（在图片区域内，角落径向渐变）──────────────────────────────
+      final lightLeakStrength = frameOpt?.lightLeak ?? 0.0;
+      if (lightLeakStrength > 0.01) {
+        _drawLightLeak(canvas, leftPx, topPx, outW, outH, lightLeakStrength);
+      }
+
+      // ── 4e. 水印（绘制在图片区域内，靠近边框内侧）──────────────────────────────
       if (selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none') {
         _drawWatermark(canvas, leftPx, topPx, outW, outH, selectedWatermarkId);
+      }
+
+      // ── 4f. 相框纹理 PNG 叠加（绘制在最上层，覆盖整个画布）──────────────────────
+      if (frameOpt != null && frameOpt.asset != null && frameOpt.asset!.isNotEmpty) {
+        try {
+          final assetData = await rootBundle.load(frameOpt.asset!);
+          final frameCodec = await ui.instantiateImageCodec(
+            assetData.buffer.asUint8List(),
+            targetWidth: canvasW.toInt(),
+            targetHeight: canvasH.toInt(),
+          );
+          final frameImgFrame = await frameCodec.getNextFrame();
+          canvas.drawImageRect(
+            frameImgFrame.image,
+            Rect.fromLTWH(0, 0,
+              frameImgFrame.image.width.toDouble(),
+              frameImgFrame.image.height.toDouble()),
+            Rect.fromLTWH(0, 0, canvasW, canvasH),
+            Paint()..filterQuality = FilterQuality.high,
+          );
+          debugPrint('[CapturePipeline] frame texture applied: ${frameOpt.asset}');
+        } catch (e) {
+          debugPrint('[CapturePipeline] frame asset load error: $e');
+        }
       }
 
       // ── 5. 输出为 PNG ────────────────────────────────────────────────────────
@@ -286,6 +355,44 @@ class CapturePipeline {
         stops: const [0.45, 1.0],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawRect(Rect.fromLTWH(ox, oy, w, h), paint);
+  }
+
+  // ── 漏光效果（角落径向渐变，暖橙/红色）─────────────────────────────────────────
+
+  void _drawLightLeak(
+      Canvas canvas, double ox, double oy, double w, double h, double strength) {
+    final rng = math.Random(42); // 固定种子，保证每次效果一致
+    // 随机选择 1-2 个角落漏光
+    final corners = [
+      Offset(ox, oy),                   // 左上
+      Offset(ox + w, oy),               // 右上
+      Offset(ox, oy + h),               // 左下
+      Offset(ox + w, oy + h),           // 右下
+    ];
+    final selectedCorners = [corners[rng.nextInt(4)]];
+    if (strength > 0.5) {
+      // 强漏光时增加第二个角落
+      int idx2;
+      do { idx2 = rng.nextInt(4); } while (corners[idx2] == selectedCorners[0]);
+      selectedCorners.add(corners[idx2]);
+    }
+
+    for (final corner in selectedCorners) {
+      final radius = math.max(w, h) * 0.65 * strength;
+      // 漏光颜色：暖橙/红色，模拟胶片漏光
+      final leakColor = Color.fromARGB(
+        (strength * 90).clamp(0, 90).toInt(),
+        255,
+        rng.nextInt(60) + 80,  // 橙红色
+        20,
+      );
+      final paint = Paint()
+        ..shader = RadialGradient(
+          colors: [leakColor, Colors.transparent],
+          stops: const [0.0, 1.0],
+        ).createShader(Rect.fromCircle(center: corner, radius: radius));
+      canvas.drawRect(Rect.fromLTWH(ox, oy, w, h), paint);
+    }
   }
 
   // ── 水印（绘制在图片区域内）──────────────────────────────────────────────────
