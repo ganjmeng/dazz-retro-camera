@@ -22,6 +22,7 @@ class CapturePipeline {
     required String selectedRatioId,
     required String selectedFrameId,
     required String selectedWatermarkId,
+    String? frameBackgroundColor, // 用户选择的背景色（覆盖 JSON 默认值）
     PreviewRenderParams? renderParams,
   }) async {
     try {
@@ -73,12 +74,21 @@ class CapturePipeline {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, canvasW, canvasH));
 
-      // ── 4a. 先填充边框背景色 ──────────────────────────────────────────────────
+         // ── 4a. 先填充边框背景色 ────────────────────────────────────────────
       if (frameOpt != null) {
         Color bgColor = const Color(0xFFF5F2EA);
+        // 优先使用用户选择的背景色，如果没有则用 JSON 默认值
+        final bgHexSrc = (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
+            ? frameBackgroundColor
+            : frameOpt.backgroundColor;
         try {
-          final hex = frameOpt.backgroundColor.replaceAll('#', '');
-          bgColor = Color(int.parse('FF$hex', radix: 16));
+          if (bgHexSrc.toLowerCase() == 'transparent') {
+            // 透明背景：不绘制背景（保持默认白色）
+            bgColor = Colors.white;
+          } else {
+            final hex = bgHexSrc.replaceAll('#', '');
+            bgColor = Color(int.parse('FF$hex', radix: 16));
+          }
         } catch (_) {}
         canvas.drawRect(
           Rect.fromLTWH(0, 0, canvasW, canvasH),

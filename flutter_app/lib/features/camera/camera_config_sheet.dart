@@ -249,8 +249,9 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
       context: ctx,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      // 透明遮罩，让主面板在后面可见
       barrierColor: Colors.black26,
+      isDismissible: true, // 点击遗罩关闭
+      enableDrag: true,    // 下拉手势关闭
       builder: (_) => _SubPanel(type: type, camera: cam),
     );
   }
@@ -318,72 +319,75 @@ class _SubPanelState extends ConsumerState<_SubPanel>
   Widget build(BuildContext context) {
     final st = ref.watch(cameraAppProvider);
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF2F2F7),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 拖拽条
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(top: 8, bottom: 4),
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFFD1D1D6),
-                borderRadius: BorderRadius.circular(2),
+    return GestureDetector(
+      onTap: () {}, // 防止点击穿透到背景层
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFF2F2F7),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 拖拽条
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 8, bottom: 4),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD1D1D6),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-          ),
-          // 标题行
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            child: Row(
-              children: [
-                Text(
-                  _title,
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
+            // 标题行
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                children: [
+                  Text(
+                    _title,
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const Spacer(),
-                // 右上角操作按钮（无水印 / 无边框）
-                if (widget.type == _SubPanelType.watermark)
-                  _ActionPill(
-                    label: '无水印',
-                    onTap: () => ref.read(cameraAppProvider.notifier).selectWatermark('none'),
-                  ),
-                if (widget.type == _SubPanelType.frame)
-                  _FrameToggleSwitch(
-                    enabled: ref.watch(cameraAppProvider).activeFrameId != null,
-                    onChanged: (v) {
-                      if (!v) {
-                        ref.read(cameraAppProvider.notifier).selectFrame('none');
-                      } else {
-                        // 重新开启时选第一个可用相框
-                        final frames = widget.camera.modules.frames;
-                        if (frames.isNotEmpty) {
-                          ref.read(cameraAppProvider.notifier).selectFrame(frames.first.id);
+                  const Spacer(),
+                  // 右上角操作按鈕（无水印 / 无边框）
+                  if (widget.type == _SubPanelType.watermark)
+                    _ActionPill(
+                      label: '无水印',
+                      onTap: () => ref.read(cameraAppProvider.notifier).selectWatermark('none'),
+                    ),
+                  if (widget.type == _SubPanelType.frame)
+                    _FrameToggleSwitch(
+                      enabled: ref.watch(cameraAppProvider).activeFrameId != null,
+                      onChanged: (v) {
+                        // v=true 表示开启边框，v=false 表示关闭边框
+                        if (!v) {
+                          ref.read(cameraAppProvider.notifier).selectFrame('none');
+                        } else {
+                          final frames = widget.camera.modules.frames;
+                          if (frames.isNotEmpty) {
+                            ref.read(cameraAppProvider.notifier).selectFrame(frames.first.id);
+                          }
                         }
-                      }
-                    },
-                  ),
-              ],
+                      },
+                    ),
+                ],
+              ),
             ),
-          ),
-          // 子 Tab 行（水印/边框有多 Tab）
-          if (widget.type == _SubPanelType.watermark) _buildWatermarkTabs(),
-          if (widget.type == _SubPanelType.frame) _buildFrameTabs(),
-          // 内容区
-          _buildContent(st),
-          SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
-        ],
+            // 子 Tab 行（水印/边框有多 Tab）
+            if (widget.type == _SubPanelType.watermark) _buildWatermarkTabs(),
+            if (widget.type == _SubPanelType.frame) _buildFrameTabs(),
+            // 内容区
+            _buildContent(st),
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+          ],
+        ),
       ),
     );
   }
@@ -552,58 +556,77 @@ class _SubPanelState extends ConsumerState<_SubPanel>
 
   // ── 边框内容 ────────────────────────────────────────────────────────────────
   Widget _buildFrameContent(CameraAppState st) {
+    final frameEnabled = st.activeFrameId != null;
+
     if (_tabIndex == 0) {
-      // 样式 Tab：边框样式选择
+      // 样式 Tab：边框样式选择（固定 3 列 GridView）
       final frames = widget.camera.modules.frames;
+      final allCells = <Widget>[
+        // 无边框选项（随机图标）
+        _FrameStyleCell(
+          isRandom: true,
+          selected: st.activeFrameId == null,
+          onTap: () => ref.read(cameraAppProvider.notifier).selectFrame('none'),
+        ),
+        ...frames.map((f) => _FrameStyleCell(
+          frame: f,
+          selected: st.activeFrameId == f.id,
+          onTap: frameEnabled
+              ? () => ref.read(cameraAppProvider.notifier).selectFrame(f.id)
+              : () => ref.read(cameraAppProvider.notifier).selectFrame(f.id),
+        )),
+      ];
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            // 随机/无边框
-            _FrameStyleCell(
-              isRandom: true,
-              selected: st.activeFrameId == null,
-              onTap: () => ref.read(cameraAppProvider.notifier).selectFrame('none'),
-            ),
-            ...frames.map((f) => _FrameStyleCell(
-              frame: f,
-              selected: st.activeFrameId == f.id,
-              onTap: () => ref.read(cameraAppProvider.notifier).selectFrame(f.id),
-            )),
-          ],
+        child: GridView.count(
+          crossAxisCount: 3,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: allCells,
         ),
       );
     }
-    // 背景 Tab：颜色块选择（含透明选项）
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          // 透明背景（棋盘格图案）
-          _BgColorCell(
-            color: Colors.transparent,
-            isTransparent: true,
-            selected: st.activeFrame?.backgroundColor.toUpperCase() == 'TRANSPARENT' ||
-                      st.activeFrame?.backgroundColor == '#00000000',
-            onTap: () => ref.read(cameraAppProvider.notifier).selectFrameBackground('transparent'),
+    // 背景 Tab：颜色块选择（含透明选项，固定 3 列）
+    final bgCells = <Widget>[
+      // 透明背景（棋盘格图案）
+      _BgColorCell(
+        color: Colors.transparent,
+        isTransparent: true,
+        selected: (st.frameBackgroundColor ?? '').toLowerCase() == 'transparent' ||
+                  (st.frameBackgroundColor ?? '').toLowerCase() == '#00000000',
+        onTap: () => ref.read(cameraAppProvider.notifier).selectFrameBackground('transparent'),
+      ),
+      ..._kFrameBgColors.map((c) {
+        final r = c.r.toInt().toRadixString(16).padLeft(2, '0');
+        final g = c.g.toInt().toRadixString(16).padLeft(2, '0');
+        final b = c.b.toInt().toRadixString(16).padLeft(2, '0');
+        final hex = '#${r}${g}${b}'.toUpperCase();
+        // 匹配用户选择的背景色（frameBackgroundColor）
+        final isSelected = (st.frameBackgroundColor?.toUpperCase() == hex);
+        return _BgColorCell(
+          color: c,
+          selected: isSelected,
+          onTap: () => ref.read(cameraAppProvider.notifier).selectFrameBackground(hex),
+        );
+      }),
+    ];
+    return Opacity(
+      opacity: frameEnabled ? 1.0 : 0.4,
+      child: IgnorePointer(
+        ignoring: !frameEnabled,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: GridView.count(
+            crossAxisCount: 3,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            children: bgCells,
           ),
-          ..._kFrameBgColors.map((c) {
-            final r = c.r.toInt().toRadixString(16).padLeft(2, '0');
-            final g = c.g.toInt().toRadixString(16).padLeft(2, '0');
-            final b = c.b.toInt().toRadixString(16).padLeft(2, '0');
-            final hex = '#${r}${g}${b}'.toUpperCase();
-            final isSelected = st.activeFrame?.backgroundColor.toUpperCase() == hex;
-            return _BgColorCell(
-              color: c,
-              selected: isSelected,
-              onTap: () => ref.read(cameraAppProvider.notifier).selectFrameBackground(hex),
-            );
-          }),
-        ],
+        ),
       ),
     );
   }
@@ -1015,7 +1038,7 @@ class _WatermarkIcon extends StatelessWidget {
   }
 }
 
-/// 边框图标（方形边框）
+/// 边框图标（方形边框，无边框时叠加斜杠）
 class _FrameIcon extends StatelessWidget {
   final bool active;
   const _FrameIcon({required this.active});
@@ -1028,10 +1051,21 @@ class _FrameIcon extends StatelessWidget {
         color: active ? _kOrange.withAlpha(40) : _kSurface,
       ),
       child: Center(
-        child: Icon(
-          Icons.crop_square_outlined,
-          color: active ? _kOrange : _kTextSecondary,
-          size: 22,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Icon(
+              Icons.crop_square_outlined,
+              color: active ? _kOrange : _kTextSecondary,
+              size: 22,
+            ),
+            // 无边框时叠加斜杠
+            if (!active)
+              CustomPaint(
+                size: const Size(22, 22),
+                painter: _DiagonalLinePainter(color: _kTextSecondary),
+              ),
+          ],
         ),
       ),
     );
@@ -1375,22 +1409,47 @@ class _CheckerPainter extends CustomPainter {
   bool shouldRepaint(_CheckerPainter old) => false;
 }
 
+/// 斜杠画笔（用于边框图标无边框状态）
+class _DiagonalLinePainter extends CustomPainter {
+  final Color color;
+  const _DiagonalLinePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(size.width * 0.15, size.height * 0.85),
+      Offset(size.width * 0.85, size.height * 0.15),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_DiagonalLinePainter old) => old.color != color;
+}
+
 /// 无边框开关
+/// enabled = true 表示当前有边框（开关处于"关"状态，即"无边框"=关）
+/// onChanged(true) = 开启边框，onChanged(false) = 关闭边框
 class _FrameToggleSwitch extends StatelessWidget {
-  final bool enabled;
-  final ValueChanged<bool> onChanged;
+  final bool enabled; // true = 有边框
+  final ValueChanged<bool> onChanged; // true = 开启边框，false = 关闭边框
 
   const _FrameToggleSwitch({required this.enabled, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
+    // "无边框" 标签：enabled=true时灰色（边框开启，无边框=关），enabled=false时黑色（无边框=开）
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           '无边框',
           style: TextStyle(
-            color: enabled ? const Color(0xFF8E8E93) : Colors.black,
+            color: !enabled ? Colors.black : const Color(0xFF8E8E93),
             fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
@@ -1399,8 +1458,8 @@ class _FrameToggleSwitch extends StatelessWidget {
         Transform.scale(
           scale: 0.8,
           child: Switch.adaptive(
-            value: !enabled, // 开关开 = 无边框
-            onChanged: (v) => onChanged(!v), // 反转传递
+            value: !enabled, // 开关 ON = 无边框（enabled=false）
+            onChanged: (switchOn) => onChanged(!switchOn), // switchOn=true→无边框→enabled=false
             activeColor: Colors.black,
             inactiveThumbColor: const Color(0xFF8E8E93),
             inactiveTrackColor: const Color(0xFFD1D1D6),

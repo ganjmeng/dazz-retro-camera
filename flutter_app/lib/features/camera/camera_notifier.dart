@@ -388,6 +388,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
               selectedRatioId: state.activeRatioId ?? '',
               selectedFrameId: state.activeFrameId ?? '',
               selectedWatermarkId: state.activeWatermarkId ?? '',
+              frameBackgroundColor: state.frameBackgroundColor, // 用户选择的背景色
               renderParams: state.renderParams,
             );
             if (processed != null) {
