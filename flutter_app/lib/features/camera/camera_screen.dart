@@ -19,9 +19,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'package:go_router/go_router.dart';
 import '../../models/camera_definition.dart';
 import '../../models/camera_registry.dart';
 import '../../services/camera_service.dart';
+import '../../router/app_router.dart';
 import 'camera_notifier.dart';
 import 'preview_renderer.dart';
 import '../gallery/gallery_screen.dart';
@@ -918,7 +920,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             icon: Icons.settings_outlined,
                             label: '设置',
                             onTap: () {
+                              // 先关闭顶部菜单，再跳转设置界面
                               ref.read(cameraAppProvider.notifier).toggleTopMenu();
+                              context.push(AppRoutes.settings);
                             },
                           ),
                           // 占位空白（保持对齐）

@@ -1409,8 +1409,8 @@ class _FrameToggleSwitch extends StatelessWidget {
       ],
     );
   }
-}  }
 }
+
 
 // ─── 胶卷图标单元格（滤镜列表）────────────────────────────────────────────────
 
