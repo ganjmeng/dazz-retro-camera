@@ -33,6 +33,9 @@ class CameraAppState {
   // User adjustments
   final double temperatureOffset; // -100..100
   final double exposureValue;     // -2.0..2.0
+  // White balance
+  final String wbMode;   // 'auto' | 'daylight' | 'incandescent'
+  final int colorTempK;  // 1800..8000
   final String? watermarkColor;       // hex color override for watermark
   final String? frameBackgroundColor; // hex color override for frame background
 
@@ -61,6 +64,8 @@ class CameraAppState {
     this.activeWatermarkId,
     this.temperatureOffset = 0,
     this.exposureValue = 0,
+    this.wbMode = 'auto',
+    this.colorTempK = 6300,
     this.watermarkColor,
     this.frameBackgroundColor,
     this.activePanel,
@@ -88,6 +93,8 @@ class CameraAppState {
     String? activeWatermarkId,
     double? temperatureOffset,
     double? exposureValue,
+    String? wbMode,
+    int? colorTempK,
     String? watermarkColor,
     String? frameBackgroundColor,
     String? activePanel,
@@ -116,6 +123,8 @@ class CameraAppState {
       activeWatermarkId: activeWatermarkId ?? this.activeWatermarkId,
       temperatureOffset: temperatureOffset ?? this.temperatureOffset,
       exposureValue: exposureValue ?? this.exposureValue,
+      wbMode: wbMode ?? this.wbMode,
+      colorTempK: colorTempK ?? this.colorTempK,
       watermarkColor: watermarkColor ?? this.watermarkColor,
       frameBackgroundColor: frameBackgroundColor ?? this.frameBackgroundColor,
       activePanel: clearPanel ? null : (activePanel ?? this.activePanel),
@@ -291,6 +300,28 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   void setExposure(double value) {
     state = state.copyWith(exposureValue: value);
+  }
+
+  // 设置白平衡预设模式
+  // mode: 'auto' | 'daylight' | 'incandescent'
+  void setWhiteBalance(String mode) {
+    int tempK;
+    switch (mode) {
+      case 'daylight':      tempK = 4800; break;
+      case 'incandescent':  tempK = 1800; break;
+      default:              tempK = 6300; break; // auto
+    }
+    state = state.copyWith(wbMode: mode, colorTempK: tempK);
+    // 通知原生层设置白平衡
+    _ref.read(cameraServiceProvider.notifier).setWhiteBalance(mode);
+  }
+
+  // 手动设置色温（滑动条拖动时调用）
+  void setColorTempK(int kelvin) {
+    state = state.copyWith(wbMode: 'manual', colorTempK: kelvin.clamp(1800, 8000));
+    // 将 K 值映射到 temperatureOffset（-100..100）供原生层使用
+    final offset = ((kelvin - 4800) / 32.0).clamp(-100.0, 100.0);
+    state = state.copyWith(temperatureOffset: offset);
   }
 
   void toggleGrid() {

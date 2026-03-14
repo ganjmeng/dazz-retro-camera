@@ -127,6 +127,15 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
+  /// 设置白平衡模式
+  Future<void> setWhiteBalance(String mode) async {
+    try {
+      await _channel.invokeMethod('setWhiteBalance', {'mode': mode});
+    } catch (e) {
+      print('Error setting white balance: \$e');
+    }
+  }
+
   /// 切换前后置摄像头（switchCamera 为 switchLens 的别名）
   Future<void> switchCamera() async => switchLens();
 

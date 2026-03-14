@@ -83,6 +83,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _showFocusRing = false;
   // 曝光水平滑动条是否展开（点击胶囊触发）
   bool _showExposureSlider = false;
+  // 色温面板是否展开（点击色温胶囊触发）
+  bool _showWbPanel = false;
 
   // Options 弹框控制器
   late AnimationController _optionsAnim;
@@ -403,6 +405,21 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 },
               ),
             ),
+          // ── 色温控制面板（取景框和工具栏之间）──
+          if (_showWbPanel)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: kBottomPanelH + bottomSafeH + 8,
+              child: _WbControlPanel(
+                colorTempK: st.colorTempK,
+                wbMode: st.wbMode,
+                onTempChanged: (k) =>
+                    ref.read(cameraAppProvider.notifier).setColorTempK(k),
+                onPreset: (mode) =>
+                    ref.read(cameraAppProvider.notifier).setWhiteBalance(mode),
+              ),
+            ),
           // ── 右上角菜单弹框 ── ──
           if (st.showTopMenu) _buildTopMenuOverlay(st),
           // ── 倒计时蒙层 ──
@@ -452,6 +469,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 child: CircularProgressIndicator(color: _kWhite, strokeWidth: 2),
               ),
             ),
+          // ── 色温滤色叠加层（根据 colorTempK 叠加半透明暖/冷色调）──
+          if (st.wbMode != 'auto')
+            _WbColorOverlay(colorTempK: st.colorTempK),
           // ── 取景框点击手势：对焦 + 曝光 ──
           GestureDetector(
             behavior: HitTestBehavior.translucent,
@@ -685,26 +705,30 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 温度按钮（圆形，左滑动调整）
+        // 色温按钮（圆形，点击弹出色温面板）
         GestureDetector(
-          onHorizontalDragStart: (d) {
-            _tempDragStart = d.localPosition.dx;
-            _tempAtDragStart = st.temperatureOffset;
+          onTap: () {
+            setState(() {
+              _showWbPanel = !_showWbPanel;
+              if (_showWbPanel) _showExposureSlider = false; // 互斥
+            });
           },
-          onHorizontalDragUpdate: (d) {
-            final delta = d.localPosition.dx - _tempDragStart;
-            final newTemp = (_tempAtDragStart + delta * 0.8).clamp(-100.0, 100.0);
-            ref.read(cameraAppProvider.notifier).setTemperature(newTemp);
-          },
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
             width: 44,
             height: 44,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.black.withAlpha(160),
+              color: _showWbPanel
+                  ? Colors.white.withAlpha(230)
+                  : Colors.black.withAlpha(160),
             ),
-            child: const Center(
-              child: Icon(Icons.thermostat_outlined, size: 20, color: _kWhite),
+            child: Center(
+              child: Icon(
+                Icons.thermostat_outlined,
+                size: 20,
+                color: _showWbPanel ? Colors.black : _kWhite,
+              ),
             ),
           ),
         ),
@@ -732,7 +756,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         // 曝光按鈕（胶囊形，点击展开水平滑动条）
         GestureDetector(
           onTap: () {
-            setState(() => _showExposureSlider = !_showExposureSlider);
+            setState(() {
+              _showExposureSlider = !_showExposureSlider;
+              if (_showExposureSlider) _showWbPanel = false; // 与色温面板互斥
+            });
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
@@ -2513,5 +2540,226 @@ class _ExposureHorizontalSlider extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ─── 色温控制面板（点击色温胶囊后弹出）────────────────────────────────────────
+// 复刻截图：顶部 K 值数字，渐变滑动条（蓝→橙），右侧三个预设按钮（A/☀/💡）
+class _WbControlPanel extends StatelessWidget {
+  final int colorTempK;
+  final String wbMode;
+  final ValueChanged<int> onTempChanged;
+  final ValueChanged<String> onPreset;
+
+  const _WbControlPanel({
+    required this.colorTempK,
+    required this.wbMode,
+    required this.onTempChanged,
+    required this.onPreset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 将 K 值（1800..8000）映射到 0.0..1.0
+    final sliderVal = ((colorTempK - 1800) / (8000 - 1800)).clamp(0.0, 1.0);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // K 值数字（居中，白色）
+          Text(
+            '${colorTempK}K',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              // 渐变滑动条（蓝→橙，宽度约占 2/3）
+              Expanded(
+                flex: 3,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // 渐变轨道背景
+                    Container(
+                      height: 36,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFF6B8FE8), // 冷蓝（低K）
+                            Color(0xFFB08AE0), // 中紫
+                            Color(0xFFE8A05A), // 暖橙（高K）
+                          ],
+                        ),
+                      ),
+                    ),
+                    // 虚线点装饰
+                    Positioned.fill(
+                      child: CustomPaint(painter: _WbTrackDotsPainter()),
+                    ),
+                    // 滑块
+                    SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: 0,
+                        activeTrackColor: Colors.transparent,
+                        inactiveTrackColor: Colors.transparent,
+                        thumbColor: Colors.white,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 12,
+                          elevation: 2,
+                        ),
+                        overlayShape: SliderComponentShape.noOverlay,
+                      ),
+                      child: Slider(
+                        value: sliderVal,
+                        min: 0.0,
+                        max: 1.0,
+                        onChanged: (v) {
+                          final k = (1800 + v * (8000 - 1800)).round();
+                          onTempChanged(k);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // 三个预设按钮（A / ☀ / 💡）
+              _WbPresetBtn(
+                label: 'A',
+                labelStyle: const TextStyle(
+                  color: Color(0xFFE8A05A), // 橙色 A
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+                isActive: wbMode == 'auto',
+                onTap: () => onPreset('auto'),
+              ),
+              const SizedBox(width: 8),
+              _WbPresetBtn(
+                icon: Icons.wb_sunny_outlined,
+                isActive: wbMode == 'daylight',
+                onTap: () => onPreset('daylight'),
+              ),
+              const SizedBox(width: 8),
+              _WbPresetBtn(
+                icon: Icons.lightbulb_outline,
+                isActive: wbMode == 'incandescent',
+                onTap: () => onPreset('incandescent'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// 预设按钮（圆形深灰，激活时变亮）
+class _WbPresetBtn extends StatelessWidget {
+  final String? label;
+  final TextStyle? labelStyle;
+  final IconData? icon;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _WbPresetBtn({
+    this.label,
+    this.labelStyle,
+    this.icon,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isActive
+              ? Colors.white.withAlpha(50)
+              : Colors.black.withAlpha(160),
+          border: isActive
+              ? Border.all(color: Colors.white.withAlpha(120), width: 1.5)
+              : null,
+        ),
+        child: Center(
+          child: label != null
+              ? Text(label!, style: labelStyle)
+              : Icon(
+                  icon,
+                  color: isActive ? Colors.white : Colors.white.withAlpha(160),
+                  size: 20,
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+// 渐变轨道虚线点装饰
+class _WbTrackDotsPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withAlpha(80)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.fill;
+    const dotR = 1.5;
+    const spacing = 10.0;
+    final cy = size.height / 2;
+    var x = spacing;
+    while (x < size.width - spacing) {
+      canvas.drawCircle(Offset(x, cy), dotR, paint);
+      x += spacing;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WbTrackDotsPainter old) => false;
+}
+
+// ─── 色温滤色叠加层（取景框内，根据 colorTempK 叠加半透明色调）──────────────
+// 1800K（暖橙）→ 6300K（中性）→ 8000K（冷蓝）
+class _WbColorOverlay extends StatelessWidget {
+  final int colorTempK;
+
+  const _WbColorOverlay({required this.colorTempK});
+
+  @override
+  Widget build(BuildContext context) {
+    // 中性点 5500K，低于此偏暖（橙），高于此偏冷（蓝）
+    const neutralK = 5500;
+    const maxWarm = 1800;
+    const maxCool = 8000;
+
+    Color overlayColor;
+    double opacity;
+
+    if (colorTempK < neutralK) {
+      // 偏暖：橙色叠加
+      final t = (neutralK - colorTempK) / (neutralK - maxWarm);
+      opacity = (t * 0.22).clamp(0.0, 0.22);
+      overlayColor = const Color(0xFFE8A05A).withOpacity(opacity);
+    } else {
+      // 偏冷：蓝色叠加
+      final t = (colorTempK - neutralK) / (maxCool - neutralK);
+      opacity = (t * 0.18).clamp(0.0, 0.18);
+      overlayColor = const Color(0xFF6B8FE8).withOpacity(opacity);
+    }
+
+    return Container(color: overlayColor);
   }
 }
