@@ -22,6 +22,10 @@ class CapturePipeline {
     required String selectedFrameId,
     required String selectedWatermarkId,
     String? frameBackgroundColor, // 用户选择的背景色（覆盖 JSON 默认值）
+    String? watermarkColorOverride,   // 用户覆盖颜色
+    String? watermarkPositionOverride, // 用户覆盖位置
+    String? watermarkSizeOverride,    // 用户覆盖大小
+    String? watermarkDirectionOverride, // 用户覆盖方向
     PreviewRenderParams? renderParams,
     Rect? minimapNormalizedRect, // 小窗模式裁剪区域（归一化 0.0~1.0）
   }) async {
@@ -259,23 +263,21 @@ class CapturePipeline {
         }
       }
 
-      // ── 4g. 水印（在相框纹理之后绘制，确保始终在最上层不被遮挡）────
+      // ── 4g. 水印（始终绘制在照片内容区域内，不在边框底部涂层）────
       if (selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none') {
-        // 当有相框底部涂层时（bottomPx > 0），水印绘制在涂层区域内（图片底边下方）
-        // 否则绘制在图片内部底部
-        if (bottomPx > 4) {
-          // 水印区域：从图片底边到相框底边（底部涂层内）
-          _drawWatermark(
-            canvas,
-            frameOffsetX + leftPx,
-            frameOffsetY + topPx + outH, // 涂层局域的顶部
-            outW,
-            bottomPx,                   // 涂层高度
-            selectedWatermarkId,
-          );
-        } else {
-          _drawWatermark(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, selectedWatermarkId);
-        }
+        // 水印始终绘制在照片内容区域（outW x outH），不受边框底部涂层影响
+        _drawWatermark(
+          canvas,
+          frameOffsetX + leftPx,
+          frameOffsetY + topPx,
+          outW,
+          outH,
+          selectedWatermarkId,
+          colorOverride: watermarkColorOverride,
+          positionOverride: watermarkPositionOverride,
+          sizeOverride: watermarkSizeOverride,
+          directionOverride: watermarkDirectionOverride,
+        );
       }
 
       // ── 5. 输出为 PNG ────────────────────────────────────────────────────────
@@ -532,7 +534,12 @@ class CapturePipeline {
   // ── 水印（绘制在图片区域内）──────────────────────────────────────────────────
 
   void _drawWatermark(
-      Canvas canvas, double ox, double oy, double w, double h, String watermarkId) {
+      Canvas canvas, double ox, double oy, double w, double h, String watermarkId, {
+    String? colorOverride,
+    String? positionOverride,
+    String? sizeOverride,
+    String? directionOverride,
+  }) {
     final wmPresets = camera.modules.watermarks.presets;
     if (wmPresets.isEmpty) return;
 
@@ -546,59 +553,146 @@ class CapturePipeline {
     if (wmOpt.isNone) return;
 
     final now = DateTime.now();
-    final text =
-        "${now.year.toString().substring(2)}.${now.month.toString().padLeft(2, '0')}.${now.day.toString().padLeft(2, '0')}";
+    // 日期格式：YY.MM.DD
+    final datePart = "${now.year.toString().substring(2)}.${now.month.toString().padLeft(2, '0')}.${now.day.toString().padLeft(2, '0')}";
+    // 时间格式：HH:MM
+    final timePart = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
 
+    // 样式决定显示内容：默认日期，样式 'datetime' 显示日期+时间
+    final text = (wmOpt.id.contains('datetime')) ? "$datePart $timePart" : datePart;
+
+    // 解析颜色：用户覆盖 > preset默认
     Color textColor = const Color(0xFFFF8C00);
-    if (wmOpt.color != null && wmOpt.color!.isNotEmpty) {
+    final colorSrc = colorOverride ?? wmOpt.color;
+    if (colorSrc != null && colorSrc.isNotEmpty) {
       try {
-        final hex = wmOpt.color!.replaceAll('#', '');
+        final hex = colorSrc.replaceAll('#', '');
         textColor = Color(int.parse('FF$hex', radix: 16));
       } catch (_) {}
     }
 
-    final fontSize = (w * 0.038).clamp(14.0, 90.0);
-
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: textColor,
-          fontSize: fontSize,
-          fontFamily: wmOpt.fontFamily,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 2,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout(maxWidth: w);
-
-    final position = wmOpt.position ?? 'bottom_right';
-    final margin = w * 0.04;
-    double dx, dy;
-    switch (position) {
-      case 'bottom_right':
-        dx = ox + w - textPainter.width - margin;
-        dy = oy + h - textPainter.height - margin;
-        break;
-      case 'bottom_left':
-        dx = ox + margin;
-        dy = oy + h - textPainter.height - margin;
-        break;
-      case 'top_right':
-        dx = ox + w - textPainter.width - margin;
-        dy = oy + margin;
-        break;
-      case 'top_left':
-        dx = ox + margin;
-        dy = oy + margin;
-        break;
+    // 解析大小：用户覆盖 > preset默认
+    double baseFontSize;
+    switch (sizeOverride) {
+      case 'small':  baseFontSize = w * 0.028; break;
+      case 'medium': baseFontSize = w * 0.038; break;
+      case 'large':  baseFontSize = w * 0.055; break;
       default:
-        dx = ox + w - textPainter.width - margin;
-        dy = oy + h - textPainter.height - margin;
+        // 使用 preset 的 fontSize 比例计算（preset.fontSize 是参考屏幕像素，这里按宽度比例缩放）
+        baseFontSize = w * 0.038;
     }
+    final fontSize = baseFontSize.clamp(12.0, 120.0);
 
-    textPainter.paint(canvas, Offset(dx, dy));
+    // 解析方向：用户覆盖 > 默认水平
+    final isVertical = (directionOverride ?? 'horizontal') == 'vertical';
+
+    // 解析位置：用户覆盖 > preset默认
+    final position = positionOverride ?? wmOpt.position ?? 'bottom_right';
+    final margin = w * 0.04;
+
+    if (isVertical) {
+      // 垂直水印：每个字符单独绘制
+      final charPainters = text.split('').map((c) {
+        final p = TextPainter(
+          text: TextSpan(text: c, style: TextStyle(
+            color: textColor,
+            fontSize: fontSize,
+            fontFamily: wmOpt!.fontFamily,
+            fontWeight: FontWeight.w700,
+          )),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        return p;
+      }).toList();
+
+      final totalH = charPainters.fold(0.0, (s, p) => s + p.height);
+      final charW = charPainters.fold(0.0, (s, p) => math.max(s, p.width));
+
+      double startX, startY;
+      switch (position) {
+        case 'bottom_right':
+          startX = ox + w - charW - margin;
+          startY = oy + h - totalH - margin;
+          break;
+        case 'bottom_left':
+          startX = ox + margin;
+          startY = oy + h - totalH - margin;
+          break;
+        case 'top_right':
+          startX = ox + w - charW - margin;
+          startY = oy + margin;
+          break;
+        case 'top_left':
+          startX = ox + margin;
+          startY = oy + margin;
+          break;
+        case 'bottom_center':
+          startX = ox + (w - charW) / 2;
+          startY = oy + h - totalH - margin;
+          break;
+        case 'top_center':
+          startX = ox + (w - charW) / 2;
+          startY = oy + margin;
+          break;
+        default:
+          startX = ox + w - charW - margin;
+          startY = oy + h - totalH - margin;
+      }
+
+      double curY = startY;
+      for (final p in charPainters) {
+        p.paint(canvas, Offset(startX + (charW - p.width) / 2, curY));
+        curY += p.height;
+      }
+    } else {
+      // 水平水印
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: TextStyle(
+            color: textColor,
+            fontSize: fontSize,
+            fontFamily: wmOpt.fontFamily,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 2,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: w);
+
+      double dx, dy;
+      switch (position) {
+        case 'bottom_right':
+          dx = ox + w - textPainter.width - margin;
+          dy = oy + h - textPainter.height - margin;
+          break;
+        case 'bottom_left':
+          dx = ox + margin;
+          dy = oy + h - textPainter.height - margin;
+          break;
+        case 'top_right':
+          dx = ox + w - textPainter.width - margin;
+          dy = oy + margin;
+          break;
+        case 'top_left':
+          dx = ox + margin;
+          dy = oy + margin;
+          break;
+        case 'bottom_center':
+          dx = ox + (w - textPainter.width) / 2;
+          dy = oy + h - textPainter.height - margin;
+          break;
+        case 'top_center':
+          dx = ox + (w - textPainter.width) / 2;
+          dy = oy + margin;
+          break;
+        default:
+          dx = ox + w - textPainter.width - margin;
+          dy = oy + h - textPainter.height - margin;
+      }
+
+      textPainter.paint(canvas, Offset(dx, dy));
+    }
   }
 
   // ── RGBA bytes → PNG bytes ────────────────────────────────────────────────

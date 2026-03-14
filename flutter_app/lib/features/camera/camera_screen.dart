@@ -742,6 +742,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
+          // ── 实时水印预览 overlay（水印开启时在取景框内展示）──
+          if (st.activeWatermark != null && !st.activeWatermark!.isNone)
+            IgnorePointer(
+              child: _WatermarkPreviewOverlay(
+                watermark: st.activeWatermark!,
+                colorOverride: st.watermarkColor,
+                positionOverride: st.watermarkPosition,
+                sizeOverride: st.watermarkSize,
+                directionOverride: st.watermarkDirection,
+              ),
+            ),
           // ── 小窗 overlay（小窗模式开启时显示）──
           if (st.minimapEnabled)
             _MinimapOverlay(
@@ -3550,4 +3561,214 @@ class _MinimapDimPainter extends CustomPainter {
   @override
   bool shouldRepaint(_MinimapDimPainter old) =>
       old.boxW != boxW || old.boxH != boxH || old.radius != radius;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 取景框实时水印预览 overlay
+// 与 capture_pipeline._drawWatermark 保持一致的位置/大小/方向逻辑
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _WatermarkPreviewOverlay extends StatelessWidget {
+  final WatermarkPreset watermark;
+  final String? colorOverride;
+  final String? positionOverride;
+  final String? sizeOverride;
+  final String? directionOverride;
+
+  const _WatermarkPreviewOverlay({
+    required this.watermark,
+    this.colorOverride,
+    this.positionOverride,
+    this.sizeOverride,
+    this.directionOverride,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: CustomPaint(
+        painter: _WatermarkPainter(
+          watermark: watermark,
+          colorOverride: colorOverride,
+          positionOverride: positionOverride,
+          sizeOverride: sizeOverride,
+          directionOverride: directionOverride,
+        ),
+      ),
+    );
+  }
+}
+
+class _WatermarkPainter extends CustomPainter {
+  final WatermarkPreset watermark;
+  final String? colorOverride;
+  final String? positionOverride;
+  final String? sizeOverride;
+  final String? directionOverride;
+
+  _WatermarkPainter({
+    required this.watermark,
+    this.colorOverride,
+    this.positionOverride,
+    this.sizeOverride,
+    this.directionOverride,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final now = DateTime.now();
+    final datePart =
+        "${now.year.toString().substring(2)}.${now.month.toString().padLeft(2, '0')}.${now.day.toString().padLeft(2, '0')}";
+    final timePart =
+        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+    final text = watermark.id.contains('datetime') ? "$datePart $timePart" : datePart;
+
+    // 解析颜色
+    Color textColor = const Color(0xFFFF8C00);
+    final colorSrc = colorOverride ?? watermark.color;
+    if (colorSrc != null && colorSrc.isNotEmpty) {
+      try {
+        final hex = colorSrc.replaceAll('#', '');
+        textColor = Color(int.parse('FF$hex', radix: 16));
+      } catch (_) {}
+    }
+
+    // 解析大小
+    double baseFontSize;
+    switch (sizeOverride) {
+      case 'small':
+        baseFontSize = size.width * 0.028;
+        break;
+      case 'medium':
+        baseFontSize = size.width * 0.038;
+        break;
+      case 'large':
+        baseFontSize = size.width * 0.055;
+        break;
+      default:
+        baseFontSize = size.width * 0.038;
+    }
+    final fontSize = baseFontSize.clamp(10.0, 60.0);
+
+    // 解析方向
+    final isVertical = (directionOverride ?? 'horizontal') == 'vertical';
+
+    // 解析位置
+    final position = positionOverride ?? watermark.position ?? 'bottom_right';
+    final margin = size.width * 0.04;
+
+    if (isVertical) {
+      // 垂直水印：逐字符绘制
+      final style = TextStyle(
+        color: textColor,
+        fontSize: fontSize,
+        fontFamily: watermark.fontFamily,
+        fontWeight: FontWeight.w700,
+      );
+      final charPainters = text.split('').map((c) {
+        final p = TextPainter(
+          text: TextSpan(text: c, style: style),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        return p;
+      }).toList();
+
+      final totalH = charPainters.fold(0.0, (s, p) => s + p.height);
+      final charW = charPainters.fold(
+          0.0, (s, p) => s > p.width ? s : p.width);
+
+      double startX, startY;
+      switch (position) {
+        case 'bottom_right':
+          startX = size.width - charW - margin;
+          startY = size.height - totalH - margin;
+          break;
+        case 'bottom_left':
+          startX = margin;
+          startY = size.height - totalH - margin;
+          break;
+        case 'top_right':
+          startX = size.width - charW - margin;
+          startY = margin;
+          break;
+        case 'top_left':
+          startX = margin;
+          startY = margin;
+          break;
+        case 'bottom_center':
+          startX = (size.width - charW) / 2;
+          startY = size.height - totalH - margin;
+          break;
+        case 'top_center':
+          startX = (size.width - charW) / 2;
+          startY = margin;
+          break;
+        default:
+          startX = size.width - charW - margin;
+          startY = size.height - totalH - margin;
+      }
+
+      double curY = startY;
+      for (final p in charPainters) {
+        p.paint(canvas, Offset(startX + (charW - p.width) / 2, curY));
+        curY += p.height;
+      }
+    } else {
+      // 水平水印
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: TextStyle(
+            color: textColor,
+            fontSize: fontSize,
+            fontFamily: watermark.fontFamily,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 2,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: size.width);
+
+      double dx, dy;
+      switch (position) {
+        case 'bottom_right':
+          dx = size.width - textPainter.width - margin;
+          dy = size.height - textPainter.height - margin;
+          break;
+        case 'bottom_left':
+          dx = margin;
+          dy = size.height - textPainter.height - margin;
+          break;
+        case 'top_right':
+          dx = size.width - textPainter.width - margin;
+          dy = margin;
+          break;
+        case 'top_left':
+          dx = margin;
+          dy = margin;
+          break;
+        case 'bottom_center':
+          dx = (size.width - textPainter.width) / 2;
+          dy = size.height - textPainter.height - margin;
+          break;
+        case 'top_center':
+          dx = (size.width - textPainter.width) / 2;
+          dy = margin;
+          break;
+        default:
+          dx = size.width - textPainter.width - margin;
+          dy = size.height - textPainter.height - margin;
+      }
+
+      textPainter.paint(canvas, Offset(dx, dy));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WatermarkPainter old) =>
+      old.watermark != watermark ||
+      old.colorOverride != colorOverride ||
+      old.positionOverride != positionOverride ||
+      old.sizeOverride != sizeOverride ||
+      old.directionOverride != directionOverride;
 }

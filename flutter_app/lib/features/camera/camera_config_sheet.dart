@@ -555,13 +555,248 @@ class _SubPanelState extends ConsumerState<_SubPanel>
         ],
       );
     }
-    // 其他 Tab（样式/位置/方向/大小）暂时显示占位
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 32),
-      child: Center(
-        child: Text('功能开发中', style: TextStyle(color: Color(0xFF8E8E93))),
-      ),
-    );
+    // Tab 1: 样式（选择水印预设）
+    if (_tabIndex == 1) {
+      final presets = widget.camera.modules.watermarks.presets;
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: presets.map((wm) {
+            final isActive = st.activeWatermarkId == wm.id;
+            Color dotColor = const Color(0xFFFF8C00);
+            if (wm.color != null && wm.color!.isNotEmpty) {
+              try {
+                final hex = wm.color!.replaceAll('#', '');
+                dotColor = Color(int.parse('FF$hex', radix: 16));
+              } catch (_) {}
+            }
+            return GestureDetector(
+              onTap: () => ref.read(cameraAppProvider.notifier).selectWatermark(wm.id),
+              child: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(8),
+                  border: isActive ? Border.all(color: const Color(0xFFFF9500), width: 2) : null,
+                ),
+                child: Center(
+                  child: wm.isNone
+                      ? const Text('无\n水印', style: TextStyle(color: Colors.white54, fontSize: 12), textAlign: TextAlign.center)
+                      : Text(
+                          '26.03.15',
+                          style: TextStyle(
+                            color: dotColor,
+                            fontSize: 13,
+                            fontFamily: wm.fontFamily,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      );
+    }
+
+    // Tab 2: 位置
+    if (_tabIndex == 2) {
+      const positions = [
+        ('top_left',     '左上'),
+        ('top_center',   '上中'),
+        ('top_right',    '右上'),
+        ('bottom_left',  '左下'),
+        ('bottom_center','下中'),
+        ('bottom_right', '右下'),
+      ];
+      final currentPos = st.watermarkPosition ?? st.activeWatermark?.position ?? 'bottom_right';
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Column(
+          children: [
+            // 3x2 位置选择网格
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: AspectRatio(
+                aspectRatio: 3 / 2,
+                child: GridView.count(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: positions.map((pos) {
+                    final isSelected = currentPos == pos.$1;
+                    return GestureDetector(
+                      onTap: () => ref.read(cameraAppProvider.notifier).setWatermarkPosition(pos.$1),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isSelected ? const Color(0xFFFF9500) : const Color(0xFF2C2C2E),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Center(
+                          child: Text(
+                            pos.$2,
+                            style: TextStyle(
+                              color: isSelected ? Colors.black : Colors.white54,
+                              fontSize: 13,
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Tab 3: 方向
+    if (_tabIndex == 3) {
+      final currentDir = st.watermarkDirection ?? 'horizontal';
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => ref.read(cameraAppProvider.notifier).setWatermarkDirection('horizontal'),
+                child: Container(
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: currentDir == 'horizontal' ? const Color(0xFFFF9500) : Colors.black,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: currentDir == 'horizontal' ? const Color(0xFFFF9500) : const Color(0xFF3A3A3C),
+                      width: 2,
+                    ),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.text_fields, color: currentDir == 'horizontal' ? Colors.black : Colors.white54, size: 24),
+                        const SizedBox(height: 4),
+                        Text('水平', style: TextStyle(
+                          color: currentDir == 'horizontal' ? Colors.black : Colors.white54,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        )),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => ref.read(cameraAppProvider.notifier).setWatermarkDirection('vertical'),
+                child: Container(
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: currentDir == 'vertical' ? const Color(0xFFFF9500) : Colors.black,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: currentDir == 'vertical' ? const Color(0xFFFF9500) : const Color(0xFF3A3A3C),
+                      width: 2,
+                    ),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.text_rotate_vertical, color: currentDir == 'vertical' ? Colors.black : Colors.white54, size: 24),
+                        const SizedBox(height: 4),
+                        Text('垂直', style: TextStyle(
+                          color: currentDir == 'vertical' ? Colors.black : Colors.white54,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        )),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Tab 4: 大小
+    if (_tabIndex == 4) {
+      const sizes = [
+        ('small',  '小'),
+        ('medium', '中'),
+        ('large',  '大'),
+      ];
+      final currentSize = st.watermarkSize ?? 'medium';
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Row(
+          children: sizes.map((s) {
+            final isSelected = currentSize == s.$1;
+            // 不同大小对应不同的字体大小预览
+            final previewFontSize = s.$1 == 'small' ? 14.0 : s.$1 == 'medium' ? 20.0 : 28.0;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => ref.read(cameraAppProvider.notifier).setWatermarkSize(s.$1),
+                child: Container(
+                  margin: EdgeInsets.only(right: s.$1 != 'large' ? 12 : 0),
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isSelected ? const Color(0xFFFF9500) : const Color(0xFF3A3A3C),
+                      width: isSelected ? 2 : 1,
+                    ),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '26.03',
+                          style: TextStyle(
+                            color: const Color(0xFFFF8C00),
+                            fontSize: previewFontSize,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(s.$2, style: TextStyle(
+                          color: isSelected ? const Color(0xFFFF9500) : Colors.white54,
+                          fontSize: 12,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                        )),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 
   // ── 边框内容 ────────────────────────────────────────────────────────────────

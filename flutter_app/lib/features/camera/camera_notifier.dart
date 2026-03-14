@@ -37,6 +37,10 @@ class CameraAppState {
   final String wbMode;   // 'auto' | 'daylight' | 'incandescent'
   final int colorTempK;  // 1800..8000
   final String? watermarkColor;       // hex color override for watermark
+  final String? watermarkPosition;    // 位置覆盖: 'bottom_right'|'bottom_left'|'top_right'|'top_left'|'bottom_center'|'top_center'
+  final String? watermarkSize;        // 大小覆盖: 'small'|'medium'|'large'
+  final String? watermarkDirection;   // 方向覆盖: 'horizontal'|'vertical'
+  final String? watermarkStyle;       // 样式覆盖: preset id
   final String? frameBackgroundColor; // hex color override for frame background
 
   // UI state
@@ -72,6 +76,10 @@ class CameraAppState {
     this.wbMode = 'auto',
     this.colorTempK = 6300,
     this.watermarkColor,
+    this.watermarkPosition,
+    this.watermarkSize,
+    this.watermarkDirection,
+    this.watermarkStyle,
     this.frameBackgroundColor,
     this.activePanel,
     this.gridEnabled = false,
@@ -104,6 +112,11 @@ class CameraAppState {
     String? wbMode,
     int? colorTempK,
     String? watermarkColor,
+    String? watermarkPosition,
+    String? watermarkSize,
+    String? watermarkDirection,
+    String? watermarkStyle,
+    bool clearWatermarkOverrides = false,
     String? frameBackgroundColor,
     String? activePanel,
     bool? gridEnabled,
@@ -138,6 +151,10 @@ class CameraAppState {
       wbMode: wbMode ?? this.wbMode,
       colorTempK: colorTempK ?? this.colorTempK,
       watermarkColor: watermarkColor ?? this.watermarkColor,
+      watermarkPosition: clearWatermarkOverrides ? null : (watermarkPosition ?? this.watermarkPosition),
+      watermarkSize: clearWatermarkOverrides ? null : (watermarkSize ?? this.watermarkSize),
+      watermarkDirection: clearWatermarkOverrides ? null : (watermarkDirection ?? this.watermarkDirection),
+      watermarkStyle: clearWatermarkOverrides ? null : (watermarkStyle ?? this.watermarkStyle),
       frameBackgroundColor: frameBackgroundColor ?? this.frameBackgroundColor,
       activePanel: clearPanel ? null : (activePanel ?? this.activePanel),
       gridEnabled: gridEnabled ?? this.gridEnabled,
@@ -294,11 +311,28 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   void selectWatermark(String id) {
-    state = state.copyWith(activeWatermarkId: id);
+    // 切换预设时清空用户覆盖（使新预设的默认配置生效）
+    state = state.copyWith(activeWatermarkId: id, clearWatermarkOverrides: true);
   }
 
   void selectWatermarkColor(String hexColor) {
     state = state.copyWith(watermarkColor: hexColor);
+  }
+
+  void setWatermarkPosition(String position) {
+    state = state.copyWith(watermarkPosition: position);
+  }
+
+  void setWatermarkSize(String size) {
+    state = state.copyWith(watermarkSize: size);
+  }
+
+  void setWatermarkDirection(String direction) {
+    state = state.copyWith(watermarkDirection: direction);
+  }
+
+  void setWatermarkStyle(String presetId) {
+    state = state.copyWith(activeWatermarkId: presetId);
   }
 
   void selectFrameBackground(String hexColor) {
@@ -434,9 +468,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
               selectedRatioId: state.activeRatioId ?? '',
               selectedFrameId: state.activeFrameId ?? '',
               selectedWatermarkId: state.activeWatermarkId ?? '',
-              frameBackgroundColor: state.frameBackgroundColor, // 用户选择的背景色
+              frameBackgroundColor: state.frameBackgroundColor,
+              watermarkColorOverride: state.watermarkColor,
+              watermarkPositionOverride: state.watermarkPosition,
+              watermarkSizeOverride: state.watermarkSize,
+              watermarkDirectionOverride: state.watermarkDirection,
               renderParams: state.renderParams,
-              minimapNormalizedRect: minimapNormalizedRect, // 小窗模式裁剪区域
+              minimapNormalizedRect: minimapNormalizedRect,
             );
             if (processed != null) {
               await File(path).writeAsBytes(processed);
