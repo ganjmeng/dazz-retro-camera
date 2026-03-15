@@ -177,9 +177,13 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
         itemBuilder: (ctx, i) {
           final entry = orderedCameras[i];
           final isActive = st.activeCameraId == entry.id;
+          final isFav = managerAsync.hasValue
+              ? managerAsync.value!.favoritedIds.contains(entry.id)
+              : false;
           return _CameraCell(
             entry: entry,
             isActive: isActive,
+            isFavorite: isFav,
             onTap: () {
               HapticFeedback.selectionClick();
               ref.read(cameraAppProvider.notifier).switchCamera(entry.id);
@@ -1351,9 +1355,15 @@ class _PillBtn extends StatelessWidget {
 class _CameraCell extends StatelessWidget {
   final CameraEntry entry;
   final bool isActive;
+  final bool isFavorite;
   final VoidCallback onTap;
 
-  const _CameraCell({required this.entry, required this.isActive, required this.onTap});
+  const _CameraCell({
+    required this.entry,
+    required this.isActive,
+    required this.onTap,
+    this.isFavorite = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1364,40 +1374,69 @@ class _CameraCell extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: _kSurface,
-                borderRadius: BorderRadius.circular(12),
-                border: isActive
-                    ? Border.all(color: _kOrange, width: 2.5)
-                    : null,
-              ),
-              child: entry.iconPath != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.asset(
-                        entry.iconPath!,
-                        width: 64,
-                        height: 64,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Center(
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: _kSurface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: isActive
+                        ? Border.all(color: _kOrange, width: 2.5)
+                        : null,
+                  ),
+                  child: entry.iconPath != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.asset(
+                            entry.iconPath!,
+                            width: 64,
+                            height: 64,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Center(
+                              child: Icon(
+                                Icons.camera_alt_outlined,
+                                color: isActive ? _kOrange : _kTextSecondary,
+                                size: 28,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Center(
                           child: Icon(
                             Icons.camera_alt_outlined,
                             color: isActive ? _kOrange : _kTextSecondary,
                             size: 28,
                           ),
                         ),
+                ),
+                // 收藏角标：左上角黄色五角星
+                if (isFavorite)
+                  Positioned(
+                    top: -2,
+                    left: -2,
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A1A),
+                        borderRadius: BorderRadius.circular(5),
                       ),
-                    )
-                  : Center(
-                      child: Icon(
-                        Icons.camera_alt_outlined,
-                        color: isActive ? _kOrange : _kTextSecondary,
-                        size: 28,
+                      child: const Center(
+                        child: Text(
+                          '★',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFFFFCC00),
+                            height: 1.0,
+                          ),
+                        ),
                       ),
                     ),
+                  ),
+              ],
             ),
             const SizedBox(height: 4),
             Text(
