@@ -50,7 +50,7 @@ const kToolbarShutterGap = 10.0;  // 工具栏和快门行间距
 const kBottomPanelH = kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
 const kCapsuleH = 40.0;           // 胶囊高度（参考图约40px）
 const kCapsuleInsetBottom = 8.0;  // 胶囊距取景框底部的内边距（胶囊下移8px）
-const kSliderAreaH = 34.0;        // 胶囊下方滑条展开区域预留高度
+const kSliderAreaH = 72.0;        // 胶囊下方滑条展开区域预留高度（不能小于滑条内容高度44px）
 const kViewfinderHPadding = 8.0;  // 取景框左右边距（参考图约8px，贴边显示）
 const kTopBarH = 44.0;
 
@@ -441,7 +441,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 取景框在顶部栏和底部面板之间的可用空间内垂直居中
     // 注意：去掉 clamp 上限，确保 1:1/3:4 等比例下取景框能真正居中
     final availableH = maxViewfinderH;
-    final viewfinderTopOffset = statusBarH + kTopBarH + ((availableH - viewfinderH) / 2).clamp(0.0, availableH);
+    // 取景框居中后再向上偏移 20px，让底部工具栏视觉上移
+    final viewfinderTopOffset = statusBarH + kTopBarH + ((availableH - viewfinderH) / 2 - 20.0).clamp(0.0, availableH);
     // 取景框水平居中
     final viewfinderLeft = (screenW - viewfinderW) / 2;
 
