@@ -1511,11 +1511,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                   borderRadius: BorderRadius.circular(7),
                                   child: Image.asset(
                                     entry.iconPath!,
-                                    width: 69,
-                                    height: 69,
+                                    width: 78,
+                                    height: 78,
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, __, ___) =>
-                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 61),
+                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 68),
                                   ),
                                 )
                               else
