@@ -64,89 +64,66 @@
         "nameEn": "Std",
         "vignette": 0.02,
         "distortion": 0.0,
-        "chromaticAberration": 0.02,
-        "bloom": 0.03,
+        "chromaticAberration": 0.0,
+        "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
         "refraction": 0.0,
         "thumbnail": "assets/thumbnails/lenses/std.jpg"
       },
       {
-        "id": "soft",
-        "name": "柔焦",
-        "nameEn": "Soft",
-        "vignette": 0.03,
-        "distortion": 0.0,
+        "id": "wide",
+        "name": "广角",
+        "nameEn": "Wide",
+        "vignette": 0.08,
+        "distortion": 0.05,
         "chromaticAberration": 0.01,
-        "bloom": 0.05,
-        "flare": 0.02,
-        "softFocus": 0.08,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
         "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/soft.jpg"
-      },
-      {
-        "id": "dream",
-        "name": "梦幻",
-        "nameEn": "Dream",
-        "vignette": 0.03,
-        "distortion": 0.0,
-        "chromaticAberration": 0.02,
-        "bloom": 0.12,
-        "flare": 0.03,
-        "softFocus": 0.05,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/dream.jpg"
+        "thumbnail": "assets/thumbnails/lenses/wide.jpg"
       },
       {
         "id": "vintage",
         "name": "复古",
         "nameEn": "Vintage",
-        "vignette": 0.08,
-        "distortion": 0.005,
-        "chromaticAberration": 0.04,
+        "vignette": 0.1,
+        "distortion": 0.02,
+        "chromaticAberration": 0.03,
         "bloom": 0.03,
         "flare": 0.01,
-        "softFocus": 0.02,
+        "softFocus": 0.03,
         "refraction": 0.0,
+        "sharpnessBias": -0.04,
         "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
-      },
-      {
-        "id": "light_leak",
-        "name": "漏光",
-        "nameEn": "Light Leak",
-        "vignette": 0.04,
-        "distortion": 0.0,
-        "chromaticAberration": 0.03,
-        "bloom": 0.08,
-        "flare": 0.15,
-        "softFocus": 0.0,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/light_leak.jpg"
       }
     ],
     "ratios": [
-      {
-        "id": "ratio_3_4",
-        "label": "3:4",
-        "width": 3,
-        "height": 4,
-        "supportsFrame": false
-      },
       {
         "id": "ratio_1_1",
         "label": "1:1",
         "width": 1,
         "height": 1,
         "supportsFrame": true
+      },
+      {
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "width": 3,
+        "height": 4,
+        "supportsFrame": true
       }
     ],
     "frames": [
       {
-        "id": "polaroid_white",
-        "name": "白色拍立得",
-        "nameEn": "Polaroid White",
+        "id": "instant_white",
+        "name": "白色",
+        "nameEn": "White",
         "asset": "assets/frames/polaroid_white.png",
         "backgroundColor": "#F8F6F1",
+        "cornerRadius": 12,
+        "innerShadow": true,
         "inset": {
           "top": 108,
           "right": 108,
@@ -154,62 +131,23 @@
           "left": 108
         },
         "supportedRatios": [
-          "ratio_1_1"
+          "ratio_1_1",
+          "ratio_3_4"
         ],
-        "thumbnail": "assets/thumbnails/frames/polaroid_white.jpg",
-        "lightLeak": 0.35,
-        "shake": 0.0,
-        "outerPadding": 40,
-        "outerBackgroundColor": "#FFFFFF"
-      },
-      {
-        "id": "polaroid_cream",
-        "name": "奶油拍立得",
-        "nameEn": "Polaroid Cream",
-        "asset": "assets/frames/polaroid_cream.png",
-        "backgroundColor": "#F4EEDC",
-        "inset": {
-          "top": 108,
-          "right": 108,
-          "bottom": 324,
-          "left": 108
-        },
-        "supportedRatios": [
-          "ratio_1_1"
-        ],
-        "thumbnail": "assets/thumbnails/frames/polaroid_cream.jpg",
-        "lightLeak": 0.5,
-        "shake": 0.3,
-        "outerPadding": 40,
-        "outerBackgroundColor": "#FFFFFF"
-      },
-      {
-        "id": "polaroid_green",
-        "name": "绿色拍立得",
-        "nameEn": "Polaroid Green",
-        "asset": "assets/frames/polaroid_green.png",
-        "backgroundColor": "#6CA85F",
-        "inset": {
-          "top": 108,
-          "right": 108,
-          "bottom": 324,
-          "left": 108
-        },
-        "supportedRatios": [
-          "ratio_1_1"
-        ],
-        "thumbnail": "assets/thumbnails/frames/polaroid_green.jpg",
-        "lightLeak": 0.25,
+        "thumbnail": "assets/thumbnails/frames/instant_white.jpg",
+        "lightLeak": 0.3,
         "shake": 0.2,
         "outerPadding": 40,
         "outerBackgroundColor": "#FFFFFF"
       },
       {
-        "id": "polaroid_yellow",
-        "name": "黄色拍立得",
-        "nameEn": "Polaroid Yellow",
-        "asset": "assets/frames/polaroid_yellow.png",
-        "backgroundColor": "#E8D84B",
+        "id": "instant_green",
+        "name": "绿色",
+        "nameEn": "Green",
+        "asset": "assets/frames/polaroid_green.png",
+        "backgroundColor": "#6CA85F",
+        "cornerRadius": 12,
+        "innerShadow": true,
         "inset": {
           "top": 108,
           "right": 108,
@@ -217,20 +155,23 @@
           "left": 108
         },
         "supportedRatios": [
-          "ratio_1_1"
+          "ratio_1_1",
+          "ratio_3_4"
         ],
-        "thumbnail": "assets/thumbnails/frames/polaroid_yellow.jpg",
+        "thumbnail": "assets/thumbnails/frames/instant_green.jpg",
         "lightLeak": 0.3,
-        "shake": 0.0,
+        "shake": 0.2,
         "outerPadding": 40,
         "outerBackgroundColor": "#FFFFFF"
       },
       {
-        "id": "polaroid_purple",
-        "name": "紫色拍立得",
-        "nameEn": "Polaroid Purple",
+        "id": "instant_purple",
+        "name": "紫色",
+        "nameEn": "Purple",
         "asset": "assets/frames/polaroid_purple.png",
         "backgroundColor": "#8C4B6E",
+        "cornerRadius": 12,
+        "innerShadow": true,
         "inset": {
           "top": 108,
           "right": 108,
@@ -238,11 +179,36 @@
           "left": 108
         },
         "supportedRatios": [
-          "ratio_1_1"
+          "ratio_1_1",
+          "ratio_3_4"
         ],
-        "thumbnail": "assets/thumbnails/frames/polaroid_purple.jpg",
-        "lightLeak": 0.4,
-        "shake": 0.25,
+        "thumbnail": "assets/thumbnails/frames/instant_purple.jpg",
+        "lightLeak": 0.3,
+        "shake": 0.2,
+        "outerPadding": 40,
+        "outerBackgroundColor": "#FFFFFF"
+      },
+      {
+        "id": "instant_yellow",
+        "name": "黄色",
+        "nameEn": "Yellow",
+        "asset": "assets/frames/polaroid_yellow.png",
+        "backgroundColor": "#E8D84B",
+        "cornerRadius": 12,
+        "innerShadow": true,
+        "inset": {
+          "top": 108,
+          "right": 108,
+          "bottom": 324,
+          "left": 108
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_yellow.jpg",
+        "lightLeak": 0.3,
+        "shake": 0.2,
         "outerPadding": 40,
         "outerBackgroundColor": "#FFFFFF"
       }
@@ -283,7 +249,7 @@
     "filterId": "inst_classic",
     "lensId": "std",
     "ratioId": "ratio_1_1",
-    "frameId": "polaroid_yellow",
+    "frameId": "instant_white",
     "watermarkPresetId": "date_orange",
     "extraId": null
   },

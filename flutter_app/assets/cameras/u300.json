@@ -62,7 +62,7 @@
         "nameEn": "Fade",
         "lut": "assets/lut/filters/u300_fade.cube",
         "contrast": 0.85,
-        "saturation": 0.80,
+        "saturation": 0.8,
         "grain": "heavy",
         "thumbnail": "assets/thumbnails/filters/u300_fade.jpg"
       }
@@ -72,12 +72,12 @@
         "id": "std",
         "name": "标准",
         "nameEn": "Std",
-        "vignette": 0.06,
-        "distortion": 0.004,
-        "chromaticAberration": 0.04,
-        "bloom": 0.04,
-        "flare": 0.01,
-        "softFocus": 0.02,
+        "vignette": 0.02,
+        "distortion": 0.0,
+        "chromaticAberration": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
         "refraction": 0.0,
         "thumbnail": "assets/thumbnails/lenses/std.jpg"
       },
@@ -85,12 +85,12 @@
         "id": "wide",
         "name": "广角",
         "nameEn": "Wide",
-        "vignette": 0.10,
-        "distortion": 0.012,
-        "chromaticAberration": 0.06,
-        "bloom": 0.05,
-        "flare": 0.02,
-        "softFocus": 0.02,
+        "vignette": 0.08,
+        "distortion": 0.05,
+        "chromaticAberration": 0.01,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
         "refraction": 0.0,
         "thumbnail": "assets/thumbnails/lenses/wide.jpg"
       },
@@ -98,40 +98,15 @@
         "id": "vintage",
         "name": "复古",
         "nameEn": "Vintage",
-        "vignette": 0.12,
-        "distortion": 0.006,
-        "chromaticAberration": 0.08,
-        "bloom": 0.06,
-        "flare": 0.03,
-        "softFocus": 0.05,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
-      },
-      {
-        "id": "dream",
-        "name": "梦幻",
-        "nameEn": "Dream",
-        "vignette": 0.05,
-        "distortion": 0.002,
+        "vignette": 0.1,
+        "distortion": 0.02,
         "chromaticAberration": 0.03,
-        "bloom": 0.12,
-        "flare": 0.04,
-        "softFocus": 0.08,
+        "bloom": 0.03,
+        "flare": 0.01,
+        "softFocus": 0.03,
         "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/dream.jpg"
-      },
-      {
-        "id": "prism",
-        "name": "棱镜",
-        "nameEn": "Prism",
-        "vignette": 0.04,
-        "distortion": 0.002,
-        "chromaticAberration": 0.12,
-        "bloom": 0.05,
-        "flare": 0.02,
-        "softFocus": 0.02,
-        "refraction": 0.16,
-        "thumbnail": "assets/thumbnails/lenses/prism.jpg"
+        "sharpnessBias": -0.04,
+        "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
       }
     ],
     "ratios": [
@@ -140,51 +115,71 @@
         "label": "2:3",
         "width": 2,
         "height": 3,
-        "supportsFrame": true
-      },
-      {
-        "id": "ratio_3_4",
-        "label": "3:4",
-        "width": 3,
-        "height": 4,
-        "supportsFrame": true
-      },
-      {
-        "id": "ratio_1_1",
-        "label": "1:1",
-        "width": 1,
-        "height": 1,
-        "supportsFrame": false
-      },
-      {
-        "id": "ratio_9_16",
-        "label": "9:16",
-        "width": 9,
-        "height": 16,
         "supportsFrame": false
       }
     ],
     "frames": [
       {
-        "id": "frame_film_strip",
-        "name": "胶片边框",
-        "nameEn": "Film Strip",
+        "id": "film_border",
+        "name": "胶卷边框",
+        "nameEn": "Film Border",
         "asset": null,
-        "backgroundColor": "#F5F0E8",
+        "backgroundColor": "#EAE6DD",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 22,
+          "right": 22,
+          "bottom": 22,
+          "left": 22
+        },
+        "supportedRatios": [
+          "ratio_2_3"
+        ],
+        "thumbnail": "assets/thumbnails/frames/film_border.jpg",
+        "outerPadding": 40,
+        "outerBackgroundColor": "#1A1A1A"
+      },
+      {
+        "id": "sprocket",
+        "name": "链孔边框",
+        "nameEn": "Sprocket",
+        "asset": null,
+        "backgroundColor": "#1A1A1A",
         "cornerRadius": 0,
         "innerShadow": false,
         "inset": {
-          "top": 50,
-          "right": 50,
-          "bottom": 50,
-          "left": 50
+          "top": 60,
+          "right": 18,
+          "bottom": 60,
+          "left": 18
         },
         "supportedRatios": [
-          "ratio_2_3",
-          "ratio_3_4"
+          "ratio_2_3"
         ],
-        "thumbnail": "assets/thumbnails/frames/frame_film_strip.jpg",
-        "outerPadding": 24,
+        "thumbnail": "assets/thumbnails/frames/sprocket.jpg",
+        "outerPadding": 0,
+        "outerBackgroundColor": "#1A1A1A"
+      },
+      {
+        "id": "film_edge",
+        "name": "胶片边缘",
+        "nameEn": "Film Edge",
+        "asset": null,
+        "backgroundColor": "#F5F0E8",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 8,
+          "right": 8,
+          "bottom": 8,
+          "left": 8
+        },
+        "supportedRatios": [
+          "ratio_2_3"
+        ],
+        "thumbnail": "assets/thumbnails/frames/film_edge.jpg",
+        "outerPadding": 30,
         "outerBackgroundColor": "#F5F0E8"
       }
     ],
@@ -224,7 +219,7 @@
     "filterId": "u300_standard",
     "lensId": "std",
     "ratioId": "ratio_2_3",
-    "frameId": "frame_film_strip",
+    "frameId": null,
     "watermarkPresetId": "date_orange",
     "extraId": null
   },
@@ -258,7 +253,7 @@
     "enableWatermarkComposite": true
   },
   "exportPolicy": {
-    "jpegQuality": 0.90,
+    "jpegQuality": 0.9,
     "applyRatioCrop": true,
     "applyFrameOnExport": true,
     "applyWatermarkOnExport": true,
@@ -266,8 +261,12 @@
   },
   "videoConfig": {
     "enabled": false,
-    "fpsOptions": [24],
-    "resolutionOptions": ["HD"],
+    "fpsOptions": [
+      24
+    ],
+    "resolutionOptions": [
+      "HD"
+    ],
     "defaultFps": 24,
     "defaultResolution": "HD",
     "supportsAudio": false,
@@ -289,5 +288,9 @@
       "kodak",
       "ultramax"
     ]
+  },
+  "filmRollBehavior": {
+    "type": "advance",
+    "style": "disposable"
   }
 }

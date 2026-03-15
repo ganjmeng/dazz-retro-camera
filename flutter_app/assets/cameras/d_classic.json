@@ -9,7 +9,7 @@
   "sensor": {
     "type": "ccd",
     "dynamicRange": 9,
-    "baseNoise": 0.10,
+    "baseNoise": 0.1,
     "colorDepth": 8
   },
   "defaultLook": {
@@ -27,7 +27,7 @@
     "clarity": 6.0,
     "saturation": 0.96,
     "vibrance": 2.0,
-    "grain": 0.10,
+    "grain": 0.1,
     "bloom": 0.03,
     "vignette": 0.04,
     "colorBiasR": 0.04,
@@ -61,7 +61,7 @@
         "name": "褪色",
         "nameEn": "Fade",
         "lut": "assets/lut/filters/d_classic_fade.cube",
-        "contrast": 0.90,
+        "contrast": 0.9,
         "saturation": 0.85,
         "grain": "medium",
         "thumbnail": "assets/thumbnails/filters/d_classic_fade.jpg"
@@ -72,12 +72,12 @@
         "id": "std",
         "name": "标准",
         "nameEn": "Std",
-        "vignette": 0.03,
+        "vignette": 0.02,
         "distortion": 0.0,
-        "chromaticAberration": 0.02,
-        "bloom": 0.02,
+        "chromaticAberration": 0.0,
+        "bloom": 0.0,
         "flare": 0.0,
-        "softFocus": 0.01,
+        "softFocus": 0.0,
         "refraction": 0.0,
         "thumbnail": "assets/thumbnails/lenses/std.jpg"
       },
@@ -85,61 +85,36 @@
         "id": "wide",
         "name": "广角",
         "nameEn": "Wide",
-        "vignette": 0.05,
-        "distortion": 0.010,
-        "chromaticAberration": 0.04,
-        "bloom": 0.02,
+        "vignette": 0.08,
+        "distortion": 0.05,
+        "chromaticAberration": 0.01,
+        "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
         "refraction": 0.0,
         "thumbnail": "assets/thumbnails/lenses/wide.jpg"
       },
       {
-        "id": "vintage",
-        "name": "复古",
-        "nameEn": "Vintage",
-        "vignette": 0.08,
-        "distortion": 0.005,
-        "chromaticAberration": 0.05,
-        "bloom": 0.04,
-        "flare": 0.02,
-        "softFocus": 0.04,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
-      },
-      {
-        "id": "dream",
-        "name": "梦幻",
-        "nameEn": "Dream",
-        "vignette": 0.04,
-        "distortion": 0.0,
-        "chromaticAberration": 0.02,
-        "bloom": 0.10,
-        "flare": 0.03,
-        "softFocus": 0.08,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/dream.jpg"
-      },
-      {
-        "id": "prism",
-        "name": "棱镜",
-        "nameEn": "Prism",
-        "vignette": 0.02,
-        "distortion": 0.0,
-        "chromaticAberration": 0.10,
-        "bloom": 0.04,
+        "id": "tele",
+        "name": "长焦",
+        "nameEn": "Tele",
+        "vignette": 0.03,
+        "distortion": -0.01,
+        "chromaticAberration": 0.0,
+        "bloom": 0.0,
         "flare": 0.0,
-        "softFocus": 0.01,
-        "refraction": 0.16,
-        "thumbnail": "assets/thumbnails/lenses/prism.jpg"
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "sharpnessBias": 0.04,
+        "thumbnail": "assets/thumbnails/lenses/tele.jpg"
       }
     ],
     "ratios": [
       {
-        "id": "ratio_3_4",
-        "label": "3:4",
-        "width": 3,
-        "height": 4,
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
         "supportsFrame": true
       },
       {
@@ -150,10 +125,10 @@
         "supportsFrame": false
       },
       {
-        "id": "ratio_1_1",
-        "label": "1:1",
-        "width": 1,
-        "height": 1,
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "width": 3,
+        "height": 4,
         "supportsFrame": true
       },
       {
@@ -164,30 +139,7 @@
         "supportsFrame": false
       }
     ],
-    "frames": [
-      {
-        "id": "frame_clean_white",
-        "name": "白边框",
-        "nameEn": "Clean White",
-        "asset": null,
-        "backgroundColor": "#FFF8F0",
-        "cornerRadius": 0,
-        "innerShadow": false,
-        "inset": {
-          "top": 60,
-          "right": 60,
-          "bottom": 60,
-          "left": 60
-        },
-        "supportedRatios": [
-          "ratio_1_1",
-          "ratio_3_4"
-        ],
-        "thumbnail": "assets/thumbnails/frames/frame_clean_white.jpg",
-        "outerPadding": 30,
-        "outerBackgroundColor": "#FFFDF8"
-      }
-    ],
+    "frames": [],
     "watermarks": {
       "presets": [
         {
@@ -224,7 +176,7 @@
     "filterId": "d_classic_standard",
     "lensId": "std",
     "ratioId": "ratio_3_4",
-    "frameId": "frame_clean_white",
+    "frameId": null,
     "watermarkPresetId": "date_orange",
     "extraId": null
   },
@@ -232,7 +184,7 @@
     "enableFilter": true,
     "enableLens": true,
     "enableRatio": true,
-    "enableFrame": true,
+    "enableFrame": false,
     "enableWatermark": true,
     "enableExtra": false
   },
@@ -258,7 +210,7 @@
     "enableWatermarkComposite": true
   },
   "exportPolicy": {
-    "jpegQuality": 0.90,
+    "jpegQuality": 0.9,
     "applyRatioCrop": true,
     "applyFrameOnExport": true,
     "applyWatermarkOnExport": true,
@@ -266,8 +218,13 @@
   },
   "videoConfig": {
     "enabled": false,
-    "fpsOptions": [24, 30],
-    "resolutionOptions": ["HD"],
+    "fpsOptions": [
+      24,
+      30
+    ],
+    "resolutionOptions": [
+      "HD"
+    ],
     "defaultFps": 30,
     "defaultResolution": "HD",
     "supportsAudio": false,

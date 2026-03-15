@@ -62,89 +62,50 @@
         "id": "std",
         "name": "标准",
         "nameEn": "Std",
-        "vignette": 0.1,
-        "distortion": 0.01,
-        "chromaticAberration": 0.04,
-        "bloom": 0.03,
-        "flare": 0.02,
-        "softFocus": 0.02,
+        "vignette": 0.02,
+        "distortion": 0.0,
+        "chromaticAberration": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
         "refraction": 0.0,
-        "thumbnail": null
+        "thumbnail": "assets/thumbnails/lenses/std.jpg"
+      },
+      {
+        "id": "wide",
+        "name": "广角",
+        "nameEn": "Wide",
+        "vignette": 0.08,
+        "distortion": 0.05,
+        "chromaticAberration": 0.01,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "thumbnail": "assets/thumbnails/lenses/wide.jpg"
       },
       {
         "id": "vintage",
         "name": "复古",
         "nameEn": "Vintage",
-        "vignette": 0.16,
-        "distortion": 0.02,
-        "chromaticAberration": 0.08,
-        "bloom": 0.04,
-        "flare": 0.03,
-        "softFocus": 0.05,
-        "refraction": 0.0,
-        "thumbnail": null
-      },
-      {
-        "id": "dream",
-        "name": "梦幻",
-        "nameEn": "Dream",
         "vignette": 0.1,
-        "distortion": 0.01,
-        "chromaticAberration": 0.05,
-        "bloom": 0.15,
-        "flare": 0.05,
-        "softFocus": 0.08,
-        "refraction": 0.0,
-        "thumbnail": null
-      },
-      {
-        "id": "light_leak",
-        "name": "漏光",
-        "nameEn": "Light Leak",
-        "vignette": 0.14,
         "distortion": 0.02,
-        "chromaticAberration": 0.07,
-        "bloom": 0.05,
-        "flare": 0.1,
+        "chromaticAberration": 0.03,
+        "bloom": 0.03,
+        "flare": 0.01,
         "softFocus": 0.03,
         "refraction": 0.0,
-        "thumbnail": null
-      },
-      {
-        "id": "prism",
-        "name": "棱镜",
-        "nameEn": "Prism",
-        "vignette": 0.12,
-        "distortion": 0.01,
-        "chromaticAberration": 0.1,
-        "bloom": 0.04,
-        "flare": 0.03,
-        "softFocus": 0.02,
-        "refraction": 0.2,
-        "thumbnail": null
+        "sharpnessBias": -0.04,
+        "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
       }
     ],
     "ratios": [
-      {
-        "id": "ratio_3_4",
-        "label": "3:4",
-        "width": 3,
-        "height": 4,
-        "supportsFrame": true
-      },
       {
         "id": "ratio_2_3",
         "label": "2:3",
         "width": 2,
         "height": 3,
         "supportsFrame": false
-      },
-      {
-        "id": "ratio_1_1",
-        "label": "1:1",
-        "width": 1,
-        "height": 1,
-        "supportsFrame": true
       }
     ],
     "frames": [
@@ -154,6 +115,8 @@
         "nameEn": "Film Border",
         "asset": null,
         "backgroundColor": "#EAE6DD",
+        "cornerRadius": 0,
+        "innerShadow": true,
         "inset": {
           "top": 22,
           "right": 22,
@@ -161,12 +124,53 @@
           "left": 22
         },
         "supportedRatios": [
-          "ratio_1_1",
-          "ratio_3_4"
+          "ratio_2_3"
         ],
-        "thumbnail": null,
+        "thumbnail": "assets/thumbnails/frames/film_border.jpg",
         "outerPadding": 40,
-        "outerBackgroundColor": "#FFFFFF"
+        "outerBackgroundColor": "#1A1A1A"
+      },
+      {
+        "id": "sprocket",
+        "name": "链孔边框",
+        "nameEn": "Sprocket",
+        "asset": null,
+        "backgroundColor": "#1A1A1A",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 60,
+          "right": 18,
+          "bottom": 60,
+          "left": 18
+        },
+        "supportedRatios": [
+          "ratio_2_3"
+        ],
+        "thumbnail": "assets/thumbnails/frames/sprocket.jpg",
+        "outerPadding": 0,
+        "outerBackgroundColor": "#1A1A1A"
+      },
+      {
+        "id": "film_edge",
+        "name": "胶片边缘",
+        "nameEn": "Film Edge",
+        "asset": null,
+        "backgroundColor": "#F5F0E8",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 8,
+          "right": 8,
+          "bottom": 8,
+          "left": 8
+        },
+        "supportedRatios": [
+          "ratio_2_3"
+        ],
+        "thumbnail": "assets/thumbnails/frames/film_edge.jpg",
+        "outerPadding": 30,
+        "outerBackgroundColor": "#F5F0E8"
       }
     ],
     "watermarks": {
@@ -276,5 +280,9 @@
       "toy",
       "warm"
     ]
+  },
+  "filmRollBehavior": {
+    "type": "advance",
+    "style": "35mm_negative"
   }
 }

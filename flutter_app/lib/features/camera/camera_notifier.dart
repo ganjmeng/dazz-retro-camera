@@ -305,7 +305,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   void selectLens(String id) {
-    state = state.copyWith(activeLensId: id);
+    // 反选：再次点击已激活的镜头时，回到相机默认镜头
+    final defaultLensId = state.camera?.defaultSelection.lensId ?? 'std';
+    if (state.activeLensId == id && id != defaultLensId) {
+      state = state.copyWith(activeLensId: defaultLensId);
+    } else {
+      state = state.copyWith(activeLensId: id);
+    }
   }
 
   void selectRatio(String id) {

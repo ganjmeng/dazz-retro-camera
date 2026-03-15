@@ -64,7 +64,7 @@
         "nameEn": "Std",
         "vignette": 0.02,
         "distortion": 0.0,
-        "chromaticAberration": 0.01,
+        "chromaticAberration": 0.0,
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
@@ -75,9 +75,9 @@
         "id": "wide",
         "name": "广角",
         "nameEn": "Wide",
-        "vignette": 0.04,
-        "distortion": 0.015,
-        "chromaticAberration": 0.015,
+        "vignette": 0.08,
+        "distortion": 0.05,
+        "chromaticAberration": 0.01,
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
@@ -85,51 +85,40 @@
         "thumbnail": "assets/thumbnails/lenses/wide.jpg"
       },
       {
+        "id": "tele",
+        "name": "长焦",
+        "nameEn": "Tele",
+        "vignette": 0.03,
+        "distortion": -0.01,
+        "chromaticAberration": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "sharpnessBias": 0.04,
+        "thumbnail": "assets/thumbnails/lenses/tele.jpg"
+      },
+      {
         "id": "vintage",
         "name": "复古",
         "nameEn": "Vintage",
-        "vignette": 0.08,
-        "distortion": 0.005,
-        "chromaticAberration": 0.04,
+        "vignette": 0.1,
+        "distortion": 0.02,
+        "chromaticAberration": 0.03,
         "bloom": 0.03,
         "flare": 0.01,
-        "softFocus": 0.02,
+        "softFocus": 0.03,
         "refraction": 0.0,
+        "sharpnessBias": -0.04,
         "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
-      },
-      {
-        "id": "dream",
-        "name": "梦幻",
-        "nameEn": "Dream",
-        "vignette": 0.03,
-        "distortion": 0.0,
-        "chromaticAberration": 0.02,
-        "bloom": 0.12,
-        "flare": 0.03,
-        "softFocus": 0.05,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/dream.jpg"
-      },
-      {
-        "id": "prism",
-        "name": "棱镜",
-        "nameEn": "Prism",
-        "vignette": 0.02,
-        "distortion": 0.0,
-        "chromaticAberration": 0.08,
-        "bloom": 0.04,
-        "flare": 0.0,
-        "softFocus": 0.01,
-        "refraction": 0.18,
-        "thumbnail": "assets/thumbnails/lenses/prism.jpg"
       }
     ],
     "ratios": [
       {
-        "id": "ratio_3_4",
-        "label": "3:4",
-        "width": 3,
-        "height": 4,
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
         "supportsFrame": true
       },
       {
@@ -140,10 +129,10 @@
         "supportsFrame": false
       },
       {
-        "id": "ratio_1_1",
-        "label": "1:1",
-        "width": 1,
-        "height": 1,
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "width": 3,
+        "height": 4,
         "supportsFrame": true
       },
       {
@@ -156,26 +145,76 @@
     ],
     "frames": [
       {
-        "id": "frame_clean_white",
-        "name": "白边框",
-        "nameEn": "Clean White",
+        "id": "ccd_frame",
+        "name": "CCD 边框",
+        "nameEn": "CCD Frame",
         "asset": null,
-        "backgroundColor": "#F5F2EA",
-        "cornerRadius": 16,
-        "innerShadow": true,
+        "backgroundColor": "#F0EDE8",
+        "cornerRadius": 4,
+        "innerShadow": false,
         "inset": {
-          "top": 80,
-          "right": 80,
-          "bottom": 240,
-          "left": 80
+          "top": 24,
+          "right": 24,
+          "bottom": 24,
+          "left": 24
         },
         "supportedRatios": [
           "ratio_1_1",
-          "ratio_3_4"
+          "ratio_2_3",
+          "ratio_3_4",
+          "ratio_9_16"
         ],
-        "thumbnail": "assets/thumbnails/frames/frame_clean_white.jpg",
-        "outerPadding": 40,
+        "thumbnail": "assets/thumbnails/frames/ccd_frame.jpg",
+        "outerPadding": 20,
         "outerBackgroundColor": "#FFFFFF"
+      },
+      {
+        "id": "date_frame",
+        "name": "日期边框",
+        "nameEn": "Date Frame",
+        "asset": null,
+        "backgroundColor": "#FAFAF8",
+        "cornerRadius": 2,
+        "innerShadow": false,
+        "inset": {
+          "top": 16,
+          "right": 16,
+          "bottom": 48,
+          "left": 16
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_2_3",
+          "ratio_3_4",
+          "ratio_9_16"
+        ],
+        "thumbnail": "assets/thumbnails/frames/date_frame.jpg",
+        "outerPadding": 16,
+        "outerBackgroundColor": "#FFFFFF"
+      },
+      {
+        "id": "film_border_ccd",
+        "name": "胶片边框",
+        "nameEn": "Film Border",
+        "asset": null,
+        "backgroundColor": "#E8E4DC",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 20,
+          "right": 20,
+          "bottom": 20,
+          "left": 20
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_2_3",
+          "ratio_3_4",
+          "ratio_9_16"
+        ],
+        "thumbnail": "assets/thumbnails/frames/film_border.jpg",
+        "outerPadding": 20,
+        "outerBackgroundColor": "#1A1A1A"
       }
     ],
     "watermarks": {
@@ -214,7 +253,7 @@
     "filterId": "grd_standard",
     "lensId": "std",
     "ratioId": "ratio_3_4",
-    "frameId": "frame_clean_white",
+    "frameId": null,
     "watermarkPresetId": "date_orange",
     "extraId": null
   },

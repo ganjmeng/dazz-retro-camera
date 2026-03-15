@@ -25,10 +25,10 @@
     "whites": 20.0,
     "blacks": -16.0,
     "clarity": 4.0,
-    "saturation": 1.10,
+    "saturation": 1.1,
     "vibrance": 12.0,
     "grain": 0.12,
-    "bloom": 0.20,
+    "bloom": 0.2,
     "vignette": 0.14,
     "colorBiasR": 0.03,
     "colorBiasG": 0.01,
@@ -62,7 +62,7 @@
         "nameEn": "Night",
         "lut": "assets/lut/filters/inst_c_night.cube",
         "contrast": 1.25,
-        "saturation": 1.10,
+        "saturation": 1.1,
         "grain": "heavy",
         "thumbnail": "assets/thumbnails/filters/inst_c_night.jpg"
       }
@@ -72,11 +72,11 @@
         "id": "std",
         "name": "标准",
         "nameEn": "Std",
-        "vignette": 0.10,
+        "vignette": 0.02,
         "distortion": 0.0,
-        "chromaticAberration": 0.03,
-        "bloom": 0.18,
-        "flare": 0.05,
+        "chromaticAberration": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
         "softFocus": 0.0,
         "refraction": 0.0,
         "thumbnail": "assets/thumbnails/lenses/std.jpg"
@@ -85,11 +85,11 @@
         "id": "wide",
         "name": "广角",
         "nameEn": "Wide",
-        "vignette": 0.14,
-        "distortion": 0.008,
-        "chromaticAberration": 0.05,
-        "bloom": 0.20,
-        "flare": 0.06,
+        "vignette": 0.08,
+        "distortion": 0.05,
+        "chromaticAberration": 0.01,
+        "bloom": 0.0,
+        "flare": 0.0,
         "softFocus": 0.0,
         "refraction": 0.0,
         "thumbnail": "assets/thumbnails/lenses/wide.jpg"
@@ -98,40 +98,15 @@
         "id": "vintage",
         "name": "复古",
         "nameEn": "Vintage",
-        "vignette": 0.18,
-        "distortion": 0.003,
-        "chromaticAberration": 0.06,
-        "bloom": 0.22,
-        "flare": 0.08,
-        "softFocus": 0.02,
+        "vignette": 0.1,
+        "distortion": 0.02,
+        "chromaticAberration": 0.03,
+        "bloom": 0.03,
+        "flare": 0.01,
+        "softFocus": 0.03,
         "refraction": 0.0,
+        "sharpnessBias": -0.04,
         "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
-      },
-      {
-        "id": "dream",
-        "name": "梦幻",
-        "nameEn": "Dream",
-        "vignette": 0.12,
-        "distortion": 0.0,
-        "chromaticAberration": 0.04,
-        "bloom": 0.30,
-        "flare": 0.10,
-        "softFocus": 0.05,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/dream.jpg"
-      },
-      {
-        "id": "prism",
-        "name": "棱镜",
-        "nameEn": "Prism",
-        "vignette": 0.08,
-        "distortion": 0.0,
-        "chromaticAberration": 0.12,
-        "bloom": 0.20,
-        "flare": 0.05,
-        "softFocus": 0.01,
-        "refraction": 0.15,
-        "thumbnail": "assets/thumbnails/lenses/prism.jpg"
       }
     ],
     "ratios": [
@@ -148,36 +123,103 @@
         "width": 3,
         "height": 4,
         "supportsFrame": true
-      },
-      {
-        "id": "ratio_9_16",
-        "label": "9:16",
-        "width": 9,
-        "height": 16,
-        "supportsFrame": false
       }
     ],
     "frames": [
       {
-        "id": "frame_instax_white",
-        "name": "拍立得白框",
-        "nameEn": "Instax White",
-        "asset": null,
-        "backgroundColor": "#FFFFFF",
-        "cornerRadius": 4,
+        "id": "instant_white",
+        "name": "白色",
+        "nameEn": "White",
+        "asset": "assets/frames/polaroid_white.png",
+        "backgroundColor": "#F8F6F1",
+        "cornerRadius": 12,
         "innerShadow": true,
         "inset": {
-          "top": 60,
-          "right": 60,
-          "bottom": 180,
-          "left": 60
+          "top": 108,
+          "right": 108,
+          "bottom": 324,
+          "left": 108
         },
         "supportedRatios": [
           "ratio_1_1",
           "ratio_3_4"
         ],
-        "thumbnail": "assets/thumbnails/frames/frame_instax_white.jpg",
-        "outerPadding": 20,
+        "thumbnail": "assets/thumbnails/frames/instant_white.jpg",
+        "lightLeak": 0.3,
+        "shake": 0.2,
+        "outerPadding": 40,
+        "outerBackgroundColor": "#FFFFFF"
+      },
+      {
+        "id": "instant_green",
+        "name": "绿色",
+        "nameEn": "Green",
+        "asset": "assets/frames/polaroid_green.png",
+        "backgroundColor": "#6CA85F",
+        "cornerRadius": 12,
+        "innerShadow": true,
+        "inset": {
+          "top": 108,
+          "right": 108,
+          "bottom": 324,
+          "left": 108
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_green.jpg",
+        "lightLeak": 0.3,
+        "shake": 0.2,
+        "outerPadding": 40,
+        "outerBackgroundColor": "#FFFFFF"
+      },
+      {
+        "id": "instant_purple",
+        "name": "紫色",
+        "nameEn": "Purple",
+        "asset": "assets/frames/polaroid_purple.png",
+        "backgroundColor": "#8C4B6E",
+        "cornerRadius": 12,
+        "innerShadow": true,
+        "inset": {
+          "top": 108,
+          "right": 108,
+          "bottom": 324,
+          "left": 108
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_purple.jpg",
+        "lightLeak": 0.3,
+        "shake": 0.2,
+        "outerPadding": 40,
+        "outerBackgroundColor": "#FFFFFF"
+      },
+      {
+        "id": "instant_yellow",
+        "name": "黄色",
+        "nameEn": "Yellow",
+        "asset": "assets/frames/polaroid_yellow.png",
+        "backgroundColor": "#E8D84B",
+        "cornerRadius": 12,
+        "innerShadow": true,
+        "inset": {
+          "top": 108,
+          "right": 108,
+          "bottom": 324,
+          "left": 108
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_yellow.jpg",
+        "lightLeak": 0.3,
+        "shake": 0.2,
+        "outerPadding": 40,
         "outerBackgroundColor": "#FFFFFF"
       }
     ],
@@ -217,7 +259,7 @@
     "filterId": "inst_c_standard",
     "lensId": "std",
     "ratioId": "ratio_1_1",
-    "frameId": "frame_instax_white",
+    "frameId": "instant_white",
     "watermarkPresetId": "date_white",
     "extraId": null
   },
@@ -259,8 +301,13 @@
   },
   "videoConfig": {
     "enabled": false,
-    "fpsOptions": [24, 30],
-    "resolutionOptions": ["HD"],
+    "fpsOptions": [
+      24,
+      30
+    ],
+    "resolutionOptions": [
+      "HD"
+    ],
     "defaultFps": 30,
     "defaultResolution": "HD",
     "supportsAudio": false,

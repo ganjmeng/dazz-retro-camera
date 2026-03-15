@@ -14,12 +14,12 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/fisheye.cube",
-    "distortion": 0.60,
+    "distortion": 0.6,
     "chromaticAberration": 0.06,
     "flare": 0.0,
     "temperature": 4,
     "tint": 2.0,
-    "contrast": 1.20,
+    "contrast": 1.2,
     "highlights": -6.0,
     "shadows": -6.0,
     "whites": 8.0,
@@ -29,7 +29,7 @@
     "vibrance": 14.0,
     "grain": 0.14,
     "bloom": 0.05,
-    "vignette": 0.30,
+    "vignette": 0.3,
     "colorBiasR": 0.01,
     "colorBiasG": 0.01,
     "colorBiasB": 0.0
@@ -51,7 +51,7 @@
         "name": "街头",
         "nameEn": "Skate",
         "lut": "assets/lut/filters/fisheye_skate.cube",
-        "contrast": 1.20,
+        "contrast": 1.2,
         "saturation": 1.15,
         "grain": "heavy",
         "thumbnail": "assets/thumbnails/filters/fisheye_skate.jpg"
@@ -61,7 +61,7 @@
         "name": "黑白",
         "nameEn": "B&W",
         "lut": "assets/lut/filters/fisheye_bw.cube",
-        "contrast": 1.30,
+        "contrast": 1.3,
         "saturation": 0.0,
         "grain": "heavy",
         "thumbnail": "assets/thumbnails/filters/fisheye_bw.jpg"
@@ -69,11 +69,11 @@
     ],
     "lenses": [
       {
-        "id": "fisheye_full",
-        "name": "全鱼眼",
-        "nameEn": "Full Fisheye",
-        "vignette": 0.30,
-        "distortion": 0.60,
+        "id": "fisheye",
+        "name": "鱼眼",
+        "nameEn": "Fisheye",
+        "vignette": 0.3,
+        "distortion": 0.6,
         "chromaticAberration": 0.06,
         "bloom": 0.04,
         "flare": 0.0,
@@ -82,56 +82,17 @@
         "thumbnail": "assets/thumbnails/lenses/fisheye_full.jpg"
       },
       {
-        "id": "fisheye_mild",
-        "name": "轻鱼眼",
-        "nameEn": "Mild",
-        "vignette": 0.20,
-        "distortion": 0.35,
-        "chromaticAberration": 0.04,
-        "bloom": 0.03,
-        "flare": 0.0,
-        "softFocus": 0.0,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/fisheye_mild.jpg"
-      },
-      {
-        "id": "fisheye_extreme",
-        "name": "极端",
-        "nameEn": "Extreme",
-        "vignette": 0.40,
+        "id": "ultra_fisheye",
+        "name": "极端鱼眼",
+        "nameEn": "Ultra Fisheye",
+        "vignette": 0.4,
         "distortion": 0.85,
-        "chromaticAberration": 0.10,
+        "chromaticAberration": 0.1,
         "bloom": 0.05,
         "flare": 0.0,
         "softFocus": 0.0,
         "refraction": 0.0,
         "thumbnail": "assets/thumbnails/lenses/fisheye_extreme.jpg"
-      },
-      {
-        "id": "vintage",
-        "name": "复古",
-        "nameEn": "Vintage",
-        "vignette": 0.35,
-        "distortion": 0.55,
-        "chromaticAberration": 0.08,
-        "bloom": 0.06,
-        "flare": 0.02,
-        "softFocus": 0.02,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
-      },
-      {
-        "id": "prism",
-        "name": "棱镜",
-        "nameEn": "Prism",
-        "vignette": 0.25,
-        "distortion": 0.50,
-        "chromaticAberration": 0.18,
-        "bloom": 0.06,
-        "flare": 0.02,
-        "softFocus": 0.01,
-        "refraction": 0.22,
-        "thumbnail": "assets/thumbnails/lenses/prism.jpg"
       }
     ],
     "ratios": [
@@ -140,21 +101,7 @@
         "label": "1:1",
         "width": 1,
         "height": 1,
-        "supportsFrame": false
-      },
-      {
-        "id": "ratio_3_4",
-        "label": "3:4",
-        "width": 3,
-        "height": 4,
-        "supportsFrame": false
-      },
-      {
-        "id": "ratio_9_16",
-        "label": "9:16",
-        "width": 9,
-        "height": 16,
-        "supportsFrame": false
+        "supportsFrame": true
       }
     ],
     "frames": [],
@@ -184,7 +131,7 @@
   },
   "defaultSelection": {
     "filterId": "fisheye_standard",
-    "lensId": "fisheye_full",
+    "lensId": "fisheye",
     "ratioId": "ratio_1_1",
     "frameId": null,
     "watermarkPresetId": "none",
@@ -228,8 +175,13 @@
   },
   "videoConfig": {
     "enabled": false,
-    "fpsOptions": [24, 30],
-    "resolutionOptions": ["HD"],
+    "fpsOptions": [
+      24,
+      30
+    ],
+    "resolutionOptions": [
+      "HD"
+    ],
     "defaultFps": 30,
     "defaultResolution": "HD",
     "supportsAudio": false,
