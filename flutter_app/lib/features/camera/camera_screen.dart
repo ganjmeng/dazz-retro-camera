@@ -1504,23 +1504,23 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           );
                           return Column(
                             mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               // 优先使用真实相机图标，如果没有则用系统图标
                               if (entry.iconPath != null)
                                 ClipRRect(
-                                  borderRadius: BorderRadius.circular(7),
+                                  borderRadius: BorderRadius.circular(6),
                                   child: Image.asset(
                                     entry.iconPath!,
-                                    width: 78,
-                                    height: 78,
+                                    width: 56,
+                                    height: 56,
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, __, ___) =>
-                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 68),
+                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 44),
                                   ),
                                 )
                               else
                                 const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 36),
-                              const SizedBox(height: 2),
                               Text(
                                 entry.name,
                                 style: const TextStyle(
@@ -1528,6 +1528,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                   fontSize: 9,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0.3,
+                                  height: 1.2,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
