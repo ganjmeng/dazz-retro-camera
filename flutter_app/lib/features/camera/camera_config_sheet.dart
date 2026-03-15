@@ -168,14 +168,21 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
       ));
     }
 
-    // 2. 边框
+    // 2. 边框（当前比例不支持相框时，按钮变灰不可点击）
     if (uiCap.enableFrame) {
       final hasFrame = st.activeFrameId != null;
-      items.add(_FuncBtn(
-        label: '边框',
-        child: _FrameIcon(active: hasFrame),
-        isActive: hasFrame,
-        onTap: () => _openSubPanel(context, _SubPanelType.frame),
+      final ratioSupportsFrame = cam.isFrameEnabled(st.activeRatioId);
+      items.add(Opacity(
+        opacity: ratioSupportsFrame ? 1.0 : 0.35,
+        child: IgnorePointer(
+          ignoring: !ratioSupportsFrame,
+          child: _FuncBtn(
+            label: '边框',
+            child: _FrameIcon(active: hasFrame && ratioSupportsFrame),
+            isActive: hasFrame && ratioSupportsFrame,
+            onTap: () => _openSubPanel(context, _SubPanelType.frame),
+          ),
+        ),
       ));
     }
 
@@ -2007,10 +2014,16 @@ const _kWatermarkColors = [
   Color(0xFF000000), // 黑
 ];
 
-// 背景色只保留黑/白/透明三种
+// 背景色：黑/白 + 多巴胺配色（与相框6色对应）
 const _kFrameBgColors = [
   Color(0xFFFFFFFF), // 纯白
   Color(0xFF1C1C1E), // 纯黑
+  Color(0xFFEBE6F8), // 薰衣草紫
+  Color(0xFFFCEEE1), // 蜜桃橙
+  Color(0xFFE1F8EE), // 薄荷绿
+  Color(0xFFE1EEFC), // 天空蓝
+  Color(0xFFFCE6F0), // 玫瑰粉
+  Color(0xFFF5F6FA), // 冷白
 ];
 
 // ─── 工具函数 ──────────────────────────────────────────────────────────────────
