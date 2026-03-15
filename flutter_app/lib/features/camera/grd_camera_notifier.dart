@@ -292,15 +292,15 @@ class GrdCameraNotifier extends StateNotifier<GrdCameraState> {
         if (state.camera != null) {
           try {
             final pipeline = CapturePipeline(camera: state.camera!);
-            final processed = await pipeline.process(
+            final result = await pipeline.process(
               imagePath: path,
               selectedRatioId: state.activeRatioId ?? '',
               selectedFrameId: state.activeFrameId ?? '',
               selectedWatermarkId: state.activeWatermarkId ?? '',
               watermarkStyleOverride: state.watermarkStyle,
             );
-            if (processed != null) {
-              await File(path).writeAsBytes(processed);
+            if (result != null) {
+              await File(path).writeAsBytes(result.bytes);
             }
           } catch (e) {
             // Post-processing failed, keep original

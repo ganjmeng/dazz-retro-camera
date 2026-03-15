@@ -112,7 +112,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       // 导入图片编辑页固定使用高画质输出（对齐竞品 4096px / q90）
       const maxDim = CapturePipeline.kMaxDimHigh;
       const jpegQ = CapturePipeline.kJpegQualityHigh;
-      final processed = await pipeline.process(
+      final result = await pipeline.process(
         imagePath: tmpPath,
         selectedRatioId: st.activeRatioId ?? '',
         selectedFrameId: st.activeFrameId ?? '',
@@ -127,7 +127,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         maxDimension: maxDim,
         jpegQuality: jpegQ,
       );
-      final finalBytes = processed ?? transformedBytes;
+      final finalBytes = result?.bytes ?? transformedBytes;
       await File(tmpPath).writeAsBytes(finalBytes);
       final perm = await PhotoManager.requestPermissionExtend();
       if (!perm.hasAccess) {
