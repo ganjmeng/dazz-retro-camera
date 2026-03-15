@@ -15,6 +15,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -114,6 +115,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   late AnimationController _optionsAnim;
   late Animation<Offset> _optionsSlide;
 
+  // ── 设备方向监听 ───────────────────────────────────────────────────────────────────────────────────
+  // 当前设备方向：0=竖屏正向, 1=横屏90度(逆时针), 2=倒竖, 3=横屏270度(顺时针)
+  int _deviceQuarter = 0;
+  // 旋转动画控制器（工具栏图标旋转动画）
+  late AnimationController _rotateAnim;
+  late Animation<double> _rotateAngle;
+  double _prevAngle = 0.0;
+  StreamSubscription<AccelerometerEvent>? _accelSub;
+
   @override
   void initState() {
     super.initState();
@@ -126,6 +136,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       begin: const Offset(0, 1),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _optionsAnim, curve: Curves.easeOutCubic));
+
+    // 旋转动画控制器
+    _rotateAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _rotateAngle = Tween<double>(begin: 0.0, end: 0.0).animate(
+      CurvedAnimation(parent: _rotateAnim, curve: Curves.easeOutCubic),
+    );
+
+    // 启动加速度计监听
+    _startOrientationListener();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // 一次性请求所有权限（相机 + 相册），再初始化
@@ -148,7 +170,65 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _hintTimer?.cancel();
     _transitionTimer?.cancel();
     _optionsAnim.dispose();
+    _rotateAnim.dispose();
+    _accelSub?.cancel();
     super.dispose();
+  }
+
+  /// 启动加速度计监听，检测设备方向并驱动旋转动画
+  void _startOrientationListener() {
+    _accelSub = accelerometerEventStream(
+      samplingPeriod: const Duration(milliseconds: 200),
+    ).listen((AccelerometerEvent event) {
+      // x: 正=右倾, 负=左倾
+      // y: 正=上立, 负=倒立
+      final x = event.x;
+      final y = event.y;
+      final absX = x.abs();
+      final absY = y.abs();
+
+      int newQuarter;
+      if (absY > absX) {
+        // 以竖屏为主
+        newQuarter = y > 0 ? 0 : 2; // 0=竖屏正向, 2=倒竖
+      } else {
+        // 以横屏为主
+        newQuarter = x > 0 ? 3 : 1; // 1=逆时针横屏(左转90°), 3=顺时针横屏(右转90°)
+      }
+
+      if (newQuarter != _deviceQuarter) {
+        // 计算目标旋转角度（工具栏图标旋转方向）
+        final targetAngle = _quarterToAngle(newQuarter);
+        // 选择最短旋转路径
+        double delta = targetAngle - _prevAngle;
+        if (delta > math.pi) delta -= 2 * math.pi;
+        if (delta < -math.pi) delta += 2 * math.pi;
+        final newAngle = _prevAngle + delta;
+
+        setState(() {
+          _deviceQuarter = newQuarter;
+          _rotateAngle = Tween<double>(
+            begin: _prevAngle,
+            end: newAngle,
+          ).animate(CurvedAnimation(parent: _rotateAnim, curve: Curves.easeOutCubic));
+          _prevAngle = newAngle;
+        });
+        _rotateAnim
+          ..reset()
+          ..forward();
+      }
+    });
+  }
+
+  /// 将设备方向转换为工具栏图标的旋转角度（弧度）
+  double _quarterToAngle(int quarter) {
+    switch (quarter) {
+      case 0: return 0.0;              // 竖屏正向：图标不旋转
+      case 1: return -math.pi / 2;    // 逆时针横屏：图标顺时针旋转90°
+      case 2: return math.pi;          // 倒竖：图标旋转180°
+      case 3: return math.pi / 2;     // 顺时针横屏：图标逆时针旋转90°
+      default: return 0.0;
+    }
   }
 
   /// App 生命周期监听：从后台切回前台时触发过渡动画
@@ -391,6 +471,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
     final result = await ref.read(cameraAppProvider.notifier).takePhoto(
       minimapNormalizedRect: minimapRect,
+      deviceQuarter: _deviceQuarter,
     );
     if (result != null && mounted) {
       // 优先用 galleryAssetId 直接查资产（绕开相册查询，100% 可靠）
@@ -1200,61 +1281,75 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Widget _buildToolbar(CameraAppState st) {
     return SizedBox(
       height: 52,
-        child: Padding(
+      child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             // 1. 导入图片
-            _ToolbarBtn(
-              icon: Icons.add_photo_alternate_outlined,
-              label: '导入图片',
-              onTap: () => openImageImportFlow(context),
+            _RotatingToolbarBtn(
+              rotateAnimation: _rotateAngle,
+              rotateController: _rotateAnim,
+              child: _ToolbarBtn(
+                icon: Icons.add_photo_alternate_outlined,
+                label: '导入图片',
+                onTap: () => openImageImportFlow(context),
+              ),
             ),
             // 2. 倒计时
-            _ToolbarBtn(
-              icon: Icons.timer_outlined,
-              label: '倒计时',
-              badge: st.timerSeconds > 0 ? '${st.timerSeconds}s' : null,
-              onTap: () {
-                // 先读当前状态，计算切换后的值，再执行切换
-                final cur = ref.read(cameraAppProvider).timerSeconds;
-                final options = [0, 3, 10];
-                final next = options[(options.indexOf(cur) + 1) % options.length];
-                ref.read(cameraAppProvider.notifier).cycleTimer();
-                if (next == 0) {
-                  _showViewfinderHint('倒计时关闭');
-                } else {
-                  _showViewfinderHint('倒计时 ${next}s');
-                }
-              },
+            _RotatingToolbarBtn(
+              rotateAnimation: _rotateAngle,
+              rotateController: _rotateAnim,
+              child: _ToolbarBtn(
+                icon: Icons.timer_outlined,
+                label: '倒计时',
+                badge: st.timerSeconds > 0 ? '${st.timerSeconds}s' : null,
+                onTap: () {
+                  final cur = ref.read(cameraAppProvider).timerSeconds;
+                  final options = [0, 3, 10];
+                  final next = options[(options.indexOf(cur) + 1) % options.length];
+                  ref.read(cameraAppProvider.notifier).cycleTimer();
+                  if (next == 0) {
+                    _showViewfinderHint('倒计时关闭');
+                  } else {
+                    _showViewfinderHint('倒计时 ${next}s');
+                  }
+                },
+              ),
             ),
             // 3. 闪光灯
-            _FlashBtn(
-              mode: st.flashMode,
-              label: '闪光灯',
-              onTap: () {
-                // 先读当前状态，计算切换后的值，再执行切换
-                final cur = ref.read(cameraAppProvider).flashMode;
-                final modes = ['off', 'on', 'auto'];
-                final next = modes[(modes.indexOf(cur) + 1) % modes.length];
-                ref.read(cameraAppProvider.notifier).cycleFlash();
-                if (next == 'off') {
-                  _showViewfinderHint('闪光灯已关闭');
-                } else if (next == 'on') {
-                  _showViewfinderHint('闪光灯已开启');
-                } else {
-                  _showViewfinderHint('闪光灯自动');
-                }
-              },
+            _RotatingToolbarBtn(
+              rotateAnimation: _rotateAngle,
+              rotateController: _rotateAnim,
+              child: _FlashBtn(
+                mode: st.flashMode,
+                label: '闪光灯',
+                onTap: () {
+                  final cur = ref.read(cameraAppProvider).flashMode;
+                  final modes = ['off', 'on', 'auto'];
+                  final next = modes[(modes.indexOf(cur) + 1) % modes.length];
+                  ref.read(cameraAppProvider.notifier).cycleFlash();
+                  if (next == 'off') {
+                    _showViewfinderHint('闪光灯已关闭');
+                  } else if (next == 'on') {
+                    _showViewfinderHint('闪光灯已开启');
+                  } else {
+                    _showViewfinderHint('闪光灯自动');
+                  }
+                },
+              ),
             ),
             // 4. 前置/后置切换
-            _ToolbarBtn(
-              icon: Icons.flip_camera_ios_outlined,
-              label: '后置',
-              onTap: () => _showCameraTransition(
-                () => ref.read(cameraAppProvider.notifier).flipCamera(),
-                duration: const Duration(milliseconds: 500),
+            _RotatingToolbarBtn(
+              rotateAnimation: _rotateAngle,
+              rotateController: _rotateAnim,
+              child: _ToolbarBtn(
+                icon: Icons.flip_camera_ios_outlined,
+                label: '后置',
+                onTap: () => _showCameraTransition(
+                  () => ref.read(cameraAppProvider.notifier).flipCamera(),
+                  duration: const Duration(milliseconds: 500),
+                ),
               ),
             ),
           ],
@@ -2685,6 +2780,33 @@ class _WatermarkRow extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // 小组件
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// 工具栏图标旋转包装器：设备方向改变时，图标带动画旋转保持正局
+/// 整个 UI 保持竖屏，只有图标内容旋转
+class _RotatingToolbarBtn extends StatelessWidget {
+  final Animation<double> rotateAnimation;
+  final AnimationController rotateController;
+  final Widget child;
+
+  const _RotatingToolbarBtn({
+    required this.rotateAnimation,
+    required this.rotateController,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: rotateAnimation,
+      builder: (context, _) {
+        return Transform.rotate(
+          angle: rotateAnimation.value,
+          child: child,
+        );
+      },
+    );
+  }
+}
 
 class _ToolbarBtn extends StatelessWidget {
   final IconData icon;

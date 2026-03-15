@@ -51,6 +51,9 @@ dependencies:
   # EXIF 写入（将 GPS 坐标写入 JPEG EXIF）
   native_exif: ^0.5.0
 
+  # 加速度计（设备旋转方向检测）
+  sensors_plus: ^6.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

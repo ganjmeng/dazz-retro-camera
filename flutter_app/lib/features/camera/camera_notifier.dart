@@ -501,7 +501,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   /// 返回 [TakePhotoResult]，包含缓存文件路径和 MediaStore 资产 ID。
   /// galleryAssetId 可直接用于 AssetEntity.fromId()，完全绕开相册查询逻辑。
   /// [minimapNormalizedRect] 小窗归一化裁剪区域（在取景框内的相对坐标 0.0~1.0）
-  Future<TakePhotoResult?> takePhoto({Rect? minimapNormalizedRect}) async {
+  Future<TakePhotoResult?> takePhoto({Rect? minimapNormalizedRect, int deviceQuarter = 0}) async {
     if (state.isTakingPhoto) return null;
     state = state.copyWith(isTakingPhoto: true);
     HapticFeedback.mediumImpact();
@@ -539,6 +539,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
               watermarkStyleOverride: state.watermarkStyle,
               renderParams: state.renderParams,
               minimapNormalizedRect: minimapNormalizedRect,
+              deviceQuarter: deviceQuarter,
             );
             if (processed != null) {
               await File(path).writeAsBytes(processed);

@@ -30,6 +30,7 @@ class CapturePipeline {
     String? watermarkStyleOverride,   // 用户覆盖样式 ID
     PreviewRenderParams? renderParams,
     Rect? minimapNormalizedRect, // 小窗模式裁剪区域（归一化 0.0~1.0）
+    int deviceQuarter = 0, // 设备方向：0=竖屏, 1=逆时针横屏(左转90°), 2=倒竖, 3=顺时针横屏(右转90°)
   }) async {
     try {
       // ── 1. 读取原始图片 ──────────────────────────────────────────────────────
@@ -306,21 +307,45 @@ class CapturePipeline {
         );
       }
 
-      // ── 5. 输出为 PNG ────────────────────────────────────────────────────────
+      // ── 5. 输出为 PNG ─────────────────────────────────────────────────────────────────────────────
       final picture = recorder.endRecording();
       final outputImage =
           await picture.toImage(canvasW.toInt(), canvasH.toInt());
+
+      // ── 5b. 根据设备方向旋转图片 ─────────────────────────────────────────────────────────────────────────────
+      // 相机托管的图片已经包含 EXIF 旋转信息，但在 Flutter 层旋转可以确保正确
+      // deviceQuarter: 0=竖屏(无需旋转), 1=逆时针横屏(顺时针旋转90°), 2=倒竖(180°), 3=顺时针横屏(逆时针旋转90°)
+      ui.Image finalImage = outputImage;
+      if (deviceQuarter != 0) {
+        final rotAngle = deviceQuarter * math.pi / 2;
+        final isLandscape = deviceQuarter == 1 || deviceQuarter == 3;
+        final rotW = isLandscape ? canvasH : canvasW;
+        final rotH = isLandscape ? canvasW : canvasH;
+        final rotRecorder = ui.PictureRecorder();
+        final rotCanvas = Canvas(rotRecorder, Rect.fromLTWH(0, 0, rotW, rotH));
+        rotCanvas.translate(rotW / 2, rotH / 2);
+        rotCanvas.rotate(rotAngle);
+        rotCanvas.translate(-canvasW / 2, -canvasH / 2);
+        rotCanvas.drawImage(outputImage, Offset.zero, Paint());
+        final rotPicture = rotRecorder.endRecording();
+        finalImage = await rotPicture.toImage(rotW.toInt(), rotH.toInt());
+        debugPrint('[CapturePipeline] rotated: quarter=$deviceQuarter, ${rotW.toInt()}x${rotH.toInt()}');
+      }
+
       final byteData =
-          await outputImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+          await finalImage.toByteData(format: ui.ImageByteFormat.rawRgba);
 
       if (byteData == null) return null;
 
+      final finalW = deviceQuarter == 1 || deviceQuarter == 3 ? canvasH.toInt() : canvasW.toInt();
+      final finalH = deviceQuarter == 1 || deviceQuarter == 3 ? canvasW.toInt() : canvasH.toInt();
+
       final pngBytes = await _rgbaToImage(
         byteData.buffer.asUint8List(),
-        canvasW.toInt(),
-        canvasH.toInt(),
+        finalW,
+        finalH,
       );
-      debugPrint('[CapturePipeline] output: ${canvasW.toInt()}x${canvasH.toInt()}, bytes=${pngBytes.length}');
+      debugPrint('[CapturePipeline] output: ${finalW}x${finalH}, bytes=${pngBytes.length}');
       return pngBytes;
     } catch (e, st) {
       debugPrint('[CapturePipeline] Error: $e\n$st');
