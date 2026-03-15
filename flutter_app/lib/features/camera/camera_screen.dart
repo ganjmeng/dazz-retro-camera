@@ -1329,85 +1329,93 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
   // ── 工具栏（5个图标）────────────────────────────────────────────────────────
   Widget _buildToolbar(CameraAppState st) {
+    const double btnW = 72.0;
     return SizedBox(
       height: 52,
       child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: kMaxBottomContentW),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
             // 1. 导入图片
-            _RotatingToolbarBtn(
-              rotateAnimation: _rotateAngle,
-              rotateController: _rotateAnim,
-              child: _ToolbarBtn(
-                icon: Icons.add_photo_alternate_outlined,
-                label: '导入图片',
-                onTap: () => openImageImportFlow(context),
+            SizedBox(
+              width: btnW,
+              child: _RotatingToolbarBtn(
+                rotateAnimation: _rotateAngle,
+                rotateController: _rotateAnim,
+                child: _ToolbarBtn(
+                  icon: Icons.add_photo_alternate_outlined,
+                  label: '导入图片',
+                  onTap: () => openImageImportFlow(context),
+                ),
               ),
             ),
             // 2. 倒计时
-            _RotatingToolbarBtn(
-              rotateAnimation: _rotateAngle,
-              rotateController: _rotateAnim,
-              child: _ToolbarBtn(
-                icon: Icons.timer_outlined,
-                label: '倒计时',
-                badge: st.timerSeconds > 0 ? '${st.timerSeconds}s' : null,
-                onTap: () {
-                  final cur = ref.read(cameraAppProvider).timerSeconds;
-                  final options = [0, 3, 10];
-                  final next = options[(options.indexOf(cur) + 1) % options.length];
-                  ref.read(cameraAppProvider.notifier).cycleTimer();
-                  if (next == 0) {
-                    _showViewfinderHint('倒计时关闭');
-                  } else {
-                    _showViewfinderHint('倒计时 ${next}s');
-                  }
-                },
+            SizedBox(
+              width: btnW,
+              child: _RotatingToolbarBtn(
+                rotateAnimation: _rotateAngle,
+                rotateController: _rotateAnim,
+                child: _ToolbarBtn(
+                  icon: Icons.timer_outlined,
+                  label: '倒计时',
+                  badge: st.timerSeconds > 0 ? '${st.timerSeconds}s' : null,
+                  onTap: () {
+                    final cur = ref.read(cameraAppProvider).timerSeconds;
+                    final options = [0, 3, 10];
+                    final next = options[(options.indexOf(cur) + 1) % options.length];
+                    ref.read(cameraAppProvider.notifier).cycleTimer();
+                    if (next == 0) {
+                      _showViewfinderHint('倒计时关闭');
+                    } else {
+                      _showViewfinderHint('倒计时 ${next}s');
+                    }
+                  },
+                ),
               ),
             ),
             // 3. 闪光灯
-            _RotatingToolbarBtn(
-              rotateAnimation: _rotateAngle,
-              rotateController: _rotateAnim,
-              child: _FlashBtn(
-                mode: st.flashMode,
-                label: '闪光灯',
-                onTap: () {
-                  final cur = ref.read(cameraAppProvider).flashMode;
-                  final modes = ['off', 'on', 'auto'];
-                  final next = modes[(modes.indexOf(cur) + 1) % modes.length];
-                  ref.read(cameraAppProvider.notifier).cycleFlash();
-                  if (next == 'off') {
-                    _showViewfinderHint('闪光灯已关闭');
-                  } else if (next == 'on') {
-                    _showViewfinderHint('闪光灯已开启');
-                  } else {
-                    _showViewfinderHint('闪光灯自动');
-                  }
-                },
+            SizedBox(
+              width: btnW,
+              child: _RotatingToolbarBtn(
+                rotateAnimation: _rotateAngle,
+                rotateController: _rotateAnim,
+                child: _FlashBtn(
+                  mode: st.flashMode,
+                  label: '闪光灯',
+                  onTap: () {
+                    final cur = ref.read(cameraAppProvider).flashMode;
+                    final modes = ['off', 'on', 'auto'];
+                    final next = modes[(modes.indexOf(cur) + 1) % modes.length];
+                    ref.read(cameraAppProvider.notifier).cycleFlash();
+                    if (next == 'off') {
+                      _showViewfinderHint('闪光灯已关闭');
+                    } else if (next == 'on') {
+                      _showViewfinderHint('闪光灯已开启');
+                    } else {
+                      _showViewfinderHint('闪光灯自动');
+                    }
+                  },
+                ),
               ),
             ),
             // 4. 前置/后置切换
-            _RotatingToolbarBtn(
-              rotateAnimation: _rotateAngle,
-              rotateController: _rotateAnim,
-              child: _ToolbarBtn(
-                icon: Icons.flip_camera_ios_outlined,
-                label: '后置',
-                onTap: () => _showCameraTransition(
-                  () => ref.read(cameraAppProvider.notifier).flipCamera(),
-                  duration: const Duration(milliseconds: 500),
+            SizedBox(
+              width: btnW,
+              child: _RotatingToolbarBtn(
+                rotateAnimation: _rotateAngle,
+                rotateController: _rotateAnim,
+                child: _ToolbarBtn(
+                  icon: Icons.flip_camera_ios_outlined,
+                  label: '后置',
+                  onTap: () => _showCameraTransition(
+                    () => ref.read(cameraAppProvider.notifier).flipCamera(),
+                    duration: const Duration(milliseconds: 500),
+                  ),
                 ),
               ),
             ),
           ],
-            ),
-          ),
         ),
       ),
     );
