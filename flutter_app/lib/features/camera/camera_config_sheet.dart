@@ -144,7 +144,7 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
   Widget _buildCameraRow(CameraAppState st) {
     // 读取相机管理状态（异步加载中时降级为 kAllCameras 默认顺序）
     final managerAsync = ref.watch(cameraManagerProvider);
-    final List<CameraDefinition> orderedCameras;
+    final List<CameraEntry> orderedCameras;
     if (managerAsync.hasValue) {
       final mgr = managerAsync.value!;
       // 收藏相机排在最前，其余按管理页顺序排列
@@ -154,14 +154,8 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
         ...mgr.nonFavoriteIds,
       ].where((id) => mgr.enabledIds.contains(id)).toList();
       orderedCameras = sortedIds
-          .map((id) {
-            try {
-              return kAllCameras.firstWhere((c) => c.id == id);
-            } catch (_) {
-              return null;
-            }
-          })
-          .whereType<CameraDefinition>()
+          .map((id) => kAllCameras.where((c) => c.id == id).firstOrNull)
+          .whereType<CameraEntry>()
           .toList();
     } else {
       // 管理状态未加载时，使用默认顺序
@@ -1376,7 +1370,7 @@ class _PillBtn extends StatelessWidget {
 
 /// 相机单元格（相机列表行）
 class _CameraCell extends StatelessWidget {
-  final CameraDefinition entry;
+  final CameraEntry entry;
   final bool isActive;
   final bool isFavorite;
   final VoidCallback onTap;
@@ -1410,11 +1404,11 @@ class _CameraCell extends StatelessWidget {
                         ? Border.all(color: _kOrange, width: 2.5)
                         : null,
                   ),
-                  child: entry.assets.icon.isNotEmpty
+                  child: (entry.iconPath?.isNotEmpty ?? false)
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(10),
                           child: Image.asset(
-                            entry.assets.icon,
+                            entry.iconPath!,
                             width: 64,
                             height: 64,
                             fit: BoxFit.cover,

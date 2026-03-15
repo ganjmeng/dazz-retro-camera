@@ -193,13 +193,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       final absX = x.abs();
       final absY = y.abs();
 
+      // 触发阈値：主轴必须超过 5.5，且主轴必须比副轴大 2.0 倍，避免轻微倾斜就触发旋转
+      const double kPrimaryThreshold = 5.5;
+      const double kDominanceRatio = 2.0;
       int newQuarter;
-      if (absY > absX) {
-        // 以竖屏为主
-        newQuarter = y > 0 ? 0 : 2; // 0=竖屏正向, 2=倒竖
-      } else {
+      if (absY > absX && absY > kPrimaryThreshold && absY > absX * kDominanceRatio) {
+        // 以氪屏为主
+        newQuarter = y > 0 ? 0 : 2; // 0=氪屏正向, 2=倒氪
+      } else if (absX > absY && absX > kPrimaryThreshold && absX > absY * kDominanceRatio) {
         // 以横屏为主
         newQuarter = x > 0 ? 3 : 1; // 1=逆时针横屏(左转90°), 3=顺时针横屏(右转90°)
+      } else {
+        return; // 不满足阈値，不更新方向
       }
 
       if (newQuarter != _deviceQuarter) {
@@ -561,17 +566,23 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               alignment: Alignment.centerRight,
               child: GestureDetector(
                 onTap: () => ref.read(cameraAppProvider.notifier).toggleTopMenu(),
-                child: const SizedBox(
+                child: SizedBox(
                   width: 56,
                   height: kTopBarH,
                   child: Center(
-                    child: Text(
-                      '•••',
-                      style: TextStyle(
-                        color: _kWhite,
-                        fontSize: 18,
-                        letterSpacing: 4,
-                        fontWeight: FontWeight.w600,
+                    child: AnimatedBuilder(
+                      animation: _rotateAngle,
+                      builder: (_, __) => Transform.rotate(
+                        angle: _rotateAngle.value,
+                        child: const Text(
+                          '•••',
+                          style: TextStyle(
+                            color: _kWhite,
+                            fontSize: 18,
+                            letterSpacing: 4,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1201,11 +1212,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   : Colors.black.withAlpha(160),
             ),
             child: Center(
-              child: Icon(
-                // 展开时显示向下箭头，收起时显示温度计
-                _showWbPanel ? Icons.keyboard_arrow_down : Icons.thermostat_outlined,
-                size: 16,
-                color: (_showWbPanel || st.wbMode != 'auto') ? Colors.black : _kWhite,
+              child: AnimatedBuilder(
+                animation: _rotateAngle,
+                builder: (_, __) => Transform.rotate(
+                  angle: _rotateAngle.value,
+                  child: Icon(
+                    _showWbPanel ? Icons.keyboard_arrow_down : Icons.thermostat_outlined,
+                    size: 16,
+                    color: (_showWbPanel || st.wbMode != 'auto') ? Colors.black : _kWhite,
+                  ),
+                ),
               ),
             ),
           ),
@@ -1232,12 +1248,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   : Colors.black.withAlpha(160),
             ),
             child: Center(
-              child: Text(
-                zoomLabel,
-                style: TextStyle(
-                  color: st.showZoomSlider ? Colors.black : _kWhite,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+              child: AnimatedBuilder(
+                animation: _rotateAngle,
+                builder: (_, __) => Transform.rotate(
+                  angle: _rotateAngle.value,
+                  child: Text(
+                    zoomLabel,
+                    style: TextStyle(
+                      color: st.showZoomSlider ? Colors.black : _kWhite,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1263,28 +1285,33 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   ? Colors.white.withAlpha(230)
                   : Colors.black.withAlpha(160),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  // 展开时显示向下箭头，收起时显示太阳
-                  _showExposureSlider ? Icons.keyboard_arrow_down : Icons.wb_sunny_outlined,
-                  size: 14,
-                  color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : _kWhite,
+            child: AnimatedBuilder(
+              animation: _rotateAngle,
+              builder: (_, __) => Transform.rotate(
+                angle: _rotateAngle.value,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _showExposureSlider ? Icons.keyboard_arrow_down : Icons.wb_sunny_outlined,
+                      size: 14,
+                      color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : _kWhite,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      st.exposureValue == 0
+                          ? '0.0'
+                          : (st.exposureValue > 0 ? '+' : '') +
+                              st.exposureValue.toStringAsFixed(1),
+                      style: TextStyle(
+                        color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : _kWhite,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 5),
-                Text(
-                  st.exposureValue == 0
-                      ? '0.0'
-                      : (st.exposureValue > 0 ? '+' : '') +
-                          st.exposureValue.toStringAsFixed(1),
-                  style: TextStyle(
-                    color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : _kWhite,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -1447,45 +1474,51 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                       size: const Size(72, 72),
                       painter: _DashedCirclePainter(),
                     ),
-                    // 相机图标 + 名称
-                    Builder(builder: (ctx) {
-                      final entry = kAllCameras.firstWhere(
-                        (e) => e.id == st.activeCameraId,
-                        orElse: () => kAllCameras.first,
-                      );
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 优先使用真实相机图标，如果没有则用系统图标
-                          if (entry.iconPath != null)
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: Image.asset(
-                                entry.iconPath!,
-                                width: 36,
-                                height: 36,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
-                                    const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 26),
+                    // 相机图标 + 名称（跟随设备方向旋转）
+                    AnimatedBuilder(
+                      animation: _rotateAngle,
+                      builder: (_, __) => Transform.rotate(
+                        angle: _rotateAngle.value,
+                        child: Builder(builder: (ctx) {
+                          final entry = kAllCameras.firstWhere(
+                            (e) => e.id == st.activeCameraId,
+                            orElse: () => kAllCameras.first,
+                          );
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // 优先使用真实相机图标，如果没有则用系统图标
+                              if (entry.iconPath != null)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Image.asset(
+                                    entry.iconPath!,
+                                    width: 36,
+                                    height: 36,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 26),
+                                  ),
+                                )
+                              else
+                                const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 26),
+                              const SizedBox(height: 3),
+                              Text(
+                                entry.name,
+                                style: const TextStyle(
+                                  color: _kWhite,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            )
-                          else
-                            const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 26),
-                          const SizedBox(height: 3),
-                          Text(
-                            entry.name,
-                            style: const TextStyle(
-                              color: _kWhite,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      );
-                    }),
+                            ],
+                          );
+                        }),
+                      ),
+                    ),
                   ],
                 ),
               ),
