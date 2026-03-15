@@ -24,6 +24,7 @@ import '../camera/camera_notifier.dart';
 import '../camera/camera_config_sheet.dart';
 import '../camera/capture_pipeline.dart';
 import '../camera/preview_renderer.dart' as renderer_lib;
+import '../../models/watermark_styles.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 入口：从相机页导入图片按钮调用
@@ -137,6 +138,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         watermarkPositionOverride: st.watermarkPosition,
         watermarkSizeOverride: st.watermarkSize,
         watermarkDirectionOverride: st.watermarkDirection,
+        watermarkStyleOverride: st.watermarkStyle,
         renderParams: st.renderParams,
       );
 
@@ -351,6 +353,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
                       positionOverride: st.watermarkPosition,
                       sizeOverride: st.watermarkSize,
                       directionOverride: st.watermarkDirection,
+                      styleId: st.watermarkStyle,
                     ),
                   ),
 
@@ -588,6 +591,7 @@ class _WatermarkPreviewOverlay extends StatelessWidget {
   final String? positionOverride;
   final String? sizeOverride;
   final String? directionOverride;
+  final String? styleId; // 样式 ID，对应 kWatermarkStyles 中的 id
 
   const _WatermarkPreviewOverlay({
     required this.watermark,
@@ -595,6 +599,7 @@ class _WatermarkPreviewOverlay extends StatelessWidget {
     this.positionOverride,
     this.sizeOverride,
     this.directionOverride,
+    this.styleId,
   });
 
   @override
@@ -607,6 +612,7 @@ class _WatermarkPreviewOverlay extends StatelessWidget {
           positionOverride: positionOverride,
           sizeOverride: sizeOverride,
           directionOverride: directionOverride,
+          styleId: styleId,
         ),
       ),
     );
@@ -619,6 +625,7 @@ class _WatermarkPainter extends CustomPainter {
   final String? positionOverride;
   final String? sizeOverride;
   final String? directionOverride;
+  final String? styleId; // 样式 ID，对应 kWatermarkStyles 中的 id
 
   _WatermarkPainter({
     required this.watermark,
@@ -626,16 +633,16 @@ class _WatermarkPainter extends CustomPainter {
     this.positionOverride,
     this.sizeOverride,
     this.directionOverride,
+    this.styleId,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final now = DateTime.now();
-    final datePart =
-        "${now.year.toString().substring(2)}.${now.month.toString().padLeft(2, '0')}.${now.day.toString().padLeft(2, '0')}";
-    final timePart =
-        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
-    final text = watermark.id.contains('datetime') ? "$datePart $timePart" : datePart;
+    // 获取样式定义（默认 s1）
+    final styleDef = getWatermarkStyle(styleId);
+    // 根据样式生成文本
+    final text = styleDef.buildText(now);
 
     Color textColor = const Color(0xFFFF8C00);
     final colorSrc = colorOverride ?? watermark.color;
@@ -647,11 +654,16 @@ class _WatermarkPainter extends CustomPainter {
     }
 
     double baseFontSize;
-      switch (sizeOverride) {
+    switch (sizeOverride) {
       case 'small':  baseFontSize = size.width * 0.028; break;
       case 'large':  baseFontSize = size.width * 0.055; break;
       default:       baseFontSize = size.width * 0.038; break;
     }
+
+    // 样式定义的字体和字间距
+    final fontFamily = styleDef.fontFamily ?? watermark.fontFamily;
+    final letterSpacing = styleDef.letterSpacing;
+    final fontWeight = styleDef.fontWeight;
 
     final textPainter = TextPainter(
       text: TextSpan(
@@ -659,8 +671,9 @@ class _WatermarkPainter extends CustomPainter {
         style: TextStyle(
           color: textColor,
           fontSize: baseFontSize,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1.2,
+          fontFamily: fontFamily,
+          fontWeight: fontWeight,
+          letterSpacing: letterSpacing,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -697,7 +710,8 @@ class _WatermarkPainter extends CustomPainter {
       old.colorOverride != colorOverride ||
       old.positionOverride != positionOverride ||
       old.sizeOverride != sizeOverride ||
-      old.directionOverride != directionOverride;
+      old.directionOverride != directionOverride ||
+      old.styleId != styleId;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

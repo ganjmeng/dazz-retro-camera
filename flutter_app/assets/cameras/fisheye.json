@@ -53,7 +53,8 @@
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0
+        "refraction": 0.0,
+        "fisheyeMode": true
       },
       {
         "id": "ultra_fisheye",
@@ -71,7 +72,8 @@
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0
+        "refraction": 0.0,
+        "fisheyeMode": true
       },
       {
         "id": "nd",

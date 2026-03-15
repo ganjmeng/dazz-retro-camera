@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/camera_definition.dart';
+import '../../models/watermark_styles.dart';
 import 'preview_renderer.dart';
 
 /// 捕获后处理管线
@@ -26,6 +27,7 @@ class CapturePipeline {
     String? watermarkPositionOverride, // 用户覆盖位置
     String? watermarkSizeOverride,    // 用户覆盖大小
     String? watermarkDirectionOverride, // 用户覆盖方向
+    String? watermarkStyleOverride,   // 用户覆盖样式 ID
     PreviewRenderParams? renderParams,
     Rect? minimapNormalizedRect, // 小窗模式裁剪区域（归一化 0.0~1.0）
   }) async {
@@ -295,6 +297,7 @@ class CapturePipeline {
           positionOverride: watermarkPositionOverride,
           sizeOverride: watermarkSizeOverride,
           directionOverride: watermarkDirectionOverride,
+          styleOverride: watermarkStyleOverride,
         );
       }
 
@@ -675,6 +678,7 @@ class CapturePipeline {
     String? positionOverride,
     String? sizeOverride,
     String? directionOverride,
+    String? styleOverride, // 样式 ID，对应 kWatermarkStyles 中的 id
   }) {
     final wmPresets = camera.modules.watermarks.presets;
     if (wmPresets.isEmpty) return;
@@ -689,13 +693,10 @@ class CapturePipeline {
     if (wmOpt.isNone) return;
 
     final now = DateTime.now();
-    // 日期格式：YY.MM.DD
-    final datePart = "${now.year.toString().substring(2)}.${now.month.toString().padLeft(2, '0')}.${now.day.toString().padLeft(2, '0')}";
-    // 时间格式：HH:MM
-    final timePart = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
-
-    // 样式决定显示内容：默认日期，样式 'datetime' 显示日期+时间
-    final text = (wmOpt.id.contains('datetime')) ? "$datePart $timePart" : datePart;
+    // 获取样式定义（默认 s1）
+    final styleDef = getWatermarkStyle(styleOverride);
+    // 根据样式生成文本
+    final text = styleDef.buildText(now);
 
     // 解析颜色：用户覆盖 > preset默认
     Color textColor = const Color(0xFFFF8C00);
@@ -726,6 +727,11 @@ class CapturePipeline {
     final position = positionOverride ?? wmOpt.position ?? 'bottom_right';
     final margin = w * 0.04;
 
+    // 样式定义的字体和字间距
+    final fontFamily = styleDef.fontFamily ?? wmOpt.fontFamily;
+    final letterSpacing = styleDef.letterSpacing;
+    final fontWeight = styleDef.fontWeight;
+
     if (isVertical) {
       // 垂直水印：每个字符单独绘制
       final charPainters = text.split('').map((c) {
@@ -733,8 +739,8 @@ class CapturePipeline {
           text: TextSpan(text: c, style: TextStyle(
             color: textColor,
             fontSize: fontSize,
-            fontFamily: wmOpt!.fontFamily,
-            fontWeight: FontWeight.w700,
+            fontFamily: fontFamily,
+            fontWeight: fontWeight,
           )),
           textDirection: TextDirection.ltr,
         )..layout();
@@ -788,9 +794,9 @@ class CapturePipeline {
           style: TextStyle(
             color: textColor,
             fontSize: fontSize,
-            fontFamily: wmOpt.fontFamily,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 2,
+            fontFamily: fontFamily,
+            fontWeight: fontWeight,
+            letterSpacing: letterSpacing,
           ),
         ),
         textDirection: TextDirection.ltr,

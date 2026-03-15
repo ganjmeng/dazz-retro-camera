@@ -362,8 +362,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     state = state.copyWith(watermarkDirection: direction);
   }
 
-  void setWatermarkStyle(String presetId) {
-    state = state.copyWith(activeWatermarkId: presetId);
+  void setWatermarkStyle(String styleId) {
+    state = state.copyWith(watermarkStyle: styleId);
   }
 
   void selectFrameBackground(String hexColor) {
@@ -536,6 +536,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
               watermarkPositionOverride: state.watermarkPosition,
               watermarkSizeOverride: state.watermarkSize,
               watermarkDirectionOverride: state.watermarkDirection,
+              watermarkStyleOverride: state.watermarkStyle,
               renderParams: state.renderParams,
               minimapNormalizedRect: minimapNormalizedRect,
             );

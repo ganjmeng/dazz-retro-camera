@@ -26,6 +26,7 @@ class GrdCameraState {
   final String? activeRatioId;
   final String? activeFrameId;
   final String? activeWatermarkId;
+  final String? watermarkStyle; // 样式 ID，对应 kWatermarkStyles
 
   // User adjustments
   final double temperatureOffset; // -100..100
@@ -50,6 +51,7 @@ class GrdCameraState {
     this.activeRatioId,
     this.activeFrameId,
     this.activeWatermarkId,
+    this.watermarkStyle,
     this.temperatureOffset = 0,
     this.exposureValue = 0,
     this.activePanel,
@@ -71,6 +73,7 @@ class GrdCameraState {
     String? activeRatioId,
     String? activeFrameId,
     String? activeWatermarkId,
+    String? watermarkStyle,
     double? temperatureOffset,
     double? exposureValue,
     String? activePanel,
@@ -93,6 +96,7 @@ class GrdCameraState {
       activeRatioId: activeRatioId ?? this.activeRatioId,
       activeFrameId: activeFrameId ?? this.activeFrameId,
       activeWatermarkId: activeWatermarkId ?? this.activeWatermarkId,
+      watermarkStyle: watermarkStyle ?? this.watermarkStyle,
       temperatureOffset: temperatureOffset ?? this.temperatureOffset,
       exposureValue: exposureValue ?? this.exposureValue,
       activePanel: clearPanel ? null : (activePanel ?? this.activePanel),
@@ -293,6 +297,7 @@ class GrdCameraNotifier extends StateNotifier<GrdCameraState> {
               selectedRatioId: state.activeRatioId ?? '',
               selectedFrameId: state.activeFrameId ?? '',
               selectedWatermarkId: state.activeWatermarkId ?? '',
+              watermarkStyleOverride: state.watermarkStyle,
             );
             if (processed != null) {
               await File(path).writeAsBytes(processed);

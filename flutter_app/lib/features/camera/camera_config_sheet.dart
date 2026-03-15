@@ -30,6 +30,7 @@ import '../../services/camera_manager_service.dart';
 import 'camera_notifier.dart';
 import 'camera_manager_screen.dart';
 import 'camera_sample_screen.dart';
+import '../../models/watermark_styles.dart';
 
 // ─── 颜色常量 ─────────────────────────────────────────────────────────────────
 const _kBg = Color(0xFF1A1A1A);
@@ -707,50 +708,72 @@ class _SubPanelState extends ConsumerState<_SubPanel>
         ],
       );
     }
-    // Tab 1: 样式（选择水印预设）
+    // Tab 1: 样式（6 种 LED 数字时钟风格横向滚动卡片）
     if (_tabIndex == 1) {
-      final presets = widget.camera.modules.watermarks.presets;
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: presets.map((wm) {
-            final isActive = st.activeWatermarkId == wm.id;
-            Color dotColor = const Color(0xFFFF8C00);
-            if (wm.color != null && wm.color!.isNotEmpty) {
-              try {
-                final hex = wm.color!.replaceAll('#', '');
-                dotColor = Color(int.parse('FF$hex', radix: 16));
-              } catch (_) {}
-            }
+      final now = DateTime.now();
+      // 当前水印颜色（用于卡片预览）
+      final previewColor = _parseColor(st.watermarkColor ?? st.activeWatermark?.color ?? '#FF8A3D');
+      final currentStyleId = st.watermarkStyle ?? 's1';
+      return SizedBox(
+        height: 120,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          itemCount: kWatermarkStyles.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 10),
+          itemBuilder: (ctx, i) {
+            final style = kWatermarkStyles[i];
+            final isActive = currentStyleId == style.id;
+            final previewText = style.buildText(now);
             return GestureDetector(
-              onTap: () => ref.read(cameraAppProvider.notifier).selectWatermark(wm.id),
-              child: Container(
-                width: 80,
-                height: 80,
+              onTap: () {
+                HapticFeedback.selectionClick();
+                ref.read(cameraAppProvider.notifier).setWatermarkStyle(style.id);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 110,
                 decoration: BoxDecoration(
                   color: Colors.black,
-                  borderRadius: BorderRadius.circular(8),
-                  border: isActive ? Border.all(color: const Color(0xFFFF9500), width: 2) : null,
+                  borderRadius: BorderRadius.circular(10),
+                  border: isActive
+                      ? Border.all(color: const Color(0xFFFF9500), width: 2)
+                      : Border.all(color: const Color(0xFF3A3A3C), width: 1),
                 ),
-                child: Center(
-                  child: wm.isNone
-                      ? const Text('无\n水印', style: TextStyle(color: Colors.white54, fontSize: 12), textAlign: TextAlign.center)
-                      : Text(
-                          '26.03.15',
-                          style: TextStyle(
-                            color: dotColor,
-                            fontSize: 13,
-                            fontFamily: wm.fontFamily,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1,
-                          ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // LED 风格日期预览
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        previewText,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: isActive ? previewColor : previewColor.withOpacity(0.7),
+                          fontSize: style.fontSize.clamp(11.0, 15.0),
+                          fontFamily: style.fontFamily,
+                          fontWeight: style.fontWeight,
+                          letterSpacing: style.letterSpacing.clamp(0.5, 3.0),
+                          height: style.wordSpacing > 0 ? 1.4 : 1.2,
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    // 样式名称标签
+                    Text(
+                      style.label,
+                      style: TextStyle(
+                        color: isActive ? const Color(0xFFFF9500) : const Color(0xFF8E8E93),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
-          }).toList(),
+          },
         ),
       );
     }
