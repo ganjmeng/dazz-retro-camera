@@ -1743,6 +1743,7 @@ class _DotSeparator extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 16,
+      height: 44,
       child: Center(
         child: Container(
           width: 5,
