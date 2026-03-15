@@ -20,7 +20,9 @@ class CameraSessionManager: NSObject {
     // MARK: - Setup
 
     /// 配置并启动相机会话
-    func configure(lens: AVCaptureDevice.Position = .back, resolution: AVCaptureSession.Preset = .hd1920x1080) {
+    /// 默认使用 .photo preset，保证 photoOutput 能输出设备全像素分辨率。
+    /// initCamera 完成后 Flutter 端会立即调用 setSharpen 切换到用户选择的档位。
+    func configure(lens: AVCaptureDevice.Position = .back, resolution: AVCaptureSession.Preset = .photo) {
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
 
@@ -51,7 +53,14 @@ class CameraSessionManager: NSObject {
 
             // 配置照片输出（用于高分辨率拍照）
             let photoOutput = AVCapturePhotoOutput()
-            photoOutput.isHighResolutionCaptureEnabled = true
+            // isHighResolutionCaptureEnabled is deprecated in iOS 16+.
+            // On iOS 16+ we set maxPhotoDimensions in capturePhoto() instead.
+            // Keep this for iOS 15 compatibility.
+            if #available(iOS 16.0, *) {
+                // iOS 16+: maxPhotoDimensions is set per-capture in capturePhoto()
+            } else {
+                photoOutput.isHighResolutionCaptureEnabled = true
+            }
             if self.session.canAddOutput(photoOutput) {
                 self.session.addOutput(photoOutput)
                 self.photoOutput = photoOutput
@@ -200,19 +209,20 @@ class CameraSessionManager: NSObject {
     // MARK: - Resolution / Sharpness
 
     /// 根据清晰度级别动态切换 sessionPreset（影响拍摄分辨率）
-    /// level: 0.0=低(2MP/.hd1280x720), 0.5=中(8MP/.hd1920x1080), 1.0=高(全像素/.photo)
+    /// level: 0.0=低(.hd1280x720), 0.5=中(.hd1920x1080), 1.0=高(.photo 全像素)
     /// 与 Android buildImageCapture(level) 对等
     func setResolution(level: Float, completion: (() -> Void)? = nil) {
         let newPreset: AVCaptureSession.Preset
         switch level {
         case ..<0.2:
-            // 低清晰度：720p 约 2MP
+            // 低清晰度：720p
             newPreset = .hd1280x720
         case 0.2..<0.7:
-            // 中清晰度：1080p 约 2MP（实际拍摄使用 isHighResolutionCaptureEnabled 升到 8MP）
+            // 中清晰度：1080p（isHighResolutionCaptureEnabled 会在此 preset 下
+            // 选择设备支持的最高分辨率，通常 8-12MP）
             newPreset = .hd1920x1080
         default:
-            // 高清晰度：.photo 使用设备全像素
+            // 高清晰度：.photo 使用设备全像素（最高分辨率）
             newPreset = .photo
         }
         // CRITICAL FIX: invoke completion AFTER sessionPreset is committed, not before.
@@ -250,7 +260,18 @@ class CameraSessionManager: NSObject {
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
             let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
-            settings.isHighResolutionPhotoEnabled = true
+            // iOS 16+: use maxPhotoDimensions to request full-sensor resolution.
+            // iOS 15 and below: fall back to isHighResolutionPhotoEnabled.
+            if #available(iOS 16.0, *) {
+                // Request the maximum supported photo dimensions (full sensor resolution).
+                // photoOutput.maxPhotoDimensions reflects the current sessionPreset:
+                //   .photo  → full sensor (e.g. 4032x3024 on iPhone 12)
+                //   .hd1920x1080 → up to sensor max via high-res capture
+                //   .hd1280x720  → 720p
+                settings.maxPhotoDimensions = photoOutput.maxPhotoDimensions
+            } else {
+                settings.isHighResolutionPhotoEnabled = true
+            }
             if photoOutput.supportedFlashModes.contains(flashMode) {
                 settings.flashMode = flashMode
             }

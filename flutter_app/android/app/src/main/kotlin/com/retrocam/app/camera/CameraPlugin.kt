@@ -555,8 +555,17 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 ).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             }
             else -> {
-                // 高清晰度：最大分辨率（设备全像素），最高质量模式
-                builder.setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                // 高清晰度：设备全像素（最高分辨率）
+                // CRITICAL: Must explicitly set HIGHEST_AVAILABLE_STRATEGY.
+                // Without a ResolutionSelector, CameraX 1.3+ defaults to a
+                // lower resolution (often 1920x1080) even in MAXIMIZE_QUALITY mode.
+                // HIGHEST_AVAILABLE_STRATEGY tells CameraX to enumerate all supported
+                // output sizes in descending order and pick the largest one.
+                builder.setResolutionSelector(
+                    ResolutionSelector.Builder()
+                        .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
+                        .build()
+                ).setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
             }
         }
         return builder.build()
