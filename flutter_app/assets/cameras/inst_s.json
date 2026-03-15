@@ -135,10 +135,10 @@
         "cornerRadius": 12,
         "innerShadow": true,
         "inset": {
-          "top": 108,
-          "right": 108,
+          "top": 156,
+          "right": 78,
           "bottom": 324,
-          "left": 108
+          "left": 78
         },
         "supportedRatios": [
           "ratio_1_1",
@@ -159,10 +159,10 @@
         "cornerRadius": 12,
         "innerShadow": true,
         "inset": {
-          "top": 108,
-          "right": 108,
+          "top": 156,
+          "right": 78,
           "bottom": 324,
-          "left": 108
+          "left": 78
         },
         "supportedRatios": [
           "ratio_1_1",
@@ -183,10 +183,10 @@
         "cornerRadius": 12,
         "innerShadow": true,
         "inset": {
-          "top": 108,
-          "right": 108,
+          "top": 156,
+          "right": 78,
           "bottom": 324,
-          "left": 108
+          "left": 78
         },
         "supportedRatios": [
           "ratio_1_1",
@@ -207,10 +207,10 @@
         "cornerRadius": 12,
         "innerShadow": true,
         "inset": {
-          "top": 108,
-          "right": 108,
+          "top": 156,
+          "right": 78,
           "bottom": 324,
-          "left": 108
+          "left": 78
         },
         "supportedRatios": [
           "ratio_1_1",

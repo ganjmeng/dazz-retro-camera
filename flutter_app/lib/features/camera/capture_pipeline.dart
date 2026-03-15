@@ -125,13 +125,11 @@ class CapturePipeline {
       // ── 4b. 填充相框背景色（相框层区域）────────────────────────────────────────
       if (frameOpt != null) {
         Color bgColor = const Color(0xFFF5F2EA);
-        // 有外层背景时，相框本身用 JSON 的 backgroundColor
-        // 无外层背景时，用用户选择的颜色（向后兼容）
-        final bgHexSrc = (outerPadPx > 0)
-            ? frameOpt.backgroundColor
-            : ((frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
-                ? frameBackgroundColor
-                : frameOpt.backgroundColor);
+        // 背景色优先级：用户选择的颜色 > JSON 默认值
+        // 无论是否有 outerPadding，用户选择的颜色都应用到相框背景
+        final bgHexSrc = (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
+            ? frameBackgroundColor
+            : frameOpt.backgroundColor;
         try {
           if (bgHexSrc.toLowerCase() == 'transparent') {
             bgColor = Colors.transparent;
