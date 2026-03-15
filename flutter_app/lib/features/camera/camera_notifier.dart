@@ -16,6 +16,7 @@ import '../../services/location_service.dart';
 import 'preview_renderer.dart';
 import 'capture_pipeline.dart';
 import '../../services/retain_settings_service.dart';
+import '../../services/app_prefs_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CameraAppState — full UI state for the camera screen
@@ -254,13 +255,26 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   CameraAppNotifier(this._ref) : super(const CameraAppState());
 
-  /// Initialize with default camera (grd_r)
+  /// Initialize: 从持久化读取上次选择的相机和全局设置
   Future<void> initialize() async {
-    await _loadCamera('grd_r');
+    final prefs = await AppPrefsService.instance.load();
+    // 先将持久化的全局设置写入 state（在 _loadCamera 之前，避免被覆盖）
+    state = state.copyWith(
+      sharpenLevel:            prefs.sharpenLevel,
+      gridEnabled:             prefs.gridEnabled,
+      minimapEnabled:          prefs.minimapEnabled,
+      shutterSoundEnabled:     prefs.shutterSoundEnabled,
+      shutterVibrationEnabled: prefs.shutterVibrationEnabled,
+      locationEnabled:         prefs.locationEnabled,
+      mirrorFrontCamera:       prefs.mirrorFrontCamera,
+    );
+    await _loadCamera(prefs.lastCameraId);
   }
 
   /// Switch to a different camera by id
   Future<void> switchToCamera(String cameraId) async {
+    // 持久化最后选择的相机
+    await AppPrefsService.instance.setLastCameraId(cameraId);
     if (state.activeCameraId == cameraId && state.camera != null) {
       // Already loaded, just close manager
       state = state.copyWith(showCameraManager: false, clearPanel: true);
@@ -444,20 +458,24 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   void setShutterSoundEnabled(bool enabled) {
     state = state.copyWith(shutterSoundEnabled: enabled);
+    AppPrefsService.instance.setShutterSoundEnabled(enabled);
   }
 
   void setMirrorFrontCamera(bool enabled) {
     state = state.copyWith(mirrorFrontCamera: enabled);
+    AppPrefsService.instance.setMirrorFrontCamera(enabled);
     // 通知原生层镜像设置
     _ref.read(cameraServiceProvider.notifier).setMirrorFrontCamera(enabled);
   }
 
   void setShutterVibrationEnabled(bool enabled) {
     state = state.copyWith(shutterVibrationEnabled: enabled);
+    AppPrefsService.instance.setShutterVibrationEnabled(enabled);
   }
 
   void setLocationEnabled(bool enabled) {
     state = state.copyWith(locationEnabled: enabled);
+    AppPrefsService.instance.setLocationEnabled(enabled);
   }
 
   void selectFrameBackground(String hexColor) {
@@ -500,7 +518,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   void toggleGrid() {
-    state = state.copyWith(gridEnabled: !state.gridEnabled);
+    final next = !state.gridEnabled;
+    state = state.copyWith(gridEnabled: next);
+    AppPrefsService.instance.setGridEnabled(next);
   }
 
   void toggleSmallFrame() {
@@ -528,11 +548,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   /// 切换小窗模式（开关时同步将缩放重置为 x1.0）
   void toggleMinimap() {
+    final next = !state.minimapEnabled;
     state = state.copyWith(
-      minimapEnabled: !state.minimapEnabled,
+      minimapEnabled: next,
       zoomLevel: 1.0,
       showZoomSlider: false,
     );
+    AppPrefsService.instance.setMinimapEnabled(next);
     _ref.read(cameraServiceProvider.notifier).setZoom(1.0);
   }
 
@@ -565,6 +587,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   void cycleSharpen() {
     final next = (state.sharpenLevel + 1) % 3;
     state = state.copyWith(sharpenLevel: next);
+    AppPrefsService.instance.setSharpenLevel(next);
     // 0=低(0.0), 1=中(0.5), 2=高(1.0)
     const levels = [0.0, 0.5, 1.0];
     _ref.read(cameraServiceProvider.notifier).setSharpen(levels[next]);

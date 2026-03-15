@@ -246,6 +246,36 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
     with SingleTickerProviderStateMixin {
   // 当前选中的 Tab（照片/视频）
   int _tabIndex = 0; // 0=照片, 1=视频
+  final ScrollController _cameraScrollCtrl = ScrollController();
+  String? _lastScrolledCameraId; // 避免重复滚动
+
+  @override
+  void dispose() {
+    _cameraScrollCtrl.dispose();
+    super.dispose();
+  }
+
+  /// 滚动相机列表使当前相机可见
+  void _scrollToActiveCamera(List<CameraEntry> orderedCameras, String activeCameraId) {
+    if (_lastScrolledCameraId == activeCameraId) return;
+    final idx = orderedCameras.indexWhere((c) => c.id == activeCameraId);
+    if (idx < 0) return;
+    _lastScrolledCameraId = activeCameraId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_cameraScrollCtrl.hasClients) return;
+      // 每个 cell 约 80px + 12px 间距 = 92px，左 padding 16px
+      const cellW = 80.0;
+      const sepW  = 12.0;
+      const padL  = 16.0;
+      final targetOffset = padL + idx * (cellW + sepW) - 16.0;
+      final maxOffset = _cameraScrollCtrl.position.maxScrollExtent;
+      _cameraScrollCtrl.animateTo(
+        targetOffset.clamp(0.0, maxOffset),
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOut,
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -338,9 +368,13 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
       orderedCameras = List.from(kAllCameras);
     }
 
+    // 每次建立列表时自动滚动到当前相机
+    _scrollToActiveCamera(orderedCameras, st.activeCameraId);
+
     return SizedBox(
       height: 110,
       child: ListView.separated(
+        controller: _cameraScrollCtrl,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         itemCount: orderedCameras.length,
@@ -357,15 +391,15 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
             isFavorite: isFav,
             onTap: () {
               HapticFeedback.selectionClick();
+              // 切换相机后重置滚动标记，下次打开时自动滚到新相机
+              _lastScrolledCameraId = null;
               ref.read(cameraAppProvider.notifier).switchCamera(entry.id);
             },
           );
         },
       ),
     );
-  }
-
-  // ── 功能图标行 ──────────────────────────────────────────────────────────────
+  }// ── 功能图标行 ──────────────────────────────────────────────────────────────
   Widget _buildFunctionRow(CameraAppState st, CameraDefinition cam) {
     final uiCap = cam.uiCapabilities;
 
