@@ -35,38 +35,7 @@
     "colorBiasB": 0.0
   },
   "modules": {
-    "filters": [
-      {
-        "id": "bw_standard",
-        "name": "标准",
-        "nameEn": "Standard",
-        "lut": null,
-        "contrast": 1.0,
-        "saturation": 1.0,
-        "grain": "none",
-        "thumbnail": "assets/thumbnails/filters/bw_standard.jpg"
-      },
-      {
-        "id": "bw_high_contrast",
-        "name": "高对比",
-        "nameEn": "High Contrast",
-        "lut": null,
-        "contrast": 1.3,
-        "saturation": 1.0,
-        "grain": "none",
-        "thumbnail": "assets/thumbnails/filters/bw_high_contrast.jpg"
-      },
-      {
-        "id": "bw_soft",
-        "name": "柔和",
-        "nameEn": "Soft",
-        "lut": null,
-        "contrast": 0.85,
-        "saturation": 1.0,
-        "grain": "none",
-        "thumbnail": "assets/thumbnails/filters/bw_soft.jpg"
-      }
-    ],
+    "filters": [],
     "lenses": [
       {
         "id": "std",
@@ -215,7 +184,7 @@
     "extras": []
   },
   "defaultSelection": {
-    "filterId": "bw_standard",
+    "filterId": null,
     "lensId": "std",
     "ratioId": "ratio_2_3",
     "frameId": null,
@@ -223,7 +192,7 @@
     "extraId": null
   },
   "uiCapabilities": {
-    "enableFilter": true,
+    "enableFilter": false,
     "enableLens": true,
     "enableRatio": true,
     "enableFrame": false,

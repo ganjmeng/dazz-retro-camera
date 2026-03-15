@@ -35,38 +35,7 @@
     "colorBiasB": 0.01
   },
   "modules": {
-    "filters": [
-      {
-        "id": "inst_s_standard",
-        "name": "标准",
-        "nameEn": "Standard",
-        "lut": "assets/lut/filters/inst_s_standard.cube",
-        "contrast": 1.0,
-        "saturation": 1.0,
-        "grain": "light",
-        "thumbnail": "assets/thumbnails/filters/inst_s_standard.jpg"
-      },
-      {
-        "id": "inst_s_dreamy",
-        "name": "梦幻",
-        "nameEn": "Dreamy",
-        "lut": "assets/lut/filters/inst_s_dreamy.cube",
-        "contrast": 0.92,
-        "saturation": 1.05,
-        "grain": "light",
-        "thumbnail": "assets/thumbnails/filters/inst_s_dreamy.jpg"
-      },
-      {
-        "id": "inst_s_pastel",
-        "name": "粉彩",
-        "nameEn": "Pastel",
-        "lut": "assets/lut/filters/inst_s_pastel.cube",
-        "contrast": 0.85,
-        "saturation": 0.9,
-        "grain": "medium",
-        "thumbnail": "assets/thumbnails/filters/inst_s_pastel.jpg"
-      }
-    ],
+    "filters": [],
     "lenses": [
       {
         "id": "std",
@@ -426,7 +395,7 @@
     "extras": []
   },
   "defaultSelection": {
-    "filterId": "inst_s_standard",
+    "filterId": null,
     "lensId": "vintage",
     "ratioId": "ratio_3_4",
     "frameId": "instant_default",
@@ -434,7 +403,7 @@
     "extraId": null
   },
   "uiCapabilities": {
-    "enableFilter": true,
+    "enableFilter": false,
     "enableLens": true,
     "enableRatio": true,
     "enableFrame": true,

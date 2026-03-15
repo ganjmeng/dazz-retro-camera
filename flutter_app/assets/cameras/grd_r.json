@@ -35,28 +35,7 @@
     "colorBiasB": 0.0
   },
   "modules": {
-    "filters": [
-      {
-        "id": "grd_standard",
-        "name": "标准",
-        "nameEn": "Standard",
-        "lut": "assets/lut/filters/grd_standard.cube",
-        "contrast": 1.0,
-        "saturation": 1.0,
-        "grain": "light",
-        "thumbnail": "assets/thumbnails/filters/grd_standard.jpg"
-      },
-      {
-        "id": "grd_high_contrast",
-        "name": "高对比",
-        "nameEn": "High Contrast",
-        "lut": "assets/lut/filters/grd_high_contrast.cube",
-        "contrast": 1.15,
-        "saturation": 0.85,
-        "grain": "medium",
-        "thumbnail": "assets/thumbnails/filters/grd_high_contrast.jpg"
-      }
-    ],
+    "filters": [],
     "lenses": [
       {
         "id": "std",
@@ -195,7 +174,7 @@
     "extras": []
   },
   "defaultSelection": {
-    "filterId": "grd_standard",
+    "filterId": null,
     "lensId": "wide",
     "ratioId": "ratio_2_3",
     "frameId": null,
@@ -203,7 +182,7 @@
     "extraId": null
   },
   "uiCapabilities": {
-    "enableFilter": true,
+    "enableFilter": false,
     "enableLens": true,
     "enableRatio": true,
     "enableFrame": false,

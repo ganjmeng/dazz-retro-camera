@@ -35,38 +35,7 @@
     "colorBiasB": 0.06
   },
   "modules": {
-    "filters": [
-      {
-        "id": "ccd_m_standard",
-        "name": "标准",
-        "nameEn": "Standard",
-        "lut": "assets/lut/filters/ccd_m_standard.cube",
-        "contrast": 1.0,
-        "saturation": 1.0,
-        "grain": "medium",
-        "thumbnail": "assets/thumbnails/filters/ccd_m_standard.jpg"
-      },
-      {
-        "id": "ccd_m_vivid",
-        "name": "鲜艳",
-        "nameEn": "Vivid",
-        "lut": "assets/lut/filters/ccd_m_vivid.cube",
-        "contrast": 1.08,
-        "saturation": 1.12,
-        "grain": "medium",
-        "thumbnail": "assets/thumbnails/filters/ccd_m_vivid.jpg"
-      },
-      {
-        "id": "ccd_m_cool",
-        "name": "冷调",
-        "nameEn": "Cool",
-        "lut": "assets/lut/filters/ccd_m_cool.cube",
-        "contrast": 1.0,
-        "saturation": 0.92,
-        "grain": "heavy",
-        "thumbnail": "assets/thumbnails/filters/ccd_m_cool.jpg"
-      }
-    ],
+    "filters": [],
     "lenses": [
       {
         "id": "std",
@@ -395,7 +364,7 @@
     "extras": []
   },
   "defaultSelection": {
-    "filterId": "ccd_m_standard",
+    "filterId": null,
     "lensId": "std",
     "ratioId": "ratio_3_4",
     "frameId": "date_frame",
@@ -403,7 +372,7 @@
     "extraId": null
   },
   "uiCapabilities": {
-    "enableFilter": true,
+    "enableFilter": false,
     "enableLens": true,
     "enableRatio": true,
     "enableFrame": true,

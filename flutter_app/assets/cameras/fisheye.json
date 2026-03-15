@@ -35,38 +35,7 @@
     "colorBiasB": 0.0
   },
   "modules": {
-    "filters": [
-      {
-        "id": "fisheye_standard",
-        "name": "标准",
-        "nameEn": "Standard",
-        "lut": "assets/lut/filters/fisheye_standard.cube",
-        "contrast": 1.0,
-        "saturation": 1.0,
-        "grain": "medium",
-        "thumbnail": "assets/thumbnails/filters/fisheye_standard.jpg"
-      },
-      {
-        "id": "fisheye_skate",
-        "name": "街头",
-        "nameEn": "Skate",
-        "lut": "assets/lut/filters/fisheye_skate.cube",
-        "contrast": 1.2,
-        "saturation": 1.15,
-        "grain": "heavy",
-        "thumbnail": "assets/thumbnails/filters/fisheye_skate.jpg"
-      },
-      {
-        "id": "fisheye_bw",
-        "name": "黑白",
-        "nameEn": "B&W",
-        "lut": "assets/lut/filters/fisheye_bw.cube",
-        "contrast": 1.3,
-        "saturation": 0.0,
-        "grain": "heavy",
-        "thumbnail": "assets/thumbnails/filters/fisheye_bw.jpg"
-      }
-    ],
+    "filters": [],
     "lenses": [
       {
         "id": "fisheye",
@@ -158,7 +127,7 @@
     "extras": []
   },
   "defaultSelection": {
-    "filterId": "fisheye_standard",
+    "filterId": null,
     "lensId": "fisheye",
     "ratioId": "ratio_1_1",
     "frameId": null,
@@ -166,7 +135,7 @@
     "extraId": null
   },
   "uiCapabilities": {
-    "enableFilter": true,
+    "enableFilter": false,
     "enableLens": true,
     "enableRatio": true,
     "enableFrame": false,

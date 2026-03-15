@@ -35,38 +35,7 @@
     "colorBiasB": -0.01
   },
   "modules": {
-    "filters": [
-      {
-        "id": "inst_c_standard",
-        "name": "标准",
-        "nameEn": "Standard",
-        "lut": "assets/lut/filters/inst_c_standard.cube",
-        "contrast": 1.0,
-        "saturation": 1.0,
-        "grain": "medium",
-        "thumbnail": "assets/thumbnails/filters/inst_c_standard.jpg"
-      },
-      {
-        "id": "inst_c_party",
-        "name": "派对",
-        "nameEn": "Party",
-        "lut": "assets/lut/filters/inst_c_party.cube",
-        "contrast": 1.15,
-        "saturation": 1.15,
-        "grain": "medium",
-        "thumbnail": "assets/thumbnails/filters/inst_c_party.jpg"
-      },
-      {
-        "id": "inst_c_night",
-        "name": "夜拍",
-        "nameEn": "Night",
-        "lut": "assets/lut/filters/inst_c_night.cube",
-        "contrast": 1.25,
-        "saturation": 1.1,
-        "grain": "heavy",
-        "thumbnail": "assets/thumbnails/filters/inst_c_night.jpg"
-      }
-    ],
+    "filters": [],
     "lenses": [
       {
         "id": "std",
@@ -426,7 +395,7 @@
     "extras": []
   },
   "defaultSelection": {
-    "filterId": "inst_c_standard",
+    "filterId": null,
     "lensId": "std",
     "ratioId": "ratio_3_4",
     "frameId": "instant_default",
@@ -434,7 +403,7 @@
     "extraId": null
   },
   "uiCapabilities": {
-    "enableFilter": true,
+    "enableFilter": false,
     "enableLens": true,
     "enableRatio": true,
     "enableFrame": true,

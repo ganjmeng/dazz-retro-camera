@@ -35,38 +35,7 @@
     "colorBiasB": -0.02
   },
   "modules": {
-    "filters": [
-      {
-        "id": "d_classic_standard",
-        "name": "标准",
-        "nameEn": "Standard",
-        "lut": "assets/lut/filters/d_classic_standard.cube",
-        "contrast": 1.0,
-        "saturation": 1.0,
-        "grain": "light",
-        "thumbnail": "assets/thumbnails/filters/d_classic_standard.jpg"
-      },
-      {
-        "id": "d_classic_warm",
-        "name": "暖调",
-        "nameEn": "Warm",
-        "lut": "assets/lut/filters/d_classic_warm.cube",
-        "contrast": 1.05,
-        "saturation": 0.95,
-        "grain": "light",
-        "thumbnail": "assets/thumbnails/filters/d_classic_warm.jpg"
-      },
-      {
-        "id": "d_classic_fade",
-        "name": "褪色",
-        "nameEn": "Fade",
-        "lut": "assets/lut/filters/d_classic_fade.cube",
-        "contrast": 0.9,
-        "saturation": 0.85,
-        "grain": "medium",
-        "thumbnail": "assets/thumbnails/filters/d_classic_fade.jpg"
-      }
-    ],
+    "filters": [],
     "lenses": [
       {
         "id": "std",
@@ -205,7 +174,7 @@
     "extras": []
   },
   "defaultSelection": {
-    "filterId": "d_classic_standard",
+    "filterId": null,
     "lensId": "std",
     "ratioId": "ratio_3_4",
     "frameId": null,
@@ -213,7 +182,7 @@
     "extraId": null
   },
   "uiCapabilities": {
-    "enableFilter": true,
+    "enableFilter": false,
     "enableLens": true,
     "enableRatio": true,
     "enableFrame": false,
