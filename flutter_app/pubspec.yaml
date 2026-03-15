@@ -57,6 +57,9 @@ dependencies:
   # 音频播放（快门声音）
   audioplayers: ^6.1.0
 
+  # 图片编码（JPEG 输出，比 PNG 快 5-10x）
+  image: ^4.2.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
