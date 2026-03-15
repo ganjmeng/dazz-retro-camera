@@ -900,7 +900,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (st.fisheyeMode)
             IgnorePointer(
               child: CustomPaint(
-                size: Size(viewfinderW, viewfinderH),
+                size: Size.infinite,
                 painter: _FisheyeCirclePainter(),
               ),
             ),
@@ -1407,9 +1407,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     duration: const Duration(milliseconds: 500),
                   ),
                 ),
-                ),
               ),
-            ),
             ),
           ],
         ),
@@ -1554,11 +1552,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
-          ],
-            ),
           ),
         ),
-      ),
+        const SizedBox(height: 10), // 底部安全区
+      ],
     );
   }
 
