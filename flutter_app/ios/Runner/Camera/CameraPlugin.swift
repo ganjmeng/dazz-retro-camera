@@ -222,13 +222,18 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     }
 
     // ─────────────────────────────────────────────
-    // setSharpen — 通过 Metal shader unsharp mask 实现锐化
-    // level: 0.0=低, 0.5=中, 1.0=高
+    // setSharpen — 分辨率切换 + Metal shader unsharp mask
+    // level: 0.0=低(720p/2MP), 0.5=中(1080p/8MP), 1.0=高(.photo/全像素)
+    // 与 Android handleSetSharpen 对等：同时切换分辨率 + GPU 锐化强度
     // ─────────────────────────────────────────────
     private func handleSetSharpen(call: FlutterMethodCall, result: @escaping FlutterResult) {
         let args = call.arguments as? [String: Any]
         let level = args?["level"] as? Double ?? 0.5
-        renderer?.setSharpen(Float(level))
+        let floatLevel = Float(level)
+        // 1. 更新 Metal shader 中的 Unsharp Mask 强度
+        renderer?.setSharpen(floatLevel)
+        // 2. 动态切换 AVCaptureSession.sessionPreset（影响实际拍摄分辨率）
+        cameraManager?.setResolution(level: floatLevel)
         result(nil)
     }
 

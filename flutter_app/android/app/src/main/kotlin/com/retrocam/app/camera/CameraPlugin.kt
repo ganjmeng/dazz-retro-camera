@@ -12,7 +12,10 @@ import android.hardware.camera2.CaptureRequest
 import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.camera2.interop.CaptureRequestOptions
+import android.util.Size
 import androidx.camera.core.*
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
 import androidx.core.content.ContextCompat
@@ -238,9 +241,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             }
         }
 
-        imageCapture = ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-            .build()
+        imageCapture = buildImageCapture(currentSharpenLevel)
 
         val recorder = Recorder.Builder()
             .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
@@ -522,41 +523,104 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     }
 
     // ─────────────────────────────────────────────
-    // setSharpen — GPU Unsharp Mask + Camera2 EDGE_MODE（双重锐化）
-    // level: 0.0=低, 0.5=中, 1.0=高
+    // buildImageCapture — 根据清晰度级别构建 ImageCapture
+    // level: 0.0=低(2MP), 0.5=中(8MP), 1.0=高(全分辨率)
+    // ─────────────────────────────────────────────
+    private fun buildImageCapture(level: Float): ImageCapture {
+        val builder = ImageCapture.Builder()
+        when {
+            level < 0.2f -> {
+                // 低清晰度：目标 2MP（1600×1200），最小延迟模式
+                val strategy = ResolutionStrategy(
+                    Size(1600, 1200),
+                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
+                )
+                builder.setResolutionSelector(
+                    ResolutionSelector.Builder()
+                        .setResolutionStrategy(strategy)
+                        .build()
+                ).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            }
+            level < 0.7f -> {
+                // 中清晰度：目标 8MP（3264×2448），最小延迟模式
+                val strategy = ResolutionStrategy(
+                    Size(3264, 2448),
+                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
+                )
+                builder.setResolutionSelector(
+                    ResolutionSelector.Builder()
+                        .setResolutionStrategy(strategy)
+                        .build()
+                ).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            }
+            else -> {
+                // 高清晰度：最大分辨率（设备全像素），最高质量模式
+                builder.setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+            }
+        }
+        return builder.build()
+    }
+
+    // ─────────────────────────────────────────────
+    // setSharpen — 分辨率切换 + GPU Unsharp Mask + Camera2 EDGE_MODE
+    // level: 0.0=低(2MP), 0.5=中(8MP), 1.0=高(全分辨率)
     // ─────────────────────────────────────────────
     private fun handleSetSharpen(call: MethodCall, result: MethodChannel.Result) {
         val level = call.argument<Double>("level") ?: 0.5
         currentSharpenLevel = level.toFloat()
         // 1. 更新 GL 渲染器中的 Unsharp Mask 强度
         glRenderer?.setSharpen(currentSharpenLevel)
+        // 2. 重建 ImageCapture 并重新绑定（切换拍摄分辨率）
+        val owner = lifecycleOwner
+        val provider = cameraProvider
+        if (owner != null && provider != null) {
+            bgExecutor.execute {
+                try {
+                    val newImageCapture = buildImageCapture(currentSharpenLevel)
+                    val cameraSelector = CameraSelector.Builder()
+                        .requireLensFacing(lensFacing)
+                        .build()
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        try {
+                            provider.unbind(imageCapture)
+                            imageCapture = newImageCapture
+                            camera = provider.bindToLifecycle(
+                                owner,
+                                cameraSelector,
+                                imageCapture
+                            )
+                            Log.d(TAG, "setSharpen: level=$level, imageCapture rebuilt")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "rebind imageCapture failed: ${e.message}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "buildImageCapture failed: ${e.message}")
+                }
+            }
+        }
+        // 3. 使用 Camera2Interop 设置 EDGE_MODE（锐化算法）
         try {
             val cam = camera
-            if (cam == null) {
-                result.success(null)
-                return
+            if (cam != null) {
+                val edgeMode = when {
+                    level < 0.2  -> android.hardware.camera2.CameraMetadata.EDGE_MODE_OFF
+                    level < 0.7  -> android.hardware.camera2.CameraMetadata.EDGE_MODE_FAST
+                    else         -> android.hardware.camera2.CameraMetadata.EDGE_MODE_HIGH_QUALITY
+                }
+                val options = CaptureRequestOptions.Builder()
+                    .setCaptureRequestOption(
+                        android.hardware.camera2.CaptureRequest.EDGE_MODE,
+                        edgeMode
+                    )
+                    .build()
+                Camera2CameraControl.from(cam.cameraControl).setCaptureRequestOptions(options)
+                Log.d(TAG, "setSharpen: level=$level, edgeMode=$edgeMode")
             }
-            // 使用 Camera2Interop 设置 EDGE_MODE
-            // EDGE_MODE_OFF=0, EDGE_MODE_FAST=1, EDGE_MODE_HIGH_QUALITY=2
-            val edgeMode = when {
-                level < 0.2  -> android.hardware.camera2.CameraMetadata.EDGE_MODE_OFF
-                level < 0.7  -> android.hardware.camera2.CameraMetadata.EDGE_MODE_FAST
-                else         -> android.hardware.camera2.CameraMetadata.EDGE_MODE_HIGH_QUALITY
-            }
-            val options = CaptureRequestOptions.Builder()
-                .setCaptureRequestOption(
-                    android.hardware.camera2.CaptureRequest.EDGE_MODE,
-                    edgeMode
-                )
-                .build()
-            Camera2CameraControl.from(cam.cameraControl).setCaptureRequestOptions(options)
-            Log.d(TAG, "setSharpen: level=$level, edgeMode=$edgeMode")
-            result.success(null)
         } catch (e: Exception) {
-            // 部分设备不支持 Camera2Interop，静默失败
-            Log.w(TAG, "setSharpen failed (device may not support): ${e.message}")
-            result.success(null)
+            Log.w(TAG, "setSharpen EDGE_MODE failed: ${e.message}")
         }
+        result.success(null)
     }
 
     // ─────────────────────────────────────────────

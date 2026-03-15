@@ -197,6 +197,39 @@ class CameraSessionManager: NSObject {
         }
     }
 
+    // MARK: - Resolution / Sharpness
+
+    /// 根据清晰度级别动态切换 sessionPreset（影响拍摄分辨率）
+    /// level: 0.0=低(2MP/.hd1280x720), 0.5=中(8MP/.hd1920x1080), 1.0=高(全像素/.photo)
+    /// 与 Android buildImageCapture(level) 对等
+    func setResolution(level: Float) {
+        let newPreset: AVCaptureSession.Preset
+        switch level {
+        case ..<0.2:
+            // 低清晰度：720p 约 2MP
+            newPreset = .hd1280x720
+        case 0.2..<0.7:
+            // 中清晰度：1080p 约 2MP（实际拍摄使用 isHighResolutionCaptureEnabled 升到 8MP）
+            newPreset = .hd1920x1080
+        default:
+            // 高清晰度：.photo 使用设备全像素
+            newPreset = .photo
+        }
+
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard self.session.sessionPreset != newPreset else { return }
+            guard self.session.canSetSessionPreset(newPreset) else {
+                print("[CameraSessionManager] setResolution: preset \(newPreset.rawValue) not supported")
+                return
+            }
+            self.session.beginConfiguration()
+            self.session.sessionPreset = newPreset
+            self.session.commitConfiguration()
+            print("[CameraSessionManager] setResolution: level=\(level), preset=\(newPreset.rawValue)")
+        }
+    }
+
     // MARK: - Capture Photo
 
     /// 高分辨率拍照（使用 AVCapturePhotoOutput，与 Android CameraX takePicture 对等）
