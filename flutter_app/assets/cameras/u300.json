@@ -37,34 +37,36 @@
   "modules": {
     "filters": [
       {
-        "id": "u300_standard",
-        "name": "标准",
-        "nameEn": "Standard",
-        "lut": "assets/lut/filters/u300_standard.cube",
-        "contrast": 1.0,
-        "saturation": 1.0,
+        "id": "disposable_slow",
+        "name": "Disposable Slow",
+        "nameEn": "Disposable Slow",
+        "lut": null,
+        "contrast": 1.05,
+        "saturation": 0.92,
         "grain": "heavy",
-        "thumbnail": "assets/thumbnails/filters/u300_standard.jpg"
+        "thumbnail": null,
+        "filmRollType": "advance",
+        "filmRollStyle": "disposable",
+        "advanceDuration": 900,
+        "slideDistance": 1.1,
+        "motionBlur": 0.12,
+        "sound": "disposable_wind"
       },
       {
-        "id": "u300_travel",
-        "name": "旅行",
-        "nameEn": "Travel",
-        "lut": "assets/lut/filters/u300_travel.cube",
-        "contrast": 0.95,
-        "saturation": 1.05,
-        "grain": "heavy",
-        "thumbnail": "assets/thumbnails/filters/u300_travel.jpg"
-      },
-      {
-        "id": "u300_fade",
-        "name": "褪色",
-        "nameEn": "Fade",
-        "lut": "assets/lut/filters/u300_fade.cube",
-        "contrast": 0.85,
-        "saturation": 0.8,
-        "grain": "heavy",
-        "thumbnail": "assets/thumbnails/filters/u300_fade.jpg"
+        "id": "disposable_quick",
+        "name": "Disposable Quick",
+        "nameEn": "Disposable Quick",
+        "lut": null,
+        "contrast": 1.03,
+        "saturation": 0.94,
+        "grain": "medium",
+        "thumbnail": null,
+        "filmRollType": "advance",
+        "filmRollStyle": "disposable_quick",
+        "advanceDuration": 720,
+        "slideDistance": 1.05,
+        "motionBlur": 0.1,
+        "sound": "disposable_click_wind"
       }
     ],
     "lenses": [
@@ -230,7 +232,7 @@
     "extras": []
   },
   "defaultSelection": {
-    "filterId": "u300_standard",
+    "filterId": "disposable_slow",
     "lensId": "wide",
     "ratioId": "ratio_2_3",
     "frameId": "film_edge",

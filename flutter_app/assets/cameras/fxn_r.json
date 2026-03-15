@@ -37,24 +37,36 @@
   "modules": {
     "filters": [
       {
-        "id": "fxn_retro",
-        "name": "Retro",
-        "nameEn": "Retro",
+        "id": "35mm_clean",
+        "name": "35mm Clean",
+        "nameEn": "35mm Clean",
         "lut": null,
-        "contrast": 1.0,
-        "saturation": 1.0,
-        "grain": "heavy",
-        "thumbnail": null
+        "contrast": 1.02,
+        "saturation": 0.98,
+        "grain": "light",
+        "thumbnail": null,
+        "filmRollType": "advance",
+        "filmRollStyle": "35mm",
+        "advanceDuration": 650,
+        "slideDistance": 1.0,
+        "motionBlur": 0.08,
+        "sound": "film_advance"
       },
       {
-        "id": "fxn_faded",
-        "name": "Faded",
-        "nameEn": "Faded",
+        "id": "35mm_mechanical",
+        "name": "35mm Mechanical",
+        "nameEn": "35mm Mechanical",
         "lut": null,
-        "contrast": 0.9,
-        "saturation": 0.88,
-        "grain": "heavy",
-        "thumbnail": null
+        "contrast": 1.04,
+        "saturation": 0.95,
+        "grain": "medium",
+        "thumbnail": null,
+        "filmRollType": "advance",
+        "filmRollStyle": "35mm_mechanical",
+        "advanceDuration": 780,
+        "slideDistance": 1.08,
+        "motionBlur": 0.1,
+        "sound": "film_advance_heavy"
       }
     ],
     "lenses": [
@@ -220,7 +232,7 @@
     "extras": []
   },
   "defaultSelection": {
-    "filterId": "fxn_retro",
+    "filterId": "35mm_clean",
     "lensId": "vintage",
     "ratioId": "ratio_2_3",
     "frameId": "film_border",
