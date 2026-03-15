@@ -3883,8 +3883,7 @@ class _MinimapOverlay extends StatelessWidget {
                               )
                             : CustomPaint(painter: _GridPainter()),
                       ),
-                    // 四角 L 形角标
-                    ..._buildCorners(boxW, boxH),
+                    // 四角 L 形角标已移除
                   ],
                 ),
               ),
