@@ -21,12 +21,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import 'package:go_router/go_router.dart';
 import '../../models/camera_definition.dart';
 import '../../models/camera_registry.dart';
 import '../../services/camera_service.dart';
 import '../../services/location_service.dart';
-import '../../router/app_router.dart';
 import 'camera_notifier.dart';
 import 'camera_manager_screen.dart';
 import '../settings/settings_screen.dart';
@@ -521,7 +519,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final st = ref.watch(cameraAppProvider);
     final camSvc = ref.watch(cameraServiceProvider);
     final mq = MediaQuery.of(context);
@@ -897,18 +895,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
-          // ── 实时水印预览 overlay（水印开启时在取景框内展示）──
-          if (false && st.activeWatermark != null && !st.activeWatermark!.isNone)
-            IgnorePointer(
-              child: _WatermarkPreviewOverlay(
-                watermark: st.activeWatermark!,
-                colorOverride: st.watermarkColor,
-                positionOverride: st.watermarkPosition,
-                sizeOverride: st.watermarkSize,
-                directionOverride: st.watermarkDirection,
-                styleId: st.watermarkStyle,
-              ),
-            ),
+
           // ── 小窗 overlay（小窗模式开启时显示）──
           if (st.minimapEnabled)
             _MinimapOverlay(
