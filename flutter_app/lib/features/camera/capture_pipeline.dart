@@ -26,8 +26,8 @@ class CapturePipeline {
   static const int kMaxDimMid    = 1920; // 中画质：1920p 长边，对齐竞品
   static const int kMaxDimHigh   = 4096; // 高画质：4K 长边，~1~3 MB（对齐竞品）
   /// 各清晰度档位的 JPEG 编码质量
-  static const int kJpegQualityLow  = 82;
-  static const int kJpegQualityMid  = 82;
+  static const int kJpegQualityLow  = 72; // 对齐竞品低画质 ~385 KB
+  static const int kJpegQualityMid  = 80; // 对齐竞品中画质 ~442 KB
   static const int kJpegQualityHigh = 90;
 
   CapturePipeline({required this.camera});
