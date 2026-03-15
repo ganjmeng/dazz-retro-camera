@@ -1487,9 +1487,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // 虚线圆圈背景
+                    // 虚线圆圈背景（圆圈大小 70，图标不变）
                     CustomPaint(
-                      size: const Size(97, 97),
+                      size: const Size(70, 70),
                       painter: _DashedCirclePainter(),
                     ),
                     // 相机图标 + 名称（跟随设备方向旋转）
