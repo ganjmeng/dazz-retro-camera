@@ -22,6 +22,9 @@ dependencies:
   
   # 本地存储（保存设置等）
   shared_preferences: ^2.2.2
+
+  # 可拖动排序网格（相机管理页单卡拖动）
+  reorderable_grid_view: ^2.2.8
   
   # 图片选择与相册访问
   photo_manager: ^3.0.0

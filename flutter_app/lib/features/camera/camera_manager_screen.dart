@@ -1,13 +1,15 @@
 // camera_manager_screen.dart
-// 相机管理页面：收藏夹 + 更多相机，支持拖动排序、启用/禁用、收藏
-// 设计风格：纯黑背景，深灰圆角卡片，金色星标，白色勾选
+// 相机管理页面：收藏夹 + 更多相机，支持单卡拖动排序、启用/禁用、收藏
+// 设计风格：纯黑背景，深灰圆角卡片，金色星标，绿色勾选
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import '../../models/camera_registry.dart';
 import '../../services/camera_manager_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 常量
+// 颜色常量
 // ─────────────────────────────────────────────────────────────────────────────
 const _kBg = Color(0xFF000000);
 const _kCardBg = Color(0xFF1C1C1E);
@@ -53,7 +55,7 @@ class CameraManagerScreen extends ConsumerWidget {
         error: (e, _) => Center(
           child: Text('加载失败: $e', style: const TextStyle(color: _kWhite)),
         ),
-        data: (state) => _CameraManagerBody(state: state),
+        data: (_) => const _CameraManagerBody(),
       ),
     );
   }
@@ -62,22 +64,17 @@ class CameraManagerScreen extends ConsumerWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // _CameraManagerBody
 // ─────────────────────────────────────────────────────────────────────────────
-class _CameraManagerBody extends ConsumerStatefulWidget {
-  final CameraManagerState state;
-  const _CameraManagerBody({required this.state});
+class _CameraManagerBody extends ConsumerWidget {
+  const _CameraManagerBody();
 
   @override
-  ConsumerState<_CameraManagerBody> createState() => _CameraManagerBodyState();
-}
-
-class _CameraManagerBodyState extends ConsumerState<_CameraManagerBody> {
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(cameraManagerProvider).valueOrNull;
     if (state == null) return const SizedBox.shrink();
 
     final favIds = state.favoriteIds;
     final nonFavIds = state.nonFavoriteIds;
+    final notifier = ref.read(cameraManagerProvider.notifier);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -88,14 +85,26 @@ class _CameraManagerBodyState extends ConsumerState<_CameraManagerBody> {
           if (favIds.isNotEmpty) ...[
             _SectionHeader(title: '收藏夹'),
             const SizedBox(height: 12),
-            _FavoriteGrid(cameraIds: favIds, state: state),
+            _DraggableGrid(
+              cameraIds: favIds,
+              state: state,
+              isFavoriteSection: true,
+              onReorder: (oldIdx, newIdx) =>
+                  notifier.reorder(oldIdx, newIdx, isFavoriteSection: true),
+            ),
             const SizedBox(height: 28),
           ],
 
           // ── 更多相机区域 ─────────────────────────────────────────────────
           _SectionHeader(title: '更多相机'),
           const SizedBox(height: 12),
-          _ReorderableGrid(cameraIds: nonFavIds, state: state),
+          _DraggableGrid(
+            cameraIds: nonFavIds,
+            state: state,
+            isFavoriteSection: false,
+            onReorder: (oldIdx, newIdx) =>
+                notifier.reorder(oldIdx, newIdx, isFavoriteSection: false),
+          ),
           const SizedBox(height: 32),
         ],
       ),
@@ -125,67 +134,38 @@ class _SectionHeader extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _FavoriteGrid — 收藏夹网格（支持拖动排序）
+// _DraggableGrid — 支持单卡拖动的相机网格
 // ─────────────────────────────────────────────────────────────────────────────
-class _FavoriteGrid extends ConsumerWidget {
+class _DraggableGrid extends ConsumerWidget {
   final List<String> cameraIds;
   final CameraManagerState state;
-  const _FavoriteGrid({required this.cameraIds, required this.state});
+  final bool isFavoriteSection;
+  final void Function(int oldIdx, int newIdx) onReorder;
+
+  const _DraggableGrid({
+    required this.cameraIds,
+    required this.state,
+    required this.isFavoriteSection,
+    required this.onReorder,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _kSectionBg,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.all(12),
-      child: _buildDraggableGrid(context, ref),
-    );
-  }
-
-  Widget _buildDraggableGrid(BuildContext context, WidgetRef ref) {
-    // 使用 ReorderableWrap 模拟网格拖动
-    // 每行3列
-    return LayoutBuilder(builder: (context, constraints) {
-      final itemWidth = (constraints.maxWidth - 24) / 3;
-      return Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          for (int i = 0; i < cameraIds.length; i++)
-            SizedBox(
-              width: itemWidth,
-              child: _CameraCard(
-                cameraId: cameraIds[i],
-                state: state,
-                isFavoriteSection: true,
-              ),
-            ),
-        ],
+    if (cameraIds.isEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          color: _kSectionBg,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: Text(
+            isFavoriteSection ? '暂无收藏相机' : '暂无相机',
+            style: const TextStyle(color: Colors.white38, fontSize: 14),
+          ),
+        ),
       );
-    });
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _ReorderableGrid — 更多相机网格（支持长按拖动排序）
-// ─────────────────────────────────────────────────────────────────────────────
-class _ReorderableGrid extends ConsumerStatefulWidget {
-  final List<String> cameraIds;
-  final CameraManagerState state;
-  const _ReorderableGrid({required this.cameraIds, required this.state});
-
-  @override
-  ConsumerState<_ReorderableGrid> createState() => _ReorderableGridState();
-}
-
-class _ReorderableGridState extends ConsumerState<_ReorderableGrid> {
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(cameraManagerProvider).valueOrNull;
-    if (state == null) return const SizedBox.shrink();
-    final ids = state.nonFavoriteIds;
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -193,57 +173,38 @@ class _ReorderableGridState extends ConsumerState<_ReorderableGrid> {
         borderRadius: BorderRadius.circular(16),
       ),
       padding: const EdgeInsets.all(12),
-      child: LayoutBuilder(builder: (context, constraints) {
-        final itemWidth = (constraints.maxWidth - 24) / 3;
-        // 将列表转为行列结构，每行3个
-        final rows = <List<String>>[];
-        for (int i = 0; i < ids.length; i += 3) {
-          rows.add(ids.sublist(i, i + 3 > ids.length ? ids.length : i + 3));
-        }
-
-        return ReorderableListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: rows.length,
-          onReorder: (oldRow, newRow) {
-            // 将行索引转换为元素索引
-            final oldIdx = oldRow * 3;
-            final newIdx = newRow * 3;
-            ref.read(cameraManagerProvider.notifier).reorder(
-                  oldIdx,
-                  newIdx,
-                  isFavoriteSection: false,
-                );
-          },
-          itemBuilder: (context, rowIdx) {
-            final rowIds = rows[rowIdx];
-            return Padding(
-              key: ValueKey('row_$rowIdx'),
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  for (int col = 0; col < 3; col++)
-                    Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          left: col == 0 ? 0 : 6,
-                          right: col == 2 ? 0 : 6,
-                        ),
-                        child: col < rowIds.length
-                            ? _CameraCard(
-                                cameraId: rowIds[col],
-                                state: state,
-                                isFavoriteSection: false,
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ),
-                ],
+      child: ReorderableGridView.count(
+        crossAxisCount: 3,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 0.78,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        onReorder: (oldIdx, newIdx) {
+          HapticFeedback.mediumImpact();
+          onReorder(oldIdx, newIdx);
+        },
+        dragWidgetBuilderV2: DragWidgetBuilderV2(
+          isScreenshotDragWidget: false,
+          builder: (index, child, screenshot) {
+            // 拖动时显示放大半透明的卡片
+            return Opacity(
+              opacity: 0.85,
+              child: Transform.scale(
+                scale: 1.08,
+                child: child,
               ),
             );
           },
-        );
-      }),
+        ),
+        children: cameraIds.map((camId) {
+          return _CameraCard(
+            key: ValueKey(camId),
+            cameraId: camId,
+            state: state,
+          );
+        }).toList(),
+      ),
     );
   }
 }
@@ -254,25 +215,29 @@ class _ReorderableGridState extends ConsumerState<_ReorderableGrid> {
 class _CameraCard extends ConsumerWidget {
   final String cameraId;
   final CameraManagerState state;
-  final bool isFavoriteSection;
 
   const _CameraCard({
+    required super.key,
     required this.cameraId,
     required this.state,
-    required this.isFavoriteSection,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // 实时读取最新状态（避免 state 参数过时）
+    final liveState = ref.watch(cameraManagerProvider).valueOrNull ?? state;
     final entry = kAllCameras.where((e) => e.id == cameraId).firstOrNull;
     if (entry == null) return const SizedBox.shrink();
 
-    final isFavorited = state.favoritedIds.contains(cameraId);
-    final isEnabled = state.enabledIds.contains(cameraId);
+    final isFavorited = liveState.favoritedIds.contains(cameraId);
+    final isEnabled = liveState.enabledIds.contains(cameraId);
     final notifier = ref.read(cameraManagerProvider.notifier);
 
     return GestureDetector(
-      onTap: () => notifier.toggleEnabled(cameraId),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        notifier.toggleEnabled(cameraId);
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
@@ -284,39 +249,41 @@ class _CameraCard extends ConsumerWidget {
         ),
         child: Stack(
           children: [
-            // 主内容
+            // ── 主内容 ──────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 16, 8, 10),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // 相机图标
-                  SizedBox(
-                    height: 64,
-                    width: 64,
-                    child: entry.iconPath != null
-                        ? Image.asset(
-                            entry.iconPath!,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const Icon(
+                  Expanded(
+                    child: Center(
+                      child: entry.iconPath != null
+                          ? Image.asset(
+                              entry.iconPath!,
+                              fit: BoxFit.contain,
+                              color: isEnabled ? null : Colors.white38,
+                              colorBlendMode: isEnabled ? null : BlendMode.modulate,
+                              errorBuilder: (_, __, ___) => Icon(
+                                Icons.camera_alt,
+                                color: isEnabled ? _kWhite : Colors.white38,
+                                size: 36,
+                              ),
+                            )
+                          : Icon(
                               Icons.camera_alt,
-                              color: _kWhite,
-                              size: 40,
+                              color: isEnabled ? _kWhite : Colors.white38,
+                              size: 36,
                             ),
-                          )
-                        : const Icon(
-                            Icons.camera_alt,
-                            color: _kWhite,
-                            size: 40,
-                          ),
+                    ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   // 相机名称
                   Text(
                     entry.name,
                     style: TextStyle(
                       color: isEnabled ? _kWhite : Colors.white38,
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.w500,
                     ),
                     maxLines: 1,
@@ -326,11 +293,14 @@ class _CameraCard extends ConsumerWidget {
                   const SizedBox(height: 8),
                   // 启用/禁用勾选按钮
                   GestureDetector(
-                    onTap: () => notifier.toggleEnabled(cameraId),
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      notifier.toggleEnabled(cameraId);
+                    },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
-                      width: 28,
-                      height: 28,
+                      width: 26,
+                      height: 26,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: isEnabled
@@ -342,7 +312,7 @@ class _CameraCard extends ConsumerWidget {
                         ),
                       ),
                       child: isEnabled
-                          ? const Icon(Icons.check, color: _kGreen, size: 16)
+                          ? const Icon(Icons.check, color: _kGreen, size: 15)
                           : const SizedBox.shrink(),
                     ),
                   ),
@@ -350,30 +320,37 @@ class _CameraCard extends ConsumerWidget {
               ),
             ),
 
-            // 星标收藏按钮（右上角）
+            // ── 星标收藏按钮（右上角）──────────────────────────────────
             Positioned(
-              top: 6,
-              right: 6,
+              top: 5,
+              right: 5,
               child: GestureDetector(
-                onTap: () => notifier.toggleFavorite(cameraId),
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  notifier.toggleFavorite(cameraId);
+                },
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
+                  transitionBuilder: (child, anim) => ScaleTransition(
+                    scale: anim,
+                    child: child,
+                  ),
                   child: Icon(
-                    isFavorited ? Icons.star : Icons.star_border,
+                    isFavorited ? Icons.star_rounded : Icons.star_outline_rounded,
                     key: ValueKey(isFavorited),
-                    color: isFavorited ? _kGold : Colors.white30,
+                    color: isFavorited ? _kGold : Colors.white25,
                     size: 18,
                   ),
                 ),
               ),
             ),
 
-            // 禁用遮罩
+            // ── 禁用遮罩 ─────────────────────────────────────────────────
             if (!isEnabled)
               Positioned.fill(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.black.withAlpha(100),
+                    color: Colors.black.withAlpha(80),
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
