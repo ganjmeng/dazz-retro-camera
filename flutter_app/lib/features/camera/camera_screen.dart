@@ -162,7 +162,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         // 加载相机 JSON 配置
         ref.read(cameraAppProvider.notifier).initialize();
         // 初始化原生相机硬件（获取 textureId，开始预览）
-        ref.read(cameraServiceProvider.notifier).initCamera();
+        await ref.read(cameraServiceProvider.notifier).initCamera();
+        // 同步清晰度档位对应的原生分辨率（initCamera 默认 1080p，需根据当前档位切换）
+        final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
+        const sharpenLevels = [0.0, 0.5, 1.0];
+        ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevels[sharpenLevel]);
         _loadLatestThumb();
       }
     });
@@ -274,6 +278,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // Flutter 的 Texture widget 会冻结在最后一帧。必须重新 initCamera 才能恢复实时预览。
     if (!mounted) return;
     await ref.read(cameraServiceProvider.notifier).initCamera();
+    // 同步清晰度档位对应的原生分辨率
+    final sharpenLevelBack = ref.read(cameraAppProvider).sharpenLevel;
+    const sharpenLevelsBack = [0.0, 0.5, 1.0];
+    ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevelsBack[sharpenLevelBack]);
     // 5. 淡出过渡动画
     _transitionTimer = Timer(const Duration(milliseconds: 500), () {
       if (mounted) setState(() => _showTransition = false);
