@@ -2956,6 +2956,7 @@ class _FlashBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isOff = mode == 'off';
+    final isAuto = mode == 'auto';
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
@@ -2979,6 +2980,19 @@ class _FlashBtn extends StatelessWidget {
                   CustomPaint(
                     size: const Size(22, 22),
                     painter: _StrikethroughPainter(),
+                  ),
+                if (isAuto)
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: _kBlue,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text('A', style: TextStyle(color: _kWhite, fontSize: 8, fontWeight: FontWeight.w700)),
+                    ),
                   ),
               ],
             ),
