@@ -1,322 +1,322 @@
 {
-    "id": "u300",
-    "name": "U300",
-    "category": "film",
-    "mode": "photo",
-    "supportsPhoto": true,
-    "supportsVideo": false,
-    "focalLengthLabel": "32mm",
-    "sensor": {
-        "type": "film",
-        "dynamicRange": 9,
-        "baseNoise": 0.22,
-        "colorDepth": 8
-    },
-    "defaultLook": {
-        "baseLut": "assets/lut/cameras/u300.cube",
-        "distortion": 0.005,
-        "chromaticAberration": 0.04,
+  "id": "u300",
+  "name": "U300",
+  "category": "film",
+  "mode": "photo",
+  "supportsPhoto": true,
+  "supportsVideo": false,
+  "focalLengthLabel": "32mm",
+  "sensor": {
+    "type": "film",
+    "dynamicRange": 9,
+    "baseNoise": 0.22,
+    "colorDepth": 8
+  },
+  "defaultLook": {
+    "baseLut": "assets/lut/cameras/u300.cube",
+    "distortion": 0.005,
+    "chromaticAberration": 0.04,
+    "flare": 0.0,
+    "temperature": 4,
+    "tint": -4.0,
+    "contrast": 0.92,
+    "highlights": -10.0,
+    "shadows": 6.0,
+    "whites": -4.0,
+    "blacks": 8.0,
+    "clarity": -6.0,
+    "saturation": 0.96,
+    "vibrance": 6.0,
+    "grain": 0.25,
+    "bloom": 0.06,
+    "vignette": 0.08,
+    "colorBiasR": 0.01,
+    "colorBiasG": 0.04,
+    "colorBiasB": -0.01
+  },
+  "modules": {
+    "filters": [
+      {
+        "id": "disposable_slow",
+        "name": "Disposable Slow",
+        "nameEn": "Disposable Slow",
+        "lut": null,
+        "contrast": 1.05,
+        "saturation": 0.92,
+        "grain": "heavy",
+        "thumbnail": null,
+        "filmRollType": "advance",
+        "filmRollStyle": "disposable",
+        "advanceDuration": 900,
+        "slideDistance": 1.1,
+        "motionBlur": 0.12,
+        "sound": "disposable_wind"
+      },
+      {
+        "id": "disposable_quick",
+        "name": "Disposable Quick",
+        "nameEn": "Disposable Quick",
+        "lut": null,
+        "contrast": 1.03,
+        "saturation": 0.94,
+        "grain": "medium",
+        "thumbnail": null,
+        "filmRollType": "advance",
+        "filmRollStyle": "disposable_quick",
+        "advanceDuration": 720,
+        "slideDistance": 1.05,
+        "motionBlur": 0.1,
+        "sound": "disposable_click_wind"
+      }
+    ],
+    "lenses": [
+      {
+        "id": "std",
+        "name": "标准",
+        "nameEn": "Standard",
+        "zoomFactor": 1.0,
+        "distortion": 0.0,
+        "vignette": 0.02,
+        "chromaticAberration": 0.0,
+        "edgeBlur": 0.0,
+        "exposure": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "highlightCompression": 0.0,
+        "bloom": 0.0,
         "flare": 0.0,
-        "temperature": 4,
-        "tint": -4.0,
-        "contrast": 0.92,
-        "highlights": -10.0,
-        "shadows": 6.0,
-        "whites": -4.0,
-        "blacks": 8.0,
-        "clarity": -6.0,
-        "saturation": 0.96,
-        "vibrance": 6.0,
-        "grain": 0.25,
-        "bloom": 0.06,
+        "softFocus": 0.0,
+        "refraction": 0.0
+      },
+      {
+        "id": "wide",
+        "name": "广角",
+        "nameEn": "Wide",
+        "zoomFactor": 0.8,
+        "distortion": 0.06,
         "vignette": 0.08,
-        "colorBiasR": 0.01,
-        "colorBiasG": 0.04,
-        "colorBiasB": -0.01
-    },
-    "modules": {
-        "filters": [
-            {
-                "id": "disposable_slow",
-                "name": "Disposable Slow",
-                "nameEn": "Disposable Slow",
-                "lut": null,
-                "contrast": 1.05,
-                "saturation": 0.92,
-                "grain": "heavy",
-                "thumbnail": null,
-                "filmRollType": "advance",
-                "filmRollStyle": "disposable",
-                "advanceDuration": 900,
-                "slideDistance": 1.1,
-                "motionBlur": 0.12,
-                "sound": "disposable_wind"
-            },
-            {
-                "id": "disposable_quick",
-                "name": "Disposable Quick",
-                "nameEn": "Disposable Quick",
-                "lut": null,
-                "contrast": 1.03,
-                "saturation": 0.94,
-                "grain": "medium",
-                "thumbnail": null,
-                "filmRollType": "advance",
-                "filmRollStyle": "disposable_quick",
-                "advanceDuration": 720,
-                "slideDistance": 1.05,
-                "motionBlur": 0.1,
-                "sound": "disposable_click_wind"
-            }
-        ],
-        "lenses": [
-            {
-                "id": "std",
-                "name": "标准",
-                "nameEn": "Standard",
-                "zoomFactor": 1.0,
-                "distortion": 0.0,
-                "vignette": 0.02,
-                "chromaticAberration": 0.0,
-                "edgeBlur": 0.0,
-                "exposure": 0.0,
-                "contrast": 0.0,
-                "saturation": 0.0,
-                "highlightCompression": 0.0,
-                "bloom": 0.0,
-                "flare": 0.0,
-                "softFocus": 0.0,
-                "refraction": 0.0
-            },
-            {
-                "id": "wide",
-                "name": "广角",
-                "nameEn": "Wide",
-                "zoomFactor": 0.8,
-                "distortion": 0.06,
-                "vignette": 0.08,
-                "chromaticAberration": 0.01,
-                "edgeBlur": 0.0,
-                "exposure": 0.0,
-                "contrast": 0.0,
-                "saturation": 0.0,
-                "highlightCompression": 0.0,
-                "bloom": 0.0,
-                "flare": 0.0,
-                "softFocus": 0.0,
-                "refraction": 0.0
-            },
-            {
-                "id": "vintage",
-                "name": "复古",
-                "nameEn": "Vintage",
-                "zoomFactor": 1.0,
-                "distortion": 0.02,
-                "vignette": 0.12,
-                "chromaticAberration": 0.03,
-                "edgeBlur": 0.04,
-                "exposure": -0.02,
-                "contrast": -0.04,
-                "saturation": -0.02,
-                "highlightCompression": 0.0,
-                "bloom": 0.0,
-                "flare": 0.0,
-                "softFocus": 0.0,
-                "refraction": 0.0
-            }
-        ],
-        "ratios": [
-            {
-                "id": "ratio_2_3",
-                "label": "2:3",
-                "width": 2,
-                "height": 3,
-                "supportsFrame": true
-            }
-        ],
-        "frames": [
-            {
-                "id": "film_classic_black",
-                "name": "经典黑框",
-                "nameEn": "Classic Black",
-                "asset": "assets/frames/film_classic_black.png",
-                "backgroundColor": "#000000",
-                "cornerRadius": 0,
-                "innerShadow": false,
-                "inset": {
-                    "top": 80,
-                    "bottom": 80,
-                    "left": 90,
-                    "right": 90
-                },
-                "thumbnail": "assets/thumbnails/frames/film_classic_black.jpg",
-                "outerPadding": 0,
-                "outerBackgroundColor": "#000000"
-            },
-            {
-                "id": "film_warm_amber",
-                "name": "暖棕胶片",
-                "nameEn": "Warm Amber",
-                "asset": "assets/frames/film_warm_amber.png",
-                "backgroundColor": "#2A1C0C",
-                "cornerRadius": 0,
-                "innerShadow": false,
-                "inset": {
-                    "top": 90,
-                    "bottom": 90,
-                    "left": 80,
-                    "right": 80
-                },
-                "thumbnail": "assets/thumbnails/frames/film_warm_amber.jpg",
-                "outerPadding": 0,
-                "outerBackgroundColor": "#2A1C0C"
-            },
-            {
-                "id": "film_white_matte",
-                "name": "白色哑光",
-                "nameEn": "White Matte",
-                "asset": "assets/frames/film_white_matte.png",
-                "backgroundColor": "#F5F2EB",
-                "cornerRadius": 0,
-                "innerShadow": false,
-                "inset": {
-                    "top": 70,
-                    "bottom": 70,
-                    "left": 60,
-                    "right": 60
-                },
-                "thumbnail": "assets/thumbnails/frames/film_white_matte.jpg",
-                "outerPadding": 0,
-                "outerBackgroundColor": "#F5F2EB"
-            },
-            {
-                "id": "film_dark_grain",
-                "name": "深色颗粒",
-                "nameEn": "Dark Grain",
-                "asset": "assets/frames/film_dark_grain.png",
-                "backgroundColor": "#12100E",
-                "cornerRadius": 0,
-                "innerShadow": false,
-                "inset": {
-                    "top": 75,
-                    "bottom": 75,
-                    "left": 100,
-                    "right": 100
-                },
-                "thumbnail": "assets/thumbnails/frames/film_dark_grain.jpg",
-                "outerPadding": 0,
-                "outerBackgroundColor": "#12100E"
-            }
-        ],
-        "watermarks": {
-            "presets": [
-                {
-                    "id": "date_orange",
-                    "name": "橙色日期",
-                    "color": "#FF8A3D",
-                    "position": "bottom_right",
-                    "fontSize": 18,
-                    "fontFamily": "DigitalMono"
-                },
-                {
-                    "id": "date_white",
-                    "name": "白色日期",
-                    "color": "#FFFFFF",
-                    "position": "bottom_right",
-                    "fontSize": 18,
-                    "fontFamily": "DigitalMono"
-                },
-                {
-                    "id": "none",
-                    "name": "无水印"
-                }
-            ],
-            "editor": {
-                "allowColorChange": true,
-                "allowPositionChange": true,
-                "allowSizeChange": true,
-                "allowOrientationChange": true
-            }
+        "chromaticAberration": 0.01,
+        "edgeBlur": 0.0,
+        "exposure": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "highlightCompression": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0
+      },
+      {
+        "id": "vintage",
+        "name": "复古",
+        "nameEn": "Vintage",
+        "zoomFactor": 1.0,
+        "distortion": 0.02,
+        "vignette": 0.12,
+        "chromaticAberration": 0.03,
+        "edgeBlur": 0.04,
+        "exposure": -0.02,
+        "contrast": -0.04,
+        "saturation": -0.02,
+        "highlightCompression": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0
+      }
+    ],
+    "ratios": [
+      {
+        "id": "ratio_2_3",
+        "label": "2:3",
+        "width": 2,
+        "height": 3,
+        "supportsFrame": true
+      }
+    ],
+    "frames": [
+      {
+        "id": "film_classic_black",
+        "name": "经典黑框",
+        "nameEn": "Classic Black",
+        "asset": "assets/frames/film_classic_black.png",
+        "backgroundColor": "#000000",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 80,
+          "bottom": 80,
+          "left": 90,
+          "right": 90
         },
-        "extras": []
+        "thumbnail": "assets/thumbnails/frames/film_classic_black.jpg",
+        "outerPadding": 0,
+        "outerBackgroundColor": "#000000"
+      },
+      {
+        "id": "film_warm_amber",
+        "name": "暖棕胶片",
+        "nameEn": "Warm Amber",
+        "asset": "assets/frames/film_warm_amber.png",
+        "backgroundColor": "#2A1C0C",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 90,
+          "bottom": 90,
+          "left": 80,
+          "right": 80
+        },
+        "thumbnail": "assets/thumbnails/frames/film_warm_amber.jpg",
+        "outerPadding": 0,
+        "outerBackgroundColor": "#2A1C0C"
+      },
+      {
+        "id": "film_white_matte",
+        "name": "白色哑光",
+        "nameEn": "White Matte",
+        "asset": "assets/frames/film_white_matte.png",
+        "backgroundColor": "#F5F2EB",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 70,
+          "bottom": 70,
+          "left": 60,
+          "right": 60
+        },
+        "thumbnail": "assets/thumbnails/frames/film_white_matte.jpg",
+        "outerPadding": 0,
+        "outerBackgroundColor": "#F5F2EB"
+      },
+      {
+        "id": "film_dark_grain",
+        "name": "深色颗粒",
+        "nameEn": "Dark Grain",
+        "asset": "assets/frames/film_dark_grain.png",
+        "backgroundColor": "#12100E",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 75,
+          "bottom": 75,
+          "left": 100,
+          "right": 100
+        },
+        "thumbnail": "assets/thumbnails/frames/film_dark_grain.jpg",
+        "outerPadding": 0,
+        "outerBackgroundColor": "#12100E"
+      }
+    ],
+    "watermarks": {
+      "presets": [
+        {
+          "id": "date_orange",
+          "name": "橙色日期",
+          "color": "#FF8A3D",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "date_white",
+          "name": "白色日期",
+          "color": "#FFFFFF",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "none",
+          "name": "无水印"
+        }
+      ],
+      "editor": {
+        "allowColorChange": true,
+        "allowPositionChange": true,
+        "allowSizeChange": true,
+        "allowOrientationChange": true
+      }
     },
-    "defaultSelection": {
-        "filterId": "disposable_slow",
-        "lensId": "wide",
-        "ratioId": "ratio_2_3",
-        "frameId": "film_classic_black",
-        "watermarkPresetId": "date_orange",
-        "extraId": null
-    },
-    "uiCapabilities": {
-        "enableFilter": true,
-        "enableLens": true,
-        "enableRatio": true,
-        "enableFrame": true,
-        "enableWatermark": true,
-        "enableExtra": false,
-        "enableFilmRoll": true
-    },
-    "previewCapabilities": {
-        "allowSmallViewport": true,
-        "allowGridOverlay": true,
-        "allowZoom": true,
-        "allowImportImage": true,
-        "allowTimer": true,
-        "allowFlash": true
-    },
-    "previewPolicy": {
-        "enableLut": true,
-        "enableTemperature": true,
-        "enableContrast": true,
-        "enableSaturation": true,
-        "enableVignette": true,
-        "enableLightLensEffect": true,
-        "enableGrain": true,
-        "enableBloom": false,
-        "enableChromaticAberration": true,
-        "enableFrameComposite": false,
-        "enableWatermarkComposite": true
-    },
-    "exportPolicy": {
-        "jpegQuality": 0.9,
-        "applyRatioCrop": true,
-        "applyFrameOnExport": true,
-        "applyWatermarkOnExport": true,
-        "preserveMetadata": true
-    },
-    "videoConfig": {
-        "enabled": false,
-        "fpsOptions": [
-            24
-        ],
-        "resolutionOptions": [
-            "HD"
-        ],
-        "defaultFps": 24,
-        "defaultResolution": "HD",
-        "supportsAudio": false,
-        "videoBitrate": 8000000
-    },
-    "assets": {
-        "thumbnail": "assets/thumbnails/cameras/u300.jpg",
-        "icon": "assets/thumbnails/cameras/u300_icon.png"
-    },
-    "meta": {
-        "version": "final",
-        "premium": false,
-        "sortOrder": 8,
-        "tags": [
-            "film",
-            "disposable",
-            "grain",
-            "travel",
-            "kodak",
-            "ultramax"
-        ]
-    },
-    "filmRollBehavior": {
-        "type": "advance",
-        "style": "disposable"
-    }
+    "extras": []
+  },
+  "defaultSelection": {
+    "filterId": "disposable_slow",
+    "lensId": "wide",
+    "ratioId": "ratio_2_3",
+    "frameId": "film_classic_black",
+    "watermarkPresetId": "none",
+    "extraId": null
+  },
+  "uiCapabilities": {
+    "enableFilter": true,
+    "enableLens": true,
+    "enableRatio": true,
+    "enableFrame": true,
+    "enableWatermark": true,
+    "enableExtra": false,
+    "enableFilmRoll": true
+  },
+  "previewCapabilities": {
+    "allowSmallViewport": true,
+    "allowGridOverlay": true,
+    "allowZoom": true,
+    "allowImportImage": true,
+    "allowTimer": true,
+    "allowFlash": true
+  },
+  "previewPolicy": {
+    "enableLut": true,
+    "enableTemperature": true,
+    "enableContrast": true,
+    "enableSaturation": true,
+    "enableVignette": true,
+    "enableLightLensEffect": true,
+    "enableGrain": true,
+    "enableBloom": false,
+    "enableChromaticAberration": true,
+    "enableFrameComposite": false,
+    "enableWatermarkComposite": true
+  },
+  "exportPolicy": {
+    "jpegQuality": 0.9,
+    "applyRatioCrop": true,
+    "applyFrameOnExport": true,
+    "applyWatermarkOnExport": true,
+    "preserveMetadata": true
+  },
+  "videoConfig": {
+    "enabled": false,
+    "fpsOptions": [
+      24
+    ],
+    "resolutionOptions": [
+      "HD"
+    ],
+    "defaultFps": 24,
+    "defaultResolution": "HD",
+    "supportsAudio": false,
+    "videoBitrate": 8000000
+  },
+  "assets": {
+    "thumbnail": "assets/thumbnails/cameras/u300.jpg",
+    "icon": "assets/thumbnails/cameras/u300_icon.png"
+  },
+  "meta": {
+    "version": "final",
+    "premium": false,
+    "sortOrder": 8,
+    "tags": [
+      "film",
+      "disposable",
+      "grain",
+      "travel",
+      "kodak",
+      "ultramax"
+    ]
+  },
+  "filmRollBehavior": {
+    "type": "advance",
+    "style": "disposable"
+  }
 }

@@ -188,7 +188,7 @@
     "lensId": "std",
     "ratioId": "ratio_2_3",
     "frameId": null,
-    "watermarkPresetId": "date_white",
+    "watermarkPresetId": "none",
     "extraId": null
   },
   "uiCapabilities": {

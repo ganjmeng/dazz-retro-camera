@@ -399,7 +399,7 @@
     "lensId": "std",
     "ratioId": "ratio_3_4",
     "frameId": "instant_default",
-    "watermarkPresetId": "date_white",
+    "watermarkPresetId": "none",
     "extraId": null
   },
   "uiCapabilities": {

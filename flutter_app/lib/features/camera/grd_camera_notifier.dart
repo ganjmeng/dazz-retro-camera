@@ -10,6 +10,7 @@ import '../../services/camera_service.dart';
 import 'dart:io';
 import 'preview_renderer.dart';
 import 'capture_pipeline.dart';
+import 'camera_notifier.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GrdCameraState
@@ -297,8 +298,12 @@ class GrdCameraNotifier extends StateNotifier<GrdCameraState> {
               imagePath: path,
               selectedRatioId: state.activeRatioId ?? '',
               selectedFrameId: state.activeFrameId ?? '',
-              selectedWatermarkId: state.activeWatermarkId ?? '',
-              watermarkStyleOverride: state.watermarkStyle,
+              selectedWatermarkId: _ref.read(cameraAppProvider).activeWatermarkId ?? '',
+              watermarkColorOverride: _ref.read(cameraAppProvider).watermarkColor,
+              watermarkPositionOverride: _ref.read(cameraAppProvider).watermarkPosition,
+              watermarkSizeOverride: _ref.read(cameraAppProvider).watermarkSize,
+              watermarkDirectionOverride: _ref.read(cameraAppProvider).watermarkDirection,
+              watermarkStyleOverride: _ref.read(cameraAppProvider).watermarkStyle,
             );
             if (result != null) {
               await File(path).writeAsBytes(result.bytes);

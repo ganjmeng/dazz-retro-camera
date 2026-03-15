@@ -399,7 +399,7 @@
     "lensId": "vintage",
     "ratioId": "ratio_3_4",
     "frameId": "instant_default",
-    "watermarkPresetId": "date_pink",
+    "watermarkPresetId": "none",
     "extraId": null
   },
   "uiCapabilities": {
