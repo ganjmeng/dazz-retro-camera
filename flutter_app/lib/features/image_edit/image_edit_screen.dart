@@ -1195,7 +1195,7 @@ class _WatermarkPreviewOverlay extends StatelessWidget {
   final WatermarkPreset watermark;
   final String? colorOverride;
   final String? positionOverride;
-  final double? sizeOverride;
+  final String? sizeOverride; // 'small'|'medium'|'large'
   final String? directionOverride;
   final String? styleId;
   const _WatermarkPreviewOverlay({
