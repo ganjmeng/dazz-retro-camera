@@ -427,7 +427,7 @@ class CapturePipeline {
     var m = _identity();
 
     // 1. 曝光
-    final expMul = math.pow(2.0, params.exposureOffset).toDouble();
+    final expMul = math.pow(2.0, params.exposureOffset + params.effectiveLensExposure).toDouble();
     m = _multiply(m, _exposureMatrix(expMul));
     // 2. 色温
     if (params.policy.enableTemperature) {

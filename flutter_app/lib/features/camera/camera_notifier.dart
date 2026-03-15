@@ -317,6 +317,15 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         wbMode: wbMode,
         clearPanel: true,
       );
+      // 关键修复：加载相机后立即将默认镜头参数同步到原生 GPU shader
+      // 不调用此就会导致切换相机后默认镜头效果不生效，必须手动点击一次才触发
+      final defaultLens = camera.lensById(defaults.lensId);
+      _ref.read(cameraServiceProvider.notifier).updateLensParams(
+        distortion: defaultLens?.distortion ?? 0.0,
+        vignette: defaultLens?.vignette ?? 0.0,
+        zoomFactor: defaultLens?.zoomFactor ?? 1.0,
+        fisheyeMode: defaultLens?.fisheyeMode ?? false,
+      );
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'Failed to load camera: $e');
     }

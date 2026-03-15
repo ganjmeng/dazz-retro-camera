@@ -75,14 +75,19 @@ class PreviewRenderParams {
   double get effectiveContrast {
     final base = defaultLook.contrast;
     final filter = activeFilter?.contrast ?? 1.0;
-    return (base * filter).clamp(0.5, 2.0);
+    final lens = activeLens?.contrast ?? 0.0; // lens.contrast is additive offset
+    return (base * filter + lens).clamp(0.5, 2.0);
   }
 
   double get effectiveSaturation {
     final base = defaultLook.saturation;
     final filter = activeFilter?.saturation ?? 1.0;
-    return (base * filter).clamp(0.0, 2.0);
+    final lens = activeLens?.saturation ?? 0.0; // lens.saturation is additive offset
+    return (base * filter + lens).clamp(0.0, 2.0);
   }
+
+  /// 镜头曝光偏移（叠加到 exposureOffset 上）
+  double get effectiveLensExposure => activeLens?.exposure ?? 0.0;
 
   // Temperature: combine defaultLook + user offset
   // defaultLook.temperature is in Kelvin offset (-100 = cool, +100 = warm)
@@ -216,7 +221,7 @@ class _ColorCorrectedTexture extends StatelessWidget {
     var m = _identity();
 
     // 1. Exposure (brightness multiplier)
-    final expMul = math.pow(2.0, params.exposureOffset).toDouble();
+    final expMul = math.pow(2.0, params.exposureOffset + params.effectiveLensExposure).toDouble();
     m = _multiply(m, _exposureMatrix(expMul));
 
     // 2. Temperature shift (warm/cool)

@@ -57,23 +57,23 @@
         "fisheyeMode": true
       },
       {
-        "id": "ultra_fisheye",
-        "name": "超级鱼眼",
-        "nameEn": "Ultra Fisheye",
-        "zoomFactor": 0.35,
-        "distortion": 0.38,
+        "id": "fisheye_wide",
+        "name": "宽鱼眼",
+        "nameEn": "FisheyeW",
+        "zoomFactor": 0.42,
+        "distortion": 0.45,
         "vignette": 0.0,
-        "chromaticAberration": 0.03,
-        "edgeBlur": 0.03,
-        "exposure": -0.02,
-        "contrast": -0.02,
+        "chromaticAberration": 0.05,
+        "edgeBlur": 0.0,
+        "exposure": -0.03,
+        "contrast": -0.03,
         "saturation": 0.0,
         "highlightCompression": 0.0,
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
         "refraction": 0.0,
-        "fisheyeMode": true
+        "fisheyeMode": false
       },
       {
         "id": "nd",
