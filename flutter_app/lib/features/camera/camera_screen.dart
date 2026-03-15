@@ -940,8 +940,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           const SizedBox(height: kToolbarShutterGap),
           // 快门行
           _buildShutterRow(st),
-          // 底部安全区域
-          const SizedBox(height: 10),
+          // 底部安全区域已移入 _buildShutterRow
         ],
       ),
     );
@@ -1408,7 +1407,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     duration: const Duration(milliseconds: 500),
                   ),
                 ),
+                ),
               ),
+            ),
             ),
           ],
         ),
@@ -1419,21 +1420,27 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ── 快门行 ──────────────────────────────────────────────────────────────────
   // 截图布局：[缩略图 72×72] [快门 80×80] [相机图标 72×72]
   Widget _buildShutterRow(CameraAppState st) {
-    return SizedBox(
-      height: 88,
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: kMaxBottomContentW),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: 88,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kMaxBottomContentW),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
             // 左侧: 图库缩略图（单击→相册列表，长按→直接打开最新相片详情）
-            GestureDetector(
-              onTap: _openGallery,
-              onLongPress: _openLatestPhotoDetail,
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: GestureDetector(
+                  onTap: _openGallery,
+                  onLongPress: _openLatestPhotoDetail,
               child: AnimatedBuilder(
                 animation: _rotateAngle,
                 builder: (_, __) => Transform.rotate(
@@ -1453,7 +1460,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                         : const Icon(Icons.photo_outlined, color: Colors.grey, size: 24),
                   ),
                 ),
+                ),
               ),
+            ),
             ),
             // 中间: 快门按钮（外圈白色线圈，内圆白色实心）
             GestureDetector(
@@ -1479,8 +1488,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               ),
             ),
             // 右侧: 相机图标（虚线圆圈背景，点击打开相机配置）
-            GestureDetector(
-              onTap: () => showCameraConfigSheet(context),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: () => showCameraConfigSheet(context),
               child: SizedBox(
                 width: 97,
                 height: 97,
@@ -1512,8 +1524,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                   borderRadius: BorderRadius.circular(6),
                                   child: Image.asset(
                                     entry.iconPath!,
-                                    width: 78,
-                                    height: 78,
+                                    width: 69,
+                                    height: 69,
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, __, ___) =>
                                         const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 68),
