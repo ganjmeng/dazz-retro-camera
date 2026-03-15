@@ -14,6 +14,7 @@ import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.camera2.interop.CaptureRequestOptions
 import android.util.Size
 import androidx.camera.core.*
+import androidx.camera.core.resolutionselector.ResolutionFilter
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -565,14 +566,23 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             }
             else -> {
                 // 高清晰度：设备全像素（最高分辨率）
-                // CRITICAL: Must explicitly set HIGHEST_AVAILABLE_STRATEGY.
-                // Without a ResolutionSelector, CameraX 1.3+ defaults to a
-                // lower resolution (often 1920x1080) even in MAXIMIZE_QUALITY mode.
-                // HIGHEST_AVAILABLE_STRATEGY tells CameraX to enumerate all supported
-                // output sizes in descending order and pick the largest one.
+                // 使用 ResolutionFilter 优先选择 ≥4096 的分辨率，如果设备不支持则回落到最大可用
+                val highResFilter = ResolutionFilter { supportedSizes, _ ->
+                    // 按像素数降序排列，优先选择 ≥4096 的尺寸
+                    val sorted = supportedSizes.sortedByDescending { it.width * it.height }
+                    val preferred = sorted.filter { it.width >= 4096 || it.height >= 4096 }
+                    if (preferred.isNotEmpty()) preferred else sorted
+                }
+                // 通过 Camera2Interop 设置 JPEG 硬件编码质量为 95
+                val extender = Camera2Interop.Extender(builder)
+                extender.setCaptureRequestOption(
+                    CaptureRequest.JPEG_QUALITY,
+                    95.toByte()
+                )
                 builder.setResolutionSelector(
                     ResolutionSelector.Builder()
                         .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
+                        .setResolutionFilter(highResFilter)
                         .build()
                 ).setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
             }
