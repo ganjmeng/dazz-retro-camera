@@ -903,14 +903,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           const SizedBox(height: kBottomPanelTopPad),
           // 工具图标行（4个图标+文字标签）
           // 点击曝光胶囊或色温胶囊时隐藏工具栏
-          // 负 margin 使工具栏在面板内整体上移 20px，快门行不受影响
-          const SizedBox(height: -20),
+          // 用 Transform.translate 上移 20px，避免负高度 SizedBox 导致 RenderFlex overflow
           AnimatedOpacity(
             opacity: (_showExposureSlider || _showWbPanel || st.showZoomSlider) ? 0.0 : 1.0,
             duration: const Duration(milliseconds: 200),
             child: IgnorePointer(
               ignoring: _showExposureSlider || _showWbPanel || st.showZoomSlider,
-              child: _buildToolbar(st),
+              child: Transform.translate(
+                offset: const Offset(0, -20),
+                child: _buildToolbar(st),
+              ),
             ),
           ),
           const SizedBox(height: kToolbarShutterGap),
