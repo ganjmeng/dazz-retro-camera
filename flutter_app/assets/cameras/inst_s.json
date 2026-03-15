@@ -426,7 +426,7 @@
     "enableSaturation": true,
     "enableVignette": true,
     "enableLightLensEffect": true,
-    "enableGrain": false,
+    "enableGrain": true,
     "enableBloom": true,
     "enableChromaticAberration": false,
     "enableFrameComposite": false,
