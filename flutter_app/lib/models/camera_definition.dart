@@ -281,17 +281,41 @@ class LensDefinition {
   final String id;
   final String name;
   final String nameEn;
-  final double zoomFactor; // 光学倍率，例如 1.0=x1, 2.0=x2
-  final double vignette;
-  final double distortion;
-  final double chromaticAberration;
+  final double zoomFactor;           // 光学倍率，例如 1.0=x1, 2.0=x2
+  final double vignette;             // 暗角强度 0.0~1.0
+  final double distortion;           // 畸变：正=桶形，负=枕形
+  final double chromaticAberration;  // 色差强度 0.0~1.0
+  final double edgeBlur;             // 边缘模糊 0.0~1.0
+  final double exposure;             // 曝光补偿 EV（-2.0~+2.0）
+  final double contrast;             // 对比度调整 -1.0~+1.0
+  final double saturation;           // 饱和度调整 -1.0~+1.0
+  final double highlightCompression; // 高光压缩（ND专用）0.0~1.0
+  // 保留旧字段（向后兼容）
   final double bloom;
   final double flare;
   final double softFocus;
   final double refraction;
   final String? thumbnail;
 
-  const LensDefinition({required this.id, required this.name, required this.nameEn, this.zoomFactor = 1.0, required this.vignette, required this.distortion, required this.chromaticAberration, required this.bloom, required this.flare, required this.softFocus, required this.refraction, this.thumbnail});
+  const LensDefinition({
+    required this.id,
+    required this.name,
+    required this.nameEn,
+    this.zoomFactor = 1.0,
+    required this.vignette,
+    required this.distortion,
+    required this.chromaticAberration,
+    this.edgeBlur = 0.0,
+    this.exposure = 0.0,
+    this.contrast = 0.0,
+    this.saturation = 0.0,
+    this.highlightCompression = 0.0,
+    this.bloom = 0.0,
+    this.flare = 0.0,
+    this.softFocus = 0.0,
+    this.refraction = 0.0,
+    this.thumbnail,
+  });
 
   factory LensDefinition.fromJson(Map<String, dynamic> json) => LensDefinition(
     id: json['id'] as String,
@@ -301,6 +325,11 @@ class LensDefinition {
     vignette: (json['vignette'] as num?)?.toDouble() ?? 0.0,
     distortion: (json['distortion'] as num?)?.toDouble() ?? 0.0,
     chromaticAberration: (json['chromaticAberration'] as num?)?.toDouble() ?? 0.0,
+    edgeBlur: (json['edgeBlur'] as num?)?.toDouble() ?? 0.0,
+    exposure: (json['exposure'] as num?)?.toDouble() ?? 0.0,
+    contrast: (json['contrast'] as num?)?.toDouble() ?? 0.0,
+    saturation: (json['saturation'] as num?)?.toDouble() ?? 0.0,
+    highlightCompression: (json['highlightCompression'] as num?)?.toDouble() ?? 0.0,
     bloom: (json['bloom'] as num?)?.toDouble() ?? 0.0,
     flare: (json['flare'] as num?)?.toDouble() ?? 0.0,
     softFocus: (json['softFocus'] as num?)?.toDouble() ?? 0.0,
