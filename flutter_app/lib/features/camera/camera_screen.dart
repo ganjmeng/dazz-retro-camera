@@ -43,14 +43,14 @@ const _kBlue = Color(0xFF007AFF);
 const _kRed = Color(0xFFFF3B30);
 
 // ─── 布局常量（提升为顶层常量，供多个方法共享）─────────────────────────────────────────────────────────────────────────────
-const kToolbarH = 48.0;          // 工具栏高度
+const kToolbarH = 52.0;          // 工具栏高度
 const kShutterH = 88.0;           // 快门行高度
 const kBottomPanelTopPad = 0.0;   // 工具栏上方间距
-const kToolbarShutterGap = 6.0;   // 工具栏和快门行间距
+const kToolbarShutterGap = 10.0;  // 工具栏和快门行间距
 const kBottomPanelH = kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
 const kCapsuleH = 40.0;           // 胶囊高度（参考图约40px）
 const kCapsuleInsetBottom = 8.0;  // 胶囊距取景框底部的内边距（胶囊下移8px）
-const kSliderAreaH = 72.0;        // 胶囊下方滑条展开区域预留高度
+const kSliderAreaH = 44.0;        // 胶囊下方滑条展开区域预留高度（减小使底部面板整体上移）
 const kViewfinderHPadding = 8.0;  // 取景框左右边距（参考图约8px，贴边显示）
 const kTopBarH = 44.0;
 
@@ -1194,11 +1194,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ── 工具栏（5个图标）────────────────────────────────────────────────────────
   Widget _buildToolbar(CameraAppState st) {
     return SizedBox(
-      height: 48,
+      height: 52,
         child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             // 1. 导入图片
             _ToolbarBtn(
