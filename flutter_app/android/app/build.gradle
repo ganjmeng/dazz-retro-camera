@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.retrocam.app"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -21,7 +21,7 @@ android {
     defaultConfig {
         applicationId = "com.retrocam.app"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -44,7 +44,7 @@ flutter {
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
-    implementation "androidx.core:core-ktx:1.15.0"
+    implementation "androidx.core:core-ktx:1.17.0"
     // CameraX
     implementation "androidx.camera:camera-core:1.4.1"
     implementation "androidx.camera:camera-camera2:1.4.1"
