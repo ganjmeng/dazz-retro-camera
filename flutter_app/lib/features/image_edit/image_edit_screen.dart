@@ -1,42 +1,30 @@
 // ImageEditScreen — 导入图片编辑页
-// 功能：裁剪/旋转/水平调整 + 相机滤镜/水印/相框/比例实时预览 → 保存到成片
-//
 // 设计哲学：Darkroom Aesthetics — 纯黑背景，白色控件，复用相机页所有效果逻辑
-// 关键复用：
-//   - CameraAppState (cameraAppProvider) 管理相机/滤镜/水印/相框/比例选择
-//   - CapturePipeline.process() 处理最终输出
-//   - PreviewFilterWidget.buildColorMatrix() 颜色矩阵
-//   - showCameraConfigSheet() 底部相机配置菜单
-
+// 底部工具按钮显示/隐藏由当前相机 uiCap 决定，完全复用拍摄页逻辑
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
-
 import '../../models/camera_definition.dart';
 import '../camera/camera_notifier.dart';
 import '../camera/camera_config_sheet.dart';
 import '../camera/capture_pipeline.dart';
 import '../camera/preview_renderer.dart' as renderer_lib;
-import '../../models/watermark_styles.dart';
+
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 入口：从相机页导入图片按钮调用
+// 入口
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// 打开系统相册选择一张图片，然后跳转到编辑页
 Future<void> openImageImportFlow(BuildContext context) async {
   final picker = ImagePicker();
   final XFile? file = await picker.pickImage(source: ImageSource.gallery);
   if (file == null) return;
   if (!context.mounted) return;
-
   await Navigator.of(context).push(
     MaterialPageRoute(
       builder: (ctx) => ProviderScope(
@@ -51,37 +39,33 @@ Future<void> openImageImportFlow(BuildContext context) async {
 // ─────────────────────────────────────────────────────────────────────────────
 // ImageEditScreen
 // ─────────────────────────────────────────────────────────────────────────────
-
 class ImageEditScreen extends ConsumerStatefulWidget {
   final String imagePath;
-
   const ImageEditScreen({super.key, required this.imagePath});
-
   @override
   ConsumerState<ImageEditScreen> createState() => _ImageEditScreenState();
 }
 
 class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   // ── 编辑参数 ──────────────────────────────────────────────────────────────
-  int _rotation = 0;          // 旋转：0/90/180/270 度
-  double _skew = 0.0;         // 水平调整（倾斜）：-0.3 ~ 0.3 rad
-  bool _flipH = false;        // 水平翻转
-  bool _isCropMode = false;   // 是否处于裁剪模式
-
-  // 裁剪区域（归一化 0.0~1.0）
+  double _fineRotation = 0.0;  // 精细旋转：-45 ~ 45 度（刻度尺控制）
+  int _coarseRotation = 0;     // 粗旋转：0/90/180/270（旋转按钮控制）
+  bool _flipH = false;
+  bool _isCropMode = false;
   Rect _cropRect = const Rect.fromLTWH(0, 0, 1, 1);
 
-  // ── 工具栏 Tab ────────────────────────────────────────────────────────────
-  _EditTab _activeTab = _EditTab.adjust;
+  // ── 面板状态 ──────────────────────────────────────────────────────────────
+  String? _activePanel; // 'filter' | 'frame' | 'watermark' | null
 
-  // ── 图片加载 ──────────────────────────────────────────────────────────────
+  // ── 加载/保存 ─────────────────────────────────────────────────────────────
   bool _isLoading = true;
   bool _isSaving = false;
+
+  double get _totalRotation => _coarseRotation.toDouble() + _fineRotation;
 
   @override
   void initState() {
     super.initState();
-    // 预加载图片以确认可读
     _preloadImage();
   }
 
@@ -94,17 +78,18 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     }
   }
 
-  // ── 旋转 ──────────────────────────────────────────────────────────────────
-  void _rotate90() => setState(() => _rotation = (_rotation + 90) % 360);
-
-  // ── 翻转 ──────────────────────────────────────────────────────────────────
+  void _rotate90() => setState(() => _coarseRotation = (_coarseRotation + 90) % 360);
   void _flipHorizontal() => setState(() => _flipH = !_flipH);
+  void _resetRotation() => setState(() => _fineRotation = 0.0);
+
+  void _togglePanel(String panel) {
+    setState(() => _activePanel = _activePanel == panel ? null : panel);
+  }
 
   // ── 保存 ──────────────────────────────────────────────────────────────────
   Future<void> _save() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
-
     try {
       final st = ref.read(cameraAppProvider);
       final camera = st.camera;
@@ -113,20 +98,14 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         setState(() => _isSaving = false);
         return;
       }
-
-      // 1. 将旋转/翻转/裁剪应用到图片
       final transformedBytes = await _applyTransforms();
       if (transformedBytes == null) {
         _showSnack('图片处理失败');
         setState(() => _isSaving = false);
         return;
       }
-
-      // 写入临时文件
       final tmpPath = '${Directory.systemTemp.path}/dazz_edit_${DateTime.now().millisecondsSinceEpoch}.png';
       await File(tmpPath).writeAsBytes(transformedBytes);
-
-      // 2. 通过 CapturePipeline 应用滤镜/水印/相框/比例
       final pipeline = CapturePipeline(camera: camera);
       final processed = await pipeline.process(
         imagePath: tmpPath,
@@ -141,26 +120,19 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         watermarkStyleOverride: st.watermarkStyle,
         renderParams: st.renderParams,
       );
-
       final finalBytes = processed ?? transformedBytes;
       await File(tmpPath).writeAsBytes(finalBytes);
-
-      // 3. 保存到相册
       final perm = await PhotoManager.requestPermissionExtend();
       if (!perm.hasAccess) {
         _showSnack('需要相册权限才能保存');
         setState(() => _isSaving = false);
         return;
       }
-
       final saved = await PhotoManager.editor.saveImageWithPath(
         tmpPath,
         title: 'DAZZ_${DateTime.now().millisecondsSinceEpoch}',
       );
-
-      // 清理临时文件
       try { await File(tmpPath).delete(); } catch (_) {}
-
       if (saved != null && mounted) {
         HapticFeedback.mediumImpact();
         _showSnack('已保存到相册');
@@ -177,46 +149,34 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     }
   }
 
-  /// 将旋转/翻转/裁剪应用到图片，返回 PNG bytes
   Future<Uint8List?> _applyTransforms() async {
     try {
       final bytes = await File(widget.imagePath).readAsBytes();
       final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
       final src = frame.image;
-
       final srcW = src.width.toDouble();
       final srcH = src.height.toDouble();
-
-      // 裁剪区域（像素）
       final cropX = _cropRect.left * srcW;
       final cropY = _cropRect.top * srcH;
       final cropW = _cropRect.width * srcW;
       final cropH = _cropRect.height * srcH;
-
-      // 旋转后的输出尺寸
-      final isRotated90or270 = _rotation == 90 || _rotation == 270;
-      final outW = (isRotated90or270 ? cropH : cropW).toInt();
-      final outH = (isRotated90or270 ? cropW : cropH).toInt();
-
+      final totalRad = _totalRotation * math.pi / 180.0;
+      final absCos = math.cos(totalRad).abs();
+      final absSin = math.sin(totalRad).abs();
+      final outW = (cropW * absCos + cropH * absSin).toInt();
+      final outH = (cropW * absSin + cropH * absCos).toInt();
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-
       canvas.translate(outW / 2.0, outH / 2.0);
-      canvas.rotate(_rotation * math.pi / 180.0);
+      canvas.rotate(totalRad);
       if (_flipH) canvas.scale(-1.0, 1.0);
-      if (_skew.abs() > 0.001) canvas.skew(_skew, 0.0);
-
-      final drawW = isRotated90or270 ? cropH : cropW;
-      final drawH = isRotated90or270 ? cropW : cropH;
-
       canvas.drawImageRect(
         src,
         Rect.fromLTWH(cropX, cropY, cropW, cropH),
-        Rect.fromLTWH(-drawW / 2.0, -drawH / 2.0, drawW, drawH),
+        Rect.fromLTWH(-cropW / 2.0, -cropH / 2.0, cropW, cropH),
         Paint()..filterQuality = FilterQuality.high,
       );
-
       final picture = recorder.endRecording();
       final outputImage = await picture.toImage(outW, outH);
       final byteData = await outputImage.toByteData(format: ui.ImageByteFormat.png);
@@ -237,11 +197,11 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   // ─────────────────────────────────────────────────────────────────────────
   // BUILD
   // ─────────────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     final st = ref.watch(cameraAppProvider);
     final camera = st.camera;
+    final uiCap = camera?.uiCapabilities;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -250,17 +210,19 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
           children: [
             // ── 顶部导航栏 ──────────────────────────────────────────────────
             _buildTopBar(),
-
             // ── 图片预览区 ──────────────────────────────────────────────────
             Expanded(
               child: _buildPreviewArea(st, camera),
             ),
-
-            // ── 编辑工具栏 ──────────────────────────────────────────────────
-            _buildEditToolbar(),
-
-            // ── 底部相机配置入口 ────────────────────────────────────────────
-            _buildBottomConfigEntry(),
+            // ── 旋转刻度尺 ──────────────────────────────────────────────────
+            _buildRotationRuler(),
+            // ── 相机选择横向列表 ────────────────────────────────────────────
+            _buildCameraSelector(st),
+            // ── 底部工具按钮行 ──────────────────────────────────────────────
+            _buildBottomToolbar(st, camera, uiCap),
+            // ── 上滑子面板 ──────────────────────────────────────────────────
+            if (_activePanel != null && camera != null)
+              _buildSubPanel(st, camera),
           ],
         ),
       ),
@@ -271,14 +233,19 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   Widget _buildTopBar() {
     return Container(
       height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
           GestureDetector(
             onTap: () => Navigator.of(context).pop(),
-            child: const Text(
-              '取消',
-              style: TextStyle(color: Colors.white70, fontSize: 16),
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white12,
+              ),
+              child: const Icon(Icons.close, color: Colors.white, size: 20),
             ),
           ),
           const Spacer(),
@@ -293,21 +260,26 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
           const Spacer(),
           GestureDetector(
             onTap: _isSaving ? null : _save,
-            child: _isSaving
-                ? const SizedBox(
-                    width: 20, height: 20,
-                    child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: _isSaving ? Colors.white24 : const Color(0xFFFF8C00),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: _isSaving
+                  ? const SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Text(
+                      '保存',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  )
-                : const Text(
-                    '保存',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+            ),
           ),
         ],
       ),
@@ -321,7 +293,6 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
       );
     }
-
     return Center(
       child: AspectRatio(
         aspectRatio: st.previewAspectRatio,
@@ -330,12 +301,9 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
             return Stack(
               fit: StackFit.expand,
               children: [
-                // Layer 1: 图片（带变换 + 颜色滤镜）
                 ClipRect(
                   child: _buildTransformedImage(st, constraints),
                 ),
-
-                // Layer 2: 相框预览 overlay
                 if (st.activeFrame != null)
                   IgnorePointer(
                     child: _FramePreviewOverlay(
@@ -343,8 +311,6 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
                       ratioId: st.activeRatioId ?? '',
                     ),
                   ),
-
-                // Layer 3: 水印预览 overlay
                 if (st.activeWatermark != null && !st.activeWatermark!.isNone)
                   IgnorePointer(
                     child: _WatermarkPreviewOverlay(
@@ -356,8 +322,6 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
                       styleId: st.watermarkStyle,
                     ),
                   ),
-
-                // Layer 4: 裁剪框（裁剪模式下显示）
                 if (_isCropMode)
                   _CropOverlay(
                     cropRect: _cropRect,
@@ -374,13 +338,11 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   Widget _buildTransformedImage(CameraAppState st, BoxConstraints constraints) {
     final params = st.renderParams ?? const renderer_lib.PreviewRenderParams();
     final colorMatrix = renderer_lib.computeColorMatrix(params);
-
     return Transform(
       alignment: Alignment.center,
       transform: Matrix4.identity()
-        ..rotateZ(_rotation * math.pi / 180.0)
-        ..scale(_flipH ? -1.0 : 1.0, 1.0)
-        ..setEntry(0, 1, _skew),
+        ..rotateZ(_totalRotation * math.pi / 180.0)
+        ..scale(_flipH ? -1.0 : 1.0, 1.0),
       child: ColorFiltered(
         colorFilter: ColorFilter.matrix(colorMatrix),
         child: Image.file(
@@ -393,162 +355,405 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     );
   }
 
-  // ── 编辑工具栏 ────────────────────────────────────────────────────────────
-  Widget _buildEditToolbar() {
+  // ── 旋转刻度尺 ────────────────────────────────────────────────────────────
+  Widget _buildRotationRuler() {
     return Container(
       color: Colors.black,
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildEditTabRow(),
-          _buildEditTabContent(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEditTabRow() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: _EditTab.values.map((tab) {
-          final isActive = _activeTab == tab;
-          return GestureDetector(
-            onTap: () => setState(() => _activeTab = tab),
-            child: Padding(
-              padding: const EdgeInsets.only(right: 24),
-              child: Text(
-                tab.label,
-                style: TextStyle(
-                  color: isActive ? Colors.white : Colors.white38,
-                  fontSize: 14,
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+          // 角度数值 + 重置 + 旋转按钮
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                // 翻转按钮
+                _RulerIconBtn(
+                  icon: Icons.flip_outlined,
+                  onTap: _flipHorizontal,
                 ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildEditTabContent() {
-    switch (_activeTab) {
-      case _EditTab.adjust:
-        return _buildAdjustTools();
-      case _EditTab.crop:
-        return _buildCropTools();
-    }
-  }
-
-  // 调整工具：旋转/翻转/水平
-  Widget _buildAdjustTools() {
-    return SizedBox(
-      height: 72,
-      child: Row(
-        children: [
-          const SizedBox(width: 16),
-          _EditToolBtn(
-            icon: Icons.rotate_90_degrees_ccw_outlined,
-            label: '旋转',
-            onTap: _rotate90,
-          ),
-          const SizedBox(width: 24),
-          _EditToolBtn(
-            icon: Icons.flip_outlined,
-            label: '翻转',
-            onTap: _flipHorizontal,
-          ),
-          const SizedBox(width: 16),
-          // 水平调整滑条
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    '水平调整',
-                    style: TextStyle(color: Colors.white54, fontSize: 11),
-                  ),
-                  const SizedBox(height: 4),
-                  SliderTheme(
-                    data: SliderThemeData(
-                      trackHeight: 2,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                      activeTrackColor: Colors.white,
-                      inactiveTrackColor: Colors.white24,
-                      thumbColor: Colors.white,
-                      overlayColor: Colors.white24,
+                const SizedBox(width: 8),
+                // 旋转90度按钮
+                _RulerIconBtn(
+                  icon: Icons.rotate_90_degrees_ccw_outlined,
+                  onTap: _rotate90,
+                ),
+                const Spacer(),
+                // 角度数值
+                GestureDetector(
+                  onTap: _resetRotation,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _fineRotation.abs() > 0.1
+                          ? const Color(0xFFFF8C00).withOpacity(0.2)
+                          : Colors.white10,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Slider(
-                      value: _skew,
-                      min: -0.3,
-                      max: 0.3,
-                      onChanged: (v) => setState(() => _skew = v),
+                    child: Text(
+                      '${_fineRotation >= 0 ? '+' : ''}${_fineRotation.toStringAsFixed(1)}°',
+                      style: TextStyle(
+                        color: _fineRotation.abs() > 0.1
+                            ? const Color(0xFFFF8C00)
+                            : Colors.white54,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                   ),
-                ],
-              ),
+                ),
+                const Spacer(),
+                // 裁剪模式按钮
+                _RulerIconBtn(
+                  icon: _isCropMode ? Icons.check_circle_outline : Icons.crop_outlined,
+                  isActive: _isCropMode,
+                  onTap: () => setState(() => _isCropMode = !_isCropMode),
+                ),
+                const SizedBox(width: 8),
+                // 重置裁剪
+                _RulerIconBtn(
+                  icon: Icons.restart_alt_outlined,
+                  onTap: () => setState(() {
+                    _cropRect = const Rect.fromLTWH(0, 0, 1, 1);
+                    _isCropMode = false;
+                    _fineRotation = 0.0;
+                  }),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(height: 6),
+          // 刻度尺
+          SizedBox(
+            height: 40,
+            child: _RotationRuler(
+              value: _fineRotation,
+              onChanged: (v) => setState(() => _fineRotation = v),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  // 裁剪工具
-  Widget _buildCropTools() {
-    return SizedBox(
-      height: 72,
+  // ── 相机选择横向列表 ──────────────────────────────────────────────────────
+  Widget _buildCameraSelector(CameraAppState st) {
+    return GestureDetector(
+      onTap: () => showCameraConfigSheet(context),
+      child: Container(
+        height: 52,
+        color: const Color(0xFF111111),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            const Icon(Icons.camera_alt_outlined, color: Colors.white54, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              st.camera?.name ?? '选择相机',
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.keyboard_arrow_up, color: Colors.white38, size: 18),
+            const Spacer(),
+            // 当前滤镜/边框标签
+            if (st.activeFilterId != null)
+              _TagChip(label: st.activeFilterId!),
+            if (st.activeFrameId != null && st.activeFrameId != 'none')
+              _TagChip(label: '边框'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── 底部工具按钮行 ────────────────────────────────────────────────────────
+  Widget _buildBottomToolbar(CameraAppState st, CameraDefinition? camera, UiCapabilities? uiCap) {
+    if (camera == null) {
+      return const SizedBox(height: 72);
+    }
+    return Container(
+      height: 80,
+      color: Colors.black,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _EditToolBtn(
-            icon: _isCropMode ? Icons.check_circle_outline : Icons.crop_outlined,
-            label: _isCropMode ? '确认裁剪' : '裁剪',
+          // 水印开关（由uiCap.enableWatermark决定）
+          if (uiCap?.enableWatermark == true)
+            _ToolIconBtn(
+              icon: st.activeWatermark != null && !st.activeWatermark!.isNone
+                  ? Icons.access_time
+                  : Icons.access_time_outlined,
+              label: '水印',
+              isActive: st.activeWatermark != null && !st.activeWatermark!.isNone,
+              onTap: () => _togglePanel('watermark'),
+            ),
+          // 边框开关（由uiCap.enableFrame决定）
+          if (uiCap?.enableFrame == true)
+            _ToolIconBtn(
+              icon: st.activeFrameId != null && st.activeFrameId != 'none'
+                  ? Icons.crop_square
+                  : Icons.crop_square_outlined,
+              label: '边框',
+              isActive: st.activeFrameId != null && st.activeFrameId != 'none',
+              onTap: () => _togglePanel('frame'),
+            ),
+          // 滤镜（由uiCap.enableFilter决定）
+          if (uiCap?.enableFilter == true)
+            _ToolIconBtn(
+              icon: Icons.filter_vintage_outlined,
+              label: '滤镜',
+              isActive: _activePanel == 'filter',
+              onTap: () => _togglePanel('filter'),
+            ),
+          // 翻转（始终显示）
+          _ToolIconBtn(
+            icon: Icons.flip_outlined,
+            label: '翻转',
+            isActive: _flipH,
+            onTap: _flipHorizontal,
+          ),
+          // 裁剪（始终显示）
+          _ToolIconBtn(
+            icon: Icons.crop_outlined,
+            label: '裁剪',
             isActive: _isCropMode,
             onTap: () => setState(() => _isCropMode = !_isCropMode),
-          ),
-          _EditToolBtn(
-            icon: Icons.restart_alt_outlined,
-            label: '重置',
-            onTap: () => setState(() {
-              _cropRect = const Rect.fromLTWH(0, 0, 1, 1);
-              _isCropMode = false;
-            }),
           ),
         ],
       ),
     );
   }
 
-  // ── 底部相机配置入口 ──────────────────────────────────────────────────────
-  Widget _buildBottomConfigEntry() {
-    return Container(
-      color: Colors.black,
+  // ── 上滑子面板 ────────────────────────────────────────────────────────────
+  Widget _buildSubPanel(CameraAppState st, CameraDefinition camera) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      color: const Color(0xFF1A1A1A),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Divider(height: 1, color: Colors.white12),
-          GestureDetector(
-            onTap: () => showCameraConfigSheet(context),
-            child: Container(
-              height: 52,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: const Row(
-                children: [
-                  Icon(Icons.camera_alt_outlined, color: Colors.white54, size: 20),
-                  SizedBox(width: 10),
-                  Text(
-                    '相机 / 滤镜 / 水印 / 相框 / 比例',
-                    style: TextStyle(color: Colors.white54, fontSize: 14),
-                  ),
-                  Spacer(),
-                  Icon(Icons.keyboard_arrow_up, color: Colors.white38, size: 20),
-                ],
+          // 面板标题 + 关闭按钮
+          Row(
+            children: [
+              Text(
+                _activePanel == 'filter' ? '滤镜'
+                    : _activePanel == 'frame' ? '边框'
+                    : '水印',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => setState(() => _activePanel = null),
+                child: const Icon(Icons.keyboard_arrow_down, color: Colors.white54, size: 22),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // 面板内容
+          switch (_activePanel) {
+            'filter' => _FilterRow(
+                filters: camera.modules.filters,
+                activeId: st.activeFilterId,
+                onSelect: (id) => ref.read(cameraAppProvider.notifier).selectFilter(id),
+              ),
+            'frame' => _FrameRow(
+                frames: camera.modules.frames,
+                activeId: st.activeFrameId,
+                onSelect: (id) => ref.read(cameraAppProvider.notifier).selectFrame(id),
+              ),
+            'watermark' => _WatermarkRow(
+                presets: camera.modules.watermarks.presets,
+                activeId: st.activeWatermarkId,
+                onSelect: (id) => ref.read(cameraAppProvider.notifier).selectWatermark(id),
+              ),
+            _ => const SizedBox.shrink(),
+          },
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 旋转刻度尺 Widget
+// ─────────────────────────────────────────────────────────────────────────────
+class _RotationRuler extends StatefulWidget {
+  final double value;       // -45 ~ 45
+  final ValueChanged<double> onChanged;
+  const _RotationRuler({required this.value, required this.onChanged});
+  @override
+  State<_RotationRuler> createState() => _RotationRulerState();
+}
+
+class _RotationRulerState extends State<_RotationRuler> {
+  double _dragStartX = 0;
+  double _dragStartValue = 0;
+  static const double _pixelsPerDegree = 6.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragStart: (d) {
+        _dragStartX = d.localPosition.dx;
+        _dragStartValue = widget.value;
+      },
+      onHorizontalDragUpdate: (d) {
+        final delta = (d.localPosition.dx - _dragStartX) / _pixelsPerDegree;
+        final newVal = (_dragStartValue - delta).clamp(-45.0, 45.0);
+        widget.onChanged(newVal);
+      },
+      child: CustomPaint(
+        painter: _RulerPainter(value: widget.value),
+        size: const Size(double.infinity, 40),
+      ),
+    );
+  }
+}
+
+class _RulerPainter extends CustomPainter {
+  final double value;
+  _RulerPainter({required this.value});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final centerX = size.width / 2;
+    final cy = size.height / 2;
+    const pixelsPerDegree = 6.0;
+
+    // 绘制刻度线
+    for (int deg = -45; deg <= 45; deg++) {
+      final x = centerX + (deg - value) * pixelsPerDegree;
+      if (x < 0 || x > size.width) continue;
+
+      final isMajor = deg % 5 == 0;
+      final isZero = deg == 0;
+      final tickH = isZero ? 20.0 : isMajor ? 14.0 : 8.0;
+      final color = isZero
+          ? const Color(0xFFFF8C00)
+          : isMajor
+              ? Colors.white54
+              : Colors.white24;
+
+      canvas.drawLine(
+        Offset(x, cy - tickH / 2),
+        Offset(x, cy + tickH / 2),
+        Paint()
+          ..color = color
+          ..strokeWidth = isZero ? 2.0 : 1.0
+          ..strokeCap = StrokeCap.round,
+      );
+
+      // 主刻度数字
+      if (isMajor && deg != 0) {
+        final tp = TextPainter(
+          text: TextSpan(
+            text: '${deg.abs()}',
+            style: TextStyle(
+              color: Colors.white24,
+              fontSize: 8,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, Offset(x - tp.width / 2, cy + tickH / 2 + 2));
+      }
+    }
+
+    // 中心指示器（三角形）
+    final path = Path()
+      ..moveTo(centerX - 5, 0)
+      ..lineTo(centerX + 5, 0)
+      ..lineTo(centerX, 7)
+      ..close();
+    canvas.drawPath(path, Paint()..color = const Color(0xFFFF8C00));
+  }
+
+  @override
+  bool shouldRepaint(_RulerPainter old) => old.value != value;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 小组件
+// ─────────────────────────────────────────────────────────────────────────────
+class _RulerIconBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool isActive;
+  const _RulerIconBtn({required this.icon, required this.onTap, this.isActive = false});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isActive ? const Color(0xFFFF8C00).withOpacity(0.2) : Colors.white10,
+        ),
+        child: Icon(
+          icon,
+          color: isActive ? const Color(0xFFFF8C00) : Colors.white54,
+          size: 18,
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolIconBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool isActive;
+  const _ToolIconBtn({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isActive = false,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isActive
+                  ? const Color(0xFFFF8C00).withOpacity(0.2)
+                  : Colors.white10,
+              border: isActive
+                  ? Border.all(color: const Color(0xFFFF8C00), width: 1.5)
+                  : null,
+            ),
+            child: Icon(
+              icon,
+              color: isActive ? const Color(0xFFFF8C00) : Colors.white70,
+              size: 22,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: isActive ? const Color(0xFFFF8C00) : Colors.white38,
+              fontSize: 11,
             ),
           ),
         ],
@@ -557,229 +762,294 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 相框预览 Overlay
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _FramePreviewOverlay extends StatelessWidget {
-  final FrameDefinition frame;
-  final String ratioId;
-
-  const _FramePreviewOverlay({required this.frame, required this.ratioId});
-
+class _TagChip extends StatelessWidget {
+  final String label;
+  const _TagChip({required this.label});
   @override
   Widget build(BuildContext context) {
-    final asset = frame.assetForRatio(ratioId);
-    if (asset == null || asset.isEmpty) return const SizedBox.shrink();
-    return Positioned.fill(
-      child: Image.asset(
-        asset,
-        fit: BoxFit.fill,
-        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+    return Container(
+      margin: const EdgeInsets.only(left: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFF8C00).withOpacity(0.2),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFFF8C00).withOpacity(0.5)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(color: Color(0xFFFF8C00), fontSize: 10),
       ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 水印预览 Overlay（与 camera_screen.dart 的实现一致）
+// 滤镜行（复用拍摄页逻辑）
 // ─────────────────────────────────────────────────────────────────────────────
-
-class _WatermarkPreviewOverlay extends StatelessWidget {
-  final WatermarkPreset watermark;
-  final String? colorOverride;
-  final String? positionOverride;
-  final String? sizeOverride;
-  final String? directionOverride;
-  final String? styleId; // 样式 ID，对应 kWatermarkStyles 中的 id
-
-  const _WatermarkPreviewOverlay({
-    required this.watermark,
-    this.colorOverride,
-    this.positionOverride,
-    this.sizeOverride,
-    this.directionOverride,
-    this.styleId,
-  });
-
+class _FilterRow extends StatelessWidget {
+  final List<FilterDefinition> filters;
+  final String? activeId;
+  final ValueChanged<String> onSelect;
+  const _FilterRow({required this.filters, this.activeId, required this.onSelect});
   @override
   Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: CustomPaint(
-        painter: _WatermarkPainter(
-          watermark: watermark,
-          colorOverride: colorOverride,
-          positionOverride: positionOverride,
-          sizeOverride: sizeOverride,
-          directionOverride: directionOverride,
-          styleId: styleId,
-        ),
+    return SizedBox(
+      height: 80,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: filters.length,
+        itemBuilder: (ctx, i) {
+          final f = filters[i];
+          final isActive = f.id == activeId;
+          return GestureDetector(
+            onTap: () => onSelect(f.id),
+            child: Container(
+              width: 64,
+              margin: const EdgeInsets.only(right: 10),
+              child: Column(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2A2A2A),
+                      borderRadius: BorderRadius.circular(10),
+                      border: isActive
+                          ? Border.all(color: const Color(0xFFFF8C00), width: 2)
+                          : Border.all(color: Colors.white12),
+                    ),
+                    child: Icon(
+                      Icons.filter_vintage_outlined,
+                      color: isActive ? const Color(0xFFFF8C00) : Colors.white38,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    f.nameEn,
+                    style: TextStyle(
+                      color: isActive ? const Color(0xFFFF8C00) : Colors.white38,
+                      fontSize: 10,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-class _WatermarkPainter extends CustomPainter {
-  final WatermarkPreset watermark;
-  final String? colorOverride;
-  final String? positionOverride;
-  final String? sizeOverride;
-  final String? directionOverride;
-  final String? styleId; // 样式 ID，对应 kWatermarkStyles 中的 id
-
-  _WatermarkPainter({
-    required this.watermark,
-    this.colorOverride,
-    this.positionOverride,
-    this.sizeOverride,
-    this.directionOverride,
-    this.styleId,
-  });
-
+// ─────────────────────────────────────────────────────────────────────────────
+// 边框行（横向滚动，复用拍摄页逻辑）
+// ─────────────────────────────────────────────────────────────────────────────
+class _FrameRow extends StatelessWidget {
+  final List<FrameDefinition> frames;
+  final String? activeId;
+  final ValueChanged<String> onSelect;
+  const _FrameRow({required this.frames, this.activeId, required this.onSelect});
   @override
-  void paint(Canvas canvas, Size size) {
-    final now = DateTime.now();
-    // 获取样式定义（默认 s1）
-    final styleDef = getWatermarkStyle(styleId);
-    // 根据样式生成文本
-    final text = styleDef.buildText(now);
-
-    Color textColor = const Color(0xFFFF8C00);
-    final colorSrc = colorOverride ?? watermark.color;
-    if (colorSrc != null && colorSrc.isNotEmpty) {
-      try {
-        final hex = colorSrc.replaceAll('#', '');
-        textColor = Color(int.parse('FF$hex', radix: 16));
-      } catch (_) {}
-    }
-
-    double baseFontSize;
-    switch (sizeOverride) {
-      case 'small':  baseFontSize = size.width * 0.028; break;
-      case 'large':  baseFontSize = size.width * 0.055; break;
-      default:       baseFontSize = size.width * 0.038; break;
-    }
-
-    // 样式定义的字体和字间距
-    final fontFamily = styleDef.fontFamily ?? watermark.fontFamily;
-    final letterSpacing = styleDef.letterSpacing;
-    final fontWeight = styleDef.fontWeight;
-
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: textColor,
-          fontSize: baseFontSize,
-          fontFamily: fontFamily,
-          fontWeight: fontWeight,
-          letterSpacing: letterSpacing,
-        ),
+  Widget build(BuildContext context) {
+    final allFrames = [
+      _FrameOpt(id: 'none', name: '无', color: Colors.transparent),
+      ...frames.map((f) {
+        Color c = const Color(0xFFF5F2EA);
+        try {
+          final hex = f.backgroundColor.replaceAll('#', '');
+          c = Color(int.parse('FF$hex', radix: 16));
+        } catch (_) {}
+        return _FrameOpt(id: f.id, name: f.nameEn, color: c);
+      }),
+    ];
+    return SizedBox(
+      height: 80,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: allFrames.length,
+        itemBuilder: (ctx, i) {
+          final opt = allFrames[i];
+          final isActive = opt.id == (activeId ?? 'none');
+          return GestureDetector(
+            onTap: () => onSelect(opt.id),
+            child: Container(
+              width: 64,
+              margin: const EdgeInsets.only(right: 10),
+              child: Column(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: opt.color == Colors.transparent
+                          ? const Color(0xFF2A2A2A)
+                          : opt.color,
+                      border: isActive
+                          ? Border.all(color: const Color(0xFFFF8C00), width: 2.5)
+                          : Border.all(color: Colors.white12),
+                    ),
+                    child: opt.color == Colors.transparent
+                        ? const Icon(Icons.block, color: Colors.white38, size: 20)
+                        : isActive
+                            ? const Icon(Icons.check, color: Color(0xFFFF8C00), size: 20)
+                            : null,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    opt.name,
+                    style: TextStyle(
+                      color: isActive ? const Color(0xFFFF8C00) : Colors.white38,
+                      fontSize: 10,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
-      textDirection: TextDirection.ltr,
     );
-    textPainter.layout();
-
-    final pos = positionOverride ?? watermark.position ?? 'bottom_right';
-    const margin = 16.0;
-    double dx, dy;
-    switch (pos) {
-      case 'bottom_left':   dx = margin; dy = size.height - textPainter.height - margin; break;
-      case 'top_right':     dx = size.width - textPainter.width - margin; dy = margin; break;
-      case 'top_left':      dx = margin; dy = margin; break;
-      case 'bottom_center': dx = (size.width - textPainter.width) / 2; dy = size.height - textPainter.height - margin; break;
-      case 'top_center':    dx = (size.width - textPainter.width) / 2; dy = margin; break;
-      default:              dx = size.width - textPainter.width - margin; dy = size.height - textPainter.height - margin; break;
-    }
-
-    final dir = directionOverride ?? 'horizontal';
-    if (dir == 'vertical') {
-      canvas.save();
-      canvas.translate(dx + textPainter.height / 2, dy + textPainter.width / 2);
-      canvas.rotate(-math.pi / 2);
-      textPainter.paint(canvas, Offset(-textPainter.width / 2, -textPainter.height / 2));
-      canvas.restore();
-    } else {
-      textPainter.paint(canvas, Offset(dx, dy));
-    }
   }
+}
 
-  @override
-  bool shouldRepaint(_WatermarkPainter old) =>
-      old.watermark != watermark ||
-      old.colorOverride != colorOverride ||
-      old.positionOverride != positionOverride ||
-      old.sizeOverride != sizeOverride ||
-      old.directionOverride != directionOverride ||
-      old.styleId != styleId;
+class _FrameOpt {
+  final String id;
+  final String name;
+  final Color color;
+  const _FrameOpt({required this.id, required this.name, required this.color});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 裁剪 Overlay
+// 水印行（复用拍摄页逻辑）
 // ─────────────────────────────────────────────────────────────────────────────
+class _WatermarkRow extends StatelessWidget {
+  final List<WatermarkPreset> presets;
+  final String? activeId;
+  final ValueChanged<String> onSelect;
+  const _WatermarkRow({required this.presets, this.activeId, required this.onSelect});
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 80,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: presets.length,
+        itemBuilder: (ctx, i) {
+          final wm = presets[i];
+          final isActive = wm.id == activeId;
+          Color dotColor = const Color(0xFFFF8C00);
+          if (wm.color != null && wm.color!.isNotEmpty) {
+            try {
+              final hex = wm.color!.replaceAll('#', '');
+              dotColor = Color(int.parse('FF$hex', radix: 16));
+            } catch (_) {}
+          }
+          return GestureDetector(
+            onTap: () => onSelect(wm.id),
+            child: Container(
+              width: 64,
+              margin: const EdgeInsets.only(right: 10),
+              child: Column(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2A2A2A),
+                      borderRadius: BorderRadius.circular(10),
+                      border: isActive
+                          ? Border.all(color: const Color(0xFFFF8C00), width: 2)
+                          : Border.all(color: Colors.white12),
+                    ),
+                    child: Center(
+                      child: wm.isNone
+                          ? const Icon(Icons.block, color: Colors.white38, size: 20)
+                          : Container(
+                              width: 18,
+                              height: 18,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: dotColor,
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    wm.name,
+                    style: TextStyle(
+                      color: isActive ? const Color(0xFFFF8C00) : Colors.white38,
+                      fontSize: 10,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 裁剪框 Overlay（保持不变）
+// ─────────────────────────────────────────────────────────────────────────────
 class _CropOverlay extends StatefulWidget {
   final Rect cropRect;
   final ValueChanged<Rect> onCropChanged;
-
   const _CropOverlay({required this.cropRect, required this.onCropChanged});
-
   @override
   State<_CropOverlay> createState() => _CropOverlayState();
 }
 
 class _CropOverlayState extends State<_CropOverlay> {
-  late Rect _rect;
   _CropHandle? _activeHandle;
   Offset? _dragStart;
   Rect? _rectAtDragStart;
 
-  @override
-  void initState() {
-    super.initState();
-    _rect = widget.cropRect;
-  }
-
-  @override
-  void didUpdateWidget(_CropOverlay old) {
-    super.didUpdateWidget(old);
-    if (old.cropRect != widget.cropRect) _rect = widget.cropRect;
-  }
+  static const double _hitSlop = 24.0;
+  static const double minSize = 0.1;
 
   _CropHandle? _hitTest(Offset pos, Size size) {
     final r = Rect.fromLTWH(
-      _rect.left * size.width,
-      _rect.top * size.height,
-      _rect.width * size.width,
-      _rect.height * size.height,
+      widget.cropRect.left * size.width,
+      widget.cropRect.top * size.height,
+      widget.cropRect.width * size.width,
+      widget.cropRect.height * size.height,
     );
-    const handleSize = 28.0;
-    final corners = {
-      _CropHandle.topLeft: r.topLeft,
-      _CropHandle.topRight: r.topRight,
-      _CropHandle.bottomLeft: r.bottomLeft,
-      _CropHandle.bottomRight: r.bottomRight,
-    };
-    for (final entry in corners.entries) {
-      if ((pos - entry.value).distance < handleSize) return entry.key;
-    }
+    if ((pos - r.topLeft).distance < _hitSlop) return _CropHandle.topLeft;
+    if ((pos - r.topRight).distance < _hitSlop) return _CropHandle.topRight;
+    if ((pos - r.bottomLeft).distance < _hitSlop) return _CropHandle.bottomLeft;
+    if ((pos - r.bottomRight).distance < _hitSlop) return _CropHandle.bottomRight;
     if (r.contains(pos)) return _CropHandle.move;
     return null;
   }
 
   void _onPanStart(DragStartDetails d, Size size) {
     _activeHandle = _hitTest(d.localPosition, size);
-    _dragStart = d.localPosition;
-    _rectAtDragStart = _rect;
+    if (_activeHandle != null) {
+      _dragStart = d.localPosition;
+      _rectAtDragStart = widget.cropRect;
+    }
   }
 
   void _onPanUpdate(DragUpdateDetails d, Size size) {
     if (_activeHandle == null || _dragStart == null || _rectAtDragStart == null) return;
-    final delta = d.localPosition - _dragStart!;
-    final dx = delta.dx / size.width;
-    final dy = delta.dy / size.height;
+    final dx = d.localPosition.dx / size.width - _dragStart!.dx / size.width;
+    final dy = d.localPosition.dy / size.height - _dragStart!.dy / size.height;
     final r = _rectAtDragStart!;
-    const minSize = 0.1;
     Rect newRect;
     switch (_activeHandle!) {
       case _CropHandle.topLeft:
@@ -817,7 +1087,7 @@ class _CropOverlayState extends State<_CropOverlay> {
         newRect = Rect.fromLTWH(newL, newT, r.width, r.height);
         break;
     }
-    setState(() => _rect = newRect);
+    setState(() => _rectAtDragStart = newRect);
     widget.onCropChanged(newRect);
   }
 
@@ -838,7 +1108,7 @@ class _CropOverlayState extends State<_CropOverlay> {
           onPanEnd: _onPanEnd,
           child: CustomPaint(
             size: size,
-            painter: _CropPainter(rect: _rect),
+            painter: _CropPainter(rect: widget.cropRect),
           ),
         );
       },
@@ -849,7 +1119,6 @@ class _CropOverlayState extends State<_CropOverlay> {
 class _CropPainter extends CustomPainter {
   final Rect rect;
   _CropPainter({required this.rect});
-
   @override
   void paint(Canvas canvas, Size size) {
     final r = Rect.fromLTWH(
@@ -858,16 +1127,12 @@ class _CropPainter extends CustomPainter {
       rect.width * size.width,
       rect.height * size.height,
     );
-
-    // 暗色遮罩（裁剪框外）
     final dimPaint = Paint()..color = Colors.black.withAlpha(130);
     final path = Path()
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
       ..addRect(r)
       ..fillType = PathFillType.evenOdd;
     canvas.drawPath(path, dimPaint);
-
-    // 裁剪框边线
     canvas.drawRect(
       r,
       Paint()
@@ -875,8 +1140,6 @@ class _CropPainter extends CustomPainter {
         ..strokeWidth = 1.5
         ..style = PaintingStyle.stroke,
     );
-
-    // 三等分网格线
     final gridPaint = Paint()
       ..color = Colors.white38
       ..strokeWidth = 0.5;
@@ -886,79 +1149,96 @@ class _CropPainter extends CustomPainter {
       canvas.drawLine(Offset(x, r.top), Offset(x, r.bottom), gridPaint);
       canvas.drawLine(Offset(r.left, y), Offset(r.right, y), gridPaint);
     }
-
-    // 四角把手
     final hp = Paint()
       ..color = Colors.white
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round;
     const hl = 16.0;
-    // 左上
     canvas.drawLine(r.topLeft, r.topLeft + const Offset(hl, 0), hp);
     canvas.drawLine(r.topLeft, r.topLeft + const Offset(0, hl), hp);
-    // 右上
     canvas.drawLine(r.topRight, r.topRight + const Offset(-hl, 0), hp);
     canvas.drawLine(r.topRight, r.topRight + const Offset(0, hl), hp);
-    // 左下
     canvas.drawLine(r.bottomLeft, r.bottomLeft + const Offset(hl, 0), hp);
     canvas.drawLine(r.bottomLeft, r.bottomLeft + const Offset(0, -hl), hp);
-    // 右下
     canvas.drawLine(r.bottomRight, r.bottomRight + const Offset(-hl, 0), hp);
     canvas.drawLine(r.bottomRight, r.bottomRight + const Offset(0, -hl), hp);
   }
-
   @override
   bool shouldRepaint(_CropPainter old) => old.rect != rect;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 辅助类型
-// ─────────────────────────────────────────────────────────────────────────────
-
-enum _EditTab {
-  adjust('调整'),
-  crop('裁剪');
-
-  final String label;
-  const _EditTab(this.label);
 }
 
 enum _CropHandle { topLeft, topRight, bottomLeft, bottomRight, move }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 编辑工具按钮
+// 相框预览 Overlay（复用拍摄页）
 // ─────────────────────────────────────────────────────────────────────────────
-
-class _EditToolBtn extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool isActive;
-
-  const _EditToolBtn({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.isActive = false,
-  });
-
+class _FramePreviewOverlay extends StatelessWidget {
+  final FrameDefinition frame;
+  final String ratioId;
+  const _FramePreviewOverlay({required this.frame, required this.ratioId});
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: isActive ? Colors.white : Colors.white70, size: 24),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: isActive ? Colors.white : Colors.white54,
-              fontSize: 11,
-            ),
+    final assetPath = frame.assetForRatio(ratioId);
+    if (assetPath == null) return const SizedBox.shrink();
+    return Image.asset(
+      assetPath,
+      fit: BoxFit.fill,
+      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 水印预览 Overlay（复用拍摄页）
+// ─────────────────────────────────────────────────────────────────────────────
+class _WatermarkPreviewOverlay extends StatelessWidget {
+  final WatermarkPreset watermark;
+  final String? colorOverride;
+  final String? positionOverride;
+  final double? sizeOverride;
+  final String? directionOverride;
+  final String? styleId;
+  const _WatermarkPreviewOverlay({
+    required this.watermark,
+    this.colorOverride,
+    this.positionOverride,
+    this.sizeOverride,
+    this.directionOverride,
+    this.styleId,
+  });
+  @override
+  Widget build(BuildContext context) {
+    if (watermark.isNone) return const SizedBox.shrink();
+    final colorSrc = colorOverride ?? watermark.color;
+    Color textColor = const Color(0xFFFF8C00);
+    if (colorSrc != null && colorSrc.isNotEmpty) {
+      try {
+        final hex = colorSrc.replaceAll('#', '');
+        textColor = Color(int.parse('FF$hex', radix: 16));
+      } catch (_) {}
+    }
+    final position = positionOverride ?? watermark.position ?? 'bottom_right';
+    Alignment align;
+    switch (position) {
+      case 'bottom_left': align = Alignment.bottomLeft; break;
+      case 'bottom_center': align = Alignment.bottomCenter; break;
+      case 'top_right': align = Alignment.topRight; break;
+      case 'top_left': align = Alignment.topLeft; break;
+      default: align = Alignment.bottomRight;
+    }
+    final fontSize = 12.0;
+    return Align(
+      alignment: align,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Text(
+          watermark.name,
+          style: TextStyle(
+            color: textColor,
+            fontSize: fontSize,
+            fontWeight: FontWeight.w500,
           ),
-        ],
+        ),
       ),
     );
   }
