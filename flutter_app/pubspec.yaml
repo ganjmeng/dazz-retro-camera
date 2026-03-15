@@ -72,7 +72,6 @@ flutter:
     - assets/presets/
     - assets/lut/
     - assets/lut/cameras/
-    - assets/lut/filters/
     - assets/grain/
     - assets/frames/
     - assets/watermarks/
