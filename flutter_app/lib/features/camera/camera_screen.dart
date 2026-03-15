@@ -27,9 +27,11 @@ import '../../services/camera_service.dart';
 import '../../services/location_service.dart';
 import '../../router/app_router.dart';
 import 'camera_notifier.dart';
+import 'camera_manager_screen.dart';
 import 'preview_renderer.dart';
 import '../gallery/gallery_screen.dart';
 import 'camera_config_sheet.dart';
+import '../../services/camera_manager_service.dart';
 // ─── 颜色常量 ─────────────────────────────────────────────────────────────────────────────
 const _kBlack = Color(0xFF000000);
 const _kDarkGray = Color(0xFF1C1C1E);
@@ -876,7 +878,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           const SizedBox(width: 8),
           // 管理按钮
           GestureDetector(
-            onTap: () {},
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const CameraManagerScreen(),
+                ),
+              );
+            },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -898,21 +906,30 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     );
   }
 
-  // ── 相机列表（横向滚动）──────────────────────────────────────────────────────
+  // ── 相机列表（横向滚动，从 cameraManagerProvider 读取启用且有序的相机）────────
   Widget _buildCameraList(CameraAppState st) {
+    // 从管理状态读取启用且有序的相机 ID 列表
+    final managerState = ref.watch(cameraManagerProvider).valueOrNull;
+    final enabledIds = managerState?.enabledOrderedIds
+        ?? kAllCameras.map((e) => e.id).toList();
+
     return SizedBox(
       height: 88,
-      child: ListView(
+      child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        children: _kPhotoCameras.map((cam) {
-          final isActive = st.activeCameraId == cam.id;
-          // 从 kAllCameras 获取真实图标路径
-          final entry = kAllCameras.where((e) => e.id == cam.id).firstOrNull;
-          final iconPath = entry?.iconPath;
+        itemCount: enabledIds.length,
+        itemBuilder: (context, index) {
+          final camId = enabledIds[index];
+          final entry = kAllCameras.where((e) => e.id == camId).firstOrNull;
+          if (entry == null) return const SizedBox.shrink();
+          final isActive = st.activeCameraId == camId;
+          final iconPath = entry.iconPath;
+          final isFavorited = managerState?.favoritedIds.contains(camId) ?? false;
+
           return GestureDetector(
             onTap: () => _showCameraTransition(
-              () => ref.read(cameraAppProvider.notifier).switchToCamera(cam.id),
+              () => ref.read(cameraAppProvider.notifier).switchToCamera(camId),
               duration: const Duration(milliseconds: 500),
             ),
             child: Container(
@@ -920,59 +937,70 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               margin: const EdgeInsets.symmetric(horizontal: 4),
               child: Column(
                 children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A1A),
-                      borderRadius: BorderRadius.circular(14),
-                      border: isActive
-                          ? Border.all(color: _kWhite, width: 2)
-                          : Border.all(color: Colors.grey[800]!, width: 1),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(13),
-                      child: iconPath != null
-                          ? Image.asset(
-                              iconPath,
-                              width: 64,
-                              height: 64,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Center(
-                                child: Text(cam.emoji, style: const TextStyle(fontSize: 28)),
-                              ),
-                            )
-                          : Center(
-                              child: Text(cam.emoji, style: const TextStyle(fontSize: 28)),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
+                  Stack(
+                    clipBehavior: Clip.none,
                     children: [
-                      Flexible(
-                        child: Text(
-                          cam.name,
-                          style: TextStyle(
-                            color: isActive ? _kWhite : Colors.grey,
-                            fontSize: 10,
-                            fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1A1A1A),
+                          borderRadius: BorderRadius.circular(14),
+                          border: isActive
+                              ? Border.all(color: _kWhite, width: 2)
+                              : Border.all(color: Colors.grey[800]!, width: 1),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(13),
+                          child: iconPath != null
+                              ? Image.asset(
+                                  iconPath,
+                                  width: 64,
+                                  height: 64,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Center(
+                                    child: Icon(Icons.camera_alt, color: Colors.white54, size: 28),
+                                  ),
+                                )
+                              : const Center(
+                                  child: Icon(Icons.camera_alt, color: Colors.white54, size: 28),
+                                ),
                         ),
                       ),
-                      if (cam.hasR)
-                        const Text(' R', style: TextStyle(color: _kRed, fontSize: 10, fontWeight: FontWeight.w700)),
+                      // 收藏星标（右上角）
+                      if (isFavorited)
+                        Positioned(
+                          top: -3,
+                          right: -3,
+                          child: Container(
+                            width: 16,
+                            height: 16,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFFCC00),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.star, color: Colors.black, size: 10),
+                          ),
+                        ),
                     ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    entry.name,
+                    style: TextStyle(
+                      color: isActive ? _kWhite : Colors.grey,
+                      fontSize: 10,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
             ),
           );
-        }).toList(),
+        },
       ),
     );
   }
@@ -1601,7 +1629,7 @@ class _OptionsSheet extends ConsumerWidget {
                   children: [
                     _buildCameraSection(context, ref, st, 'Video', _kVideoCameras),
                     const SizedBox(height: 8),
-                    _buildCameraSection(context, ref, st, 'Photo', _kPhotoCameras),
+                    _buildManagedCameraSection(context, ref, st),
                     const SizedBox(height: 16),
                     // Option 行
                     _buildOptionRow(context, ref, st, camera),
@@ -1672,6 +1700,123 @@ class _OptionsSheet extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  // ── Photo 相机选择（从 cameraManagerProvider 读取启用且有序的相机）─────────────
+  Widget _buildManagedCameraSection(BuildContext context, WidgetRef ref, CameraAppState st) {
+    final managerState = ref.watch(cameraManagerProvider).valueOrNull;
+    final enabledIds = managerState?.enabledOrderedIds
+        ?? kAllCameras.map((e) => e.id).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: _kBlue,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Text('Photo', style: TextStyle(color: _kWhite, fontSize: 13, fontWeight: FontWeight.w600)),
+          ),
+        ),
+        SizedBox(
+          height: 110,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: enabledIds.length,
+            itemBuilder: (ctx, i) {
+              final camId = enabledIds[i];
+              final entry = kAllCameras.where((e) => e.id == camId).firstOrNull;
+              if (entry == null) return const SizedBox.shrink();
+              final isActive = st.activeCameraId == camId;
+              final isFavorited = managerState?.favoritedIds.contains(camId) ?? false;
+
+              return GestureDetector(
+                onTap: () {
+                  onCameraTransition(
+                    () => ref.read(cameraAppProvider.notifier).switchToCamera(camId),
+                    duration: const Duration(milliseconds: 500),
+                  );
+                  onClose();
+                },
+                child: Container(
+                  width: 80,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Column(
+                    children: [
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              color: _kDarkGray,
+                              borderRadius: BorderRadius.circular(14),
+                              border: isActive
+                                  ? Border.all(color: _kWhite, width: 2)
+                                  : null,
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(13),
+                              child: entry.iconPath != null
+                                  ? Image.asset(
+                                      entry.iconPath!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.camera_alt,
+                                        color: Colors.white54,
+                                        size: 32,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.camera_alt,
+                                      color: Colors.white54,
+                                      size: 32,
+                                    ),
+                            ),
+                          ),
+                          if (isFavorited)
+                            Positioned(
+                              top: -3,
+                              right: -3,
+                              child: Container(
+                                width: 16,
+                                height: 16,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFFFCC00),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.star, color: Colors.black, size: 10),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        entry.name,
+                        style: TextStyle(
+                          color: isActive ? _kWhite : Colors.grey,
+                          fontSize: 11,
+                          fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
