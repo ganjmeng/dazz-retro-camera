@@ -36,7 +36,9 @@ struct CCDParams {
     float sharpen;
     float blurRadius;
     float jpegArtifacts;
-    float time; // 用于动态噪点的时间种子
+    float time;        // 用于动态噪点的时间种子
+    float fisheyeMode; // 1.0=圆形鱼眼模式, 0.0=普通模式
+    float aspectRatio; // 宽/高 比例（用于保持圆形）
 };
 
 // MARK: - 工具函数
@@ -105,6 +107,26 @@ float3 applySharpen(
     return clamp(center + strength * (center - blur), 0.0, 1.0);
 }
 
+// MARK: - 圆形鱼眼投影
+
+/// 等距投影：将屏幕像素映射到球面，圆形以外返回 float2(-1)
+/// r=1 对应 90° FOV 边缘，产生强烈桶形畸变
+float2 fisheyeUV(float2 uv, float aspect) {
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect; // 修正宽高比使圆形不变形
+    float r = length(p);
+    if (r > 1.0) return float2(-1.0); // 圆外标记
+    // 等距投影：theta = r * (π/2)
+    float theta = r * 1.5707963; // M_PI_F / 2
+    float phi = atan2(p.y, p.x);
+    float sinTheta = sin(theta);
+    float2 texCoord = float2(
+        sinTheta * cos(phi),
+        sinTheta * sin(phi)
+    );
+    return texCoord * 0.5 + 0.5;
+}
+
 // MARK: - CCD 风格片段着色器
 
 fragment float4 ccdFragmentShader(
@@ -117,6 +139,16 @@ fragment float4 ccdFragmentShader(
     constexpr sampler textureSampler(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
 
     float2 uv = in.texCoord;
+
+    // 鱼眼模式：重映射 UV 坐标
+    if (params.fisheyeMode > 0.5) {
+        float2 fUV = fisheyeUV(uv, params.aspectRatio);
+        if (fUV.x < 0.0) {
+            // 圆形以外：输出纯黑
+            return float4(0.0, 0.0, 0.0, 1.0);
+        }
+        uv = fUV;
+    }
 
     // 计算单像素大小（用于锐化卷积）
     uint texWidth  = cameraTexture.get_width();
@@ -172,8 +204,11 @@ fragment float4 ccdFragmentShader(
     }
     
     // === Pass 6: 暗角 (Vignette) ===
-    float vignette = vignetteEffect(uv, params.vignetteAmount);
-    color *= vignette;
+    // 鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗
+    if (params.fisheyeMode < 0.5) {
+        float vignette = vignetteEffect(uv, params.vignetteAmount);
+        color *= vignette;
+    }
     
     return float4(color, 1.0);
 }

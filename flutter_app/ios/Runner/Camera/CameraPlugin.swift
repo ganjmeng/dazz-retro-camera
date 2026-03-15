@@ -76,6 +76,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleSetWhiteBalance(call: call, result: result)
         case "setSharpen":
             handleSetSharpen(call: call, result: result)
+        case "updateLensParams":
+            handleUpdateLensParams(call: call, result: result)
         case "saveToGallery":
             handleSaveToGallery(call: call, result: result)
         case "dispose":
@@ -234,6 +236,24 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         renderer?.setSharpen(floatLevel)
         // 2. 动态切换 AVCaptureSession.sessionPreset（影响实际拍摄分辨率）
         cameraManager?.setResolution(level: floatLevel)
+        result(nil)
+    }
+
+    // ─────────────────────────────────────────────
+    // updateLensParams — 镜头参数（畸变/暗角/缩放/鱼眼模式）
+    // ─────────────────────────────────────────────
+    private func handleUpdateLensParams(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any]
+        let fisheyeMode = args?["fisheyeMode"] as? Bool ?? false
+        let vignette = args?["vignette"] as? Double ?? 0.0
+        // 将鱼眼模式传递到 Metal 渲染器
+        renderer?.setFisheyeMode(fisheyeMode)
+        // 将暗角传递到 Metal 渲染器
+        if let r = renderer {
+            var p = r.getCCDParams()
+            p.vignetteAmount = Float(vignette)
+            r.setCCDParams(p)
+        }
         result(nil)
     }
 

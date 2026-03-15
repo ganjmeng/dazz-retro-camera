@@ -73,6 +73,8 @@ uniform float uGrainAmount;
 uniform float uSharpen;
 uniform float uTime;
 uniform vec2  uTexelSize;   // 1/width, 1/height
+uniform float uFisheyeMode; // 1.0=圆形鱼眼模式, 0.0=普通模式
+uniform float uAspectRatio; // 宽/高 比例（用于保持圆形）
 
 // ── 工具函数 ──────────────────────────────────────────────────────
 float random(vec2 st, float seed) {
@@ -121,9 +123,46 @@ vec3 applySharpen(vec2 uv, float amount) {
     return clamp(center + strength * (center - blur), 0.0, 1.0);
 }
 
+// ── 圆形鱼眼投影 ──────────────────────────────────────────────────
+// 等距投影：将屏幕像素映射到球面，圆形以外输出纯黑
+// 原理：以画面中心为原点，将 [-1,1] 的归一化坐标做极坐标变换，
+//       r = sqrt(x²+y²) 是到中心的距离，r>1 时为圆外（黑色）
+//       圆内通过等距投影反算纹理坐标，产生强烈桶形畸变
+vec2 fisheyeUV(vec2 uv, float aspect) {
+    // 转为以中心为原点的坐标，并修正宽高比使圆形不变形
+    vec2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect; // 修正宽高比
+    float r = length(p);
+    if (r > 1.0) return vec2(-1.0); // 圆外标记
+    // 等距投影：theta = r * (π/2)，即 r=1 对应 90° 视角边缘
+    float theta = r * 1.5707963; // π/2
+    float phi = atan(p.y, p.x);
+    // 球面坐标反算纹理坐标（等距投影到平面）
+    float sinTheta = sin(theta);
+    vec2 texCoord = vec2(
+        sinTheta * cos(phi),
+        sinTheta * sin(phi)
+    );
+    // 映射回 [0,1]
+    texCoord = texCoord * 0.5 + 0.5;
+    return texCoord;
+}
+
 // ── 主函数 ────────────────────────────────────────────────────────
 void main() {
     vec2 uv = vTexCoord;
+    bool isCircleOutside = false;
+
+    // 鱼眼模式：重映射 UV 坐标
+    if (uFisheyeMode > 0.5) {
+        vec2 fUV = fisheyeUV(uv, uAspectRatio);
+        if (fUV.x < 0.0) {
+            // 圆形以外：输出纯黑
+            fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+        }
+        uv = fUV;
+    }
 
     // Pass 0: 锐化 (Unsharp Mask)
     vec3 color = applySharpen(uv, uSharpen);
@@ -156,9 +195,11 @@ void main() {
         color = clamp(color + noise * uNoiseAmount * 0.2 * dark, 0.0, 1.0);
     }
 
-    // Pass 5: 暗角
-    float vignette = vignetteEffect(uv, uVignetteAmount);
-    color *= vignette;
+    // Pass 5: 暗角（鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗）
+    if (uFisheyeMode < 0.5) {
+        float vignette = vignetteEffect(uv, uVignetteAmount);
+        color *= vignette;
+    }
 
     fragColor = vec4(color, 1.0);
 }"""
@@ -196,6 +237,8 @@ void main() {
     private var uTime: Int = -1
     private var uTexelSize: Int = -1
     private var uSTMatrix: Int = -1
+    private var uFisheyeMode: Int = -1
+    private var uAspectRatio: Int = -1
 
     // SurfaceTexture 变换矩阵（修正 OES 纹理方向）
     private val stMatrix = FloatArray(16)
@@ -214,6 +257,7 @@ void main() {
     @Volatile private var grainAmount: Float = 0.0f
     @Volatile private var sharpen: Float = 0.0f
     @Volatile private var time: Float = 0.0f
+    @Volatile private var fisheyeMode: Float = 0.0f // 0=normal, 1=circular fisheye
     @Volatile private var previewWidth: Int = 1280
     @Volatile private var previewHeight: Int = 720
 
@@ -354,6 +398,8 @@ void main() {
         uTime                 = GLES30.glGetUniformLocation(programId, "uTime")
         uTexelSize            = GLES30.glGetUniformLocation(programId, "uTexelSize")
         uSTMatrix             = GLES30.glGetUniformLocation(programId, "uSTMatrix")
+        uFisheyeMode          = GLES30.glGetUniformLocation(programId, "uFisheyeMode")
+        uAspectRatio          = GLES30.glGetUniformLocation(programId, "uAspectRatio")
 
         // ── 11. 顶点缓冲 ─────────────────────────────────────────────────────
         vertexBuffer = ByteBuffer.allocateDirect(QUAD_VERTICES.size * 4)
@@ -410,6 +456,8 @@ void main() {
         GLES30.glUniform2f(uTexelSize,
             1f / previewWidth.toFloat(),
             1f / previewHeight.toFloat())
+        GLES30.glUniform1f(uFisheyeMode,         fisheyeMode)
+        GLES30.glUniform1f(uAspectRatio,         previewWidth.toFloat() / previewHeight.toFloat())
         // 传入 SurfaceTexture 变换矩阵（修正 OES 纹理方向）
         GLES30.glUniformMatrix4fv(uSTMatrix, 1, false, stMatrix, 0)
         time += 0.016f
@@ -455,6 +503,10 @@ void main() {
 
     fun setSharpen(level: Float) {
         sharpen = level
+    }
+
+    fun setFisheyeMode(enabled: Boolean) {
+        fisheyeMode = if (enabled) 1.0f else 0.0f
     }
 
     // ── 获取相机输入 Surface ──────────────────────────────────────────────────

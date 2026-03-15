@@ -319,10 +319,12 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     final distortion = newLens?.distortion ?? 0.0;
     final vignette = newLens?.vignette ?? 0.0;
     final zoomFactor = newLens?.zoomFactor ?? 1.0;
+    final fisheyeMode = newLens?.fisheyeMode ?? false;
     _ref.read(cameraServiceProvider.notifier).updateLensParams(
       distortion: distortion,
       vignette: vignette,
       zoomFactor: zoomFactor,
+      fisheyeMode: fisheyeMode,
     );
   }
 

@@ -142,12 +142,13 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "setExposure"     -> handleSetExposure(call, result)
             "setFlash"        -> handleSetFlash(call, result)
             "setWhiteBalance" -> handleSetWhiteBalance(call, result)
-            "setSharpen"      -> handleSetSharpen(call, result)
-            "startRecording"  -> handleStartRecording(result)
-            "stopRecording"   -> handleStopRecording(result)
-            "saveToGallery"   -> handleSaveToGallery(call, result)
-            "dispose"         -> handleDispose(result)
-            else              -> result.notImplemented()
+            "setSharpen"         -> handleSetSharpen(call, result)
+            "updateLensParams"   -> handleUpdateLensParams(call, result)
+            "startRecording"     -> handleStartRecording(result)
+            "stopRecording"      -> handleStopRecording(result)
+            "saveToGallery"      -> handleSaveToGallery(call, result)
+            "dispose"            -> handleDispose(result)
+            else                 -> result.notImplemented()
         }
     }
 
@@ -620,6 +621,21 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         } catch (e: Exception) {
             Log.w(TAG, "setSharpen EDGE_MODE failed: ${e.message}")
         }
+        result.success(null)
+    }
+
+    // ─────────────────────────────────────────────
+    // updateLensParams — 镜头参数（畸变/暗角/缩放/鱼眼模式）
+    // ─────────────────────────────────────────────
+
+    private fun handleUpdateLensParams(call: MethodCall, result: MethodChannel.Result) {
+        val fisheyeMode = call.argument<Boolean>("fisheyeMode") ?: false
+        val vignette    = call.argument<Double>("vignette")    ?: 0.0
+        // 将鱼眼模式传递到 GL 渲染器
+        glRenderer?.setFisheyeMode(fisheyeMode)
+        // 将暗角传递到 GL 渲染器
+        glRenderer?.updateParams(mapOf("vignette" to vignette))
+        Log.d(TAG, "updateLensParams: fisheyeMode=$fisheyeMode, vignette=$vignette")
         result.success(null)
     }
 

@@ -164,16 +164,19 @@ class CameraService extends StateNotifier<CameraState> {
   /// [distortion] Brown-Conrady k1：负值=桶形(鱼眼), 正值=枕形, 0=无畸变
   /// [vignette] 暗角强度 0.0~1.0（原生层 GPU shader 叠加）
   /// [zoomFactor] 镜头缩放倍数（1.0=标准，0.5=超广角/鱼眼）
+  /// [fisheyeMode] 圆形鱼眼模式：画面映射为圆形+四周黑色（等距投影）
   Future<void> updateLensParams({
     required double distortion,
     double vignette = 0.0,
     double zoomFactor = 1.0,
+    bool fisheyeMode = false,
   }) async {
     try {
       await _channel.invokeMethod('updateLensParams', {
         'distortion': distortion,
         'vignette': vignette,
         'zoomFactor': zoomFactor,
+        'fisheyeMode': fisheyeMode,
       });
     } catch (e) {
       print('Error updating lens params: $e');

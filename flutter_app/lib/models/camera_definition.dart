@@ -296,6 +296,8 @@ class LensDefinition {
   final double softFocus;
   final double refraction;
   final String? thumbnail;
+  /// 圆形鱼眼模式：画面映射为圆形+四周黑色（等距投影）
+  final bool fisheyeMode;
 
   const LensDefinition({
     required this.id,
@@ -315,6 +317,7 @@ class LensDefinition {
     this.softFocus = 0.0,
     this.refraction = 0.0,
     this.thumbnail,
+    this.fisheyeMode = false,
   });
 
   factory LensDefinition.fromJson(Map<String, dynamic> json) => LensDefinition(
@@ -335,6 +338,7 @@ class LensDefinition {
     softFocus: (json['softFocus'] as num?)?.toDouble() ?? 0.0,
     refraction: (json['refraction'] as num?)?.toDouble() ?? 0.0,
     thumbnail: json['thumbnail'] as String?,
+    fisheyeMode: json['fisheyeMode'] as bool? ?? false,
   );
 }
 

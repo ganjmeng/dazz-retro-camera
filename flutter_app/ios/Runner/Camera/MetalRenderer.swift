@@ -23,6 +23,8 @@ struct CCDParams {
     var blurRadius: Float = 0.0
     var jpegArtifacts: Float = 0.0
     var time: Float = 0.0
+    var fisheyeMode: Float = 0.0  // 1.0=圆形鱼眼模式, 0.0=普通模式
+    var aspectRatio: Float = 0.75 // 宽/高 比例（默认 3:4 竖屏）
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -250,6 +252,8 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
 
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
+        // 每帧自动同步宽高比（为鱼眼模式提供正确的圆形比例）
+        updateAspectRatio(width: width, height: height)
 
         // 确保输出 PixelBuffer Pool 已创建
         ensureOutputPool(width: width, height: height)
@@ -334,6 +338,34 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
     func setSharpen(_ level: Float) {
         paramsLock.lock()
         ccdParams.sharpen = level
+        paramsLock.unlock()
+    }
+
+    // MARK: - Fisheye Mode Control
+    /// 圆形鱼眼模式（由 updateLensParams method channel 调用）
+    func setFisheyeMode(_ enabled: Bool) {
+        paramsLock.lock()
+        ccdParams.fisheyeMode = enabled ? 1.0 : 0.0
+        paramsLock.unlock()
+    }
+
+    /// 更新宽高比（每帧渲染时自动设置）
+    func updateAspectRatio(width: Int, height: Int) {
+        guard height > 0 else { return }
+        paramsLock.lock()
+        ccdParams.aspectRatio = Float(width) / Float(height)
+        paramsLock.unlock()
+    }
+
+    func getCCDParams() -> CCDParams {
+        paramsLock.lock()
+        defer { paramsLock.unlock() }
+        return ccdParams
+    }
+
+    func setCCDParams(_ params: CCDParams) {
+        paramsLock.lock()
+        ccdParams = params
         paramsLock.unlock()
     }
 
