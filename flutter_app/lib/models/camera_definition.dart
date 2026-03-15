@@ -391,9 +391,10 @@ class FrameDefinition {
   final String outerBackgroundColor;
   /// 相框圆角半径（相对于 1080px 参考宽度，0=无圆角）
   final double cornerRadius;
-  /// 是否在图片区域边缘绘制内嵌阴影（增加拟物厚度感）
+   /// 是否在图片区域边缘绘制内嵌阴影（增加拟物厚度感）
   final bool innerShadow;
-
+  /// 是否支持用户选择背景色（拍立得相框支持，CCD铺满型相框不支持）
+  final bool supportsBackground;
   const FrameDefinition({
     required this.id,
     required this.name,
@@ -411,6 +412,7 @@ class FrameDefinition {
     this.outerBackgroundColor = '#FFFFFF',
     this.cornerRadius = 0.0,
     this.innerShadow = false,
+    this.supportsBackground = false,
   });
 
   /// 根据 ratioId 获取实际使用的 asset 路径（优先 ratioAssets，回退 asset）
@@ -450,6 +452,7 @@ class FrameDefinition {
     outerBackgroundColor: json['outerBackgroundColor'] as String? ?? '#FFFFFF',
     cornerRadius: (json['cornerRadius'] as num?)?.toDouble() ?? 0.0,
     innerShadow: json['innerShadow'] as bool? ?? false,
+    supportsBackground: json['supportsBackground'] as bool? ?? false,
   );
 }
 

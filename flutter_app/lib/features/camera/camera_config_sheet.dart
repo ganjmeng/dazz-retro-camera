@@ -312,13 +312,34 @@ class _SubPanelState extends ConsumerState<_SubPanel>
   double _pickerSaturation = 1.0;  // HSV 饱和度 0~1
   double _pickerValue = 1.0;       // HSV 亮度 0~1
 
+  int _lastTabCount = 0;
+
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: _tabCount, vsync: this);
+    _lastTabCount = _tabCount;
+    _tabCtrl = TabController(length: _lastTabCount, vsync: this);
     _tabCtrl.addListener(() {
       if (!_tabCtrl.indexIsChanging) setState(() => _tabIndex = _tabCtrl.index);
     });
+  }
+
+  /// 当相框切换导致 supportsBackground 变化时，重建 TabController
+  void _rebuildTabControllerIfNeeded() {
+    final newCount = _tabCount;
+    if (newCount != _lastTabCount) {
+      _tabCtrl.dispose();
+      _lastTabCount = newCount;
+      _tabCtrl = TabController(length: newCount, vsync: this);
+      _tabCtrl.addListener(() {
+        if (!_tabCtrl.indexIsChanging) setState(() => _tabIndex = _tabCtrl.index);
+      });
+      // 如果当前 tab 超出范围，重置到第一个
+      if (_tabIndex >= newCount) {
+        _tabIndex = 0;
+        _tabCtrl.animateTo(0);
+      }
+    }
   }
 
   @override
@@ -330,9 +351,16 @@ class _SubPanelState extends ConsumerState<_SubPanel>
   int get _tabCount {
     switch (widget.type) {
       case _SubPanelType.watermark: return 5;
-      case _SubPanelType.frame: return 2;
+      case _SubPanelType.frame: return _frameSupportsBackground ? 2 : 1;
       default: return 1;
     }
+  }
+
+  /// 当前选中相框是否支持背景色选择
+  bool get _frameSupportsBackground {
+    final st = ref.read(cameraAppProvider);
+    final frame = widget.camera.frameById(st.activeFrameId);
+    return frame?.supportsBackground ?? false;
   }
 
   String get _title {
@@ -510,9 +538,10 @@ class _SubPanelState extends ConsumerState<_SubPanel>
     );
   }
 
-  // ── 边框 Tab 行 ─────────────────────────────────────────────────────────────
+  // ── 边框 Tab 行 ────────────────────────────────────────────────────────────────────────────────────
   Widget _buildFrameTabs() {
-    const tabs = ['样式', '背景'];
+    // 仅当当前相框支持背景色时才显示“背景”Tab
+    final tabs = _frameSupportsBackground ? ['样式', '背景'] : ['样式'];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -986,14 +1015,18 @@ class _SubPanelState extends ConsumerState<_SubPanel>
         _FrameStyleCell(
           isRandom: true,
           selected: st.activeFrameId == null,
-          onTap: () => ref.read(cameraAppProvider.notifier).selectFrame('none'),
+          onTap: () {
+            ref.read(cameraAppProvider.notifier).selectFrame('none');
+            setState(() => _rebuildTabControllerIfNeeded());
+          },
         ),
         ...frames.map((f) => _FrameStyleCell(
           frame: f,
           selected: st.activeFrameId == f.id,
-          onTap: frameEnabled
-              ? () => ref.read(cameraAppProvider.notifier).selectFrame(f.id)
-              : () => ref.read(cameraAppProvider.notifier).selectFrame(f.id),
+          onTap: () {
+            ref.read(cameraAppProvider.notifier).selectFrame(f.id);
+            setState(() => _rebuildTabControllerIfNeeded());
+          },
         )),
       ];
       return Padding(

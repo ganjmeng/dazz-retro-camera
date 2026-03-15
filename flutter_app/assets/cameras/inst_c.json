@@ -179,7 +179,8 @@
         "lightLeak": 0.2,
         "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#F5F6FA"
+        "outerBackgroundColor": "#F5F6FA",
+        "supportsBackground": true
       },
       {
         "id": "instant_lavender",
@@ -220,7 +221,8 @@
         "lightLeak": 0.2,
         "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#EBE6F8"
+        "outerBackgroundColor": "#EBE6F8",
+        "supportsBackground": true
       },
       {
         "id": "instant_peach",
@@ -261,7 +263,8 @@
         "lightLeak": 0.2,
         "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#FCEEE1"
+        "outerBackgroundColor": "#FCEEE1",
+        "supportsBackground": true
       },
       {
         "id": "instant_mint",
@@ -302,7 +305,8 @@
         "lightLeak": 0.2,
         "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#E1F8EE"
+        "outerBackgroundColor": "#E1F8EE",
+        "supportsBackground": true
       },
       {
         "id": "instant_sky",
@@ -343,7 +347,8 @@
         "lightLeak": 0.2,
         "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#E1EEFC"
+        "outerBackgroundColor": "#E1EEFC",
+        "supportsBackground": true
       },
       {
         "id": "instant_rose",
@@ -384,7 +389,8 @@
         "lightLeak": 0.2,
         "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#FCE6F0"
+        "outerBackgroundColor": "#FCE6F0",
+        "supportsBackground": true
       }
     ],
     "watermarks": {
