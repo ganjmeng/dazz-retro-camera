@@ -48,7 +48,7 @@ const _kRed = Color(0xFFFF3B30);
 
 // ─── 布局常量（提升为顶层常量，供多个方法共享）─────────────────────────────────────────────────────────────────────────────
 const kToolbarH = 52.0;          // 工具栏高度
-const kShutterH = 100.0;          // 快门行高度
+const kShutterH = 88.0;           // 快门行高度
 const kBottomPanelTopPad = 0.0;   // 工具栏上方间距
 const kToolbarShutterGap = 10.0;  // 工具栏和快门行间距
 const kBottomPanelH = kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
@@ -1420,7 +1420,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // 截图布局：[缩略图 72×72] [快门 80×80] [相机图标 72×72]
   Widget _buildShutterRow(CameraAppState st) {
     return SizedBox(
-      height: 100,
+      height: 88,
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: kMaxBottomContentW),
@@ -1485,6 +1485,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 width: 100,
                 height: 100,
                 child: Stack(
+                  clipBehavior: Clip.none,
                   alignment: Alignment.center,
                   children: [
                     // 虚线圆圈背景（圆圈大小 70，图标不变）
