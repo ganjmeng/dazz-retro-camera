@@ -90,20 +90,30 @@ class CapturePipeline {
       final frameCanvasW = outW + leftPx + rightPx;
       final frameCanvasH = outH + topPx + bottomPx;
 
-      // 最终输出画布尺寸 = 相框画布 + 外层背景间距
-      final canvasW = frameCanvasW + outerPadPx * 2;
-      final canvasH = frameCanvasH + outerPadPx * 2;
+      // 判断是否有 PNG 边框资源（提前判断，用于画布尺寸计算）
+      final hasPngAssetForSize = selectedFrameId.isNotEmpty &&
+          selectedFrameId != 'frame_none' &&
+          selectedFrameId != 'none' &&
+          frameOpt != null &&
+          frameOpt.asset != null &&
+          frameOpt.asset!.isNotEmpty;
 
-      // 相框在输出画布中的偏移
-      final frameOffsetX = outerPadPx;
-      final frameOffsetY = outerPadPx;
+      // 最终输出画布尺寸：
+      // - 有 PNG 边框：画布 = 相框层尺寸（PNG 自身包含边框+背景，不需要额外 outerPadding）
+      // - 无 PNG 边框：画布 = 相框层 + 外层背景间距
+      final canvasW = hasPngAssetForSize ? frameCanvasW : frameCanvasW + outerPadPx * 2;
+      final canvasH = hasPngAssetForSize ? frameCanvasH : frameCanvasH + outerPadPx * 2;
+
+      // 相框在输出画布中的偏移（有 PNG 时不需要偏移）
+      final frameOffsetX = hasPngAssetForSize ? 0.0 : outerPadPx;
+      final frameOffsetY = hasPngAssetForSize ? 0.0 : outerPadPx;
 
       // ── 4. 创建画布 ──────────────────────────────────────────────────────────
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, canvasW, canvasH));
 
-      // ── 4a. 先填充外层背景（如果有 outerPadding）──────────────────────────────
-      if (frameOpt != null && outerPadPx > 0) {
+      // ── 4a. 先填充外层背景（如果有 outerPadding，且没有 PNG 边框）──────────────────────────────
+      if (frameOpt != null && outerPadPx > 0 && !hasPngAssetForSize) {
         // 外层背景色：用户在"背景"Tab 选择的颜色，否则用 outerBackgroundColor
         final outerHexSrc = (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
             ? frameBackgroundColor
@@ -122,8 +132,8 @@ class CapturePipeline {
         }
       }
 
-      // ── 4b. 填充相框背景色（相框层区域）────────────────────────────────────────
-      if (frameOpt != null) {
+      // ── 4b. 填充相框背景色（相框层区域，PNG 边框时跳过）────────────────────────────────────────
+      if (frameOpt != null && !hasPngAssetForSize) {
         Color bgColor = const Color(0xFFF5F2EA);
         // 背景色优先级：用户选择的颜色 > JSON 默认值
         // 无论是否有 outerPadding，用户选择的颜色都应用到相框背景
@@ -252,7 +262,8 @@ class CapturePipeline {
             Rect.fromLTWH(0, 0,
               frameImgFrame.image.width.toDouble(),
               frameImgFrame.image.height.toDouble()),
-            Rect.fromLTWH(frameOffsetX, frameOffsetY, frameCanvasW, frameCanvasH),
+            // PNG 覆盖整个画布（含 outerPadding 区域），由 PNG 自身提供完整边框+背景
+            Rect.fromLTWH(0, 0, canvasW, canvasH),
             Paint()..filterQuality = FilterQuality.high,
           );
           debugPrint('[CapturePipeline] frame texture applied: ${frameOpt.asset}');
