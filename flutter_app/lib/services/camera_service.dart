@@ -160,12 +160,20 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
-  /// 更新镜头参数（切换镜头时将 distortion 传递到原生层渲染管线）
+  /// 更新镜头参数（切换镜头时将参数传递到原生层渲染管线）
   /// [distortion] Brown-Conrady k1：负值=桶形(鱼眼), 正值=枕形, 0=无畸变
-  Future<void> updateLensParams({required double distortion}) async {
+  /// [vignette] 暗角强度 0.0~1.0（原生层 GPU shader 叠加）
+  /// [zoomFactor] 镜头缩放倍数（1.0=标准，0.5=超广角/鱼眼）
+  Future<void> updateLensParams({
+    required double distortion,
+    double vignette = 0.0,
+    double zoomFactor = 1.0,
+  }) async {
     try {
       await _channel.invokeMethod('updateLensParams', {
         'distortion': distortion,
+        'vignette': vignette,
+        'zoomFactor': zoomFactor,
       });
     } catch (e) {
       print('Error updating lens params: $e');

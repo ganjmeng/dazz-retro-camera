@@ -314,10 +314,16 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       newLensId = id;
     }
     state = state.copyWith(activeLensId: newLensId);
-    // 通知原生层更新镜头畸变参数（在 GPU shader 中实现，零 CPU 开销）
+    // 通知原生层更新镜头参数（在 GPU shader 中实现，零 CPU 开销）
     final newLens = state.camera?.lensById(newLensId);
     final distortion = newLens?.distortion ?? 0.0;
-    _ref.read(cameraServiceProvider.notifier).updateLensParams(distortion: distortion);
+    final vignette = newLens?.vignette ?? 0.0;
+    final zoomFactor = newLens?.zoomFactor ?? 1.0;
+    _ref.read(cameraServiceProvider.notifier).updateLensParams(
+      distortion: distortion,
+      vignette: vignette,
+      zoomFactor: zoomFactor,
+    );
   }
 
   void selectRatio(String id) {
