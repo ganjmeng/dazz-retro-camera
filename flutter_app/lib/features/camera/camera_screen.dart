@@ -441,8 +441,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 取景框在顶部栏和底部面板之间的可用空间内垂直居中
     // 注意：去掉 clamp 上限，确保 1:1/3:4 等比例下取景框能真正居中
     final availableH = maxViewfinderH;
-    // 取景框居中后再向上偏移 20px，让底部工具栏视觉上移
-    final viewfinderTopOffset = statusBarH + kTopBarH + ((availableH - viewfinderH) / 2 - 20.0).clamp(0.0, availableH);
+    final viewfinderTopOffset = statusBarH + kTopBarH + ((availableH - viewfinderH) / 2).clamp(0.0, availableH);
     // 取景框水平居中
     final viewfinderLeft = (screenW - viewfinderW) / 2;
 
@@ -815,6 +814,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           const SizedBox(height: kBottomPanelTopPad),
           // 工具图标行（4个图标+文字标签）
           // 点击曝光胶囊或色温胶囊时隐藏工具栏
+          // 负 margin 使工具栏在面板内整体上移 20px，快门行不受影响
+          const SizedBox(height: -20),
           AnimatedOpacity(
             opacity: (_showExposureSlider || _showWbPanel || st.showZoomSlider) ? 0.0 : 1.0,
             duration: const Duration(milliseconds: 200),
