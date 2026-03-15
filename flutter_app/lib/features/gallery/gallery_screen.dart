@@ -2,9 +2,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:device_info_plus/device_info_plus.dart';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../models/camera_registry.dart';
 
@@ -134,8 +131,37 @@ class _GalleryScreenState extends State<GalleryScreen> {
     // 检查内存缓存（有缓存时跳过耗时的 MediaStore 查询）
     if (_GalleryCache.isValid && _GalleryCache.assets != null) {
       final cached = _GalleryCache.assets!;
-      _rebuildFromAssets(cached);
-      if (mounted) setState(() => _isLoading = false);
+      // 从缓存资产重建 UI 状态
+      final counts = <String, int>{'all': cached.length};
+      final cameraIdsFound = <String>{};
+      for (final asset in cached) {
+        final title = (asset.title ?? '').toLowerCase();
+        for (final cam in kAllCameras) {
+          if (title.contains(cam.id.toLowerCase())) {
+            cameraIdsFound.add(cam.id);
+            counts[cam.id] = (counts[cam.id] ?? 0) + 1;
+            break;
+          }
+        }
+      }
+      final entries = <_AlbumEntry>[
+        const _AlbumEntry(id: 'all', name: '全部照片', icon: Icons.photo_library_outlined),
+      ];
+      for (final cam in kAllCameras) {
+        if (cameraIdsFound.contains(cam.id)) {
+          entries.add(_AlbumEntry(id: cam.id, name: cam.name, icon: Icons.camera_alt_outlined, iconPath: cam.iconPath));
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _allDazzAssets = cached;
+          _assets = cached;
+          _albumCounts = counts;
+          _cameraAlbumEntries = entries;
+          _isLoading = false;
+        });
+        _applyInitialCameraFilter();
+      }
       return;
     }
     // 强制释放所有缓存，确保能看到最新保存的文件

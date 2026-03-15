@@ -338,7 +338,7 @@ class _CameraCard extends ConsumerWidget {
                   child: Icon(
                     isFavorited ? Icons.star_rounded : Icons.star_outline_rounded,
                     key: ValueKey(isFavorited),
-                    color: isFavorited ? _kGold : Colors.white25,
+                    color: isFavorited ? _kGold : Colors.white.withAlpha(64),
                     size: 18,
                   ),
                 ),
