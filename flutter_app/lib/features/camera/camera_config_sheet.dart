@@ -59,6 +59,182 @@ Future<void> showCameraConfigSheet(BuildContext context) {
 // 主面板 Widget
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// 图片编辑页底部常驻面板：无 Tab行，只显示相机列表 + 功能图标行
+class CameraConfigInlinePanel extends ConsumerWidget {
+  const CameraConfigInlinePanel();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final st = ref.watch(cameraAppProvider);
+    final cam = st.camera;
+
+    return Container(
+      color: _kBg,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Divider(height: 1, color: _kDivider),
+          _buildCameraRow(context, ref, st),
+          const Divider(height: 1, color: _kDivider),
+          if (cam != null) _buildFunctionRow(context, ref, st, cam),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+        ],
+      ),
+    );
+  }
+
+  // ── 相机列表行 ─────────────────────────────────────────────────────────────
+  Widget _buildCameraRow(BuildContext context, WidgetRef ref, CameraAppState st) {
+    final managerAsync = ref.watch(cameraManagerProvider);
+    final List<CameraEntry> orderedCameras;
+    if (managerAsync.hasValue) {
+      final mgr = managerAsync.value!;
+      final sortedIds = [
+        ...mgr.favoriteIds,
+        ...mgr.nonFavoriteIds,
+      ].where((id) => mgr.enabledIds.contains(id)).toList();
+      orderedCameras = sortedIds
+          .map((id) => kAllCameras.where((c) => c.id == id).firstOrNull)
+          .whereType<CameraEntry>()
+          .toList();
+    } else {
+      orderedCameras = List.from(kAllCameras);
+    }
+
+    return SizedBox(
+      height: 110,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        itemCount: orderedCameras.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (ctx, i) {
+          final entry = orderedCameras[i];
+          final isActive = st.activeCameraId == entry.id;
+          final isFav = managerAsync.hasValue
+              ? managerAsync.value!.favoritedIds.contains(entry.id)
+              : false;
+          return _CameraCell(
+            entry: entry,
+            isActive: isActive,
+            isFavorite: isFav,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              ref.read(cameraAppProvider.notifier).switchCamera(entry.id);
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  // ── 功能图标行 ─────────────────────────────────────────────────────────────
+  Widget _buildFunctionRow(BuildContext context, WidgetRef ref, CameraAppState st, CameraDefinition cam) {
+    final uiCap = cam.uiCapabilities;
+    final List<Widget> items = [];
+
+    if (uiCap.enableWatermark) {
+      final active = st.activeWatermark;
+      final hasWatermark = active != null && !active.isNone;
+      items.add(_FuncBtn(
+        label: '时间水印',
+        child: _WatermarkIcon(active: hasWatermark),
+        isActive: hasWatermark,
+        onTap: () => _openSubPanel(context, ref, _SubPanelType.watermark, cam),
+      ));
+    }
+
+    if (uiCap.enableFrame) {
+      final hasFrame = st.activeFrameId != null;
+      final ratioSupportsFrame = cam.isFrameEnabled(st.activeRatioId);
+      items.add(Opacity(
+        opacity: ratioSupportsFrame ? 1.0 : 0.35,
+        child: IgnorePointer(
+          ignoring: !ratioSupportsFrame,
+          child: _FuncBtn(
+            label: '边框',
+            child: _FrameIcon(active: hasFrame && ratioSupportsFrame),
+            isActive: hasFrame && ratioSupportsFrame,
+            onTap: () => _openSubPanel(context, ref, _SubPanelType.frame, cam),
+          ),
+        ),
+      ));
+    }
+
+    if (uiCap.enableRatio) {
+      final ratio = st.activeRatio;
+      final isDefaultRatio = st.activeRatioId == null ||
+          st.activeRatioId == cam.defaultSelection.ratioId;
+      final ratioLabel = ratio?.label ?? '3:4';
+      items.add(_FuncBtn(
+        label: isDefaultRatio ? '原比例' : ratioLabel,
+        child: _RatioIcon(
+          label: isDefaultRatio ? '原比例' : ratioLabel,
+          isDefault: isDefaultRatio,
+        ),
+        isActive: !isDefaultRatio,
+        onTap: () => _openSubPanel(context, ref, _SubPanelType.ratio, cam),
+      ));
+    }
+
+    if (uiCap.enableFilter) {
+      items.add(_FuncBtn(
+        label: '滤镜',
+        child: const _FilmFilterIcon(),
+        isActive: false,
+        onTap: () => _openSubPanel(context, ref, _SubPanelType.filter, cam),
+      ));
+    }
+
+    items.add(const _DotSeparator());
+
+    if (uiCap.enableLens) {
+      for (final lens in cam.modules.lenses) {
+        final isActive = st.activeLensId == lens.id;
+        items.add(_LensBtn(
+          lens: lens,
+          isActive: isActive,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            ref.read(cameraAppProvider.notifier).selectLens(lens.id);
+          },
+        ));
+      }
+    }
+
+    return SizedBox(
+      height: 90,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        children: items.map((w) => Padding(
+          padding: const EdgeInsets.only(right: 16),
+          child: w,
+        )).toList(),
+      ),
+    );
+  }
+
+  void _openSubPanel(BuildContext context, WidgetRef ref, _SubPanelType type, CameraDefinition cam) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black26,
+      isDismissible: true,
+      enableDrag: true,
+      useRootNavigator: false,
+      builder: (modalCtx) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: _SubPanel(type: type, camera: cam),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 弹框版（保持不变，供相机页使用）
+// ─────────────────────────────────────────────────────────────────────────────
 class _CameraConfigSheet extends ConsumerStatefulWidget {
   const _CameraConfigSheet();
 

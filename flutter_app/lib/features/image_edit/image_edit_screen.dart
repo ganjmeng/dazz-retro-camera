@@ -55,6 +55,12 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   bool _isCropMode = false;
   Rect _cropRect = const Rect.fromLTWH(0, 0, 1, 1);
 
+  // ── 预览手势（缩放/拖动）────────────────────────────────────────────────
+  double _previewScale = 1.0;       // 当前缩放倍率
+  double _scaleStart = 1.0;         // 捏合手势开始时的缩放倍率
+  Offset _previewOffset = Offset.zero; // 当前平移偏移
+  Offset _panStart = Offset.zero;   // 拖动手势开始时的偏移
+
   // ── 面板状态 ──────────────────────────────────────────────────────────────
   String? _activePanel; // 'filter' | 'frame' | 'watermark' | null
 
@@ -234,10 +240,8 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
             ),
             // ── 旋转刻度尺 ──────────────────────────────────────────────────
             _buildRotationRuler(),
-            // ── 相机选择横向列表 ────────────────────────────────────────────
-            _buildCameraSelector(st),
-            // ── 底部工具按钮行 ──────────────────────────────────────────────
-            _buildBottomToolbar(st, camera, uiCap),
+            // ── 相机菜单（常驻底部）────────────────────────────────────────
+            _buildInlineCameraMenu(st),
             // ── 上滑子面板 ──────────────────────────────────────────────────
             if (_activePanel != null && camera != null)
               _buildSubPanel(st, camera),
@@ -311,43 +315,73 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
       );
     }
-    return Center(
-      child: AspectRatio(
-        aspectRatio: st.previewAspectRatio,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                ClipRect(
-                  child: _buildTransformedImage(st, constraints),
-                ),
-                if (st.activeFrame != null)
-                  IgnorePointer(
-                    child: _FramePreviewOverlay(
-                      frame: st.activeFrame!,
-                      ratioId: st.activeRatioId ?? '',
+    return GestureDetector(
+      // 双击重置缩放
+      onDoubleTap: () => setState(() {
+        _previewScale = 1.0;
+        _previewOffset = Offset.zero;
+      }),
+      // 捕合缩放
+      onScaleStart: (d) {
+        _scaleStart = _previewScale;
+        _panStart = d.focalPoint - _previewOffset;
+      },
+      onScaleUpdate: (d) {
+        setState(() {
+          // 缩放：1.0 ~ 5.0
+          _previewScale = (_scaleStart * d.scale).clamp(1.0, 5.0);
+          // 拖动（只在缩放 > 1 时允许拖动）
+          if (_previewScale > 1.0) {
+            _previewOffset = d.focalPoint - _panStart;
+          } else {
+            _previewOffset = Offset.zero;
+          }
+        });
+      },
+      child: Center(
+        child: Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.identity()
+            ..translate(_previewOffset.dx, _previewOffset.dy)
+            ..scale(_previewScale),
+          child: AspectRatio(
+            aspectRatio: st.previewAspectRatio,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ClipRect(
+                      child: _buildTransformedImage(st, constraints),
                     ),
-                  ),
-                if (st.activeWatermark != null && !st.activeWatermark!.isNone)
-                  IgnorePointer(
-                    child: _WatermarkPreviewOverlay(
-                      watermark: st.activeWatermark!,
-                      colorOverride: st.watermarkColor,
-                      positionOverride: st.watermarkPosition,
-                      sizeOverride: st.watermarkSize,
-                      directionOverride: st.watermarkDirection,
-                      styleId: st.watermarkStyle,
-                    ),
-                  ),
-                if (_isCropMode)
-                  _CropOverlay(
-                    cropRect: _cropRect,
-                    onCropChanged: (rect) => setState(() => _cropRect = rect),
-                  ),
-              ],
-            );
-          },
+                    if (st.activeFrame != null)
+                      IgnorePointer(
+                        child: _FramePreviewOverlay(
+                          frame: st.activeFrame!,
+                          ratioId: st.activeRatioId ?? '',
+                        ),
+                      ),
+                    if (st.activeWatermark != null && !st.activeWatermark!.isNone)
+                      IgnorePointer(
+                        child: _WatermarkPreviewOverlay(
+                          watermark: st.activeWatermark!,
+                          colorOverride: st.watermarkColor,
+                          positionOverride: st.watermarkPosition,
+                          sizeOverride: st.watermarkSize,
+                          directionOverride: st.watermarkDirection,
+                          styleId: st.watermarkStyle,
+                        ),
+                      ),
+                    if (_isCropMode)
+                      _CropOverlay(
+                        cropRect: _cropRect,
+                        onCropChanged: (rect) => setState(() => _cropRect = rect),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -456,7 +490,12 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     );
   }
 
-  // ── 相机选择横向列表 ──────────────────────────────────────────────────────
+  // ── 常驻底部相机菜单 ─────────────────────────────────────────────────
+  Widget _buildInlineCameraMenu(CameraAppState st) {
+    return const CameraConfigInlinePanel();
+  }
+
+  // ── 相机选择横向列表（备用，已不在主流程中使用）─────────────────────────────
   Widget _buildCameraSelector(CameraAppState st) {
     return GestureDetector(
       onTap: () => showCameraConfigSheet(context),
