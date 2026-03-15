@@ -9,7 +9,9 @@ import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
 import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.CameraCharacteristics
 import androidx.camera.camera2.interop.Camera2CameraControl
+import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.camera2.interop.CaptureRequestOptions
 import android.util.Size
@@ -203,13 +205,52 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
     }
 
+    /**
+     * 在高品质模式下，通过 Camera2CameraInfo 查询所有后置摄像头的传感器像素阵列大小，
+     * 选择像素数最大的主摄，避免 CameraX 默认选到超广角或长焦镜头。
+     */
+    @androidx.camera.camera2.interop.ExperimentalCamera2Interop
+    private fun buildCameraSelector(provider: androidx.camera.lifecycle.ProcessCameraProvider): CameraSelector {
+        if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
+            return CameraSelector.DEFAULT_FRONT_CAMERA
+        }
+        // 高品质模式：选最大传感器的后置摄像头
+        if (currentSharpenLevel >= 0.7f) {
+            try {
+                val backCameras = provider.availableCameraInfos.filter { info ->
+                    Camera2CameraInfo.from(info).getCameraCharacteristic(
+                        CameraCharacteristics.LENS_FACING
+                    ) == CameraCharacteristics.LENS_FACING_BACK
+                }
+                val bestCamera = backCameras.maxByOrNull { info ->
+                    val size = Camera2CameraInfo.from(info).getCameraCharacteristic(
+                        CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE
+                    )
+                    (size?.width?.toLong() ?: 0L) * (size?.height?.toLong() ?: 0L)
+                }
+                if (bestCamera != null) {
+                    val camId = Camera2CameraInfo.from(bestCamera).cameraId
+                    Log.d(TAG, "高品质模式：选择最大传感器摄像头 ID=$camId")
+                    return CameraSelector.Builder()
+                        .addCameraFilter { cams ->
+                            cams.filter { Camera2CameraInfo.from(it).cameraId == camId }
+                        }
+                        .build()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "最大传感器摄像头选择失败，回落到默认后置: ${e.message}")
+            }
+        }
+        return CameraSelector.Builder()
+            .requireLensFacing(lensFacing)
+            .build()
+    }
+
     private fun bindCameraUseCases(owner: LifecycleOwner) {
         val provider = cameraProvider ?: return
         val st = surfaceTexture ?: return
-
-        val cameraSelector = CameraSelector.Builder()
-            .requireLensFacing(lensFacing)
-            .build()
+        @Suppress("UnsafeOptInUsageError")
+        val cameraSelector = buildCameraSelector(provider)
 
         preview = Preview.Builder().build().also { prev ->
             // GL 渲染模式：相机帧 → CameraGLRenderer（EGL + 着色器）→ Flutter SurfaceTexture
@@ -610,9 +651,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             bgExecutor.execute {
                 try {
                     val newImageCapture = buildImageCapture(currentSharpenLevel)
-                    val cameraSelector = CameraSelector.Builder()
-                        .requireLensFacing(lensFacing)
-                        .build()
+                    @Suppress("UnsafeOptInUsageError")
+                    val cameraSelector = buildCameraSelector(provider)
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         try {
                             // CRITICAL FIX: Must unbindAll and rebind ALL use cases together.
