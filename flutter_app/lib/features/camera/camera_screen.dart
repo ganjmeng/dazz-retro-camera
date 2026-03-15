@@ -1329,7 +1329,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
   // ── 工具栏（5个图标）────────────────────────────────────────────────────────
   Widget _buildToolbar(CameraAppState st) {
-    const double btnW = 72.0;
+    const double btnW = 52.0;
     return SizedBox(
       height: 52,
       child: Center(
