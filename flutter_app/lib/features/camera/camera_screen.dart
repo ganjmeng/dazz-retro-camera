@@ -1482,10 +1482,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             GestureDetector(
               onTap: () => showCameraConfigSheet(context),
               child: SizedBox(
-                width: 100,
-                height: 100,
+                width: 97,
+                height: 97,
                 child: Stack(
-                  clipBehavior: Clip.none,
                   alignment: Alignment.center,
                   children: [
                     // 虚线圆圈背景（圆圈大小 70，图标不变）
@@ -1526,10 +1525,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                 entry.name,
                                 style: const TextStyle(
                                   color: _kWhite,
-                                  fontSize: 9,
+                                  fontSize: 8,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0.3,
-                                  height: 1.1,
+                                  height: 1.0,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
