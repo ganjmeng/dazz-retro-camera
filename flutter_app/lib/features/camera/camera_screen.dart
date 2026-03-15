@@ -3781,12 +3781,14 @@ class _ZoomHorizontalSlider extends StatelessWidget {
 //   x0.6 → 比 x1.0 还大（但不超过取景框）
 // 小窗内显示网格线（当 gridEnabled 时）
 // 小窗内显示等效焦距标签
-class _MinimapOverlay extends StatelessWidget {
+// 小窗边框圆角（与取景框一致）
+const _kMinimapRadius = 16.0;
+
+class _MinimapOverlay extends StatefulWidget {
   final double zoomLevel;
   final bool gridEnabled;
   final double areaW;
   final double areaH;
-
   const _MinimapOverlay({
     required this.zoomLevel,
     required this.gridEnabled,
@@ -3795,10 +3797,7 @@ class _MinimapOverlay extends StatelessWidget {
   });
 
   /// 计算小窗在取景框内的归一化 Rect（用于拍照时裁剪）
-  /// 小窗始终居中，宽高比 = 取景框宽高比
   static Rect calcNormalizedRect(double zoomLevel) {
-    // x1.0 时小窗占满取景框（归一化 = 整个画面）
-    // 随缩放增大，小窗缩小（反比）
     final scale = (1.0 / zoomLevel).clamp(0.05, 1.0);
     final left = (1.0 - scale) / 2;
     final top = (1.0 - scale) / 2;
@@ -3806,39 +3805,114 @@ class _MinimapOverlay extends StatelessWidget {
   }
 
   @override
+  State<_MinimapOverlay> createState() => _MinimapOverlayState();
+}
+
+class _MinimapOverlayState extends State<_MinimapOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _borderAnim;
+  late Animation<double> _borderOpacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _borderAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    );
+    _borderOpacity = CurvedAnimation(
+      parent: _borderAnim,
+      curve: Curves.easeInOut,
+    );
+    // 初始状态：根据当前缩放判断边框可见性
+    if (widget.zoomLevel > 1.0) {
+      _borderAnim.value = 1.0;
+    }
+  }
+
+  @override
+  void didUpdateWidget(_MinimapOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.zoomLevel != widget.zoomLevel) {
+      if (widget.zoomLevel > 1.0) {
+        _borderAnim.forward();
+      } else {
+        _borderAnim.reverse();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _borderAnim.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final scale = (1.0 / zoomLevel).clamp(0.05, 1.0);
-    final boxW = areaW * scale;
-    final boxH = areaH * scale;
-    const radius = 0.0; // 小窗直角（方形）
-
+    final scale = (1.0 / widget.zoomLevel).clamp(0.05, 1.0);
+    final boxW = widget.areaW * scale;
+    final boxH = widget.areaH * scale;
+    const radius = _kMinimapRadius;
     // 等效焦距标签
-    final mm = (26.0 * zoomLevel).round();
+    final mm = (26.0 * widget.zoomLevel).round();
     final focalLabel = '${mm}mm';
-
-    // 小窗顶部外侧居中的 Y 坐标：取景框垂直中心 - boxH/2 - 标签高度 - 间距
-    // 在 Positioned.fill 的 Stack 中，居中小窗的 top = areaH/2 - boxH/2
-    final labelTopOffset = (areaH - boxH) / 2 - 24.0; // 24 = 标签高度+间距
+    // 胶片文字固定在取景框顶部（不随小窗缩放移动）
+    const labelTopFixed = 12.0;
 
     return Positioned.fill(
       child: IgnorePointer(
         child: Stack(
           children: [
-            // ── 小窗外部暗化遗罩：用 CustomPaint 绘制“挖空”效果 ──
+            // ── 小窗外部暗化遮罩：用 CustomPaint 绘制"挖空"效果 ──
             Positioned.fill(
               child: CustomPaint(
                 painter: _MinimapDimPainter(
                   boxW: boxW,
                   boxH: boxH,
                   radius: radius,
-                  areaW: areaW,
-                  areaH: areaH,
+                  areaW: widget.areaW,
+                  areaH: widget.areaH,
                 ),
               ),
             ),
-            // ── 焦距标签：小窗顶部外侧正上方居中 ──
+            // ── 小窗主体：圆角边框 + 内部网格（居中）──
+            Center(
+              child: SizedBox(
+                width: boxW,
+                height: boxH,
+                child: Stack(
+                  children: [
+                    // 圆角边框（缩放≤1时淡出）
+                    Positioned.fill(
+                      child: FadeTransition(
+                        opacity: _borderOpacity,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(radius),
+                            border: Border.all(
+                              color: Colors.white.withAlpha(220),
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // 圆角裁剪的网格线（仅在 gridEnabled 时显示）
+                    if (widget.gridEnabled)
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(radius),
+                          child: CustomPaint(painter: _GridPainter()),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            // ── 胶片文字：固定在取景框顶部，不随小窗大小变化 ──
             Positioned(
-              top: labelTopOffset.clamp(4.0, areaH),
+              top: labelTopFixed,
               left: 0,
               right: 0,
               child: Center(
@@ -3855,75 +3929,10 @@ class _MinimapOverlay extends StatelessWidget {
                 ),
               ),
             ),
-            // ── 小窗主体：圆角边框 + 内部网格 ──
-            Center(
-              child: SizedBox(
-                width: boxW,
-                height: boxH,
-                child: Stack(
-                  children: [
-                    // 直角边框（小窗模式四角无圆角）
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: Colors.white.withAlpha(220),
-                            width: 1.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                    // 圆角裁剪的网格线（仅在 gridEnabled 时显示）
-                    if (gridEnabled)
-                      Positioned.fill(
-                        child: radius > 0
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(radius),
-                                child: CustomPaint(painter: _GridPainter()),
-                              )
-                            : CustomPaint(painter: _GridPainter()),
-                      ),
-                    // 四角 L 形角标已移除
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       ),
     );
-  }
-
-  List<Widget> _buildCorners(double w, double h) {
-    const len = 12.0;
-    const thick = 2.0;
-    const color = Colors.white;
-    return [
-      // 左上
-      Positioned(
-        left: 0, top: 0,
-        child: _Corner(len: len, thick: thick, color: color,
-            showRight: true, showBottom: true),
-      ),
-      // 右上
-      Positioned(
-        right: 0, top: 0,
-        child: _Corner(len: len, thick: thick, color: color,
-            showLeft: true, showBottom: true),
-      ),
-      // 左下
-      Positioned(
-        left: 0, bottom: 0,
-        child: _Corner(len: len, thick: thick, color: color,
-            showRight: true, showTop: true),
-      ),
-      // 右下
-      Positioned(
-        right: 0, bottom: 0,
-        child: _Corner(len: len, thick: thick, color: color,
-            showLeft: true, showTop: true),
-      ),
-    ];
   }
 }
 
