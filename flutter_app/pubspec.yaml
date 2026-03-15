@@ -70,15 +70,11 @@ flutter:
   assets:
     - assets/cameras/
     - assets/presets/
-    - assets/lut/
     - assets/lut/cameras/
-    - assets/grain/
     - assets/frames/
     - assets/watermarks/
     - assets/thumbnails/
     - assets/thumbnails/cameras/
-    - assets/thumbnails/filters/
-    - assets/thumbnails/lenses/
     - assets/thumbnails/frames/
     - assets/images/
     - assets/samples/
