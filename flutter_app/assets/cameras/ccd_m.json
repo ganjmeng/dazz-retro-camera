@@ -292,7 +292,7 @@
     "enableLightLensEffect": true,
     "enableGrain": false,
     "enableBloom": false,
-    "enableChromaticAberration": false,
+    "enableChromaticAberration": true,
     "enableFrameComposite": false,
     "enableWatermarkComposite": true
   },

@@ -277,7 +277,7 @@
     "enableVignette": true,
     "enableLightLensEffect": true,
     "enableGrain": false,
-    "enableBloom": false,
+    "enableBloom": true,
     "enableChromaticAberration": false,
     "enableFrameComposite": false,
     "enableWatermarkComposite": true

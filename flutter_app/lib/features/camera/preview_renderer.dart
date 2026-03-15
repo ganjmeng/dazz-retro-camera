@@ -64,6 +64,14 @@ class PreviewRenderParams {
     return (activeLens?.softFocus ?? 0).clamp(0.0, 1.0);
   }
 
+  /// 真实镜头畸变：负值=桶形(barrel/fisheye)，正值=枕形(pincushion/tele)
+  /// 来源：defaultLook.distortion + lens.distortion 叠加
+  double get effectiveDistortion {
+    final base = defaultLook.distortion;
+    final lens = activeLens?.distortion ?? 0;
+    return (base + lens).clamp(-1.0, 1.0);
+  }
+
   double get effectiveContrast {
     final base = defaultLook.contrast;
     final filter = activeFilter?.contrast ?? 1.0;
@@ -167,10 +175,13 @@ class PreviewFilterWidget extends StatelessWidget {
                 if (params.policy.enableVignette && params.effectiveVignette > 0.01)
                   _VignetteLayer(strength: params.effectiveVignette),
 
-                // Layer 5: Lens distortion indicator (visual only, subtle)
-                if (params.activeLens?.distortion != null &&
-                    (params.activeLens!.distortion).abs() > 0.01)
-                  _DistortionIndicator(distortion: params.activeLens!.distortion),
+                // Layer 5: TRUE barrel/pincushion distortion mesh warp
+                if (params.effectiveDistortion.abs() > 0.01)
+                  _DistortionLayer(
+                    textureId: textureId,
+                    distortion: params.effectiveDistortion,
+                    chromaticAberration: params.effectiveChromaticAberration,
+                  ),
               ],
             ),
           ),
@@ -614,34 +625,149 @@ class _VignettePainter extends CustomPainter {
   @override
   bool shouldRepaint(_VignettePainter old) => old.strength != strength;
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Layer 5: Distortion indicator (subtle corner warp hint)
+// Layer 5: TRUE Barrel / Pincushion Distortion via mesh warp
+// Brown-Conrady 径向畸变模型：r' = r * (1 + k1 * r²)
+//   k1 < 0 → barrel (鱼眼/广角)   k1 > 0 → pincushion (长焦)
 // ─────────────────────────────────────────────────────────────────────────────
-
-class _DistortionIndicator extends StatelessWidget {
-  final double distortion; // negative = barrel, positive = pincushion
-
-  const _DistortionIndicator({required this.distortion});
-
+class _DistortionLayer extends StatefulWidget {
+  final int textureId;
+  final double distortion;
+  final double chromaticAberration;
+  const _DistortionLayer({
+    required this.textureId,
+    required this.distortion,
+    this.chromaticAberration = 0,
+  });
+  @override
+  State<_DistortionLayer> createState() => _DistortionLayerState();
+}
+class _DistortionLayerState extends State<_DistortionLayer> {
+  final GlobalKey _captureKey = GlobalKey();
+  ui.Image? _frame;
+  bool _busy = false;
+  int get _gridN => widget.distortion.abs() > 0.3 ? 32 : 20;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loop());
+  }
+  void _loop() {
+    if (!mounted || _busy) return;
+    _busy = true;
+    Future.delayed(const Duration(milliseconds: 33), () async {
+      if (!mounted) { _busy = false; return; }
+      try {
+        final rb = _captureKey.currentContext?.findRenderObject()
+            as RenderRepaintBoundary?;
+        if (rb != null) {
+          final img = await rb.toImage(pixelRatio: 1.0);
+          if (mounted) setState(() => _frame = img);
+        }
+      } catch (_) {}
+      _busy = false;
+      if (mounted) _loop();
+    });
+  }
   @override
   Widget build(BuildContext context) {
-    // Very subtle visual indicator — just a slight opacity gradient
-    // Real barrel/pincushion distortion requires GPU shader (handled in capture pipeline)
-    final isBarrel = distortion < 0;
-    return IgnorePointer(
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment.center,
-            radius: 1.0,
-            colors: [
-              Colors.transparent,
-              isBarrel
-                  ? Colors.black.withAlpha(15)
-                  : Colors.white.withAlpha(8),
-            ],
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Opacity(
+          opacity: 0.0,
+          child: RepaintBoundary(
+            key: _captureKey,
+            child: Texture(textureId: widget.textureId),
           ),
+        ),
+        if (_frame != null)
+          IgnorePointer(
+            child: CustomPaint(
+              painter: _WarpPainter(
+                image: _frame!,
+                distortion: widget.distortion,
+                gridN: _gridN,
+              ),
+            ),
+          )
+        else
+          Texture(textureId: widget.textureId),
+      ],
+    );
+  }
+}
+class _WarpPainter extends CustomPainter {
+  final ui.Image image;
+  final double distortion;
+  final int gridN;
+  const _WarpPainter({required this.image, required this.distortion, required this.gridN});
+  Offset _warp(double nx, double ny, double k1) {
+    final r2 = nx * nx + ny * ny;
+    final factor = 1.0 + k1 * r2;
+    return Offset(nx * factor, ny * factor);
+  }
+  @override
+  void paint(Canvas canvas, Size size) {
+    final imgW = image.width.toDouble();
+    final imgH = image.height.toDouble();
+    final w = size.width;
+    final h = size.height;
+    final k1 = distortion * 0.75;
+    final n = gridN;
+    final positions = <Offset>[];
+    final texCoords = <Offset>[];
+    final indices = <int>[];
+    for (int row = 0; row <= n; row++) {
+      for (int col = 0; col <= n; col++) {
+        final sx = col / n * w;
+        final sy = row / n * h;
+        final nx = (col / n) * 2.0 - 1.0;
+        final ny = (row / n) * 2.0 - 1.0;
+        final warped = _warp(nx, ny, k1);
+        final u = ((warped.dx + 1.0) / 2.0).clamp(0.0, 1.0);
+        final v = ((warped.dy + 1.0) / 2.0).clamp(0.0, 1.0);
+        positions.add(Offset(sx, sy));
+        texCoords.add(Offset(u * imgW, v * imgH));
+      }
+    }
+    for (int row = 0; row < n; row++) {
+      for (int col = 0; col < n; col++) {
+        final tl = row * (n + 1) + col;
+        final tr = tl + 1;
+        final bl = tl + (n + 1);
+        final br = bl + 1;
+        indices.addAll([tl, tr, bl]);
+        indices.addAll([tr, br, bl]);
+      }
+    }
+    final shader = ui.ImageShader(
+      image, TileMode.clamp, TileMode.clamp, Matrix4.identity().storage,
+    );
+    final paint = Paint()..shader = shader..filterQuality = FilterQuality.medium;
+    final vertices = ui.Vertices(
+      ui.VertexMode.triangles, positions,
+      textureCoordinates: texCoords, indices: indices,
+    );
+    canvas.drawVertices(vertices, BlendMode.src, paint);
+    if (distortion < -0.2) {
+      final vigStrength = (-distortion - 0.2) * 0.8;
+      final center = Offset(w / 2, h / 2);
+      final radius = math.sqrt(w * w + h * h) / 2;
+      final vp = Paint()
+        ..shader = RadialGradient(
+          center: Alignment.center, radius: 1.0,
+          colors: [Colors.transparent, Colors.transparent,
+            Colors.black.withAlpha((vigStrength * 180).round())],
+          stops: const [0.0, 0.55, 1.0],
+        ).createShader(Rect.fromCircle(center: center, radius: radius * 1.1));
+      canvas.drawRect(Offset.zero & size, vp);
+    }
+  }
+  @override
+  bool shouldRepaint(_WarpPainter old) =>
+      old.image != image || old.distortion != distortion;
+}
         ),
       ),
     );

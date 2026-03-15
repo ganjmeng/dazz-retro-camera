@@ -209,9 +209,9 @@
     "enableSaturation": true,
     "enableVignette": true,
     "enableLightLensEffect": false,
-    "enableGrain": false,
+    "enableGrain": true,
     "enableBloom": false,
-    "enableChromaticAberration": false,
+    "enableChromaticAberration": true,
     "enableFrameComposite": false,
     "enableWatermarkComposite": true
   },
