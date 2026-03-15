@@ -88,13 +88,22 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     }
     
     private func handleUpdateLensParams(call: FlutterMethodCall, result: @escaping FlutterResult) {
-        // 镜头切换时实时更新 Metal shader 中的畸变参数
+        // 镜头切换时实时更新 Metal shader 中的镜头参数
+        // distortion: Brown-Conrady k1 系数，负值=桶形畸变（鱼眼/广角）
+        // vignette: 镜头层暗角，叠加在 preset 暗角之上
+        // zoomFactor: UV 缩放，<1.0 时视野扩大（鱼眼圆形遮罩效果）
         guard let args = call.arguments as? [String: Any] else {
             result(FlutterError(code: "1004", message: "Invalid lens parameters", details: nil))
             return
         }
-        let distortion = (args["distortion"] as? NSNumber)?.floatValue ?? 0.0
-        renderer?.updateParams(["distortion": distortion])
+        let distortion  = (args["distortion"]  as? NSNumber)?.floatValue ?? 0.0
+        let vignette    = (args["vignette"]    as? NSNumber)?.floatValue ?? 0.0
+        let zoomFactor  = (args["zoomFactor"]  as? NSNumber)?.floatValue ?? 1.0
+        renderer?.updateParams([
+            "distortion":   distortion,
+            "lensVignette": vignette,
+            "zoomFactor":   zoomFactor,
+        ])
         result(["success": true])
     }
     

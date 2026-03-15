@@ -45,7 +45,7 @@ struct CCDParams {
     // ── 胶片效果 ──────────────────────────────────────────────
     float grainAmount;         // 颗粒强度 0~1
     float noiseAmount;         // 数字噪点强度 0~1
-    float vignetteAmount;      // 暗角强度 0~1
+    float vignetteAmount;      // 暗角强度 0~1（preset 层）
     float chromaticAberration; // 色差强度
     float bloomAmount;         // 高光光晕强度
     float halationAmount;      // 光晕（胶片漏光感）
@@ -54,6 +54,8 @@ struct CCDParams {
     float jpegArtifacts;       // JPEG 压缩感
     float time;                // 动态噪点时间种子
     float distortion;          // 镜头畸变：负值=桶形(鱼眼), 正值=枕形, 0=无畸变
+    float zoomFactor;          // 镜头缩放倍数：1.0=标准, 0.5=超广角/鱼眼（UV 缩放）
+    float lensVignette;        // 镜头层暗角（叠加在 preset 暗角之上）
 };
 
 // MARK: - 工具函数
@@ -69,7 +71,15 @@ float2 applyLensDistortion(float2 uv, float k1) {
     return centered / scale + 0.5;        // 反变换：采样点往内收 = 图像向外鼓
 }
 
-/// 暗角强度
+/// 镜头缩放：zoomFactor < 1.0 时视野扩大（鱼眼效果），超出 [0,1] 的区域填黑
+/// zoomFactor = 0.5 时，UV 范围扩展到 [-0.25, 1.25]，超出部分为黑色圆形遮罩
+float2 applyZoom(float2 uv, float zoomFactor) {
+    if (abs(zoomFactor - 1.0) < 0.001) return uv;
+    float2 centered = (uv - 0.5) * zoomFactor;
+    return centered + 0.5;
+}
+
+/// 暗角强度（椭圆径向渐变）
 float vignetteEffect(float2 uv, float amount) {
     float2 d = uv - 0.5;
     return 1.0 - dot(d, d) * amount * 2.5;
@@ -165,13 +175,26 @@ fragment float4 ccdFragmentShader(
     texture2d<float> grainTexture  [[texture(2)]],
     constant CCDParams &params     [[buffer(0)]]
 ) {
-    constexpr sampler textureSampler(mag_filter::linear, min_filter::linear);
+    constexpr sampler textureSampler(mag_filter::linear, min_filter::linear,
+                                     address_u::clamp_to_zero,
+                                     address_v::clamp_to_zero);
     
     float2 uv = in.texCoord;
 
-    // === Pass 0: 镜头畸变（在所有色彩处理之前变换 UV）===
+    // === Pass 0a: 镜头缩放（鱼眼视野扩展）===
+    // zoomFactor < 1.0 时 UV 向外扩展，超出 [0,1] 的区域为黑色（圆形遮罩效果）
+    // fisheye: zoomFactor=0.5 → 视野扩大 2x，形成圆形鱼眼外观
+    // ultra_fisheye: zoomFactor=0.35 → 视野扩大 ~2.86x，更强烈的圆形效果
+    if (params.zoomFactor > 0.001 && abs(params.zoomFactor - 1.0) > 0.001) {
+        uv = applyZoom(uv, params.zoomFactor);
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+            return float4(0.0, 0.0, 0.0, 1.0);
+        }
+    }
+
+    // === Pass 0b: 镜头畸变（Brown-Conrady 径向畸变）===
     // params.distortion 直接映射到 k1（Brown-Conrady 系数）
-    // 鱼眼 distortion=-0.60 → k1=-0.45（强桶形）
+    // 鱼眼 distortion=-0.60 → k1=-0.45（强桶形，图像向外鼓）
     // 广角 distortion=-0.08 → k1=-0.06（轻微桶形）
     // 长焦 distortion=+0.05 → k1=+0.0375（轻微枕形）
     float k1 = params.distortion * 0.75;
@@ -238,7 +261,9 @@ fragment float4 ccdFragmentShader(
     }
     
     // === Pass 12: 暗角 (Vignette) ===
-    float vignette = vignetteEffect(uv, params.vignetteAmount);
+    // preset 暗角 + 镜头层暗角叠加，上限 1.0
+    float vigTotal = min(params.vignetteAmount + params.lensVignette, 1.0);
+    float vignette = vignetteEffect(uv, vigTotal);
     color *= vignette;
     
     return float4(color, 1.0);

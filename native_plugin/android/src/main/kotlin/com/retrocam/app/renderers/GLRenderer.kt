@@ -42,6 +42,10 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
     private var time = 0.0f
     // 镜头畸变（Brown-Conrady k1）：负值=桶形(鱼眼), 正值=枕形
     private var distortion = 0.0f
+    // 镜头缩放：1.0=标准, 0.5=鱼眼视野扩展（圆形遮罩效果）
+    private var zoomFactor = 1.0f
+    // 镜头层暗角（叠加在 preset 暗角之上）
+    private var lensVignette = 0.0f
     
     init {
         // In a real implementation, we would set up an EGL context here
@@ -89,6 +93,8 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
         (params["bloom"] as? Number)?.let { bloomAmount = it.toFloat() }
         (params["grain"] as? Number)?.let { grainAmount = it.toFloat() }
         (params["distortion"] as? Number)?.let { distortion = it.toFloat() }
+        (params["zoomFactor"] as? Number)?.let { zoomFactor = it.toFloat() }
+        (params["lensVignette"] as? Number)?.let { lensVignette = it.toFloat() }
         
         // In a real implementation, we would load the textures from Flutter assets here
         // using FlutterInjector.instance().flutterLoader().getLookupKeyForAsset()
@@ -171,7 +177,9 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
         // glUniform1f(bloomLoc, bloomAmount)
         // glUniform1f(grainLoc, grainAmount)
         // glUniform1f(timeLoc, time)
-        // glUniform1f(distortionLoc, distortion)  // 镜头畸变 uniform
+        // glUniform1f(distortionLoc, distortion)      // 镜头畸变 uniform
+        // glUniform1f(zoomFactorLoc, zoomFactor)       // 镜头缩放（鱼眼圆形遮罩）
+        // glUniform1f(lensVignetteLoc, lensVignette)   // 镜头层暗角
         
         // 4. Draw using OpenGL ES with the active shader program
         // glDrawArrays(GL_TRIANGLE_STRIP, 0, 4)

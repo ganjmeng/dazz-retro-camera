@@ -89,9 +89,18 @@ class RetroCamPlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHandl
     }
 
     private fun handleUpdateLensParams(call: MethodCall, result: Result) {
-        // 镜头切换时实时更新 GPU shader 中的畸变参数
-        val distortion = call.argument<Double>("distortion") ?: 0.0
-        glRenderer?.updateParams(mapOf("distortion" to distortion))
+        // 镜头切换时实时更新 OpenGL ES shader 中的镜头参数
+        // distortion: Brown-Conrady k1 系数，负值=桶形畸变（鱼眼/广角）
+        // lensVignette: 镜头层暗角，叠加在 preset 暗角之上
+        // zoomFactor: UV 缩放，<1.0 时视野扩大（鱼眼圆形遮罩效果）
+        val distortion   = call.argument<Double>("distortion")   ?: 0.0
+        val lensVignette = call.argument<Double>("lensVignette") ?: 0.0
+        val zoomFactor   = call.argument<Double>("zoomFactor")   ?: 1.0
+        glRenderer?.updateParams(mapOf(
+            "distortion"   to distortion,
+            "lensVignette" to lensVignette,
+            "zoomFactor"   to zoomFactor,
+        ))
         result.success(mapOf("success" to true))
     }
 

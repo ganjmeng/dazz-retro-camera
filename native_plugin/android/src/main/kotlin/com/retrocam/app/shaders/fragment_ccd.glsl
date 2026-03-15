@@ -30,11 +30,13 @@ uniform float uColorBiasB;
 // ── 胶片效果参数 ──────────────────────────────────────────────
 uniform float uGrainAmount;        // 颗粒强度 0~1
 uniform float uNoiseAmount;        // 数字噪点强度 0~1
-uniform float uVignetteAmount;     // 暗角强度 0~1
+uniform float uVignetteAmount;     // 暗角强度 0~1（preset 层）
 uniform float uChromaticAberration;// 色差强度
 uniform float uBloomAmount;        // 高光光晕强度
 uniform float uTime;               // 动态噪点时间种子
 uniform float uDistortion;         // 镜头畸变：负值=桶形(鱼眼), 正值=枕形, 0=无畸变
+uniform float uZoomFactor;         // 镜头缩放：1.0=标准, 0.5=鱼眼视野扩展（圆形遮罩）
+uniform float uLensVignette;       // 镜头层暗角，叠加在 preset 暗角之上
 
 varying vec2 vTexCoord;
 
@@ -130,6 +132,16 @@ vec3 applyColorBias(vec3 color, float r, float g, float b) {
 }
 
 // ============================================================
+// 镜头缩放：zoomFactor < 1.0 时视野扩大（鱼眼圆形遮罩效果）
+// fisheye: zoomFactor=0.5 → 视野扩大 2x，形成圆形鱼眼外观
+// ultra_fisheye: zoomFactor=0.35 → 视野扩大 ~2.86x
+// ============================================================
+vec2 applyZoom(vec2 uv, float zoomFactor) {
+    vec2 centered = (uv - 0.5) * zoomFactor;
+    return centered + 0.5;
+}
+
+// ============================================================
 // 镜头畸变：Brown-Conrady 径向畸变模型
 // k1 < 0 → 桶形畸变（鱼眼/广角），k1 > 0 → 枕形畸变（长焦）
 // 公式：r' = r * (1 + k1 * r²)，在 UV 采样前变换坐标
@@ -150,9 +162,21 @@ vec2 applyLensDistortion(vec2 uv, float k1) {
 void main() {
     vec2 uv = vTexCoord;
 
-    // === Pass 0: 镜头畸变（在所有色彩处理之前变换 UV）===
+    // === Pass 0a: 镜头缩放（鱼眼视野扩展）===
+    // uZoomFactor < 1.0 时 UV 向外扩展，超出 [0,1] 的区域为黑色（圆形遮罩效果）
+    // fisheye: uZoomFactor=0.5 → 视野扩大 2x，形成圆形鱼眼外观
+    // ultra_fisheye: uZoomFactor=0.35 → 视野扩大 ~2.86x，更强烈的圆形效果
+    if (abs(uZoomFactor - 1.0) > 0.001) {
+        uv = applyZoom(uv, uZoomFactor);
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+        }
+    }
+
+    // === Pass 0b: 镜头畸变（Brown-Conrady 径向畸变）===
     // uDistortion 直接映射到 k1（Brown-Conrady 系数）
-    // 鱼眼 distortion=-0.60 → k1=-0.45（强桶形）
+    // 鱼眼 distortion=-0.60 → k1=-0.45（强桶形，图像向外鼓）
     // 广角 distortion=-0.08 → k1=-0.06（轻微桶形）
     // 长焦 distortion=+0.05 → k1=+0.0375（轻微枕形）
     float k1 = uDistortion * 0.75;
@@ -220,7 +244,9 @@ void main() {
     }
 
     // === Pass 12: 暗角 (Vignette) ===
-    float vignette = vignetteEffect(uv, uVignetteAmount);
+    // preset 暗角 + 镜头层暗角叠加，上限 1.0
+    float vigTotal = min(uVignetteAmount + uLensVignette, 1.0);
+    float vignette = vignetteEffect(uv, vigTotal);
     color *= vignette;
 
     gl_FragColor = vec4(color, 1.0);
