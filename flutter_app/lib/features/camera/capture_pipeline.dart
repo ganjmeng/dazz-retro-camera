@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img_lib;
@@ -371,7 +373,7 @@ class CapturePipeline {
       final finalW = deviceQuarter == 1 || deviceQuarter == 3 ? canvasH.toInt() : canvasW.toInt();
       final finalH = deviceQuarter == 1 || deviceQuarter == 3 ? canvasW.toInt() : canvasH.toInt();
 
-      final jpegBytes = _rgbaToJpegSync(
+      final jpegBytes = await _encodeJpeg(
         byteData.buffer.asUint8List(),
         finalW,
         finalH,
@@ -941,17 +943,28 @@ class CapturePipeline {
     }
   }
 
-  // ── RGBA bytes → JPEG bytes（使用 image 包实现真正 JPEG 编码）────────────────────
-  /// 同步 JPEG 编码（在主 Isolate 中运行，但尺寸已限制在 2048px，时间可接受）
-  Uint8List _rgbaToJpegSync(Uint8List rgba, int w, int h, {int quality = 82}) {
-    final image = img_lib.Image.fromBytes(
-      width: w,
-      height: h,
-      bytes: rgba.buffer,
-      format: img_lib.Format.uint8,
-      numChannels: 4,
-    );
-    final jpegBytes = img_lib.encodeJpg(image, quality: quality);
-    return Uint8List.fromList(jpegBytes);
+  // ── RGBA bytes → JPEG bytes（使用 compute() 在独立 Isolate 中编码，不阻塞 UI 线程）─────────
+  Future<Uint8List> _encodeJpeg(Uint8List rgba, int w, int h, {int quality = 82}) {
+    return compute(_encodeJpegIsolate, _JpegEncodeParams(rgba, w, h, quality));
   }
+}
+// ── Isolate 顶层函数（必须是顶层函数，不能是类方法）────────────────────────────────────
+class _JpegEncodeParams {
+  final Uint8List rgba;
+  final int w;
+  final int h;
+  final int quality;
+  const _JpegEncodeParams(this.rgba, this.w, this.h, this.quality);
+}
+
+Uint8List _encodeJpegIsolate(_JpegEncodeParams p) {
+  final image = img_lib.Image.fromBytes(
+    width: p.w,
+    height: p.h,
+    bytes: p.rgba.buffer,
+    format: img_lib.Format.uint8,
+    numChannels: 4,
+  );
+  final jpegBytes = img_lib.encodeJpg(image, quality: p.quality);
+  return Uint8List.fromList(jpegBytes);
 }
