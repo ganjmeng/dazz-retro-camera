@@ -64,6 +64,7 @@ class CameraAppState {
   final bool showZoomSlider;   // 胶囊点击后展开缩放滑动条
   final bool minimapEnabled;   // 小窗模式开关
   final bool locationEnabled;  // 位置信息开关：开启后拍照将 GPS 坐标写入 EXIF
+  final bool showDebugOverlay; // 调试信息浮层：显示实时渲染参数
 
   const CameraAppState({
     this.activeCameraId = 'grd_r',
@@ -100,6 +101,7 @@ class CameraAppState {
     this.showZoomSlider = false,
     this.minimapEnabled = false,
     this.locationEnabled = false,
+    this.showDebugOverlay = false,
   });
 
   CameraAppState copyWith({
@@ -138,6 +140,7 @@ class CameraAppState {
     bool? showZoomSlider,
     bool? minimapEnabled,
     bool? locationEnabled,
+    bool? showDebugOverlay,
     bool clearPanel = false,
     bool clearError = false,
     bool clearFrameId = false, // 用于将 activeFrameId 清空为 null
@@ -177,6 +180,7 @@ class CameraAppState {
       showZoomSlider: showZoomSlider ?? this.showZoomSlider,
       minimapEnabled: minimapEnabled ?? this.minimapEnabled,
       locationEnabled: locationEnabled ?? this.locationEnabled,
+      showDebugOverlay: showDebugOverlay ?? this.showDebugOverlay,
     );
   }
 
@@ -420,6 +424,11 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   /// 切换位置信息开关
   /// 返回切换后的状态和权限结果
+  /// 切换调试信息浮层
+  void toggleDebugOverlay() {
+    state = state.copyWith(showDebugOverlay: !state.showDebugOverlay);
+  }
+
   Future<LocationToggleResult> toggleLocation() async {
     if (state.locationEnabled) {
       // 当前开启 → 直接关闭

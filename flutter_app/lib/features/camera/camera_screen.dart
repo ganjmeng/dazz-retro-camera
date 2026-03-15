@@ -634,6 +634,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           _buildPreview(st, camSvc),
           // 三等分网格线：小窗开启时网格移入小窗内部，小窗关闭时全局显示
           if (st.gridEnabled && !st.minimapEnabled) _buildGrid(),
+          // 调试信息浮层（开发调试用）
+          if (st.showDebugOverlay)
+            Positioned(
+              top: 8,
+              left: 8,
+              right: 8,
+              child: _DebugOverlay(st: st),
+            ),
           // 拍摄中黑色半透明蒙层
           if (st.isTakingPhoto)
             Container(
@@ -828,21 +836,39 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ),
           ),
           const Spacer(),
-          // 样图按钮
+          // 样图按钮（显示当前相机图标，点击跳转到当前相机的成片页）
           GestureDetector(
-            onTap: () {},
+            onTap: () {
+              HapticFeedback.selectionClick();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => GalleryScreen(initialCameraId: st.activeCameraId),
+                ),
+              );
+            },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: const Color(0xFF3A3A3C),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.image_outlined, color: _kWhite, size: 14),
-                  SizedBox(width: 4),
-                  Text('样图', style: TextStyle(color: _kWhite, fontSize: 13)),
+                  // 当前相机图标（圆角小图）
+                  Builder(builder: (_) {
+                    final entry = kAllCameras.where((e) => e.id == st.activeCameraId).firstOrNull;
+                    final iconPath = entry?.iconPath;
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: iconPath != null
+                          ? Image.asset(iconPath, width: 18, height: 18, fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined, color: _kWhite, size: 14))
+                          : const Icon(Icons.image_outlined, color: _kWhite, size: 14),
+                    );
+                  }),
+                  const SizedBox(width: 5),
+                  const Text('样图', style: TextStyle(color: _kWhite, fontSize: 13)),
                 ],
               ),
             ),
@@ -1470,8 +1496,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                               context.push(AppRoutes.settings);
                             },
                           ),
-                          // 占位空白（保持等宽对齐）
-                          SizedBox(width: btnW),
+                          // 8. 调试信息浮层
+                          _TopMenuBtn(
+                            icon: st.showDebugOverlay
+                                ? Icons.bug_report
+                                : Icons.bug_report_outlined,
+                            label: st.showDebugOverlay ? '调试开启' : '调试关闭',
+                            btnW: btnW,
+                            onTap: () {
+                              ref.read(cameraAppProvider.notifier).toggleDebugOverlay();
+                              ref.read(cameraAppProvider.notifier).toggleTopMenu();
+                            },
+                          ),
                         ],
                       ),
                     ],
@@ -3848,4 +3884,87 @@ class _WatermarkPainter extends CustomPainter {
       old.positionOverride != positionOverride ||
       old.sizeOverride != sizeOverride ||
       old.directionOverride != directionOverride;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _DebugOverlay — 调试信息浮层（开发调试用）
+// 显示当前相机 ID、滤镜参数、曝光、色温、渲染策略等实时信息
+// ─────────────────────────────────────────────────────────────────────────────
+class _DebugOverlay extends StatelessWidget {
+  final CameraAppState st;
+  const _DebugOverlay({required this.st});
+
+  @override
+  Widget build(BuildContext context) {
+    final params = st.renderParams;
+    final cam = st.camera;
+
+    final lines = <String>[
+      '── DAZZ DEBUG ──',
+      'Camera: ${st.activeCameraId}  (${cam?.name ?? "loading"})',
+      'Filter: ${st.activeFilterId ?? "none"}  Lens: ${st.activeLensId ?? "default"}',
+      'Ratio: ${st.activeRatioId ?? "default"}  Frame: ${st.activeFrameId ?? "none"}',
+      '',
+      '── Render Params ──',
+      if (params != null) ...[
+        'Exposure: ${st.exposureValue.toStringAsFixed(2)} EV',
+        'Temp: ${params.effectiveTemperature.toStringAsFixed(0)} (offset: ${st.temperatureOffset.toStringAsFixed(0)})',
+        'Tint: ${params.effectiveTint.toStringAsFixed(0)}',
+        'Contrast: ${params.effectiveContrast.toStringAsFixed(2)}',
+        'Saturation: ${params.effectiveSaturation.toStringAsFixed(2)}',
+        'Vibrance: ${params.effectiveVibrance.toStringAsFixed(0)}',
+        'Highlights: ${params.effectiveHighlights.toStringAsFixed(0)}  Shadows: ${params.effectiveShadows.toStringAsFixed(0)}',
+        'Whites: ${params.effectiveWhites.toStringAsFixed(0)}  Blacks: ${params.effectiveBlacks.toStringAsFixed(0)}',
+        'Clarity: ${params.effectiveClarity.toStringAsFixed(0)}',
+        'Vignette: ${params.effectiveVignette.toStringAsFixed(2)}',
+        'Bloom: ${params.effectiveBloom.toStringAsFixed(2)}  SoftFocus: ${params.effectiveSoftFocus.toStringAsFixed(2)}',
+        'ChromAb: ${params.effectiveChromaticAberration.toStringAsFixed(3)}',
+        'Grain: ${params.effectiveGrain.toStringAsFixed(2)}',
+        'ColorBias R:${params.effectiveColorBiasR.toStringAsFixed(2)} G:${params.effectiveColorBiasG.toStringAsFixed(2)} B:${params.effectiveColorBiasB.toStringAsFixed(2)}',
+        '',
+        '── Policy ──',
+        'LUT:${params.policy.enableLut ? "✓" : "✗"} '
+            'Temp:${params.policy.enableTemperature ? "✓" : "✗"} '
+            'Contrast:${params.policy.enableContrast ? "✓" : "✗"} '
+            'Sat:${params.policy.enableSaturation ? "✓" : "✗"}',
+        'Vignette:${params.policy.enableVignette ? "✓" : "✗"} '
+            'Bloom:${params.policy.enableBloom ? "✓" : "✗"} '
+            'ChromAb:${params.policy.enableChromaticAberration ? "✓" : "✗"} '
+            'Grain:${params.policy.enableGrain ? "✓" : "✗"}',
+      ] else
+        'params: null (loading...)',
+      '',
+      '── UI State ──',
+      'Zoom: ${st.zoomLevel.toStringAsFixed(1)}x  Flash: ${st.flashMode}  Timer: ${st.timerSeconds}s',
+      'WB: ${st.wbMode} (${st.colorTempK}K)  Front: ${st.isFrontCamera}',
+      'Sharpen: ${["低", "中", "高"][st.sharpenLevel]}  Grid: ${st.gridEnabled}  Minimap: ${st.minimapEnabled}',
+    ];
+
+    return IgnorePointer(
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.black.withAlpha(180),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF00FF88).withAlpha(120), width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: lines.map((line) => Text(
+            line,
+            style: TextStyle(
+              color: line.startsWith('──')
+                  ? const Color(0xFF00FF88)
+                  : Colors.white.withAlpha(220),
+              fontSize: 9.5,
+              fontFamily: 'monospace',
+              height: 1.4,
+              fontWeight: line.startsWith('──') ? FontWeight.w700 : FontWeight.w400,
+            ),
+          )).toList(),
+        ),
+      ),
+    );
+  }
 }

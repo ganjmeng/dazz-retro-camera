@@ -23,8 +23,10 @@ class _AlbumEntry {
 class GalleryScreen extends StatefulWidget {
   /// 如果传入 initialAsset，进入时直接打开该相片详情（长按触发）
   final AssetEntity? initialAsset;
+  /// 如果传入 initialCameraId，进入时自动过滤到该相机的成片
+  final String? initialCameraId;
 
-  const GalleryScreen({super.key, this.initialAsset});
+  const GalleryScreen({super.key, this.initialAsset, this.initialCameraId});
 
   @override
   State<GalleryScreen> createState() => _GalleryScreenState();
@@ -181,6 +183,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           _cameraAlbumEntries = entries;
           _isLoading = false;
         });
+        _applyInitialCameraFilter();
       }
       return;
     }
@@ -223,6 +226,18 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _cameraAlbumEntries = entries;
         _isLoading = false;
       });
+      // 如果有 initialCameraId，数据加载完成后自动切换到该相机
+      _applyInitialCameraFilter();
+    }
+  }
+
+  /// 在数据加载完成后，若有 initialCameraId 则自动切换到该相机分类
+  void _applyInitialCameraFilter() {
+    final id = widget.initialCameraId;
+    if (id == null || id == 'all') return;
+    final exists = _cameraAlbumEntries.any((e) => e.id == id);
+    if (exists) {
+      _filterByCamera(id);
     }
   }
 
