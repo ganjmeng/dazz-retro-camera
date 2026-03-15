@@ -15,6 +15,7 @@ import '../camera/camera_notifier.dart';
 import '../camera/camera_config_sheet.dart';
 import '../camera/capture_pipeline.dart';
 import '../camera/preview_renderer.dart' as renderer_lib;
+import 'package:image/image.dart' as image_lib;
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -104,9 +105,21 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         setState(() => _isSaving = false);
         return;
       }
-      final tmpPath = '${Directory.systemTemp.path}/dazz_edit_${DateTime.now().millisecondsSinceEpoch}.png';
+      // 临时文件使用 .jpg 扩展名，与 pipeline 输出格式一致
+      final tmpPath = '${Directory.systemTemp.path}/dazz_edit_${DateTime.now().millisecondsSinceEpoch}.jpg';
       await File(tmpPath).writeAsBytes(transformedBytes);
       final pipeline = CapturePipeline(camera: camera);
+      // 按清晰度档位选择输出尺寸和 JPEG 质量（与拍照逻辑保持一致）
+      final maxDim = switch (st.sharpenLevel) {
+        0 => CapturePipeline.kMaxDimLow,
+        2 => CapturePipeline.kMaxDimHigh,
+        _ => CapturePipeline.kMaxDimMid,
+      };
+      final jpegQ = switch (st.sharpenLevel) {
+        0 => CapturePipeline.kJpegQualityLow,
+        2 => CapturePipeline.kJpegQualityHigh,
+        _ => CapturePipeline.kJpegQualityMid,
+      };
       final processed = await pipeline.process(
         imagePath: tmpPath,
         selectedRatioId: st.activeRatioId ?? '',
@@ -119,6 +132,8 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         watermarkDirectionOverride: st.watermarkDirection,
         watermarkStyleOverride: st.watermarkStyle,
         renderParams: st.renderParams,
+        maxDimension: maxDim,
+        jpegQuality: jpegQ,
       );
       final finalBytes = processed ?? transformedBytes;
       await File(tmpPath).writeAsBytes(finalBytes);
@@ -179,8 +194,19 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       );
       final picture = recorder.endRecording();
       final outputImage = await picture.toImage(outW, outH);
-      final byteData = await outputImage.toByteData(format: ui.ImageByteFormat.png);
-      return byteData?.buffer.asUint8List();
+      // 输出 rawRgba 供 pipeline 处理，避免 PNG 中间格式（PNG 编码慢且无必要）
+      // pipeline 内部会将 rawRgba 解码后再做色彩/相框/水印处理
+      final byteData = await outputImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (byteData == null) return null;
+      // 将 rawRgba 编码为 JPEG 作为临时文件（供 pipeline 读取）
+      final img = image_lib.Image.fromBytes(
+        width: outW,
+        height: outH,
+        bytes: byteData.buffer,
+        format: image_lib.Format.uint8,
+        numChannels: 4,
+      );
+      return image_lib.encodeJpg(img, quality: 95);
     } catch (e) {
       debugPrint('[ImageEditScreen] _applyTransforms error: $e');
       return null;
