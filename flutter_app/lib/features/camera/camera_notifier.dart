@@ -65,6 +65,7 @@ class CameraAppState {
   final bool minimapEnabled;   // 小窗模式开关
   final bool locationEnabled;  // 位置信息开关：开启后拍照将 GPS 坐标写入 EXIF
   final bool showDebugOverlay; // 调试信息浮层：显示实时渲染参数
+  final bool shutterSoundEnabled; // 快门声音开关
 
   const CameraAppState({
     this.activeCameraId = 'grd_r',
@@ -102,6 +103,7 @@ class CameraAppState {
     this.minimapEnabled = false,
     this.locationEnabled = false,
     this.showDebugOverlay = false,
+    this.shutterSoundEnabled = true,
   });
 
   CameraAppState copyWith({
@@ -141,6 +143,7 @@ class CameraAppState {
     bool? minimapEnabled,
     bool? locationEnabled,
     bool? showDebugOverlay,
+    bool? shutterSoundEnabled,
     bool clearPanel = false,
     bool clearError = false,
     bool clearFrameId = false, // 用于将 activeFrameId 清空为 null
@@ -181,6 +184,7 @@ class CameraAppState {
       minimapEnabled: minimapEnabled ?? this.minimapEnabled,
       locationEnabled: locationEnabled ?? this.locationEnabled,
       showDebugOverlay: showDebugOverlay ?? this.showDebugOverlay,
+      shutterSoundEnabled: shutterSoundEnabled ?? this.shutterSoundEnabled,
     );
   }
 
@@ -364,6 +368,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   void setWatermarkStyle(String styleId) {
     state = state.copyWith(watermarkStyle: styleId);
+  }
+
+  void setShutterSoundEnabled(bool enabled) {
+    state = state.copyWith(shutterSoundEnabled: enabled);
   }
 
   void selectFrameBackground(String hexColor) {

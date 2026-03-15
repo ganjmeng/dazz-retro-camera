@@ -54,6 +54,9 @@ dependencies:
   # 加速度计（设备旋转方向检测）
   sensors_plus: ^6.1.0
 
+  # 音频播放（快门声音）
+  audioplayers: ^6.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -80,3 +83,4 @@ flutter:
     - assets/thumbnails/frames/
     - assets/images/
     - assets/samples/
+    - assets/sounds/

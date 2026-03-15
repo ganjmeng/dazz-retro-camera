@@ -33,6 +33,7 @@ import '../settings/settings_screen.dart';
 import 'preview_renderer.dart';
 import '../gallery/gallery_screen.dart';
 import 'camera_config_sheet.dart';
+import '../../services/shutter_sound_service.dart';
 import 'camera_sample_screen.dart';
 import '../image_edit/image_edit_screen.dart';
 import '../../services/camera_manager_service.dart';
@@ -464,6 +465,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _doTakePhoto() async {
     final st = ref.read(cameraAppProvider);
+    // 播放快门声音（如果已开启）
+    if (st.shutterSoundEnabled) {
+      ShutterSoundService.instance.play(st.activeCameraId);
+    }
     // 小窗模式开启时，计算小窗在取景框内的归一化坐标
     Rect? minimapRect;
     if (st.minimapEnabled) {

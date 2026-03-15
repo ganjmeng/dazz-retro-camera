@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../router/app_router.dart';
 import '../../services/subscription_service.dart';
+import '../camera/camera_notifier.dart';
 
 // ─── 设置状态 Provider ────────────────────────────────────────────────────────
 class _SettingsState {
@@ -18,6 +19,7 @@ class _SettingsState {
   final bool guideLines;
   final bool levelIndicator;
   final bool shutterVibration;
+  final bool shutterSound;
   final bool recommendApp;
 
   const _SettingsState({
@@ -28,6 +30,7 @@ class _SettingsState {
     this.guideLines = true,
     this.levelIndicator = true,
     this.shutterVibration = true,
+    this.shutterSound = true,
     this.recommendApp = true,
   });
 
@@ -39,6 +42,7 @@ class _SettingsState {
     bool? guideLines,
     bool? levelIndicator,
     bool? shutterVibration,
+    bool? shutterSound,
     bool? recommendApp,
   }) {
     return _SettingsState(
@@ -49,6 +53,7 @@ class _SettingsState {
       guideLines: guideLines ?? this.guideLines,
       levelIndicator: levelIndicator ?? this.levelIndicator,
       shutterVibration: shutterVibration ?? this.shutterVibration,
+      shutterSound: shutterSound ?? this.shutterSound,
       recommendApp: recommendApp ?? this.recommendApp,
     );
   }
@@ -65,6 +70,7 @@ class _SettingsNotifier extends StateNotifier<_SettingsState> {
       case 'guideLines': state = state.copyWith(guideLines: !state.guideLines); break;
       case 'levelIndicator': state = state.copyWith(levelIndicator: !state.levelIndicator); break;
       case 'shutterVibration': state = state.copyWith(shutterVibration: !state.shutterVibration); break;
+      case 'shutterSound': state = state.copyWith(shutterSound: !state.shutterSound); break;
       case 'recommendApp': state = state.copyWith(recommendApp: !state.recommendApp); break;
     }
   }
@@ -90,6 +96,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final st = ref.watch(_settingsProvider);
     final notifier = ref.read(_settingsProvider.notifier);
+    final camNotifier = ref.read(cameraAppProvider.notifier);
     ref.watch(subscriptionServiceProvider); // 订阅状态（未来功能用）
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light, // 白色状态栏图标（黑色背景）
@@ -248,6 +255,17 @@ class SettingsScreen extends ConsumerWidget {
                         trailing: _RedSwitch(
                           value: st.shutterVibration,
                           onChanged: (_) => notifier.toggle('shutterVibration'),
+                        ),
+                      ),
+                      _SettingsDivider(),
+                      _SettingsRow(
+                        title: '快门声音',
+                        trailing: _RedSwitch(
+                          value: st.shutterSound,
+                          onChanged: (_) {
+                            notifier.toggle('shutterSound');
+                            camNotifier.setShutterSoundEnabled(!st.shutterSound);
+                          },
                         ),
                       ),
                       _SettingsDivider(),
