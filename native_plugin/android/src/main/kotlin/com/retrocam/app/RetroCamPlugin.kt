@@ -39,6 +39,7 @@ class RetroCamPlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHandl
                 result.success(mapOf("success" to true))
             }
             "setPreset" -> handleSetPreset(call, result)
+            "updateLensParams" -> handleUpdateLensParams(call, result)
             "takePhoto" -> handleTakePhoto(call, result)
             "startRecording" -> handleStartRecording(call, result)
             "stopRecording" -> handleStopRecording(call, result)
@@ -84,6 +85,13 @@ class RetroCamPlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHandl
         
         glRenderer?.updateParams(shaderParams)
         
+        result.success(mapOf("success" to true))
+    }
+
+    private fun handleUpdateLensParams(call: MethodCall, result: Result) {
+        // 镜头切换时实时更新 GPU shader 中的畸变参数
+        val distortion = call.argument<Double>("distortion") ?: 0.0
+        glRenderer?.updateParams(mapOf("distortion" to distortion))
         result.success(mapOf("success" to true))
     }
 

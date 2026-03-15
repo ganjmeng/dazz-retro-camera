@@ -307,11 +307,17 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   void selectLens(String id) {
     // 反选：再次点击已激活的镜头时，回到相机默认镜头
     final defaultLensId = state.camera?.defaultSelection.lensId ?? 'std';
+    final String newLensId;
     if (state.activeLensId == id && id != defaultLensId) {
-      state = state.copyWith(activeLensId: defaultLensId);
+      newLensId = defaultLensId;
     } else {
-      state = state.copyWith(activeLensId: id);
+      newLensId = id;
     }
+    state = state.copyWith(activeLensId: newLensId);
+    // 通知原生层更新镜头畸变参数（在 GPU shader 中实现，零 CPU 开销）
+    final newLens = state.camera?.lensById(newLensId);
+    final distortion = newLens?.distortion ?? 0.0;
+    _ref.read(cameraServiceProvider.notifier).updateLensParams(distortion: distortion);
   }
 
   void selectRatio(String id) {

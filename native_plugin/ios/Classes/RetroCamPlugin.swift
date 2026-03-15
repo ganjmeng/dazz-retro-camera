@@ -31,6 +31,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             result(["success": true])
         case "setPreset":
             handleSetPreset(call: call, result: result)
+        case "updateLensParams":
+            handleUpdateLensParams(call: call, result: result)
         case "takePhoto":
             handleTakePhoto(call: call, result: result)
         case "startRecording":
@@ -82,6 +84,17 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         
         renderer?.updateParams(shaderParams)
         
+        result(["success": true])
+    }
+    
+    private func handleUpdateLensParams(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        // 镜头切换时实时更新 Metal shader 中的畸变参数
+        guard let args = call.arguments as? [String: Any] else {
+            result(FlutterError(code: "1004", message: "Invalid lens parameters", details: nil))
+            return
+        }
+        let distortion = (args["distortion"] as? NSNumber)?.floatValue ?? 0.0
+        renderer?.updateParams(["distortion": distortion])
         result(["success": true])
     }
     

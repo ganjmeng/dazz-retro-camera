@@ -53,9 +53,21 @@ struct CCDParams {
     float blurRadius;          // 模糊半径
     float jpegArtifacts;       // JPEG 压缩感
     float time;                // 动态噪点时间种子
+    float distortion;          // 镜头畸变：负值=桶形(鱼眼), 正值=枕形, 0=无畸变
 };
 
 // MARK: - 工具函数
+
+/// 镜头畸变：Brown-Conrady 径向畸变模型
+/// k1 < 0 → 桶形畸变（鱼眼/广角），k1 > 0 → 枕形畸变（长焦）
+float2 applyLensDistortion(float2 uv, float k1) {
+    if (abs(k1) < 0.001) return uv;
+    float2 centered = uv - 0.5;           // 以图像中心为原点
+    float r2 = dot(centered, centered);   // r²
+    float scale = 1.0 + k1 * r2;         // 畸变缩放因子
+    scale = max(scale, 0.1);              // 防止极端值导致 UV 翻转
+    return centered / scale + 0.5;        // 反变换：采样点往内收 = 图像向外鼓
+}
 
 /// 暗角强度
 float vignetteEffect(float2 uv, float amount) {
@@ -156,7 +168,19 @@ fragment float4 ccdFragmentShader(
     constexpr sampler textureSampler(mag_filter::linear, min_filter::linear);
     
     float2 uv = in.texCoord;
-    
+
+    // === Pass 0: 镜头畸变（在所有色彩处理之前变换 UV）===
+    // params.distortion 直接映射到 k1（Brown-Conrady 系数）
+    // 鱼眼 distortion=-0.60 → k1=-0.45（强桶形）
+    // 广角 distortion=-0.08 → k1=-0.06（轻微桶形）
+    // 长焦 distortion=+0.05 → k1=+0.0375（轻微枕形）
+    float k1 = params.distortion * 0.75;
+    uv = applyLensDistortion(uv, k1);
+    // 边缘裁切：畸变后 UV 超出 [0,1] 的区域填充黑色
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        return float4(0.0, 0.0, 0.0, 1.0);
+    }
+
     // === Pass 1: 色差 (Chromatic Aberration) ===
     float ca = params.chromaticAberration;
     float r  = cameraTexture.sample(textureSampler, uv + float2(ca, 0.0)).r;

@@ -40,6 +40,8 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
     private var bloomAmount = 0.0f
     private var grainAmount = 0.0f
     private var time = 0.0f
+    // 镜头畸变（Brown-Conrady k1）：负值=桶形(鱼眼), 正值=枕形
+    private var distortion = 0.0f
     
     init {
         // In a real implementation, we would set up an EGL context here
@@ -86,6 +88,7 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
         (params["vignette"] as? Number)?.let { vignetteAmount = it.toFloat() }
         (params["bloom"] as? Number)?.let { bloomAmount = it.toFloat() }
         (params["grain"] as? Number)?.let { grainAmount = it.toFloat() }
+        (params["distortion"] as? Number)?.let { distortion = it.toFloat() }
         
         // In a real implementation, we would load the textures from Flutter assets here
         // using FlutterInjector.instance().flutterLoader().getLookupKeyForAsset()
@@ -168,6 +171,7 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
         // glUniform1f(bloomLoc, bloomAmount)
         // glUniform1f(grainLoc, grainAmount)
         // glUniform1f(timeLoc, time)
+        // glUniform1f(distortionLoc, distortion)  // 镜头畸变 uniform
         
         // 4. Draw using OpenGL ES with the active shader program
         // glDrawArrays(GL_TRIANGLE_STRIP, 0, 4)

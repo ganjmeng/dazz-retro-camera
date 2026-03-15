@@ -155,6 +155,18 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
+  /// 更新镜头参数（切换镜头时将 distortion 传递到原生层渲染管线）
+  /// [distortion] Brown-Conrady k1：负值=桶形(鱼眼), 正值=枕形, 0=无畸变
+  Future<void> updateLensParams({required double distortion}) async {
+    try {
+      await _channel.invokeMethod('updateLensParams', {
+        'distortion': distortion,
+      });
+    } catch (e) {
+      print('Error updating lens params: $e');
+    }
+  }
+
   /// 切换前后置摄像头（switchCamera 为 switchLens 的别名）
   Future<void> switchCamera() async => switchLens();
 

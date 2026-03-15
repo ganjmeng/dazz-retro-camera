@@ -87,6 +87,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         ccdParams.blurRadius        = 0.0
         ccdParams.jpegArtifacts     = 0.0
         ccdParams.time              = 0.0
+        ccdParams.distortion        = 0.0  // 镜头畸变默认无畸变
     }
     
     func updateParams(_ params: [String: Any]) {
@@ -114,6 +115,8 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let vignette = params["vignette"]           as? Float { ccdParams.vignetteAmount      = vignette }
         if let bloom   = params["bloom"]               as? Float { ccdParams.bloomAmount         = bloom }
         if let grain   = params["grain"]               as? Float { ccdParams.grainAmount         = grain }
+        // 镜头畸变：Brown-Conrady k1 系数，负值=桶形(鱼眼), 正值=枕形
+        if let distortion = params["distortion"]       as? Float { ccdParams.distortion          = distortion }
         
         // In a real implementation, we would load the textures from Flutter assets here
         // using FlutterPluginRegistrar.lookupKey(forAsset:) and MTKTextureLoader
