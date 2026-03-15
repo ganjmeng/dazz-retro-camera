@@ -33,6 +33,7 @@ import 'preview_renderer.dart';
 import '../gallery/gallery_screen.dart';
 import 'camera_config_sheet.dart';
 import 'camera_sample_screen.dart';
+import '../image_edit/image_edit_screen.dart';
 import '../../services/camera_manager_service.dart';
 // ─── 颜色常量 ─────────────────────────────────────────────────────────────────────────────
 const _kBlack = Color(0xFF000000);
@@ -1206,7 +1207,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             _ToolbarBtn(
               icon: Icons.add_photo_alternate_outlined,
               label: '导入图片',
-              onTap: () {},
+              onTap: () => openImageImportFlow(context),
             ),
             // 2. 倒计时
             _ToolbarBtn(

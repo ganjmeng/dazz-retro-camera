@@ -201,7 +201,7 @@ class _ColorCorrectedTexture extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorMatrix = _buildColorMatrix(params);
+    final colorMatrix = buildColorMatrix(params);
 
     return ColorFiltered(
       colorFilter: ColorFilter.matrix(colorMatrix),
@@ -212,7 +212,7 @@ class _ColorCorrectedTexture extends StatelessWidget {
   /// Build a 5x4 color matrix combining the full pipeline:
   /// Exposure → Temperature → Tint → Blacks/Whites → Contrast → Highlights/Shadows
   /// → Clarity → Saturation → Vibrance → ColorBias
-  static List<double> _buildColorMatrix(PreviewRenderParams params) {
+  static List<double> buildColorMatrix(PreviewRenderParams params) {
     var m = _identity();
 
     // 1. Exposure (brightness multiplier)
@@ -722,3 +722,9 @@ class _GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GridPainter old) => false;
 }
+
+
+/// Public top-level helper: compute a 20-element color matrix from [PreviewRenderParams].
+/// Used by ImageEditScreen to apply the same DAZZ color pipeline to static images.
+List<double> computeColorMatrix(PreviewRenderParams params) =>
+    _ColorCorrectedTexture.buildColorMatrix(params);

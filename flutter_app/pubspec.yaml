@@ -28,6 +28,7 @@ dependencies:
   
   # 图片选择与相册访问
   photo_manager: ^3.0.0
+  image_picker: ^1.1.2
   
   # 分享功能
   share_plus: ^7.2.2

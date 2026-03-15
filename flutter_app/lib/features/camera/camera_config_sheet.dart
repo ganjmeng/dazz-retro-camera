@@ -1353,7 +1353,7 @@ class _PillBtn extends StatelessWidget {
 
 /// 相机单元格（相机列表行）
 class _CameraCell extends StatelessWidget {
-  final CameraEntry entry;
+  final CameraDefinition entry;
   final bool isActive;
   final bool isFavorite;
   final VoidCallback onTap;
@@ -1387,11 +1387,11 @@ class _CameraCell extends StatelessWidget {
                         ? Border.all(color: _kOrange, width: 2.5)
                         : null,
                   ),
-                  child: entry.iconPath != null
+                  child: entry.assets.icon.isNotEmpty
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(10),
                           child: Image.asset(
-                            entry.iconPath!,
+                            entry.assets.icon,
                             width: 64,
                             height: 64,
                             fit: BoxFit.cover,
