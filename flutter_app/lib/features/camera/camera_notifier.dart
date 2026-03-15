@@ -69,6 +69,7 @@ class CameraAppState {
   final bool shutterSoundEnabled; // 快门声音开关
   final bool mirrorFrontCamera;   // 前置摄像头镜像开关
   final bool shutterVibrationEnabled; // 快门振动开关
+  final bool fisheyeMode;              // 鱼眼圆圈模式
   // Debug: 最近一次拍照的分辨率信息
   final String lastCaptureRaw;    // e.g. "4032×3024" 原始分辨率
   final String lastCaptureOutput; // e.g. "3024×3024" 输出分辨率
@@ -112,6 +113,7 @@ class CameraAppState {
     this.shutterSoundEnabled = true,
     this.mirrorFrontCamera = true,
      this.shutterVibrationEnabled = true,
+    this.fisheyeMode = false,
     this.lastCaptureRaw = '',
     this.lastCaptureOutput = '',
   });
@@ -155,6 +157,7 @@ class CameraAppState {
     bool? shutterSoundEnabled,
     bool? mirrorFrontCamera,
     bool? shutterVibrationEnabled,
+    bool? fisheyeMode,
     String? lastCaptureRaw,
     String? lastCaptureOutput,
     bool clearPanel = false,
@@ -200,6 +203,7 @@ class CameraAppState {
       shutterSoundEnabled: shutterSoundEnabled ?? this.shutterSoundEnabled,
       mirrorFrontCamera: mirrorFrontCamera ?? this.mirrorFrontCamera,
       shutterVibrationEnabled: shutterVibrationEnabled ?? this.shutterVibrationEnabled,
+      fisheyeMode: fisheyeMode ?? this.fisheyeMode,
       lastCaptureRaw: lastCaptureRaw ?? this.lastCaptureRaw,
       lastCaptureOutput: lastCaptureOutput ?? this.lastCaptureOutput,
     );
@@ -323,6 +327,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         zoomLevel: zoom,
         colorTempK: colorK,
         wbMode: wbMode,
+        fisheyeMode: camera.lensById(defaults.lensId)?.fisheyeMode ?? false,
         clearPanel: true,
       );
       // 关键修复：加载相机后立即将默认镜头参数同步到原生 GPU shader
@@ -384,13 +389,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     } else {
       newLensId = id;
     }
-    state = state.copyWith(activeLensId: newLensId);
     // 通知原生层更新镜头参数（在 GPU shader 中实现，零 CPU 开销）
     final newLens = state.camera?.lensById(newLensId);
     final distortion = newLens?.distortion ?? 0.0;
     final vignette = newLens?.vignette ?? 0.0;
     final zoomFactor = newLens?.zoomFactor ?? 1.0;
     final fisheyeMode = newLens?.fisheyeMode ?? false;
+    state = state.copyWith(activeLensId: newLensId, fisheyeMode: fisheyeMode);
     _ref.read(cameraServiceProvider.notifier).updateLensParams(
       distortion: distortion,
       vignette: vignette,

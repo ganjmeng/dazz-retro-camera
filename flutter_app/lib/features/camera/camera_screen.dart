@@ -896,6 +896,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               ),
             ),
 
+          // ── 鱼眼圆圈默色边角阒罩 overlay（fisheyeMode 开启时显示）──
+          if (st.fisheyeMode)
+            IgnorePointer(
+              child: CustomPaint(
+                size: Size(viewfinderW, viewfinderH),
+                painter: _FisheyeCirclePainter(),
+              ),
+            ),
           // ── 小窗 overlay（小窗模式开启时显示）──
           if (st.minimapEnabled)
             _MinimapOverlay(
@@ -4374,4 +4382,26 @@ class _DebugOverlay extends ConsumerWidget {
       ),
     );
   }
+}
+
+// ─── 鱼眼圆圈遮罩 ──────────────────────────────────────────────────────────────
+/// 在取景框四角绘制黑色遮罩，只留中央圆形区域可见，模拟鱼眼镜头的圆形画面效果。
+class _FisheyeCirclePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.black;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.shortestSide / 2;
+
+    // 用 Path 的 evenOdd 填充规则：矩形 - 圆形 = 四角黑色区域
+    final path = Path()
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..addOval(Rect.fromCircle(center: center, radius: radius))
+      ..fillType = PathFillType.evenOdd;
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_FisheyeCirclePainter oldDelegate) => false;
 }
