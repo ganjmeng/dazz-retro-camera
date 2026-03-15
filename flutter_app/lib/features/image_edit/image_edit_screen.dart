@@ -109,17 +109,9 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       final tmpPath = '${Directory.systemTemp.path}/dazz_edit_${DateTime.now().millisecondsSinceEpoch}.jpg';
       await File(tmpPath).writeAsBytes(transformedBytes);
       final pipeline = CapturePipeline(camera: camera);
-      // 按清晰度档位选择输出尺寸和 JPEG 质量（与拍照逻辑保持一致）
-      final maxDim = switch (st.sharpenLevel) {
-        0 => CapturePipeline.kMaxDimLow,
-        2 => CapturePipeline.kMaxDimHigh,
-        _ => CapturePipeline.kMaxDimMid,
-      };
-      final jpegQ = switch (st.sharpenLevel) {
-        0 => CapturePipeline.kJpegQualityLow,
-        2 => CapturePipeline.kJpegQualityHigh,
-        _ => CapturePipeline.kJpegQualityMid,
-      };
+      // 导入图片编辑页固定使用高画质输出（对齐竞品 4096px / q90）
+      const maxDim = CapturePipeline.kMaxDimHigh;
+      const jpegQ = CapturePipeline.kJpegQualityHigh;
       final processed = await pipeline.process(
         imagePath: tmpPath,
         selectedRatioId: st.activeRatioId ?? '',
