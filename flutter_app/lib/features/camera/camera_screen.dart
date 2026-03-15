@@ -28,6 +28,7 @@ import '../../services/location_service.dart';
 import '../../router/app_router.dart';
 import 'camera_notifier.dart';
 import 'camera_manager_screen.dart';
+import '../settings/settings_screen.dart';
 import 'preview_renderer.dart';
 import '../gallery/gallery_screen.dart';
 import 'camera_config_sheet.dart';
@@ -161,7 +162,29 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
   }
 
-  /// 耗时操作过渡：黑屏 + App Icon 淡入，执行 [action]，然后淡出。
+  /// 进入二级页面时暂停相机预览，返回后自动恢复，并显示过渡动画。
+  Future<void> _pushWithCameraPause(Widget page) async {
+    // 1. 显示过渡动画（黑屏 + icon）
+    _transitionTimer?.cancel();
+    setState(() => _showTransition = true);
+    await Future.delayed(const Duration(milliseconds: 180));
+    // 2. 暂停原生相机预览（释放 GPU/CPU 资源）
+    await ref.read(cameraServiceProvider.notifier).stopPreview();
+    // 3. push 到二级页面，await 等待返回
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => page),
+    );
+    // 4. 返回后恢复相机预览
+    if (!mounted) return;
+    await ref.read(cameraServiceProvider.notifier).startPreview();
+    // 5. 淡出过渡动画
+    _transitionTimer = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => _showTransition = false);
+    });
+  }
+
+    /// 耗时操作过渡：黑屏 + App Icon 淡入，执行 [action]，然后淡出。
   /// [duration] 是黑屏持续时间（不含淡入淡出动画时间）。
   Future<void> _showCameraTransition(VoidCallback action, {Duration duration = const Duration(milliseconds: 400)}) async {
     _transitionTimer?.cancel();
@@ -842,11 +865,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           GestureDetector(
             onTap: () {
               HapticFeedback.selectionClick();
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => GalleryScreen(initialCameraId: st.activeCameraId),
-                ),
-              );
+              _pushWithCameraPause(GalleryScreen(initialCameraId: st.activeCameraId));
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -879,11 +898,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // 管理按钮
           GestureDetector(
             onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const CameraManagerScreen(),
-                ),
-              );
+              _pushWithCameraPause(const CameraManagerScreen());
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1521,7 +1536,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             btnW: btnW,
                             onTap: () {
                               ref.read(cameraAppProvider.notifier).toggleTopMenu();
-                              context.push(AppRoutes.settings);
+                              _pushWithCameraPause(const SettingsScreen());
                             },
                           ),
                           // 8. 调试信息浮层
@@ -1552,11 +1567,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ── 单击：打开相册列表页 ─────────────────────────────────────────────────
   void _openGallery() {
     HapticFeedback.selectionClick();
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const GalleryScreen(),
-      ),
-    );
+    _pushWithCameraPause(const GalleryScreen());
   }
 
   // ── 长按：直接打开最新相片详情，返回后回到相册列表 ─────────────────────────
@@ -1567,11 +1578,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       return;
     }
     HapticFeedback.mediumImpact();
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => GalleryScreen(initialAsset: _latestAsset),
-      ),
-    );
+    _pushWithCameraPause(GalleryScreen(initialAsset: _latestAsset));
   }
 
   // ── 保留旧方法名以防其他地方引用 ─────────────────────────────────────────

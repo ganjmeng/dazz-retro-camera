@@ -3,7 +3,37 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../models/camera_registry.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 全局相册缓存（内存级，App 存活期间有效）
+// ─────────────────────────────────────────────────────────────────────────────
+class _GalleryCache {
+  static List<AssetEntity>? _assets;
+  static DateTime? _loadedAt;
+
+  static bool get isValid {
+    if (_assets == null) return false;
+    // 缓存有效期 5 分钟（MediaStore 变更会主动清除）
+    if (_loadedAt == null) return false;
+    return DateTime.now().difference(_loadedAt!).inMinutes < 5;
+  }
+
+  static List<AssetEntity>? get assets => _assets;
+
+  static void set(List<AssetEntity> assets) {
+    _assets = List.unmodifiable(assets);
+    _loadedAt = DateTime.now();
+  }
+
+  static void invalidate() {
+    _assets = null;
+    _loadedAt = null;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 相机分类数据（动态根据实际有成片的相机生成）
@@ -57,7 +87,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   void _onMediaChange(MethodCall call) {
-    // MediaStore 有变动（新照片保存、删除等）时自动刷新
+    // MediaStore 有变动（新照片保存、删除等）时清缓存并刷新
+    _GalleryCache.invalidate();
     if (mounted) {
       _fetchAssets();
     }
@@ -100,6 +131,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
       return;
     }
 
+    // 检查内存缓存（有缓存时跳过耗时的 MediaStore 查询）
+    if (_GalleryCache.isValid && _GalleryCache.assets != null) {
+      final cached = _GalleryCache.assets!;
+      _rebuildFromAssets(cached);
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
     // 强制释放所有缓存，确保能看到最新保存的文件
     await PhotoManager.releaseCache();
     // 等待 MediaStore 索引完成（OPPO ColorOS 需要更长的延迟）
@@ -726,7 +764,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   Uint8List? _fullData;
   late int _currentIndex;
   late PageController _pageController;
-  String _deviceModel = '';
+  String _cameraName = ''; // 拍摄相机名称（从 asset title 解析）
 
   @override
   void initState() {
@@ -735,7 +773,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     if (_currentIndex < 0) _currentIndex = 0;
     _pageController = PageController(initialPage: _currentIndex);
     _loadAsset(widget.asset);
-    _loadDeviceModel();
+    _parseCameraName(widget.asset);
   }
 
   @override
@@ -744,21 +782,40 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     super.dispose();
   }
 
-  Future<void> _loadDeviceModel() async {
-    try {
-      final info = DeviceInfoPlugin();
-      final android = await info.androidInfo;
-      final model = android.model;
-      if (mounted) setState(() => _deviceModel = model);
-    } catch (_) {
-      // 获取失败时不显示机型
+  /// 从 asset title 解析相机名称（title 格式：dazz_grd_r_20240101_xxx.jpg）
+  void _parseCameraName(AssetEntity asset) {
+    final title = (asset.title ?? '').toLowerCase();
+    for (final cam in kAllCameras) {
+      if (title.contains(cam.id.toLowerCase())) {
+        if (mounted) setState(() => _cameraName = cam.name);
+        return;
+      }
     }
+    // 解析失败时显示 DAZZ
+    if (mounted) setState(() => _cameraName = 'DAZZ');
   }
 
   Future<void> _loadAsset(AssetEntity asset) async {
     final data = await asset.originBytes;
     // 不清空旧图片，加载完成后直接替换，避免切换时闪白
     if (mounted && data != null) setState(() => _fullData = data);
+  }
+
+  Future<void> _shareAsset() async {
+    try {
+      final asset = widget.allAssets.isEmpty ? widget.asset : widget.allAssets[_currentIndex];
+      final file = await asset.originFile;
+      if (file == null) return;
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Shot with DAZZ${_cameraName.isNotEmpty ? " · $_cameraName" : ""}',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('分享失败'), backgroundColor: Color(0xFF2C2C2E)),
+      );
+    }
   }
 
   Future<void> _saveToGallery() async {
@@ -815,6 +872,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
               // 不清空 _fullData，保留旧图片直到新图加载完成，避免闪白
               setState(() => _currentIndex = i);
               _loadAsset(widget.allAssets[i]);
+              _parseCameraName(widget.allAssets[i]);
             },
             itemBuilder: (ctx, i) {
               final pageAsset = widget.allAssets.isEmpty ? widget.asset : widget.allAssets[i];
@@ -848,20 +906,41 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // 左侧：拍摄机型（从设备信息获取）
-                  if (_deviceModel.isNotEmpty)
-                    Text(
-                      _deviceModel,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w400,
-                        letterSpacing: 0.3,
-                      ),
+                  // 左侧：拍摄相机名称
+                  if (_cameraName.isNotEmpty)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.camera_alt_outlined, color: Colors.white54, size: 14),
+                        const SizedBox(width: 5),
+                        Text(
+                          _cameraName,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
                     ),
                   // 右侧：下载 + 删除
                   Row(
                     children: [
+                      // 分享按钮
+                      GestureDetector(
+                        onTap: _shareAsset,
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2C2C2E),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.ios_share_outlined, color: Colors.white, size: 24),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       // 下载按钮
                       GestureDetector(
                         onTap: _saveToGallery,
@@ -914,8 +993,13 @@ class _PhotoFrame extends StatefulWidget {
   State<_PhotoFrame> createState() => _PhotoFrameState();
 }
 
-class _PhotoFrameState extends State<_PhotoFrame> {
+class _PhotoFrameState extends State<_PhotoFrame>
+    with AutomaticKeepAliveClientMixin {
   Uint8List? _data;
+  Uint8List? _thumbData; // 缩略图占位（加载原图期间显示）
+
+  @override
+  bool get wantKeepAlive => true; // 防止 PageView 滑动时重建
 
   @override
   void initState() {
@@ -923,10 +1007,9 @@ class _PhotoFrameState extends State<_PhotoFrame> {
     if (widget.fullData != null) {
       _data = widget.fullData;
     } else {
-      _load();
+      _loadWithThumb();
     }
   }
-
   @override
   void didUpdateWidget(_PhotoFrame old) {
     super.didUpdateWidget(old);
@@ -935,10 +1018,25 @@ class _PhotoFrameState extends State<_PhotoFrame> {
       setState(() => _data = widget.fullData);
     } else if (widget.fullData == null && old.asset != widget.asset) {
       // 资产切换时：不清空 _data，保留旧图直到新图加载完成，避免闪白闪动
-      _load();
+      _loadWithThumb();
     }
   }
-
+  /// 先加载缩略图作为占位，再加载原图替换，消除 loading 圈闪烁
+  Future<void> _loadWithThumb() async {
+    // 先加载缩略图（快，几十毫秒）
+    final thumb = await widget.asset.thumbnailDataWithSize(const ThumbnailSize(800, 800));
+    if (mounted && thumb != null && _data == null) {
+      setState(() => _thumbData = thumb);
+    }
+    // 再加载原图（慢，但有缩略图占位不会闪白）
+    final data = await widget.asset.originBytes;
+    if (mounted && data != null) {
+      setState(() {
+        _data = data;
+        _thumbData = null; // 原图加载完成，清除缩略图占位
+      });
+    }
+  }
   Future<void> _load() async {
     final data = await widget.asset.originBytes;
     if (mounted && data != null) setState(() => _data = data);
@@ -946,6 +1044,7 @@ class _PhotoFrameState extends State<_PhotoFrame> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin 要求
     final mq = MediaQuery.of(context);
     // 可用高度 = 屏幕高度 - 状态栏 - 底部操作栏(~90px)
     final availH = mq.size.height - mq.padding.top - 90;
@@ -973,7 +1072,8 @@ class _PhotoFrameState extends State<_PhotoFrame> {
 
   Widget _buildFramedPhoto() {
     // 截图 12916.jpg：直接显示成片原图（成片本身已带相框/滤镜效果，不需要再套框）
-    if (_data == null) {
+    final displayData = _data ?? _thumbData;
+    if (displayData == null) {
       return Container(
         color: Colors.black,
         child: const Center(
@@ -982,7 +1082,7 @@ class _PhotoFrameState extends State<_PhotoFrame> {
       );
     }
     return Image.memory(
-      _data!,
+      displayData,
       fit: BoxFit.contain,
       // 不指定 width/height，让外层 SizedBox 的约束自然传递，避免尺寸冲突报错
     );
