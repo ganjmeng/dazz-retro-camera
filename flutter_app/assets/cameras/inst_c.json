@@ -151,6 +151,30 @@
         "outerBackgroundColor": "#FFFFFF"
       },
       {
+        "id": "instant_cream",
+        "name": "奶油",
+        "nameEn": "Cream",
+        "asset": "assets/frames/polaroid_cream.png",
+        "backgroundColor": "#F5EDD6",
+        "cornerRadius": 12,
+        "innerShadow": true,
+        "inset": {
+          "top": 156,
+          "right": 78,
+          "bottom": 324,
+          "left": 78
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_cream.jpg",
+        "lightLeak": 0.3,
+        "shake": 0.2,
+        "outerPadding": 40,
+        "outerBackgroundColor": "#FFFFFF"
+      },
+      {
         "id": "instant_green",
         "name": "绿色",
         "nameEn": "Green",
@@ -241,30 +265,6 @@
           "ratio_3_4"
         ],
         "thumbnail": "assets/thumbnails/frames/instant_blue.jpg",
-        "lightLeak": 0.3,
-        "shake": 0.2,
-        "outerPadding": 40,
-        "outerBackgroundColor": "#FFFFFF"
-      },
-      {
-        "id": "instant_cream",
-        "name": "奶油",
-        "nameEn": "Cream",
-        "asset": "assets/frames/polaroid_cream.png",
-        "backgroundColor": "#F5EDD6",
-        "cornerRadius": 12,
-        "innerShadow": true,
-        "inset": {
-          "top": 156,
-          "right": 78,
-          "bottom": 324,
-          "left": 78
-        },
-        "supportedRatios": [
-          "ratio_1_1",
-          "ratio_3_4"
-        ],
-        "thumbnail": "assets/thumbnails/frames/instant_cream.jpg",
         "lightLeak": 0.3,
         "shake": 0.2,
         "outerPadding": 40,
