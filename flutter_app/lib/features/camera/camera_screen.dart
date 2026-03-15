@@ -48,7 +48,7 @@ const _kRed = Color(0xFFFF3B30);
 
 // ─── 布局常量（提升为顶层常量，供多个方法共享）─────────────────────────────────────────────────────────────────────────────
 const kToolbarH = 52.0;          // 工具栏高度
-const kShutterH = 88.0;           // 快门行高度
+const kShutterH = 100.0;          // 快门行高度
 const kBottomPanelTopPad = 0.0;   // 工具栏上方间距
 const kToolbarShutterGap = 10.0;  // 工具栏和快门行间距
 const kBottomPanelH = kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
@@ -1420,7 +1420,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // 截图布局：[缩略图 72×72] [快门 80×80] [相机图标 72×72]
   Widget _buildShutterRow(CameraAppState st) {
     return SizedBox(
-      height: 88,
+      height: 100,
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: kMaxBottomContentW),
@@ -1482,8 +1482,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             GestureDetector(
               onTap: () => showCameraConfigSheet(context),
               child: SizedBox(
-                width: 97,
-                height: 97,
+                width: 100,
+                height: 100,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
@@ -1512,11 +1512,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                   borderRadius: BorderRadius.circular(6),
                                   child: Image.asset(
                                     entry.iconPath!,
-                                    width: 56,
-                                    height: 56,
+                                    width: 78,
+                                    height: 78,
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, __, ___) =>
-                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 44),
+                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 68),
                                   ),
                                 )
                               else
@@ -1528,7 +1528,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                   fontSize: 9,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0.3,
-                                  height: 1.2,
+                                  height: 1.1,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
