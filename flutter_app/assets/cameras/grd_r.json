@@ -148,15 +148,15 @@
         "id": "ccd_frame",
         "name": "CCD 边框",
         "nameEn": "CCD Frame",
-        "asset": null,
+        "asset": "assets/frames/polaroid_white.png",
         "backgroundColor": "#F0EDE8",
         "cornerRadius": 4,
         "innerShadow": false,
         "inset": {
-          "top": 24,
-          "right": 24,
-          "bottom": 24,
-          "left": 24
+          "top": 156,
+          "bottom": 324,
+          "left": 78,
+          "right": 78
         },
         "supportedRatios": [
           "ratio_1_1",
@@ -172,15 +172,15 @@
         "id": "date_frame",
         "name": "日期边框",
         "nameEn": "Date Frame",
-        "asset": null,
+        "asset": "assets/frames/polaroid_cream.png",
         "backgroundColor": "#FAFAF8",
         "cornerRadius": 2,
         "innerShadow": false,
         "inset": {
-          "top": 16,
-          "right": 16,
-          "bottom": 48,
-          "left": 16
+          "top": 156,
+          "bottom": 324,
+          "left": 78,
+          "right": 78
         },
         "supportedRatios": [
           "ratio_1_1",
@@ -196,15 +196,15 @@
         "id": "film_border_ccd",
         "name": "胶片边框",
         "nameEn": "Film Border",
-        "asset": null,
+        "asset": "assets/frames/polaroid_white.png",
         "backgroundColor": "#E8E4DC",
         "cornerRadius": 0,
         "innerShadow": true,
         "inset": {
-          "top": 20,
-          "right": 20,
-          "bottom": 20,
-          "left": 20
+          "top": 156,
+          "bottom": 324,
+          "left": 78,
+          "right": 78
         },
         "supportedRatios": [
           "ratio_1_1",
@@ -212,7 +212,7 @@
           "ratio_3_4",
           "ratio_9_16"
         ],
-        "thumbnail": "assets/thumbnails/frames/film_border.jpg",
+        "thumbnail": "assets/thumbnails/frames/film_border_ccd.jpg",
         "outerPadding": 20,
         "outerBackgroundColor": "#1A1A1A"
       }

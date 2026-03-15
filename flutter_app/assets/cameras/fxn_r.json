@@ -113,15 +113,15 @@
         "id": "film_border",
         "name": "胶卷边框",
         "nameEn": "Film Border",
-        "asset": null,
+        "asset": "assets/frames/polaroid_white.png",
         "backgroundColor": "#EAE6DD",
         "cornerRadius": 0,
         "innerShadow": true,
         "inset": {
-          "top": 22,
-          "right": 22,
-          "bottom": 22,
-          "left": 22
+          "top": 156,
+          "bottom": 324,
+          "left": 78,
+          "right": 78
         },
         "supportedRatios": [
           "ratio_2_3"
@@ -134,15 +134,15 @@
         "id": "sprocket",
         "name": "链孔边框",
         "nameEn": "Sprocket",
-        "asset": null,
+        "asset": "assets/frames/polaroid_white.png",
         "backgroundColor": "#1A1A1A",
         "cornerRadius": 0,
         "innerShadow": false,
         "inset": {
-          "top": 60,
-          "right": 18,
-          "bottom": 60,
-          "left": 18
+          "top": 156,
+          "bottom": 324,
+          "left": 78,
+          "right": 78
         },
         "supportedRatios": [
           "ratio_2_3"
@@ -155,15 +155,15 @@
         "id": "film_edge",
         "name": "胶片边缘",
         "nameEn": "Film Edge",
-        "asset": null,
+        "asset": "assets/frames/polaroid_cream.png",
         "backgroundColor": "#F5F0E8",
         "cornerRadius": 0,
         "innerShadow": true,
         "inset": {
-          "top": 8,
-          "right": 8,
-          "bottom": 8,
-          "left": 8
+          "top": 156,
+          "bottom": 324,
+          "left": 78,
+          "right": 78
         },
         "supportedRatios": [
           "ratio_2_3"
