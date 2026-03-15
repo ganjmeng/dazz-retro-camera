@@ -67,6 +67,8 @@ class CameraAppState {
   final bool locationEnabled;  // 位置信息开关：开启后拍照将 GPS 坐标写入 EXIF
   final bool showDebugOverlay; // 调试信息浮层：显示实时渲染参数
   final bool shutterSoundEnabled; // 快门声音开关
+  final bool mirrorFrontCamera;   // 前置摄像头镜像开关
+  final bool shutterVibrationEnabled; // 快门振动开关
 
   const CameraAppState({
     this.activeCameraId = 'grd_r',
@@ -105,6 +107,8 @@ class CameraAppState {
     this.locationEnabled = false,
     this.showDebugOverlay = false,
     this.shutterSoundEnabled = true,
+    this.mirrorFrontCamera = true,
+    this.shutterVibrationEnabled = true,
   });
 
   CameraAppState copyWith({
@@ -145,6 +149,8 @@ class CameraAppState {
     bool? locationEnabled,
     bool? showDebugOverlay,
     bool? shutterSoundEnabled,
+    bool? mirrorFrontCamera,
+    bool? shutterVibrationEnabled,
     bool clearPanel = false,
     bool clearError = false,
     bool clearFrameId = false, // 用于将 activeFrameId 清空为 null
@@ -186,6 +192,8 @@ class CameraAppState {
       locationEnabled: locationEnabled ?? this.locationEnabled,
       showDebugOverlay: showDebugOverlay ?? this.showDebugOverlay,
       shutterSoundEnabled: shutterSoundEnabled ?? this.shutterSoundEnabled,
+      mirrorFrontCamera: mirrorFrontCamera ?? this.mirrorFrontCamera,
+      shutterVibrationEnabled: shutterVibrationEnabled ?? this.shutterVibrationEnabled,
     );
   }
 
@@ -414,6 +422,20 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   void setShutterSoundEnabled(bool enabled) {
     state = state.copyWith(shutterSoundEnabled: enabled);
+  }
+
+  void setMirrorFrontCamera(bool enabled) {
+    state = state.copyWith(mirrorFrontCamera: enabled);
+    // 通知原生层镜像设置
+    _ref.read(cameraServiceProvider.notifier).setMirrorFrontCamera(enabled);
+  }
+
+  void setShutterVibrationEnabled(bool enabled) {
+    state = state.copyWith(shutterVibrationEnabled: enabled);
+  }
+
+  void setLocationEnabled(bool enabled) {
+    state = state.copyWith(locationEnabled: enabled);
   }
 
   void selectFrameBackground(String hexColor) {

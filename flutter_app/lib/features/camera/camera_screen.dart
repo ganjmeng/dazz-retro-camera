@@ -578,8 +578,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           '•••',
                           style: TextStyle(
                             color: _kWhite,
-                            fontSize: 18,
-                            letterSpacing: 4,
+                            fontSize: 16,
+                            letterSpacing: 2,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -928,7 +928,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             child: IgnorePointer(
               ignoring: _showExposureSlider || _showWbPanel || st.showZoomSlider,
               child: Transform.translate(
-                offset: const Offset(0, -20),
+                offset: const Offset(0, -8),
                 child: _buildToolbar(st),
               ),
             ),
@@ -1490,26 +1490,26 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                               // 优先使用真实相机图标，如果没有则用系统图标
                               if (entry.iconPath != null)
                                 ClipRRect(
-                                  borderRadius: BorderRadius.circular(6),
+                                  borderRadius: BorderRadius.circular(5),
                                   child: Image.asset(
                                     entry.iconPath!,
-                                    width: 36,
-                                    height: 36,
+                                    width: 28,
+                                    height: 28,
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, __, ___) =>
-                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 26),
+                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 22),
                                   ),
                                 )
                               else
-                                const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 26),
-                              const SizedBox(height: 3),
+                                const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 22),
+                              const SizedBox(height: 2),
                               Text(
                                 entry.name,
                                 style: const TextStyle(
                                   color: _kWhite,
-                                  fontSize: 10,
+                                  fontSize: 9,
                                   fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.5,
+                                  letterSpacing: 0.3,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -1540,7 +1540,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 按鈕实际宽度 = (屏幕宽 - 左右padding) / 4
     final screenW = mq.size.width;
     // 宽屏限制：btnW 最大 160dp，避免平板上按鈕过宽
-    final btnW = ((screenW - 48) / 4).clamp(0.0, 160.0);
+    // 容器 maxWidth = screenW-16，margin=8*2=16，padding=16*2=32 → 可用内容宽 = screenW-64
+    // 4个按鈕平分该宽度，防止溢出
+    final btnW = ((screenW - 64) / 4).clamp(0.0, 160.0);
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => ref.read(cameraAppProvider.notifier).toggleTopMenu(),

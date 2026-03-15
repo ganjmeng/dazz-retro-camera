@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import '../../router/app_router.dart';
 import '../../services/subscription_service.dart';
 import '../../core/l10n.dart';
 import '../camera/camera_notifier.dart';
@@ -82,6 +80,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final st       = ref.watch(_settingsProvider);
     final notifier = ref.read(_settingsProvider.notifier);
+    final camState    = ref.watch(cameraAppProvider);
     final camNotifier = ref.read(cameraAppProvider.notifier);
     final lang     = ref.watch(languageProvider);
     final s        = sOf(lang);
@@ -103,7 +102,7 @@ class SettingsScreen extends ConsumerWidget {
                     children: [
                       // 返回按钮
                       GestureDetector(
-                        onTap: () => context.go(AppRoutes.camera),
+                        onTap: () => Navigator.of(context).pop(),
                         child: Container(
                           width: 36,
                           height: 36,
@@ -182,16 +181,21 @@ class SettingsScreen extends ConsumerWidget {
                         _SettingsRow(
                           title: s.mirrorFront,
                           trailing: _RedSwitch(
-                            value: st.mirrorFrontCamera,
-                            onChanged: (_) => notifier.toggle('mirrorFrontCamera'),
+                            // 直接从 cameraAppProvider 读取，保证开关状态与相机层同步
+                            value: camState.mirrorFrontCamera,
+                            onChanged: (_) {
+                              camNotifier.setMirrorFrontCamera(!camState.mirrorFrontCamera);
+                            },
                           ),
                         ),
                         _SettingsDivider(),
                         _SettingsRow(
                           title: s.saveLocation,
                           trailing: _RedSwitch(
-                            value: st.saveLocation,
-                            onChanged: (_) => notifier.toggle('saveLocation'),
+                            value: camState.locationEnabled,
+                            onChanged: (_) {
+                              camNotifier.setLocationEnabled(!camState.locationEnabled);
+                            },
                           ),
                         ),
                         _SettingsDivider(),
@@ -206,18 +210,19 @@ class SettingsScreen extends ConsumerWidget {
                         _SettingsRow(
                           title: s.shutterVibration,
                           trailing: _RedSwitch(
-                            value: st.shutterVibration,
-                            onChanged: (_) => notifier.toggle('shutterVibration'),
+                            value: camState.shutterVibrationEnabled,
+                            onChanged: (_) {
+                              camNotifier.setShutterVibrationEnabled(!camState.shutterVibrationEnabled);
+                            },
                           ),
                         ),
-                         _SettingsDivider(),
+                        _SettingsDivider(),
                         _SettingsRow(
                           title: s.shutterSound,
                           trailing: _RedSwitch(
-                            value: st.shutterSound,
+                            value: camState.shutterSoundEnabled,
                             onChanged: (_) {
-                              notifier.toggle('shutterSound');
-                              camNotifier.setShutterSoundEnabled(!st.shutterSound);
+                              camNotifier.setShutterSoundEnabled(!camState.shutterSoundEnabled);
                             },
                           ),
                         ),

@@ -183,6 +183,15 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
+  /// 设置前置摄像头镜像开关
+  Future<void> setMirrorFrontCamera(bool enabled) async {
+    try {
+      await _channel.invokeMethod('setMirrorFrontCamera', {'enabled': enabled});
+    } catch (e) {
+      print('Error setting mirror front camera: \$e');
+    }
+  }
+
   /// 切换前后置摄像头（switchCamera 为 switchLens 的别名）
   Future<void> switchCamera() async => switchLens();
 
