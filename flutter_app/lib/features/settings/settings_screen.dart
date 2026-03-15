@@ -9,6 +9,7 @@ import '../../router/app_router.dart';
 import '../../services/subscription_service.dart';
 import '../../core/l10n.dart';
 import '../camera/camera_notifier.dart';
+import '../../services/retain_settings_service.dart';
 
 // ─── 设置状态 Provider ────────────────────────────────────────────────────────
 class _SettingsState {
@@ -209,7 +210,7 @@ class SettingsScreen extends ConsumerWidget {
                             onChanged: (_) => notifier.toggle('shutterVibration'),
                           ),
                         ),
-                        _SettingsDivider(),
+                         _SettingsDivider(),
                         _SettingsRow(
                           title: s.shutterSound,
                           trailing: _RedSwitch(
@@ -220,10 +221,20 @@ class SettingsScreen extends ConsumerWidget {
                             },
                           ),
                         ),
+                        _SettingsDivider(),
+                        // 保留设定 → 跳转子页面
+                        _SettingsRow(
+                          title: s.retainSettings,
+                          trailing: const Icon(Icons.chevron_right, color: _kGray, size: 20),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const RetainSettingsScreen(),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 24),
-
                     // 分组4：分享/反馈/推荐/评论
                     _SettingsGroup(
                       children: [
@@ -489,6 +500,163 @@ class _RedSwitch extends StatelessWidget {
       onChanged: onChanged,
       activeTrackColor: _kRed,
       inactiveTrackColor: const Color(0xFF3A3A3C),
+    );
+  }
+}
+
+// ─── 保留设定子页面 ────────────────────────────────────────────────────────────
+class RetainSettingsScreen extends ConsumerWidget {
+  const RetainSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final retain   = ref.watch(retainSettingsProvider);
+    final notifier = ref.read(retainSettingsProvider.notifier);
+    final lang     = ref.watch(languageProvider);
+    final s        = sOf(lang);
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: _kBg,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // ── 顶部导航栏 ──
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: SizedBox(
+                  height: 44,
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: const BoxDecoration(
+                            color: _kCard,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.chevron_left,
+                            color: _kWhite,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            s.retainSettings,
+                            style: const TextStyle(
+                              color: _kWhite,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 36),
+                    ],
+                  ),
+                ),
+              ),
+              // ── 内容 ──
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  children: [
+                    _SettingsGroup(
+                      children: [
+                        _RetainItem(
+                          title: s.retainTemperature,
+                          subtitle: s.retainTemperatureDesc,
+                          value: retain.retainTemperature,
+                          onChanged: (_) => notifier.toggle('retainTemperature'),
+                        ),
+                        _SettingsDivider(),
+                        _RetainItem(
+                          title: s.retainExposure,
+                          subtitle: s.retainExposureDesc,
+                          value: retain.retainExposure,
+                          onChanged: (_) => notifier.toggle('retainExposure'),
+                        ),
+                        _SettingsDivider(),
+                        _RetainItem(
+                          title: s.retainZoom,
+                          subtitle: s.retainZoomDesc,
+                          value: retain.retainZoom,
+                          onChanged: (_) => notifier.toggle('retainZoom'),
+                        ),
+                        _SettingsDivider(),
+                        _RetainItem(
+                          title: s.retainFrame,
+                          subtitle: s.retainFrameDesc,
+                          value: retain.retainFrame,
+                          onChanged: (_) => notifier.toggle('retainFrame'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 带副标题的保留设定行
+class _RetainItem extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _RetainItem({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: _kWhite,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: _kGray,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          _RedSwitch(value: value, onChanged: onChanged),
+        ],
+      ),
     );
   }
 }

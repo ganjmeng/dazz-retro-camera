@@ -15,6 +15,7 @@ import '../../services/camera_service.dart';
 import '../../services/location_service.dart';
 import 'preview_renderer.dart';
 import 'capture_pipeline.dart';
+import '../../services/retain_settings_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CameraAppState — full UI state for the camera screen
@@ -245,8 +246,26 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       state = state.copyWith(showCameraManager: false, clearPanel: true);
       return;
     }
+    // 切换前：保存当前相机的设定快照（供下次切回时恢复）
+    await _saveCurrentSnapshot();
     await _loadCamera(cameraId);
     state = state.copyWith(showCameraManager: false);
+  }
+
+  /// 保存当前相机设定快照到 RetainSettingsService
+  Future<void> _saveCurrentSnapshot() async {
+    final retainNotifier = _ref.read(retainSettingsProvider.notifier);
+    await retainNotifier.saveSnapshot(
+      state.activeCameraId,
+      CameraSnapshot(
+        temperatureOffset: state.temperatureOffset,
+        colorTempK:        state.colorTempK,
+        wbMode:            state.wbMode,
+        exposureValue:     state.exposureValue,
+        zoomLevel:         state.zoomLevel,
+        frameId:           state.activeFrameId,
+      ),
+    );
   }
 
   Future<void> _loadCamera(String cameraId) async {
@@ -254,6 +273,26 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     try {
       final camera = await loadCamera(cameraId);
       final defaults = camera.defaultSelection;
+
+      // 读取保留设定开关和该相机的快照
+      final retainState    = _ref.read(retainSettingsProvider);
+      final retainNotifier = _ref.read(retainSettingsProvider.notifier);
+      final snapshot       = await retainNotifier.loadSnapshot(cameraId);
+
+      // 根据各开关决定是否恢复设定，无快照则使用默认值
+      final double tempOffset = (retainState.retainTemperature && snapshot != null)
+          ? snapshot.temperatureOffset : 0;
+      final int    colorK     = (retainState.retainTemperature && snapshot != null)
+          ? snapshot.colorTempK : 6300;
+      final String wbMode     = (retainState.retainTemperature && snapshot != null)
+          ? snapshot.wbMode : 'auto';
+      final double exposure   = (retainState.retainExposure && snapshot != null)
+          ? snapshot.exposureValue : 0;
+      final double zoom       = (retainState.retainZoom && snapshot != null)
+          ? snapshot.zoomLevel : 1.0;
+      final String? frameId   = (retainState.retainFrame && snapshot != null && snapshot.frameId != null)
+          ? snapshot.frameId : defaults.frameId;
+
       state = state.copyWith(
         camera: camera,
         isLoading: false,
@@ -261,10 +300,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         activeFilterId: defaults.filterId,
         activeLensId: defaults.lensId,
         activeRatioId: defaults.ratioId,
-        activeFrameId: defaults.frameId,
+        activeFrameId: frameId,
         activeWatermarkId: defaults.watermarkPresetId,
-        temperatureOffset: 0,
-        exposureValue: 0,
+        temperatureOffset: tempOffset,
+        exposureValue: exposure,
+        zoomLevel: zoom,
+        colorTempK: colorK,
+        wbMode: wbMode,
         clearPanel: true,
       );
     } catch (e) {

@@ -118,8 +118,18 @@ class S {
   String get termsOfUse      => get('termsOfUse');
   String get storageHint     => get('storageHint');
   String get hashtagHint     => get('hashtagHint');
-  String get selectLanguage  => get('selectLanguage');
-  String get cancel          => get('cancel');
+  String get selectLanguage      => get('selectLanguage');
+  String get cancel              => get('cancel');
+  // 保留设定
+  String get retainSettings        => get('retainSettings');
+  String get retainTemperature     => get('retainTemperature');
+  String get retainTemperatureDesc => get('retainTemperatureDesc');
+  String get retainExposure        => get('retainExposure');
+  String get retainExposureDesc    => get('retainExposureDesc');
+  String get retainZoom            => get('retainZoom');
+  String get retainZoomDesc        => get('retainZoomDesc');
+  String get retainFrame           => get('retainFrame');
+  String get retainFrameDesc       => get('retainFrameDesc');
 }
 
 // 全局翻译表
@@ -291,6 +301,79 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.ms:     'Batal',
     AppLanguage.ja:     'キャンセル',
     AppLanguage.ko:     '취소',
+  },
+  // 保留设定
+  'retainSettings': {
+    AppLanguage.zhHans: '保留设定',
+    AppLanguage.zhHant: '保留設定',
+    AppLanguage.en:     'Retain Settings',
+    AppLanguage.ms:     'Kekal Tetapan',
+    AppLanguage.ja:     '設定を保持',
+    AppLanguage.ko:     '설정 유지',
+  },
+  'retainTemperature': {
+    AppLanguage.zhHans: '色温',
+    AppLanguage.zhHant: '色溫',
+    AppLanguage.en:     'White Balance',
+    AppLanguage.ms:     'Imbangan Putih',
+    AppLanguage.ja:     'ホワイトバランス',
+    AppLanguage.ko:     '화이트 밸런스',
+  },
+  'retainTemperatureDesc': {
+    AppLanguage.zhHans: '保留上次使用的色温，而不自动重置。',
+    AppLanguage.zhHant: '保留上次使用的色溫，而不自動重置。',
+    AppLanguage.en:     'Keep the last white balance instead of auto reset.',
+    AppLanguage.ms:     'Kekal imbangan putih terakhir tanpa tetapan semula.',
+    AppLanguage.ja:     '前回の色温度を保持し、自動リセットしません。',
+    AppLanguage.ko:     '마지막 화이트 밸런스를 유지합니다.',
+  },
+  'retainExposure': {
+    AppLanguage.zhHans: '曝光设定',
+    AppLanguage.zhHant: '曝光設定',
+    AppLanguage.en:     'Exposure',
+    AppLanguage.ms:     'Pendedahan',
+    AppLanguage.ja:     '露出設定',
+    AppLanguage.ko:     '노출 설정',
+  },
+  'retainExposureDesc': {
+    AppLanguage.zhHans: '保留曝光设定，如 EV，而不自动重置。',
+    AppLanguage.zhHant: '保留曝光設定，如 EV，而不自動重置。',
+    AppLanguage.en:     'Keep the last exposure (EV) instead of auto reset.',
+    AppLanguage.ms:     'Kekal tetapan pendedahan (EV) tanpa tetapan semula.',
+    AppLanguage.ja:     '前回の露出設定(EV)を保持します。',
+    AppLanguage.ko:     '마지막 노출(EV) 설정을 유지합니다.',
+  },
+  'retainZoom': {
+    AppLanguage.zhHans: '焦距',
+    AppLanguage.zhHant: '焦距',
+    AppLanguage.en:     'Focal Length',
+    AppLanguage.ms:     'Panjang Fokal',
+    AppLanguage.ja:     'ズーム',
+    AppLanguage.ko:     '줌 거리',
+  },
+  'retainZoomDesc': {
+    AppLanguage.zhHans: '保留上次使用的焦距，而不自动重置。',
+    AppLanguage.zhHant: '保留上次使用的焦距，而不自動重置。',
+    AppLanguage.en:     'Keep the last zoom level instead of auto reset.',
+    AppLanguage.ms:     'Kekal tahap zum terakhir tanpa tetapan semula.',
+    AppLanguage.ja:     '前回のズームを保持し、自動リセットしません。',
+    AppLanguage.ko:     '마지막 줌 거리를 유지합니다.',
+  },
+  'retainFrame': {
+    AppLanguage.zhHans: '底片',
+    AppLanguage.zhHant: '底片',
+    AppLanguage.en:     'Film Frame',
+    AppLanguage.ms:     'Bingkai Filem',
+    AppLanguage.ja:     'フィルム枠',
+    AppLanguage.ko:     '필름 프레임',
+  },
+  'retainFrameDesc': {
+    AppLanguage.zhHans: '保留上次的底片设置，而不自动重置。',
+    AppLanguage.zhHant: '保留上次的底片設定，而不自動重置。',
+    AppLanguage.en:     'Keep the last film frame instead of auto reset.',
+    AppLanguage.ms:     'Kekal bingkai filem terakhir tanpa tetapan semula.',
+    AppLanguage.ja:     '前回のフィルム枠を保持し、自動リセットしません。',
+    AppLanguage.ko:     '마지막 필름 프레임을 유지합니다.',
   },
 };
 
