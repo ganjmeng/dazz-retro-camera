@@ -93,6 +93,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void initState() {
     super.initState();
+    // 每次打开相册强制刷新：拍照发生在相册页面之外，缓存无法感知新照片
+    _GalleryCache.invalidate();
     PhotoManager.addChangeCallback(_onMediaChange);
     PhotoManager.startChangeNotify();
     _fetchAssets();
