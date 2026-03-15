@@ -32,6 +32,7 @@ import '../settings/settings_screen.dart';
 import 'preview_renderer.dart';
 import '../gallery/gallery_screen.dart';
 import 'camera_config_sheet.dart';
+import 'camera_sample_screen.dart';
 import '../../services/camera_manager_service.dart';
 // ─── 颜色常量 ─────────────────────────────────────────────────────────────────────────────
 const _kBlack = Color(0xFF000000);
@@ -863,11 +864,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ),
           ),
           const Spacer(),
-          // 样图按钮（显示当前相机图标，点击跳转到当前相机的成片页）
+          // 样图按钮（显示当前相机图标，点击跳转到当前相机的样片页）
           GestureDetector(
             onTap: () {
               HapticFeedback.selectionClick();
-              _pushWithCameraPause(GalleryScreen(initialCameraId: st.activeCameraId));
+              _pushWithCameraPause(CameraSampleScreen(cameraId: st.activeCameraId));
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
