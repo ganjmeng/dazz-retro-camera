@@ -13,7 +13,7 @@
     "colorDepth": 8
   },
   "defaultLook": {
-    "baseLut": null,
+    "baseLut": "assets/lut/cameras/fxn_r.cube",
     "distortion": 0.01,
     "chromaticAberration": 0.0,
     "flare": 0.0,

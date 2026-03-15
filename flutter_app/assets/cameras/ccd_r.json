@@ -13,7 +13,7 @@
     "colorDepth": 8
   },
   "defaultLook": {
-    "baseLut": "assets/lut/cameras/ccd_m.cube",
+    "baseLut": "assets/lut/cameras/ccd_r.cube",
     "distortion": 0.0,
     "chromaticAberration": 0.1,
     "flare": 0.0,
