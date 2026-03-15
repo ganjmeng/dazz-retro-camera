@@ -61,56 +61,41 @@
       {
         "id": "std",
         "name": "标准",
-        "nameEn": "Std",
+        "nameEn": "Standard",
+        "zoomFactor": 1.0,
         "vignette": 0.02,
         "distortion": 0.0,
         "chromaticAberration": 0.0,
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/std.jpg"
+        "refraction": 0.0
       },
       {
         "id": "wide",
         "name": "广角",
         "nameEn": "Wide",
+        "zoomFactor": 0.8,
         "vignette": 0.08,
         "distortion": 0.05,
         "chromaticAberration": 0.01,
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/wide.jpg"
+        "refraction": 0.0
       },
       {
         "id": "tele",
         "name": "长焦",
         "nameEn": "Tele",
+        "zoomFactor": 2.0,
         "vignette": 0.03,
         "distortion": -0.01,
         "chromaticAberration": 0.0,
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0,
-        "sharpnessBias": 0.04,
-        "thumbnail": "assets/thumbnails/lenses/tele.jpg"
-      },
-      {
-        "id": "vintage",
-        "name": "复古",
-        "nameEn": "Vintage",
-        "vignette": 0.1,
-        "distortion": 0.02,
-        "chromaticAberration": 0.03,
-        "bloom": 0.03,
-        "flare": 0.01,
-        "softFocus": 0.03,
-        "refraction": 0.0,
-        "sharpnessBias": -0.04,
-        "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
+        "refraction": 0.0
       }
     ],
     "ratios": [
@@ -119,7 +104,7 @@
         "label": "1:1",
         "width": 1,
         "height": 1,
-        "supportsFrame": true
+        "supportsFrame": false
       },
       {
         "id": "ratio_2_3",
@@ -133,7 +118,7 @@
         "label": "3:4",
         "width": 3,
         "height": 4,
-        "supportsFrame": true
+        "supportsFrame": false
       },
       {
         "id": "ratio_9_16",
@@ -143,80 +128,7 @@
         "supportsFrame": false
       }
     ],
-    "frames": [
-      {
-        "id": "ccd_frame",
-        "name": "CCD 边框",
-        "nameEn": "CCD Frame",
-        "asset": "assets/frames/polaroid_white.png",
-        "backgroundColor": "#F0EDE8",
-        "cornerRadius": 4,
-        "innerShadow": false,
-        "inset": {
-          "top": 156,
-          "bottom": 324,
-          "left": 78,
-          "right": 78
-        },
-        "supportedRatios": [
-          "ratio_1_1",
-          "ratio_2_3",
-          "ratio_3_4",
-          "ratio_9_16"
-        ],
-        "thumbnail": "assets/thumbnails/frames/ccd_frame.jpg",
-        "outerPadding": 20,
-        "outerBackgroundColor": "#FFFFFF"
-      },
-      {
-        "id": "date_frame",
-        "name": "日期边框",
-        "nameEn": "Date Frame",
-        "asset": "assets/frames/polaroid_cream.png",
-        "backgroundColor": "#FAFAF8",
-        "cornerRadius": 2,
-        "innerShadow": false,
-        "inset": {
-          "top": 156,
-          "bottom": 324,
-          "left": 78,
-          "right": 78
-        },
-        "supportedRatios": [
-          "ratio_1_1",
-          "ratio_2_3",
-          "ratio_3_4",
-          "ratio_9_16"
-        ],
-        "thumbnail": "assets/thumbnails/frames/date_frame.jpg",
-        "outerPadding": 16,
-        "outerBackgroundColor": "#FFFFFF"
-      },
-      {
-        "id": "film_border_ccd",
-        "name": "胶片边框",
-        "nameEn": "Film Border",
-        "asset": "assets/frames/polaroid_white.png",
-        "backgroundColor": "#E8E4DC",
-        "cornerRadius": 0,
-        "innerShadow": true,
-        "inset": {
-          "top": 156,
-          "bottom": 324,
-          "left": 78,
-          "right": 78
-        },
-        "supportedRatios": [
-          "ratio_1_1",
-          "ratio_2_3",
-          "ratio_3_4",
-          "ratio_9_16"
-        ],
-        "thumbnail": "assets/thumbnails/frames/film_border_ccd.jpg",
-        "outerPadding": 20,
-        "outerBackgroundColor": "#1A1A1A"
-      }
-    ],
+    "frames": [],
     "watermarks": {
       "presets": [
         {
@@ -251,8 +163,8 @@
   },
   "defaultSelection": {
     "filterId": "grd_standard",
-    "lensId": "std",
-    "ratioId": "ratio_3_4",
+    "lensId": "wide",
+    "ratioId": "ratio_2_3",
     "frameId": null,
     "watermarkPresetId": "date_orange",
     "extraId": null
@@ -261,9 +173,10 @@
     "enableFilter": true,
     "enableLens": true,
     "enableRatio": true,
-    "enableFrame": true,
+    "enableFrame": false,
     "enableWatermark": true,
-    "enableExtra": false
+    "enableExtra": false,
+    "enableFilmRoll": false
   },
   "previewCapabilities": {
     "allowSmallViewport": true,

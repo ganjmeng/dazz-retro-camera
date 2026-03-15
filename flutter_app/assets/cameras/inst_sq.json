@@ -61,42 +61,41 @@
       {
         "id": "std",
         "name": "标准",
-        "nameEn": "Std",
+        "nameEn": "Standard",
+        "zoomFactor": 1.0,
         "vignette": 0.02,
         "distortion": 0.0,
         "chromaticAberration": 0.0,
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/std.jpg"
+        "refraction": 0.0
       },
       {
         "id": "wide",
         "name": "广角",
         "nameEn": "Wide",
+        "zoomFactor": 0.8,
         "vignette": 0.08,
         "distortion": 0.05,
         "chromaticAberration": 0.01,
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/wide.jpg"
+        "refraction": 0.0
       },
       {
         "id": "vintage",
         "name": "复古",
         "nameEn": "Vintage",
+        "zoomFactor": 1.0,
         "vignette": 0.1,
         "distortion": 0.02,
         "chromaticAberration": 0.03,
-        "bloom": 0.03,
-        "flare": 0.01,
+        "bloom": 0.0,
+        "flare": 0.0,
         "softFocus": 0.03,
-        "refraction": 0.0,
-        "sharpnessBias": -0.04,
-        "thumbnail": "assets/thumbnails/lenses/vintage.jpg"
+        "refraction": 0.0
       }
     ],
     "ratios": [
@@ -409,7 +408,8 @@
     "enableRatio": true,
     "enableFrame": true,
     "enableWatermark": true,
-    "enableExtra": false
+    "enableExtra": false,
+    "enableFilmRoll": false
   },
   "previewCapabilities": {
     "allowSmallViewport": true,

@@ -72,27 +72,27 @@
         "id": "fisheye",
         "name": "鱼眼",
         "nameEn": "Fisheye",
-        "vignette": 0.3,
-        "distortion": 0.6,
-        "chromaticAberration": 0.06,
-        "bloom": 0.04,
+        "zoomFactor": 0.6,
+        "vignette": 0.22,
+        "distortion": 0.28,
+        "chromaticAberration": 0.02,
+        "bloom": 0.0,
         "flare": 0.0,
-        "softFocus": 0.0,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/fisheye_full.jpg"
+        "softFocus": 0.02,
+        "refraction": 0.0
       },
       {
         "id": "ultra_fisheye",
-        "name": "极端鱼眼",
+        "name": "超鱼眼",
         "nameEn": "Ultra Fisheye",
-        "vignette": 0.4,
-        "distortion": 0.85,
-        "chromaticAberration": 0.1,
-        "bloom": 0.05,
+        "zoomFactor": 0.5,
+        "vignette": 0.3,
+        "distortion": 0.38,
+        "chromaticAberration": 0.03,
+        "bloom": 0.0,
         "flare": 0.0,
-        "softFocus": 0.0,
-        "refraction": 0.0,
-        "thumbnail": "assets/thumbnails/lenses/fisheye_extreme.jpg"
+        "softFocus": 0.03,
+        "refraction": 0.0
       }
     ],
     "ratios": [
@@ -101,7 +101,7 @@
         "label": "1:1",
         "width": 1,
         "height": 1,
-        "supportsFrame": true
+        "supportsFrame": false
       }
     ],
     "frames": [],
@@ -143,7 +143,8 @@
     "enableRatio": true,
     "enableFrame": false,
     "enableWatermark": true,
-    "enableExtra": false
+    "enableExtra": false,
+    "enableFilmRoll": false
   },
   "previewCapabilities": {
     "allowSmallViewport": true,

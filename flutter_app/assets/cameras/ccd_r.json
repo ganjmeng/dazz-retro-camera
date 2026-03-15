@@ -1,0 +1,435 @@
+{
+  "id": "ccd_r",
+  "name": "CCD R",
+  "category": "ccd",
+  "mode": "photo",
+  "supportsPhoto": true,
+  "supportsVideo": false,
+  "focalLengthLabel": "35mm",
+  "sensor": {
+    "type": "ccd",
+    "dynamicRange": 8,
+    "baseNoise": 0.18,
+    "colorDepth": 8
+  },
+  "defaultLook": {
+    "baseLut": "assets/lut/cameras/ccd_m.cube",
+    "distortion": 0.0,
+    "chromaticAberration": 0.1,
+    "flare": 0.0,
+    "temperature": -6,
+    "tint": -4.0,
+    "contrast": 0.94,
+    "highlights": 8.0,
+    "shadows": 4.0,
+    "whites": 12.0,
+    "blacks": -6.0,
+    "clarity": -2.0,
+    "saturation": 1.06,
+    "vibrance": 8.0,
+    "grain": 0.2,
+    "bloom": 0.08,
+    "vignette": 0.06,
+    "colorBiasR": -0.02,
+    "colorBiasG": 0.01,
+    "colorBiasB": 0.06
+  },
+  "modules": {
+    "filters": [
+      {
+        "id": "ccd_m_standard",
+        "name": "标准",
+        "nameEn": "Standard",
+        "lut": "assets/lut/filters/ccd_m_standard.cube",
+        "contrast": 1.0,
+        "saturation": 1.0,
+        "grain": "medium",
+        "thumbnail": "assets/thumbnails/filters/ccd_m_standard.jpg"
+      },
+      {
+        "id": "ccd_m_vivid",
+        "name": "鲜艳",
+        "nameEn": "Vivid",
+        "lut": "assets/lut/filters/ccd_m_vivid.cube",
+        "contrast": 1.08,
+        "saturation": 1.12,
+        "grain": "medium",
+        "thumbnail": "assets/thumbnails/filters/ccd_m_vivid.jpg"
+      },
+      {
+        "id": "ccd_m_cool",
+        "name": "冷调",
+        "nameEn": "Cool",
+        "lut": "assets/lut/filters/ccd_m_cool.cube",
+        "contrast": 1.0,
+        "saturation": 0.92,
+        "grain": "heavy",
+        "thumbnail": "assets/thumbnails/filters/ccd_m_cool.jpg"
+      }
+    ],
+    "lenses": [
+      {
+        "id": "std",
+        "name": "标准",
+        "nameEn": "Standard",
+        "zoomFactor": 1.0,
+        "vignette": 0.02,
+        "distortion": 0.0,
+        "chromaticAberration": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0
+      },
+      {
+        "id": "wide",
+        "name": "广角",
+        "nameEn": "Wide",
+        "zoomFactor": 0.8,
+        "vignette": 0.08,
+        "distortion": 0.05,
+        "chromaticAberration": 0.01,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0
+      },
+      {
+        "id": "tele",
+        "name": "长焦",
+        "nameEn": "Tele",
+        "zoomFactor": 2.0,
+        "vignette": 0.03,
+        "distortion": -0.01,
+        "chromaticAberration": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0
+      },
+      {
+        "id": "vintage",
+        "name": "复古",
+        "nameEn": "Vintage",
+        "zoomFactor": 1.0,
+        "vignette": 0.1,
+        "distortion": 0.02,
+        "chromaticAberration": 0.03,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.03,
+        "refraction": 0.0
+      }
+    ],
+    "ratios": [
+      {
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_2_3",
+        "label": "2:3",
+        "width": 2,
+        "height": 3,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "width": 3,
+        "height": 4,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_9_16",
+        "label": "9:16",
+        "width": 9,
+        "height": 16,
+        "supportsFrame": true
+      }
+    ],
+    "frames": [
+      {
+        "id": "ccd_frame",
+        "name": "CCD 边框",
+        "nameEn": "CCD Frame",
+        "backgroundColor": "#F8F8F6",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 30,
+          "bottom": 30,
+          "left": 36,
+          "right": 36
+        },
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/ccd_frame_1x1.png",
+          "ratio_2_3": "assets/frames/ccd_frame_2x3.png",
+          "ratio_3_4": "assets/frames/ccd_frame_3x4.png",
+          "ratio_9_16": "assets/frames/ccd_frame_9x16.png"
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 30,
+            "bottom": 30,
+            "left": 36,
+            "right": 36
+          },
+          "ratio_2_3": {
+            "top": 30,
+            "bottom": 30,
+            "left": 36,
+            "right": 36
+          },
+          "ratio_3_4": {
+            "top": 30,
+            "bottom": 30,
+            "left": 36,
+            "right": 36
+          },
+          "ratio_9_16": {
+            "top": 30,
+            "bottom": 30,
+            "left": 36,
+            "right": 36
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_2_3",
+          "ratio_3_4",
+          "ratio_9_16"
+        ],
+        "thumbnail": "assets/thumbnails/frames/ccd_frame.jpg",
+        "outerPadding": 0,
+        "outerBackgroundColor": "#FFFFFF",
+        "lightLeak": 0.0,
+        "shake": 0.0
+      },
+      {
+        "id": "date_frame",
+        "name": "日期边框",
+        "nameEn": "Date Frame",
+        "backgroundColor": "#FAFAF7",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 30,
+          "bottom": 30,
+          "left": 36,
+          "right": 36
+        },
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/date_frame_1x1.png",
+          "ratio_2_3": "assets/frames/date_frame_2x3.png",
+          "ratio_3_4": "assets/frames/date_frame_3x4.png",
+          "ratio_9_16": "assets/frames/date_frame_9x16.png"
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 30,
+            "bottom": 30,
+            "left": 36,
+            "right": 36
+          },
+          "ratio_2_3": {
+            "top": 30,
+            "bottom": 30,
+            "left": 36,
+            "right": 36
+          },
+          "ratio_3_4": {
+            "top": 30,
+            "bottom": 30,
+            "left": 36,
+            "right": 36
+          },
+          "ratio_9_16": {
+            "top": 30,
+            "bottom": 30,
+            "left": 36,
+            "right": 36
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_2_3",
+          "ratio_3_4",
+          "ratio_9_16"
+        ],
+        "thumbnail": "assets/thumbnails/frames/date_frame.jpg",
+        "outerPadding": 0,
+        "outerBackgroundColor": "#FFFFFF",
+        "lightLeak": 0.0,
+        "shake": 0.0
+      },
+      {
+        "id": "film_border_ccd",
+        "name": "胶片边框",
+        "nameEn": "Film Border",
+        "backgroundColor": "#1C1C1C",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 30,
+          "bottom": 30,
+          "left": 36,
+          "right": 36
+        },
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/film_border_ccd_1x1.png",
+          "ratio_2_3": "assets/frames/film_border_ccd_2x3.png",
+          "ratio_3_4": "assets/frames/film_border_ccd_3x4.png",
+          "ratio_9_16": "assets/frames/film_border_ccd_9x16.png"
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 30,
+            "bottom": 30,
+            "left": 36,
+            "right": 36
+          },
+          "ratio_2_3": {
+            "top": 30,
+            "bottom": 30,
+            "left": 36,
+            "right": 36
+          },
+          "ratio_3_4": {
+            "top": 30,
+            "bottom": 30,
+            "left": 36,
+            "right": 36
+          },
+          "ratio_9_16": {
+            "top": 30,
+            "bottom": 30,
+            "left": 36,
+            "right": 36
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_2_3",
+          "ratio_3_4",
+          "ratio_9_16"
+        ],
+        "thumbnail": "assets/thumbnails/frames/film_border_ccd.jpg",
+        "outerPadding": 0,
+        "outerBackgroundColor": "#1C1C1C",
+        "lightLeak": 0.0,
+        "shake": 0.0
+      }
+    ],
+    "watermarks": {
+      "presets": [
+        {
+          "id": "date_blue",
+          "name": "蓝色日期",
+          "color": "#5B9BD5",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "date_white",
+          "name": "白色日期",
+          "color": "#FFFFFF",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "none",
+          "name": "无水印"
+        }
+      ],
+      "editor": {
+        "allowColorChange": true,
+        "allowPositionChange": true,
+        "allowSizeChange": true,
+        "allowOrientationChange": true
+      }
+    },
+    "extras": []
+  },
+  "defaultSelection": {
+    "filterId": "ccd_r_standard",
+    "lensId": "std",
+    "ratioId": "ratio_3_4",
+    "frameId": "ccd_frame",
+    "watermarkPresetId": "date_blue",
+    "extraId": null
+  },
+  "uiCapabilities": {
+    "enableFilter": true,
+    "enableLens": true,
+    "enableRatio": true,
+    "enableFrame": true,
+    "enableWatermark": true,
+    "enableExtra": false,
+    "enableFilmRoll": false
+  },
+  "previewCapabilities": {
+    "allowSmallViewport": true,
+    "allowGridOverlay": true,
+    "allowZoom": true,
+    "allowImportImage": true,
+    "allowTimer": true,
+    "allowFlash": true
+  },
+  "previewPolicy": {
+    "enableLut": true,
+    "enableTemperature": true,
+    "enableContrast": true,
+    "enableSaturation": true,
+    "enableVignette": true,
+    "enableLightLensEffect": true,
+    "enableGrain": false,
+    "enableBloom": false,
+    "enableChromaticAberration": true,
+    "enableFrameComposite": false,
+    "enableWatermarkComposite": true
+  },
+  "exportPolicy": {
+    "jpegQuality": 0.92,
+    "applyRatioCrop": true,
+    "applyFrameOnExport": true,
+    "applyWatermarkOnExport": true,
+    "preserveMetadata": true
+  },
+  "videoConfig": {
+    "enabled": false,
+    "fpsOptions": [
+      24,
+      30
+    ],
+    "resolutionOptions": [
+      "HD"
+    ],
+    "defaultFps": 30,
+    "defaultResolution": "HD",
+    "supportsAudio": false,
+    "videoBitrate": 8000000
+  },
+  "assets": {
+    "thumbnail": "assets/thumbnails/cameras/ccd_r.jpg",
+    "icon": "assets/icons/cameras/ccd_r.png"
+  },
+  "meta": {
+    "version": "final",
+    "premium": false,
+    "sortOrder": 4,
+    "tags": [
+      "ccd",
+      "digital",
+      "cool",
+      "noise",
+      "chromatic-aberration",
+      "2005"
+    ]
+  }
+}
