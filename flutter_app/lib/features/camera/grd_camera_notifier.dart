@@ -280,7 +280,8 @@ class GrdCameraNotifier extends StateNotifier<GrdCameraState> {
         await Future.delayed(Duration(seconds: state.timerSeconds));
       }
 
-      final path = await _ref.read(cameraServiceProvider.notifier).takePhoto();
+      final _photoResult = await _ref.read(cameraServiceProvider.notifier).takePhoto();
+      final path = _photoResult?['filePath'] as String?;
 
       if (path != null) {
         state = state.copyWith(showCaptureFlash: true);
@@ -293,14 +294,14 @@ class GrdCameraNotifier extends StateNotifier<GrdCameraState> {
           try {
             final pipeline = CapturePipeline(camera: state.camera!);
             final result = await pipeline.process(
-              imagePath: path,
+              imagePath: path!,
               selectedRatioId: state.activeRatioId ?? '',
               selectedFrameId: state.activeFrameId ?? '',
               selectedWatermarkId: state.activeWatermarkId ?? '',
               watermarkStyleOverride: state.watermarkStyle,
             );
             if (result != null) {
-              await File(path).writeAsBytes(result.bytes);
+              await File(path!).writeAsBytes(result.bytes);
             }
           } catch (e) {
             // Post-processing failed, keep original

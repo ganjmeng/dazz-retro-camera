@@ -18,6 +18,8 @@ class CameraState {
   bool get isProcessing => isLoading;
   String? get errorMessage => error;
   final String currentLens; // "front" | "back"
+  /// Android Camera2 传感器调试信息（onCameraReady 事件携带）
+  final Map<String, dynamic> activeCameraDebugInfo;
 
   const CameraState({
     this.isReady = false,
@@ -27,6 +29,7 @@ class CameraState {
     this.currentPreset,
     this.isRecording = false,
     this.currentLens = 'back',
+    this.activeCameraDebugInfo = const {},
   });
 
   CameraState copyWith({
@@ -37,6 +40,7 @@ class CameraState {
     Preset? currentPreset,
     bool? isRecording,
     String? currentLens,
+    Map<String, dynamic>? activeCameraDebugInfo,
   }) {
     return CameraState(
       isReady: isReady ?? this.isReady,
@@ -46,6 +50,7 @@ class CameraState {
       currentPreset: currentPreset ?? this.currentPreset,
       isRecording: isRecording ?? this.isRecording,
       currentLens: currentLens ?? this.currentLens,
+      activeCameraDebugInfo: activeCameraDebugInfo ?? this.activeCameraDebugInfo,
     );
   }
 }
@@ -289,7 +294,15 @@ class CameraService extends StateNotifier<CameraState> {
 
     switch (type) {
       case AppConstants.eventCameraReady:
-        state = state.copyWith(isReady: true);
+        // payload 包含 Android Camera2 传感器调试信息（cameraId/sensorSize/sensorMp/focalLengths/facing）
+        final debugInfo = <String, dynamic>{};
+        if (payload != null && payload.isNotEmpty) {
+          payload.forEach((k, v) => debugInfo[k.toString()] = v);
+        }
+        state = state.copyWith(
+          isReady: true,
+          activeCameraDebugInfo: debugInfo.isNotEmpty ? debugInfo : state.activeCameraDebugInfo,
+        );
         break;
       case AppConstants.eventError:
         final message = payload?['message'] as String? ?? 'Unknown error';
