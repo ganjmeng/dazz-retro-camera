@@ -21,7 +21,14 @@ class CapturePipeline {
   final CameraDefinition camera;
 
   /// 输出图像最大边长（像素）。超过此值时等比缩小画布。
-  static const int kMaxOutputDimension = 2048;
+  /// 各清晰度档位的输出最大边长（像素）
+  static const int kMaxDimLow    = 1080; // 低画质：1080p 长边，~150~300 KB
+  static const int kMaxDimMid    = 1440; // 中画质：1440p 长边，~300~600 KB
+  static const int kMaxDimHigh   = 4096; // 高画质：4K 长边，~1~3 MB（对齐竞品）
+  /// 各清晰度档位的 JPEG 编码质量
+  static const int kJpegQualityLow  = 82;
+  static const int kJpegQualityMid  = 82;
+  static const int kJpegQualityHigh = 90;
 
   CapturePipeline({required this.camera});
 
@@ -40,6 +47,8 @@ class CapturePipeline {
     PreviewRenderParams? renderParams,
     Rect? minimapNormalizedRect, // 小窗模式裁剪区域（归一化 0.0~1.0）
     int deviceQuarter = 0, // 设备方向：0=竖屏, 1=逆时针横屏(左转90°), 2=倒竖, 3=顺时针横屏(右转90°)
+    int maxDimension = kMaxDimMid,   // 输出最大边长（由调用方按清晰度档位传入）
+    int jpegQuality  = kJpegQualityMid, // JPEG 编码质量（由调用方按清晰度档位传入）
   }) async {
     try {
           // ── 1. 读取原始图片（解码时限制最大边长，避免 12MP 全量解码）──────────────
@@ -49,12 +58,12 @@ class CapturePipeline {
       final rawW = rawSize?[0] ?? 0;
       final rawH = rawSize?[1] ?? 0;
 
-      // 计算解码目标尺寸（限制最大边长为 kMaxOutputDimension）
+      // 计算解码目标尺寸（限制最大边长为 maxDimension）
       final maxRaw = math.max(rawW, rawH);
       int? decodeTargetW;
       int? decodeTargetH;
-      if (maxRaw > kMaxOutputDimension && maxRaw > 0) {
-        final scale = kMaxOutputDimension / maxRaw;
+      if (maxRaw > maxDimension && maxRaw > 0) {
+        final scale = maxDimension / maxRaw;
         decodeTargetW = (rawW * scale).round();
         decodeTargetH = (rawH * scale).round();
       }
@@ -136,8 +145,8 @@ class CapturePipeline {
       // ── 3c. 限制画布最大边长（防止超大画布导致 GPU OOM / 卡顿）─────────────────────
       final maxCanvas = math.max(canvasW, canvasH);
       double canvasScale = 1.0;
-      if (maxCanvas > kMaxOutputDimension) {
-        canvasScale = kMaxOutputDimension / maxCanvas;
+      if (maxCanvas > maxDimension) {
+        canvasScale = maxDimension / maxCanvas;
         canvasW *= canvasScale;
         canvasH *= canvasScale;
         outW *= canvasScale;
@@ -366,6 +375,7 @@ class CapturePipeline {
         byteData.buffer.asUint8List(),
         finalW,
         finalH,
+        quality: jpegQuality,
       );
       debugPrint('[CapturePipeline] output: ${finalW}x${finalH}, bytes=${jpegBytes.length}');
       return jpegBytes;
@@ -933,7 +943,7 @@ class CapturePipeline {
 
   // ── RGBA bytes → JPEG bytes（使用 image 包实现真正 JPEG 编码）────────────────────
   /// 同步 JPEG 编码（在主 Isolate 中运行，但尺寸已限制在 2048px，时间可接受）
-  Uint8List _rgbaToJpegSync(Uint8List rgba, int w, int h) {
+  Uint8List _rgbaToJpegSync(Uint8List rgba, int w, int h, {int quality = 82}) {
     final image = img_lib.Image.fromBytes(
       width: w,
       height: h,
@@ -941,7 +951,7 @@ class CapturePipeline {
       format: img_lib.Format.uint8,
       numChannels: 4,
     );
-    final jpegBytes = img_lib.encodeJpg(image, quality: 92);
+    final jpegBytes = img_lib.encodeJpg(image, quality: quality);
     return Uint8List.fromList(jpegBytes);
   }
 }

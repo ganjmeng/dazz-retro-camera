@@ -576,6 +576,18 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           try {
             debugPrint('[CameraNotifier] Starting post-process: ratio=${state.activeRatioId}, frame=${state.activeFrameId}, wm=${state.activeWatermarkId}');
             final pipeline = CapturePipeline(camera: state.camera!);
+            // 按清晰度档位选择输出尺寸和 JPEG 质量
+            // sharpenLevel: 0=低(1080px/q82), 1=中(1440px/q82), 2=高(4096px/q90)
+            final maxDim = switch (state.sharpenLevel) {
+              0 => CapturePipeline.kMaxDimLow,
+              2 => CapturePipeline.kMaxDimHigh,
+              _ => CapturePipeline.kMaxDimMid,
+            };
+            final jpegQ = switch (state.sharpenLevel) {
+              0 => CapturePipeline.kJpegQualityLow,
+              2 => CapturePipeline.kJpegQualityHigh,
+              _ => CapturePipeline.kJpegQualityMid,
+            };
             final processed = await pipeline.process(
               imagePath: path,
               selectedRatioId: state.activeRatioId ?? '',
@@ -590,6 +602,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
               renderParams: state.renderParams,
               minimapNormalizedRect: minimapNormalizedRect,
               deviceQuarter: deviceQuarter,
+              maxDimension: maxDim,
+              jpegQuality: jpegQ,
             );
             if (processed != null) {
               await File(path).writeAsBytes(processed);
