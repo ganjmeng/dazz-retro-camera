@@ -67,11 +67,13 @@ class CapturePipeline {
           // 以图片短边为参考，确保边框比例一致
           final refSize = math.min(outW, outH);
           final scale = refSize / 1080.0;
-          topPx = frameOpt.inset.top * scale;
-          rightPx = frameOpt.inset.right * scale;
-          bottomPx = frameOpt.inset.bottom * scale;
-          leftPx = frameOpt.inset.left * scale;
-          debugPrint('[CapturePipeline] frame inset: t=$topPx r=$rightPx b=$bottomPx l=$leftPx');
+          // 优先使用 ratioInsets（按比例不同 inset），回退到 inset
+          final activeInset = frameOpt.insetForRatio(selectedRatioId);
+          topPx = activeInset.top * scale;
+          rightPx = activeInset.right * scale;
+          bottomPx = activeInset.bottom * scale;
+          leftPx = activeInset.left * scale;
+          debugPrint('[CapturePipeline] frame inset (ratio=$selectedRatioId): t=$topPx r=$rightPx b=$bottomPx l=$leftPx');
         } catch (_) {
           frameOpt = null;
         }
@@ -90,13 +92,15 @@ class CapturePipeline {
       final frameCanvasW = outW + leftPx + rightPx;
       final frameCanvasH = outH + topPx + bottomPx;
 
+      // 按比例选择 asset（优先 ratioAssets，回退 asset）
+      final resolvedAsset = frameOpt?.assetForRatio(selectedRatioId);
       // 判断是否有 PNG 边框资源（提前判断，用于画布尺寸计算）
       final hasPngAssetForSize = selectedFrameId.isNotEmpty &&
           selectedFrameId != 'frame_none' &&
           selectedFrameId != 'none' &&
           frameOpt != null &&
-          frameOpt.asset != null &&
-          frameOpt.asset!.isNotEmpty;
+          resolvedAsset != null &&
+          resolvedAsset.isNotEmpty;
 
       // 最终输出画布尺寸：
       // - 有 PNG 边框：画布 = 相框层尺寸（PNG 自身包含边框+背景，不需要额外 outerPadding）
@@ -248,9 +252,9 @@ class CapturePipeline {
       // ── 4e. 水印（移至4g，在相框纹理之后绘制）──────────────────────────────────
 
       // ── 4f. 相框纹理 PNG 叠加（绘制在最上层，覆盖整个画布）──────────────────────
-      if (frameOpt != null && frameOpt.asset != null && frameOpt.asset!.isNotEmpty) {
+      if (frameOpt != null && resolvedAsset != null && resolvedAsset.isNotEmpty) {
         try {
-          final assetData = await rootBundle.load(frameOpt.asset!);
+          final assetData = await rootBundle.load(resolvedAsset);
           final frameCodec = await ui.instantiateImageCodec(
             assetData.buffer.asUint8List(),
             targetWidth: canvasW.toInt(),
@@ -266,7 +270,7 @@ class CapturePipeline {
             Rect.fromLTWH(0, 0, canvasW, canvasH),
             Paint()..filterQuality = FilterQuality.high,
           );
-          debugPrint('[CapturePipeline] frame texture applied: ${frameOpt.asset}');
+          debugPrint('[CapturePipeline] frame texture applied: $resolvedAsset (ratio=$selectedRatioId)');
         } catch (e) {
           debugPrint('[CapturePipeline] frame asset load error: $e');
         }

@@ -342,8 +342,14 @@ class FrameDefinition {
   final String name;
   final String nameEn;
   final String? asset;
+  /// 按比例选择不同 PNG 资源：{ "ratio_1_1": "assets/frames/xxx_1x1.png", "ratio_3_4": "assets/frames/xxx_3x4.png" }
+  /// 优先级高于 asset 字段；若对应比例不存在则回退到 asset
+  final Map<String, String> ratioAssets;
   final String backgroundColor;
   final FrameInset inset;
+  /// 按比例选择不同 inset：{ "ratio_1_1": FrameInset(...), "ratio_3_4": FrameInset(...) }
+  /// 优先级高于 inset 字段；若对应比例不存在则回退到 inset
+  final Map<String, FrameInset> ratioInsets;
   final List<String> supportedRatios;
   final String? thumbnail;
   /// 漏光强度 0.0~1.0（0=无，1=最强）
@@ -364,8 +370,10 @@ class FrameDefinition {
     required this.name,
     required this.nameEn,
     this.asset,
+    this.ratioAssets = const {},
     required this.backgroundColor,
     required this.inset,
+    this.ratioInsets = const {},
     required this.supportedRatios,
     this.thumbnail,
     this.lightLeak = 0.0,
@@ -376,13 +384,35 @@ class FrameDefinition {
     this.innerShadow = false,
   });
 
+  /// 根据 ratioId 获取实际使用的 asset 路径（优先 ratioAssets，回退 asset）
+  String? assetForRatio(String? ratioId) {
+    if (ratioId != null && ratioAssets.containsKey(ratioId)) {
+      return ratioAssets[ratioId];
+    }
+    return asset;
+  }
+
+  /// 根据 ratioId 获取实际使用的 inset（优先 ratioInsets，回退 inset）
+  FrameInset insetForRatio(String? ratioId) {
+    if (ratioId != null && ratioInsets.containsKey(ratioId)) {
+      return ratioInsets[ratioId]!;
+    }
+    return inset;
+  }
+
   factory FrameDefinition.fromJson(Map<String, dynamic> json) => FrameDefinition(
     id: json['id'] as String,
     name: json['name'] as String,
     nameEn: json['nameEn'] as String? ?? json['name'] as String,
     asset: json['asset'] as String?,
+    ratioAssets: (json['ratioAssets'] as Map<String, dynamic>?)?.map(
+      (k, v) => MapEntry(k, v as String),
+    ) ?? const {},
     backgroundColor: json['backgroundColor'] as String? ?? '#FFFFFF',
     inset: FrameInset.fromJson(json['inset'] as Map<String, dynamic>? ?? {}),
+    ratioInsets: (json['ratioInsets'] as Map<String, dynamic>?)?.map(
+      (k, v) => MapEntry(k, FrameInset.fromJson(v as Map<String, dynamic>)),
+    ) ?? const {},
     supportedRatios: (json['supportedRatios'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [],
     thumbnail: json['thumbnail'] as String?,
     lightLeak: (json['lightLeak'] as num?)?.toDouble() ?? 0.0,
