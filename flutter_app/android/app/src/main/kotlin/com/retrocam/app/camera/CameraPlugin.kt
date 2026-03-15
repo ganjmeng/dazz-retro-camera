@@ -596,12 +596,19 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                         .build()
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         try {
-                            provider.unbind(imageCapture)
+                            // CRITICAL FIX: Must unbindAll and rebind ALL use cases together.
+                            // If only imageCapture is rebound while preview+videoCapture remain,
+                            // CameraX negotiates a shared stream config compatible with the
+                            // existing preview (1920x1080), silently capping imageCapture at 2MP
+                            // even when HIGHEST_AVAILABLE_STRATEGY is set.
+                            provider.unbindAll()
                             imageCapture = newImageCapture
                             camera = provider.bindToLifecycle(
                                 owner,
                                 cameraSelector,
-                                imageCapture
+                                preview,
+                                imageCapture,
+                                videoCapture
                             )
                             Log.d(TAG, "setSharpen: level=$level, imageCapture rebuilt")
                             // 3. 使用 Camera2Interop 设置 EDGE_MODE（锐化算法）
