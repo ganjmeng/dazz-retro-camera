@@ -26,6 +26,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/camera_definition.dart';
 import '../../models/camera_registry.dart';
+import '../../services/camera_manager_service.dart';
 import 'camera_notifier.dart';
 import 'camera_manager_screen.dart';
 import 'camera_sample_screen.dart';
@@ -138,16 +139,43 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
   }
 
   // ── 相机列表行 ──────────────────────────────────────────────────────────────
+  // 顺序与相机管理页联动：收藏的相机排在最前，其余按管理页拖动顺序排列
   Widget _buildCameraRow(CameraAppState st) {
+    // 读取相机管理状态（异步加载中时降级为 kAllCameras 默认顺序）
+    final managerAsync = ref.watch(cameraManagerProvider);
+    final List<CameraDefinition> orderedCameras;
+    if (managerAsync.hasValue) {
+      final mgr = managerAsync.value!;
+      // 收藏相机排在最前，其余按管理页顺序排列
+      // 仅显示已启用的相机（enabledIds 中的）
+      final sortedIds = [
+        ...mgr.favoriteIds,
+        ...mgr.nonFavoriteIds,
+      ].where((id) => mgr.enabledIds.contains(id)).toList();
+      orderedCameras = sortedIds
+          .map((id) {
+            try {
+              return kAllCameras.firstWhere((c) => c.id == id);
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<CameraDefinition>()
+          .toList();
+    } else {
+      // 管理状态未加载时，使用默认顺序
+      orderedCameras = List.from(kAllCameras);
+    }
+
     return SizedBox(
       height: 110,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        itemCount: kAllCameras.length,
+        itemCount: orderedCameras.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (ctx, i) {
-          final entry = kAllCameras[i];
+          final entry = orderedCameras[i];
           final isActive = st.activeCameraId == entry.id;
           return _CameraCell(
             entry: entry,
