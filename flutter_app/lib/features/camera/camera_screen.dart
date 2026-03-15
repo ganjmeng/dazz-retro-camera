@@ -164,9 +164,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         // 初始化原生相机硬件（获取 textureId，开始预览）
         await ref.read(cameraServiceProvider.notifier).initCamera();
         // 同步清晰度档位对应的原生分辨率（initCamera 默认 1080p，需根据当前档位切换）
+        // IMPORTANT: must await — native camera must finish reconfiguring before
+        // the loading overlay is dismissed and takePhoto is allowed.
         final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
         const sharpenLevels = [0.0, 0.5, 1.0];
-        ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevels[sharpenLevel]);
+        await ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevels[sharpenLevel]);
         _loadLatestThumb();
       }
     });
@@ -279,11 +281,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (!mounted) return;
     await ref.read(cameraServiceProvider.notifier).initCamera();
     // 同步清晰度档位对应的原生分辨率
+    // IMPORTANT: must await so the transition overlay stays visible until the
+    // native camera is fully reconfigured at the correct resolution.
     final sharpenLevelBack = ref.read(cameraAppProvider).sharpenLevel;
     const sharpenLevelsBack = [0.0, 0.5, 1.0];
-    ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevelsBack[sharpenLevelBack]);
-    // 5. 淡出过渡动画
-    _transitionTimer = Timer(const Duration(milliseconds: 500), () {
+    await ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevelsBack[sharpenLevelBack]);
+    // 5. 淡出过渡动画（setSharpen 完成后再淡出，确保分辨率已切换）
+    _transitionTimer = Timer(const Duration(milliseconds: 300), () {
       if (mounted) setState(() => _showTransition = false);
     });
   }
