@@ -549,9 +549,10 @@ class _SubPanelState extends ConsumerState<_SubPanel>
   // 将 HSV 转为 hex 字符串
   String _hsvToHex(double h, double s, double v) {
     final color = HSVColor.fromAHSV(1.0, h, s, v).toColor();
-    final r = color.r.toInt().toRadixString(16).padLeft(2, '0');
-    final g = color.g.toInt().toRadixString(16).padLeft(2, '0');
-    final b = color.b.toInt().toRadixString(16).padLeft(2, '0');
+    // Flutter 3.x 中 Color.r/g/b 是 double (0.0~1.0)，需乘以 255 再取整
+    final r = (color.r * 255).round().toRadixString(16).padLeft(2, '0');
+    final g = (color.g * 255).round().toRadixString(16).padLeft(2, '0');
+    final b = (color.b * 255).round().toRadixString(16).padLeft(2, '0');
     return '#$r$g$b'.toUpperCase();
   }
 
@@ -598,9 +599,10 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                   onTap: () => setState(() => _showColorPicker = !_showColorPicker),
                 ),
                 ..._kWatermarkColors.map((c) {
-                  final r = c.r.toInt().toRadixString(16).padLeft(2, '0');
-                  final g = c.g.toInt().toRadixString(16).padLeft(2, '0');
-                  final b = c.b.toInt().toRadixString(16).padLeft(2, '0');
+                  // Flutter 3.x 中 Color.r/g/b 是 double (0.0~1.0)，需乘以 255 再取整
+                  final r = (c.r * 255).round().toRadixString(16).padLeft(2, '0');
+                  final g = (c.g * 255).round().toRadixString(16).padLeft(2, '0');
+                  final b = (c.b * 255).round().toRadixString(16).padLeft(2, '0');
                   final hex = '#$r$g$b'.toUpperCase();
                   // 预设颜色选中时关闭 HSV 色盘
                   final isSelected = !_showColorPicker &&
@@ -1006,9 +1008,10 @@ class _SubPanelState extends ConsumerState<_SubPanel>
         onTap: () => ref.read(cameraAppProvider.notifier).selectFrameBackground('transparent'),
       ),
       ..._kFrameBgColors.map((c) {
-        final r = c.r.toInt().toRadixString(16).padLeft(2, '0');
-        final g = c.g.toInt().toRadixString(16).padLeft(2, '0');
-        final b = c.b.toInt().toRadixString(16).padLeft(2, '0');
+        // Flutter 3.x 中 Color.r/g/b 是 double (0.0~1.0)，需乘以 255 再取整
+        final r = (c.r * 255).round().toRadixString(16).padLeft(2, '0');
+        final g = (c.g * 255).round().toRadixString(16).padLeft(2, '0');
+        final b = (c.b * 255).round().toRadixString(16).padLeft(2, '0');
         final hex = '#${r}${g}${b}'.toUpperCase();
         // 匹配用户选择的背景色（frameBackgroundColor）
         // 初始状态 frameBackgroundColor==null 时，默认白色被选中（对应 outerBackgroundColor #FFFFFF）
