@@ -245,6 +245,11 @@ class CapturePipeline {
         _drawVignette(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, renderParams.effectiveVignette);
       }
 
+      // ── 4c3. 胶片颗粒感（grain）──────────────────────────────────────────────
+      if (renderParams != null && renderParams.effectiveGrain > 0.01) {
+        _drawFilmGrain(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, renderParams.effectiveGrain);
+      }
+
       // ── 4c2. 内嵌阴影（拟物相纸厚度感）──────────────────────────────────────
       if (frameOpt != null && frameOpt.innerShadow) {
         _drawInnerShadow(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
@@ -615,6 +620,35 @@ class CapturePipeline {
         colors: [shadowColor, Colors.transparent],
       ).createShader(Rect.fromLTWH(ox + w - sw, oy, sw, h)),
     );
+  }
+
+  // ── 胶片颗粒感（Film Grain）────────────────────────────────────────────────
+  void _drawFilmGrain(
+      Canvas canvas, double ox, double oy, double w, double h, double strength) {
+    // 使用固定种子保证每次输出一致（非实时预览，需要确定性）
+    final rng = math.Random(12345);
+    // 颗粒密度：strength 0.1 → ~800点，strength 0.3 → ~3000点
+    final count = (w * h * strength * 0.012).clamp(200, 8000).toInt();
+    // 颗粒尺寸随 strength 变化
+    final baseSize = (strength * 2.5).clamp(0.5, 3.0);
+    for (int i = 0; i < count; i++) {
+      final px = ox + rng.nextDouble() * w;
+      final py = oy + rng.nextDouble() * h;
+      final size = baseSize * (0.5 + rng.nextDouble() * 0.8);
+      // 颗粒颜色：随机亮/暗，模拟银盐颗粒
+      final brightness = rng.nextBool()
+          ? (strength * 60).clamp(20, 80).toInt()   // 亮颗粒
+          : -(strength * 40).clamp(15, 60).toInt();  // 暗颗粒（用负值表示）
+      final alpha = (strength * 120).clamp(30, 140).toInt();
+      final color = brightness >= 0
+          ? Color.fromARGB(alpha, brightness, brightness, brightness)
+          : Color.fromARGB(alpha, 0, 0, 0);
+      canvas.drawCircle(
+        Offset(px, py),
+        size,
+        Paint()..color = color..blendMode = BlendMode.overlay,
+      );
+    }
   }
 
   void _drawVignette(
