@@ -50,7 +50,7 @@ const kToolbarShutterGap = 10.0;  // 工具栏和快门行间距
 const kBottomPanelH = kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
 const kCapsuleH = 40.0;           // 胶囊高度（参考图约40px）
 const kCapsuleInsetBottom = 8.0;  // 胶囊距取景框底部的内边距（胶囊下移8px）
-const kSliderAreaH = 44.0;        // 胶囊下方滑条展开区域预留高度（减小使底部面板整体上移）
+const kSliderAreaH = 34.0;        // 胶囊下方滑条展开区域预留高度
 const kViewfinderHPadding = 8.0;  // 取景框左右边距（参考图约8px，贴边显示）
 const kTopBarH = 44.0;
 
@@ -1196,9 +1196,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return SizedBox(
       height: 52,
         child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             // 1. 导入图片
             _ToolbarBtn(
