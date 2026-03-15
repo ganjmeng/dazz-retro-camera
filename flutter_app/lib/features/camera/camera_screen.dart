@@ -940,7 +940,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             child: IgnorePointer(
               ignoring: _showExposureSlider || _showWbPanel || st.showZoomSlider,
               child: Transform.translate(
-                offset: const Offset(0, -8),
+                offset: const Offset(0, -23),
                 child: _buildToolbar(st),
               ),
             ),
@@ -1338,9 +1338,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: kMaxBottomContentW),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
             // 1. 导入图片
             _RotatingToolbarBtn(
@@ -1439,8 +1439,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 builder: (_, __) => Transform.rotate(
                   angle: _rotateAngle.value,
                   child: Container(
-                    width: 60,
-                    height: 60,
+                    width: 50,
+                    height: 50,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
                       color: _kDarkGray,
@@ -1482,14 +1482,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             GestureDetector(
               onTap: () => showCameraConfigSheet(context),
               child: SizedBox(
-                width: 72,
-                height: 72,
+                width: 97,
+                height: 97,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
                     // 虚线圆圈背景
                     CustomPaint(
-                      size: const Size(72, 72),
+                      size: const Size(97, 97),
                       painter: _DashedCirclePainter(),
                     ),
                     // 相机图标 + 名称（跟随设备方向旋转）
@@ -1511,11 +1511,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                   borderRadius: BorderRadius.circular(7),
                                   child: Image.asset(
                                     entry.iconPath!,
-                                    width: 44,
-                                    height: 44,
+                                    width: 69,
+                                    height: 69,
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, __, ___) =>
-                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 36),
+                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 61),
                                   ),
                                 )
                               else
