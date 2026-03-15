@@ -116,22 +116,27 @@ class CapturePipeline {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, canvasW, canvasH));
 
-      // ── 4a. 先填充外层背景（如果有 outerPadding，且没有 PNG 边框）──────────────────────────────
-      if (frameOpt != null && outerPadPx > 0 && !hasPngAssetForSize) {
-        // 外层背景色：用户在"背景"Tab 选择的颜色，否则用 outerBackgroundColor
-        final outerHexSrc = (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
-            ? frameBackgroundColor
-            : frameOpt.outerBackgroundColor;
-        // 透明时不绘制任何背景
-        if (outerHexSrc.toLowerCase() != 'transparent') {
-          Color outerBgColor = Colors.white;
+      // ── 4a. 先填充画布背景色（无论有无 PNG 边框，都先填充，默认白色）────────────────────────────
+      {
+        // 背景色优先级：用户选择 > frameOpt.outerBackgroundColor > 白色
+        String bgHexSrc = '#FFFFFF'; // 默认白色
+        if (frameOpt != null) {
+          bgHexSrc = (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
+              ? frameBackgroundColor
+              : frameOpt.outerBackgroundColor;
+        } else if (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty) {
+          bgHexSrc = frameBackgroundColor;
+        }
+        // 透明时不绘制任何背景（保持画布透明）
+        if (bgHexSrc.toLowerCase() != 'transparent' && bgHexSrc.toLowerCase() != '#00000000') {
+          Color bgColor = Colors.white;
           try {
-            final hex = outerHexSrc.replaceAll('#', '');
-            outerBgColor = Color(int.parse('FF$hex', radix: 16));
+            final hex = bgHexSrc.replaceAll('#', '');
+            bgColor = Color(int.parse('FF$hex', radix: 16));
           } catch (_) {}
           canvas.drawRect(
             Rect.fromLTWH(0, 0, canvasW, canvasH),
-            Paint()..color = outerBgColor,
+            Paint()..color = bgColor,
           );
         }
       }
