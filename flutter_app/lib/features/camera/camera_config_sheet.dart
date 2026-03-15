@@ -27,6 +27,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/camera_definition.dart';
 import '../../models/camera_registry.dart';
 import 'camera_notifier.dart';
+import 'camera_manager_screen.dart';
+import 'camera_sample_screen.dart';
 
 // ─── 颜色常量 ─────────────────────────────────────────────────────────────────
 const _kBg = Color(0xFF1A1A1A);
@@ -116,9 +118,20 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
           _TabBtn(label: '视频', selected: _tabIndex == 1, onTap: () => setState(() => _tabIndex = 1)),
           const Spacer(),
           // 右侧：样图 | 管理
-          _PillBtn(label: '样图', icon: Icons.landscape_outlined, onTap: () {}),
+          _PillBtn(label: '样图', icon: Icons.landscape_outlined, onTap: () {
+            final st = ref.read(cameraAppProvider);
+            Navigator.of(context).pop();
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => CameraSampleScreen(cameraId: st.activeCameraId),
+            ));
+          }),
           const SizedBox(width: 8),
-          _PillBtn(label: '管理', icon: Icons.camera_alt_outlined, onTap: () {}),
+          _PillBtn(label: '管理', icon: Icons.camera_alt_outlined, onTap: () {
+            Navigator.of(context).pop();
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const CameraManagerScreen(),
+            ));
+          }),
         ],
       ),
     );
@@ -1140,9 +1153,20 @@ class _SubPanelState extends ConsumerState<_SubPanel>
               const SizedBox(width: 20),
               _TabBtn(label: '视频', selected: false, onTap: () {}, dark: false),
               const Spacer(),
-              _PillBtn(label: '样图', icon: Icons.landscape_outlined, onTap: () {}, dark: false),
+              _PillBtn(label: '样图', icon: Icons.landscape_outlined, dark: false, onTap: () {
+                final st = ref.read(cameraAppProvider);
+                Navigator.of(context).pop();
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => CameraSampleScreen(cameraId: st.activeCameraId),
+                ));
+              }),
               const SizedBox(width: 8),
-              _PillBtn(label: '管理', icon: Icons.camera_alt_outlined, onTap: () {}, dark: false),
+              _PillBtn(label: '管理', icon: Icons.camera_alt_outlined, dark: false, onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const CameraManagerScreen(),
+                ));
+              }),
             ],
           ),
         ),
