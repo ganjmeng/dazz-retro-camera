@@ -3595,7 +3595,7 @@ class _MinimapOverlay extends StatelessWidget {
     final scale = (1.0 / zoomLevel).clamp(0.05, 1.0);
     final boxW = areaW * scale;
     final boxH = areaH * scale;
-    const radius = 12.0; // 小窗圆角半径
+    const radius = 0.0; // 小窗直角（方形）
 
     // 等效焦距标签
     final mm = (26.0 * zoomLevel).round();
@@ -3652,7 +3652,7 @@ class _MinimapOverlay extends StatelessWidget {
                       child: Container(
                         clipBehavior: Clip.hardEdge,
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(radius),
+                          borderRadius: radius > 0 ? BorderRadius.circular(radius) : null,
                           border: Border.all(
                             color: Colors.white.withAlpha(220),
                             width: 1.5,
@@ -3663,12 +3663,12 @@ class _MinimapOverlay extends StatelessWidget {
                     // 圆角裁剪的网格线（仅在 gridEnabled 时显示）
                     if (gridEnabled)
                       Positioned.fill(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(radius),
-                          child: CustomPaint(
-                            painter: _GridPainter(),
-                          ),
-                        ),
+                        child: radius > 0
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(radius),
+                                child: CustomPaint(painter: _GridPainter()),
+                              )
+                            : CustomPaint(painter: _GridPainter()),
                       ),
                     // 四角 L 形角标
                     ..._buildCorners(boxW, boxH),
@@ -3811,13 +3811,16 @@ class _MinimapDimPainter extends CustomPainter {
       width: boxW,
       height: boxH,
     );
-    final rrect = RRect.fromRectAndRadius(boxRect, Radius.circular(radius));
-
-    // 用 EvenOdd 填充规则：外部矩形 - 内部圆角矩形 = 遮罩区域
+    // 用 EvenOdd 填充规则：外部矩形 - 内部小窗矩形 = 遗罩区域
     final path = Path()
-      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..addRRect(rrect)
-      ..fillType = PathFillType.evenOdd;
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+    if (radius > 0) {
+      final rrect = RRect.fromRectAndRadius(boxRect, Radius.circular(radius));
+      path.addRRect(rrect);
+    } else {
+      path.addRect(boxRect);
+    }
+    path.fillType = PathFillType.evenOdd;
 
     final paint = Paint()
       ..color = Colors.black.withAlpha(110) // 约 43% 透明度，外部暗化
