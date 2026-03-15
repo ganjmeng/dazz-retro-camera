@@ -1300,16 +1300,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedBuilder(
-                  animation: _rotateAngle,
-                  builder: (_, __) => Transform.rotate(
-                    angle: _rotateAngle.value,
-                    child: Icon(
-                      _showExposureSlider ? Icons.keyboard_arrow_down : Icons.wb_sunny_outlined,
-                      size: 14,
-                      color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : _kWhite,
-                    ),
-                  ),
+                Icon(
+                  _showExposureSlider ? Icons.keyboard_arrow_down : Icons.wb_sunny_outlined,
+                  size: 14,
+                  color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : _kWhite,
                 ),
                 const SizedBox(width: 5),
                 AnimatedBuilder(
