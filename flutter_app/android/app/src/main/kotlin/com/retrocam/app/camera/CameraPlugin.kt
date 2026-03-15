@@ -572,6 +572,10 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         // 1. 更新 GL 渲染器中的 Unsharp Mask 强度
         glRenderer?.setSharpen(currentSharpenLevel)
         // 2. 重建 ImageCapture 并重新绑定（切换拍摄分辨率）
+        // CRITICAL FIX: result.success must be called ONLY AFTER imageCapture is fully
+        // rebound. Previously result.success(null) was called immediately after launching
+        // bgExecutor.execute{}, causing Flutter's takePhoto to run before the new
+        // high-res ImageCapture was bound — resulting in 2MP output even in high-quality mode.
         val owner = lifecycleOwner
         val provider = cameraProvider
         if (owner != null && provider != null) {
@@ -591,37 +595,45 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                                 imageCapture
                             )
                             Log.d(TAG, "setSharpen: level=$level, imageCapture rebuilt")
+                            // 3. 使用 Camera2Interop 设置 EDGE_MODE（锐化算法）
+                            // Must run after bindToLifecycle so cam.cameraControl is valid
+                            try {
+                                val cam = camera
+                                if (cam != null) {
+                                    val edgeMode = when {
+                                        level < 0.2  -> android.hardware.camera2.CameraMetadata.EDGE_MODE_OFF
+                                        level < 0.7  -> android.hardware.camera2.CameraMetadata.EDGE_MODE_FAST
+                                        else         -> android.hardware.camera2.CameraMetadata.EDGE_MODE_HIGH_QUALITY
+                                    }
+                                    val options = CaptureRequestOptions.Builder()
+                                        .setCaptureRequestOption(
+                                            android.hardware.camera2.CaptureRequest.EDGE_MODE,
+                                            edgeMode
+                                        )
+                                        .build()
+                                    Camera2CameraControl.from(cam.cameraControl).setCaptureRequestOptions(options)
+                                    Log.d(TAG, "setSharpen: level=$level, edgeMode=$edgeMode")
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "setSharpen EDGE_MODE failed: ${e.message}")
+                            }
+                            // Return to Flutter ONLY after imageCapture is fully rebound
+                            result.success(null)
                         } catch (e: Exception) {
                             Log.w(TAG, "rebind imageCapture failed: ${e.message}")
+                            result.success(null) // Unblock Flutter even on failure
                         }
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "buildImageCapture failed: ${e.message}")
+                    result.success(null) // Unblock Flutter even on failure
                 }
             }
+        } else {
+            // No camera provider yet — just update the level and return immediately.
+            // bindCameraUseCases will use currentSharpenLevel when it runs.
+            result.success(null)
         }
-        // 3. 使用 Camera2Interop 设置 EDGE_MODE（锐化算法）
-        try {
-            val cam = camera
-            if (cam != null) {
-                val edgeMode = when {
-                    level < 0.2  -> android.hardware.camera2.CameraMetadata.EDGE_MODE_OFF
-                    level < 0.7  -> android.hardware.camera2.CameraMetadata.EDGE_MODE_FAST
-                    else         -> android.hardware.camera2.CameraMetadata.EDGE_MODE_HIGH_QUALITY
-                }
-                val options = CaptureRequestOptions.Builder()
-                    .setCaptureRequestOption(
-                        android.hardware.camera2.CaptureRequest.EDGE_MODE,
-                        edgeMode
-                    )
-                    .build()
-                Camera2CameraControl.from(cam.cameraControl).setCaptureRequestOptions(options)
-                Log.d(TAG, "setSharpen: level=$level, edgeMode=$edgeMode")
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "setSharpen EDGE_MODE failed: ${e.message}")
-        }
-        result.success(null)
     }
 
     // ─────────────────────────────────────────────

@@ -235,8 +235,16 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         // 1. 更新 Metal shader 中的 Unsharp Mask 强度
         renderer?.setSharpen(floatLevel)
         // 2. 动态切换 AVCaptureSession.sessionPreset（影响实际拍摄分辨率）
-        cameraManager?.setResolution(level: floatLevel)
-        result(nil)
+        // CRITICAL FIX: call result(nil) only AFTER sessionPreset is committed.
+        // Previously result(nil) was called immediately, causing Flutter's takePhoto
+        // to run before the new sessionPreset was applied — resulting in 2MP output.
+        if let mgr = cameraManager {
+            mgr.setResolution(level: floatLevel) {
+                result(nil)
+            }
+        } else {
+            result(nil)
+        }
     }
 
     // ─────────────────────────────────────────────

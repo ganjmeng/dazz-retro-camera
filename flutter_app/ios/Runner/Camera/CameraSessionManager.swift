@@ -202,7 +202,7 @@ class CameraSessionManager: NSObject {
     /// 根据清晰度级别动态切换 sessionPreset（影响拍摄分辨率）
     /// level: 0.0=低(2MP/.hd1280x720), 0.5=中(8MP/.hd1920x1080), 1.0=高(全像素/.photo)
     /// 与 Android buildImageCapture(level) 对等
-    func setResolution(level: Float) {
+    func setResolution(level: Float, completion: (() -> Void)? = nil) {
         let newPreset: AVCaptureSession.Preset
         switch level {
         case ..<0.2:
@@ -215,18 +215,25 @@ class CameraSessionManager: NSObject {
             // 高清晰度：.photo 使用设备全像素
             newPreset = .photo
         }
-
+        // CRITICAL FIX: invoke completion AFTER sessionPreset is committed, not before.
+        // Previously the caller returned result(nil) immediately, causing Flutter's
+        // takePhoto to run before the new sessionPreset was applied.
         sessionQueue.async { [weak self] in
-            guard let self = self else { return }
-            guard self.session.sessionPreset != newPreset else { return }
-            guard self.session.canSetSessionPreset(newPreset) else {
-                print("[CameraSessionManager] setResolution: preset \(newPreset.rawValue) not supported")
+            guard let self = self else {
+                completion?()
                 return
             }
-            self.session.beginConfiguration()
-            self.session.sessionPreset = newPreset
-            self.session.commitConfiguration()
-            print("[CameraSessionManager] setResolution: level=\(level), preset=\(newPreset.rawValue)")
+            if self.session.sessionPreset != newPreset {
+                if self.session.canSetSessionPreset(newPreset) {
+                    self.session.beginConfiguration()
+                    self.session.sessionPreset = newPreset
+                    self.session.commitConfiguration()
+                    print("[CameraSessionManager] setResolution: level=\(level), preset=\(newPreset.rawValue)")
+                } else {
+                    print("[CameraSessionManager] setResolution: preset \(newPreset.rawValue) not supported")
+                }
+            }
+            completion?()
         }
     }
 
