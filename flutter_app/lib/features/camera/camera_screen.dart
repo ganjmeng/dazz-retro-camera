@@ -521,7 +521,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final st = ref.watch(cameraAppProvider);
     final camSvc = ref.watch(cameraServiceProvider);
     final mq = MediaQuery.of(context);
@@ -2338,7 +2338,7 @@ class _GallerySheetState extends State<_GallerySheet> {
     }
   }
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Stack(
       children: [
         // 半透明黑色背景
@@ -2447,7 +2447,7 @@ class _AssetThumbState extends State<_AssetThumb> {
     if (mounted && data != null) setState(() => _thumb = data);
   }
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (_thumb == null) {
       return Container(color: const Color(0xFF1C1C1E));
     }
@@ -2462,7 +2462,7 @@ class _PhotoGridPage extends StatelessWidget {
   final List<AssetEntity> photos;
   const _PhotoGridPage({required this.photos});
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: _kBlack,
       appBar: AppBar(
@@ -2520,7 +2520,7 @@ class _PhotoDetailPageState extends State<_PhotoDetailPage> {
     if (mounted && data != null) setState(() => _fullData = data);
   }
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -2605,7 +2605,7 @@ class _GalleryItem extends StatelessWidget {
   const _GalleryItem({this.icon, this.customIcon, required this.label, required this.count});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
@@ -2635,7 +2635,7 @@ class _RatioRow extends StatelessWidget {
   const _RatioRow({required this.ratios, this.activeId, required this.onSelect});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SizedBox(
       height: 48,
       child: ListView.builder(
@@ -2678,7 +2678,7 @@ class _FilterRow extends StatelessWidget {
   const _FilterRow({required this.filters, this.activeId, required this.onSelect});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SizedBox(
       height: 72,
       child: ListView.builder(
@@ -2734,7 +2734,7 @@ class _FrameGrid extends StatelessWidget {
   const _FrameGrid({required this.frames, this.activeId, required this.onSelect});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // 加上"无边框"选项
     final allFrames = [
       const _FrameOption(id: 'none', name: '无', color: Colors.transparent),
@@ -2800,7 +2800,7 @@ class _WatermarkRow extends StatelessWidget {
   const _WatermarkRow({required this.presets, this.activeId, required this.onSelect});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SizedBox(
       height: 72,
       child: ListView.builder(
@@ -2883,7 +2883,7 @@ class _RotatingToolbarBtn extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return AnimatedBuilder(
       animation: rotateAnimation,
       builder: (context, _) {
@@ -2905,7 +2905,7 @@ class _ToolbarBtn extends StatelessWidget {
   const _ToolbarBtn({required this.icon, this.label, this.badge, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
@@ -2956,7 +2956,7 @@ class _FlashBtn extends StatelessWidget {
   const _FlashBtn({required this.mode, this.label, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isOff = mode == 'off';
     return GestureDetector(
       onTap: onTap,
@@ -3013,7 +3013,7 @@ class _TopMenuBtn extends StatelessWidget {
   }) : assert(icon != null || customIcon != null);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
@@ -3073,7 +3073,7 @@ class _MenuGridBtn extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
@@ -3113,7 +3113,7 @@ class _OptionIconBtn extends StatelessWidget {
   const _OptionIconBtn({required this.child, required this.label, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -3279,7 +3279,7 @@ class _FocusExposureOverlay extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // 对焦圈半径
     const ringR = 36.0;
     // 太阳图标尺寸
@@ -3362,7 +3362,7 @@ class _ExposureHorizontalSlider extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
@@ -3435,7 +3435,7 @@ class _WbControlPanel extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // 将 K 值（1800..8000）映射到 0.0..1.0
     final sliderVal = ((colorTempK - 1800) / (8000 - 1800)).clamp(0.0, 1.0);
 
@@ -3555,7 +3555,7 @@ class _WbPresetBtn extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -3624,7 +3624,7 @@ class _WbColorOverlay extends StatelessWidget {
   const _WbColorOverlay({required this.colorTempK});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // 中性点 5500K，低于此偏暖（橙），高于此偏冷（蓝）
     const neutralK = 5500;
     const maxWarm = 1800;
@@ -3685,7 +3685,7 @@ class _ZoomHorizontalSlider extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final sliderVal = _zoomToSlider(value).clamp(0.0, 1.0);
     final zoomLabel = value == value.roundToDouble()
         ? 'x${value.toInt()}'
@@ -3849,7 +3849,7 @@ class _MinimapOverlayState extends State<_MinimapOverlay>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scale = (1.0 / widget.zoomLevel).clamp(0.05, 1.0);
     final boxW = widget.areaW * scale;
     final boxH = widget.areaH * scale;
@@ -3956,7 +3956,7 @@ class _Corner extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SizedBox(
       width: len,
       height: len,
@@ -4078,7 +4078,7 @@ class _WatermarkPreviewOverlay extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Positioned.fill(
       child: CustomPaint(
         painter: _WatermarkPainter(
@@ -4278,14 +4278,15 @@ class _WatermarkPainter extends CustomPainter {
 // _DebugOverlay — 调试信息浮层（开发调试用）
 // 显示当前相机 ID、滤镜参数、曝光、色温、渲染策略等实时信息
 // ─────────────────────────────────────────────────────────────────────────────
-class _DebugOverlay extends StatelessWidget {
+class _DebugOverlay extends ConsumerWidget {
   final CameraAppState st;
   const _DebugOverlay({required this.st});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final params = st.renderParams;
     final cam = st.camera;
+    final camInfo = ref.watch(cameraServiceProvider).activeCameraDebugInfo;
 
     final lines = <String>[
       '── DAZZ DEBUG ──',
@@ -4330,6 +4331,14 @@ class _DebugOverlay extends StatelessWidget {
       '\u2500\u2500 Capture Resolution \u2500\u2500',
       'Raw: ${st.lastCaptureRaw.isEmpty ? "(not captured yet)" : st.lastCaptureRaw}',
       'Output: ${st.lastCaptureOutput.isEmpty ? "(not captured yet)" : st.lastCaptureOutput}',
+      '',
+      '── Active Camera (Android) ──',
+      if (camInfo.isNotEmpty) ...[
+        'ID: ${camInfo["cameraId"] ?? "?"}  Facing: ${camInfo["facing"] ?? "?"}',
+        'Sensor: ${camInfo["sensorSize"] ?? "?"}  (${camInfo["sensorMp"] ?? "?"}MP)',
+        'Focal: ${camInfo["focalLengths"] ?? "?"}mm',
+      ] else
+        '(iOS or not yet initialized)',
     ];
     return IgnorePointer(
       child: Container(
