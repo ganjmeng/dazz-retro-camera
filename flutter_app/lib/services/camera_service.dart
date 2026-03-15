@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../models/preset.dart';
@@ -56,6 +57,9 @@ class CameraService extends StateNotifier<CameraState> {
   static const MethodChannel _channel = MethodChannel(AppConstants.cameraControlChannel);
   static const EventChannel _eventChannel = EventChannel(AppConstants.cameraEventsChannel);
 
+  // 原生事件流订阅（每次 initCamera 先取消旧订阅再重新订阅，防止重复监听）
+  StreamSubscription? _eventSubscription;
+
   /// 初始化相机，获取 Texture ID 并开始预览
   Future<void> initCamera() async {
     state = state.copyWith(isLoading: true, error: null);
@@ -72,8 +76,9 @@ class CameraService extends StateNotifier<CameraState> {
     }
 
     try {
-      // 监听原生事件流
-      _eventChannel.receiveBroadcastStream().listen(_onNativeEvent);
+      // 取消旧订阅，防止重复监听
+      await _eventSubscription?.cancel();
+      _eventSubscription = _eventChannel.receiveBroadcastStream().listen(_onNativeEvent);
 
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('initCamera', {
         'resolution': '1080p',

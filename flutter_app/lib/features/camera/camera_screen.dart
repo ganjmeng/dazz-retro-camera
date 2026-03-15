@@ -175,9 +175,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => page),
     );
-    // 4. 返回后恢复相机预览
+    // 4. 返回后重新初始化相机（重新获取 textureId）
+    // 注意：不能只用 startPreview，因为 stopSession 后 MetalRenderer 停止推帧，
+    // Flutter 的 Texture widget 会冻结在最后一帧。必须重新 initCamera 才能恢复实时预览。
     if (!mounted) return;
-    await ref.read(cameraServiceProvider.notifier).startPreview();
+    await ref.read(cameraServiceProvider.notifier).initCamera();
     // 5. 淡出过渡动画
     _transitionTimer = Timer(const Duration(milliseconds: 500), () {
       if (mounted) setState(() => _showTransition = false);
