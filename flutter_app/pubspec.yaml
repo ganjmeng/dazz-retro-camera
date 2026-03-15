@@ -60,6 +60,9 @@ dependencies:
   # 图片编码（JPEG 输出，比 PNG 快 5-10x）
   image: ^4.2.0
 
+  # 手势缩放查看器（详情页双指缩放）
+  photo_view: ^0.15.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

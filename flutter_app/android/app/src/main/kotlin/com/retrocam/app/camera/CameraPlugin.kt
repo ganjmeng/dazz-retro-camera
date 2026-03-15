@@ -353,10 +353,19 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                     val filePath = cacheFile.absolutePath
                     Log.d(TAG, "Photo saved to cache: $filePath")
+                    // Attach actual capture resolution for debug overlay
+                    val resInfo = capture.resolutionInfo
+                    val captureW = resInfo?.resolution?.width ?: 0
+                    val captureH = resInfo?.resolution?.height ?: 0
+                    Log.d(TAG, "Capture resolution: ${captureW}x${captureH}")
                     val mainExecutor = ContextCompat.getMainExecutor(context)
                     mainExecutor.execute {
                         sendEvent("onPhotoCaptured", mapOf("filePath" to filePath))
-                        result.success(mapOf("filePath" to filePath))
+                        result.success(mapOf(
+                            "filePath" to filePath,
+                            "captureWidth" to captureW,
+                            "captureHeight" to captureH
+                        ))
                     }
                 }
                 override fun onError(exception: ImageCaptureException) {

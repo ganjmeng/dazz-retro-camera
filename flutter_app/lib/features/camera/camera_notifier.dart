@@ -69,6 +69,9 @@ class CameraAppState {
   final bool shutterSoundEnabled; // 快门声音开关
   final bool mirrorFrontCamera;   // 前置摄像头镜像开关
   final bool shutterVibrationEnabled; // 快门振动开关
+  // Debug: 最近一次拍照的分辨率信息
+  final String lastCaptureRaw;    // e.g. "4032×3024" 原始分辨率
+  final String lastCaptureOutput; // e.g. "3024×3024" 输出分辨率
 
   const CameraAppState({
     this.activeCameraId = 'grd_r',
@@ -108,9 +111,10 @@ class CameraAppState {
     this.showDebugOverlay = false,
     this.shutterSoundEnabled = true,
     this.mirrorFrontCamera = true,
-    this.shutterVibrationEnabled = true,
+     this.shutterVibrationEnabled = true,
+    this.lastCaptureRaw = '',
+    this.lastCaptureOutput = '',
   });
-
   CameraAppState copyWith({
     String? activeCameraId,
     CameraDefinition? camera,
@@ -151,6 +155,8 @@ class CameraAppState {
     bool? shutterSoundEnabled,
     bool? mirrorFrontCamera,
     bool? shutterVibrationEnabled,
+    String? lastCaptureRaw,
+    String? lastCaptureOutput,
     bool clearPanel = false,
     bool clearError = false,
     bool clearFrameId = false, // 用于将 activeFrameId 清空为 null
@@ -194,6 +200,8 @@ class CameraAppState {
       shutterSoundEnabled: shutterSoundEnabled ?? this.shutterSoundEnabled,
       mirrorFrontCamera: mirrorFrontCamera ?? this.mirrorFrontCamera,
       shutterVibrationEnabled: shutterVibrationEnabled ?? this.shutterVibrationEnabled,
+      lastCaptureRaw: lastCaptureRaw ?? this.lastCaptureRaw,
+      lastCaptureOutput: lastCaptureOutput ?? this.lastCaptureOutput,
     );
   }
 
@@ -588,7 +596,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     HapticFeedback.mediumImpact();
 
     try {
-      final path = await _ref.read(cameraServiceProvider.notifier).takePhoto();
+      final photoResult = await _ref.read(cameraServiceProvider.notifier).takePhoto();
+      final path = photoResult?['filePath'] as String?;
+      final captureW = photoResult?['captureWidth'] as int? ?? 0;
+      final captureH = photoResult?['captureHeight'] as int? ?? 0;
+      if (captureW > 0 && captureH > 0) {
+        state = state.copyWith(lastCaptureRaw: '${captureW}×${captureH}');
+      }
 
       if (path != null) {
         state = state.copyWith(showCaptureFlash: true);
@@ -637,8 +651,12 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
               jpegQuality: jpegQ,
             );
             if (processed != null) {
-              await File(path).writeAsBytes(processed);
-              debugPrint('[CameraNotifier] Post-process done, wrote ${processed.length} bytes to $path');
+              await File(path).writeAsBytes(processed.bytes);
+              // 存储输出分辨率到 debug overlay
+              state = state.copyWith(
+                lastCaptureOutput: '${processed.outputWidth}×${processed.outputHeight}',
+              );
+              debugPrint('[CameraNotifier] Post-process done, wrote ${processed.bytes.length} bytes to $path (${processed.outputWidth}x${processed.outputHeight})');
             } else {
               debugPrint('[CameraNotifier] Post-process returned null, keeping original');
             }

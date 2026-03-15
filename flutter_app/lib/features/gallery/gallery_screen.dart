@@ -1,21 +1,41 @@
+// ignore_for_file: use_build_context_synchronously
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:photo_view/photo_view.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../models/camera_registry.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 全局相册缓存（内存级，App 存活期间有效）
+// 全局缩略图字节缓存（内存级，App 存活期间有效，避免重复解码）
+// ─────────────────────────────────────────────────────────────────────────────
+class _ThumbCache {
+  static final Map<String, Uint8List> _cache = {};
+
+  static Uint8List? get(String id) => _cache[id];
+
+  static void set(String id, Uint8List data) {
+    // 最多缓存 500 张缩略图（约 500×300×300×4 = ~180MB 极端情况，实际 JPEG 约 5-15KB/张，500张约 5-7MB）
+    if (_cache.length >= 500) {
+      _cache.remove(_cache.keys.first);
+    }
+    _cache[id] = data;
+  }
+
+  static void remove(String id) => _cache.remove(id);
+  static void clear() => _cache.clear();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 全局相册资产缓存（内存级，App 存活期间有效）
 // ─────────────────────────────────────────────────────────────────────────────
 class _GalleryCache {
   static List<AssetEntity>? _assets;
   static DateTime? _loadedAt;
 
   static bool get isValid {
-    if (_assets == null) return false;
-    // 缓存有效期 5 分钟（MediaStore 变更会主动清除）
-    if (_loadedAt == null) return false;
+    if (_assets == null || _loadedAt == null) return false;
     return DateTime.now().difference(_loadedAt!).inMinutes < 5;
   }
 
@@ -33,24 +53,21 @@ class _GalleryCache {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 相机分类数据（动态根据实际有成片的相机生成）
+// 相机分类数据
 // ─────────────────────────────────────────────────────────────────────────────
 class _AlbumEntry {
   final String id;
   final String name;
   final IconData? icon;
-  final String? iconPath; // 相机缩略图路径（assets/thumbnails/cameras/xxx_icon.png）
+  final String? iconPath;
   const _AlbumEntry({required this.id, required this.name, this.icon, this.iconPath});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GalleryScreen — 相册列表主页
-// 截图 13084.jpg：3列网格，黄色边框相片卡片，左上角"导入图片"，顶部"全部照片 ▼"
 // ─────────────────────────────────────────────────────────────────────────────
 class GalleryScreen extends StatefulWidget {
-  /// 如果传入 initialAsset，进入时直接打开该相片详情（长按触发）
   final AssetEntity? initialAsset;
-  /// 如果传入 initialCameraId，进入时自动过滤到该相机的成片
   final String? initialCameraId;
 
   const GalleryScreen({super.key, this.initialAsset, this.initialCameraId});
@@ -60,8 +77,8 @@ class GalleryScreen extends StatefulWidget {
 }
 
 class _GalleryScreenState extends State<GalleryScreen> {
-  List<AssetEntity> _allDazzAssets = []; // DAZZ 相册所有照片
-  List<AssetEntity> _assets = [];        // 当前显示的照片（已按相机过滤）
+  List<AssetEntity> _allDazzAssets = [];
+  List<AssetEntity> _assets = [];
   bool _isLoading = true;
   bool _isSelectionMode = false;
   Set<String> _selectedIds = {};
@@ -69,7 +86,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
   String _currentAlbumId = 'all';
   String _currentAlbumName = '全部照片';
   Map<String, int> _albumCounts = {};
-  // 动态相机分类列表（只包含实际有成片的相机）
   List<_AlbumEntry> _cameraAlbumEntries = [
     const _AlbumEntry(id: 'all', name: '全部照片', icon: Icons.photo_library_outlined),
   ];
@@ -77,18 +93,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void initState() {
     super.initState();
-    // 监听 MediaStore 变更，有新文件保存时自动刷新
     PhotoManager.addChangeCallback(_onMediaChange);
     PhotoManager.startChangeNotify();
     _fetchAssets();
   }
 
   void _onMediaChange(MethodCall call) {
-    // MediaStore 有变动（新照片保存、删除等）时清缓存并刷新
     _GalleryCache.invalidate();
-    if (mounted) {
-      _fetchAssets();
-    }
+    if (mounted) _fetchAssets();
   }
 
   @override
@@ -101,7 +113,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 如果有 initialAsset，在第一帧后直接打开详情页
     if (widget.initialAsset != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _openDetail(widget.initialAsset!, fromLongPress: true);
@@ -110,14 +121,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   Future<void> _fetchAssets() async {
+    // 有缓存时立即显示，无需 loading
+    if (_GalleryCache.isValid && _GalleryCache.assets != null) {
+      final cached = _GalleryCache.assets!;
+      _rebuildFromAssets(cached, showLoading: false);
+      return;
+    }
+
     setState(() => _isLoading = true);
+
     final ps = await PhotoManager.requestPermissionExtend();
-    // hasAccess = authorized || limited（OPPO ColorOS 16 可能返回 limited）
     if (!ps.hasAccess) {
-      // 尝试引导用户去设置开启权限
       if (mounted) {
         setState(() => _isLoading = false);
-        // 显示权限提示
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('请在设置中开启相册访问权限，才能查看成片'),
@@ -128,51 +144,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
       return;
     }
 
-    // 检查内存缓存（有缓存时跳过耗时的 MediaStore 查询）
-    if (_GalleryCache.isValid && _GalleryCache.assets != null) {
-      final cached = _GalleryCache.assets!;
-      // 从缓存资产重建 UI 状态
-      final counts = <String, int>{'all': cached.length};
-      final cameraIdsFound = <String>{};
-      for (final asset in cached) {
-        final title = (asset.title ?? '').toLowerCase();
-        for (final cam in kAllCameras) {
-          if (title.contains(cam.id.toLowerCase())) {
-            cameraIdsFound.add(cam.id);
-            counts[cam.id] = (counts[cam.id] ?? 0) + 1;
-            break;
-          }
-        }
-      }
-      final entries = <_AlbumEntry>[
-        const _AlbumEntry(id: 'all', name: '全部照片', icon: Icons.photo_library_outlined),
-      ];
-      for (final cam in kAllCameras) {
-        if (cameraIdsFound.contains(cam.id)) {
-          entries.add(_AlbumEntry(id: cam.id, name: cam.name, icon: Icons.camera_alt_outlined, iconPath: cam.iconPath));
-        }
-      }
-      if (mounted) {
-        setState(() {
-          _allDazzAssets = cached;
-          _assets = cached;
-          _albumCounts = counts;
-          _cameraAlbumEntries = entries;
-          _isLoading = false;
-        });
-        _applyInitialCameraFilter();
-      }
-      return;
-    }
-    // 强制释放所有缓存，确保能看到最新保存的文件
-    await PhotoManager.releaseCache();
-    // 等待 MediaStore 索引完成（OPPO ColorOS 需要更长的延迟）
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    // 同时获取所有子相册 + 虚拟根相册，确保能找到 DAZZ
+    // 直接查询，新照片由 changeCallback 触发刷新（移除 releaseCache 避免不必要的延迟）
     final allPaths = await PhotoManager.getAssetPathList(
       type: RequestType.image,
-      hasAll: true,   // 包含虚拟根相册（小米 MIUI / OPPO ColorOS 需要此选项）
+      hasAll: true,
       onlyAll: false,
       filterOption: FilterOptionGroup(
         orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
@@ -184,7 +159,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       return;
     }
 
-    // 查找 DAZZ 相册：兼容 "DAZZ"、"DCIM/DAZZ"、"dazz" 等变体
+    // 查找 DAZZ 相册
     AssetPathEntity? dazzPath;
     for (final p in allPaths) {
       final upper = p.name.toUpperCase();
@@ -194,73 +169,47 @@ class _GalleryScreenState extends State<GalleryScreen> {
       }
     }
 
+    List<AssetEntity> assets;
+
     if (dazzPath == null) {
-      // 找不到 DAZZ 相册：尝试从根相册过滤文件名包含 dazz 的照片
-      final rootPath = allPaths.firstWhere(
-        (p) => p.isAll,
-        orElse: () => allPaths.first,
-      );
+      // 从根相册过滤文件名包含 dazz 的照片
+      final rootPath = allPaths.firstWhere((p) => p.isAll, orElse: () => allPaths.first);
       final rootCount = await rootPath.assetCountAsync;
       final rootAssets = await rootPath.getAssetListRange(start: 0, end: rootCount.clamp(0, 5000));
-      final dazzAssets = rootAssets.where((a) {
+      assets = rootAssets.where((a) {
         final title = (a.title ?? '').toLowerCase();
         return title.startsWith('dazz_') || title.contains('dazz');
       }).toList();
-
-      if (dazzAssets.isEmpty) {
-        // 相册确实为空，显示空状态
-        if (mounted) setState(() {
-          _allDazzAssets = [];
-          _assets = [];
-          _albumCounts = {'all': 0};
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // 找到了，用这些照片作为 DAZZ 相册内容
-      final counts = <String, int>{'all': dazzAssets.length};
-      final cameraIdsFound = <String>{};
-      for (final asset in dazzAssets) {
-        final title = (asset.title ?? '').toLowerCase();
-        for (final cam in kAllCameras) {
-          if (title.contains(cam.id.toLowerCase())) {
-            cameraIdsFound.add(cam.id);
-            counts[cam.id] = (counts[cam.id] ?? 0) + 1;
-            break;
-          }
-        }
-      }
-      final entries = <_AlbumEntry>[
-        const _AlbumEntry(id: 'all', name: '全部照片', icon: Icons.photo_library_outlined),
-      ];
-      for (final cam in kAllCameras) {
-        if (cameraIdsFound.contains(cam.id)) {
-          entries.add(_AlbumEntry(id: cam.id, name: cam.name, icon: Icons.camera_alt_outlined, iconPath: cam.iconPath));
-        }
-      }
-      if (mounted) {
-        setState(() {
-          _allDazzAssets = dazzAssets;
-          _assets = dazzAssets;
-          _albumCounts = counts;
-          _cameraAlbumEntries = entries;
-          _isLoading = false;
-        });
-        _applyInitialCameraFilter();
-      }
-      return;
+    } else {
+      final count = await dazzPath.assetCountAsync;
+      assets = await dazzPath.getAssetListRange(start: 0, end: count.clamp(0, 5000));
     }
 
-    final count = await dazzPath.assetCountAsync;
-    final allAssets = await dazzPath.getAssetListRange(start: 0, end: count.clamp(0, 5000));
+    _GalleryCache.set(assets);
+    _rebuildFromAssets(assets, showLoading: false);
 
-    // 按文件名中的 cameraId 动态统计各相机成片数量
-    // 文件命名格式: DAZZ_{cameraId}_{timestamp}.jpg
-    final counts = <String, int>{'all': allAssets.length};
+    // 后台预生成前 30 张缩略图，加快首屏渲染
+    _prefetchThumbs(assets.take(30).toList());
+  }
+
+  /// 后台并行预生成缩略图（不阻塞 UI，最多 8 并发）
+  Future<void> _prefetchThumbs(List<AssetEntity> assets) async {
+    // 分批并行，每批 8 张，避免一次性占用过多线程
+    const batchSize = 8;
+    final toLoad = assets.where((a) => _ThumbCache.get(a.id) == null).toList();
+    for (int i = 0; i < toLoad.length; i += batchSize) {
+      final batch = toLoad.skip(i).take(batchSize).toList();
+      await Future.wait(batch.map((asset) async {
+        final data = await asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
+        if (data != null) _ThumbCache.set(asset.id, data);
+      }));
+    }
+  }
+
+  void _rebuildFromAssets(List<AssetEntity> assets, {required bool showLoading}) {
+    final counts = <String, int>{'all': assets.length};
     final cameraIdsFound = <String>{};
-
-    for (final asset in allAssets) {
+    for (final asset in assets) {
       final title = (asset.title ?? '').toLowerCase();
       for (final cam in kAllCameras) {
         if (title.contains(cam.id.toLowerCase())) {
@@ -270,42 +219,34 @@ class _GalleryScreenState extends State<GalleryScreen> {
         }
       }
     }
-
-    // 构建动态相机分类列表：全部照片 + 有成片的相机
     final entries = <_AlbumEntry>[
       const _AlbumEntry(id: 'all', name: '全部照片', icon: Icons.photo_library_outlined),
     ];
-    // 按 kAllCameras 顺序添加有成片的相机，带上真实图标路径
     for (final cam in kAllCameras) {
       if (cameraIdsFound.contains(cam.id)) {
         entries.add(_AlbumEntry(id: cam.id, name: cam.name, icon: Icons.camera_alt_outlined, iconPath: cam.iconPath));
       }
     }
-
     if (mounted) {
       setState(() {
-        _allDazzAssets = allAssets;
-        _assets = allAssets;
+        _allDazzAssets = assets;
+        _assets = assets;
         _albumCounts = counts;
         _cameraAlbumEntries = entries;
-        _isLoading = false;
+        _isLoading = showLoading;
       });
-      // 如果有 initialCameraId，数据加载完成后自动切换到该相机
       _applyInitialCameraFilter();
     }
   }
 
-  /// 在数据加载完成后，若有 initialCameraId 则自动切换到该相机分类
   void _applyInitialCameraFilter() {
     final id = widget.initialCameraId;
     if (id == null || id == 'all') return;
-    final exists = _cameraAlbumEntries.any((e) => e.id == id);
-    if (exists) {
+    if (_cameraAlbumEntries.any((e) => e.id == id)) {
       _filterByCamera(id);
     }
   }
 
-  // 按当前选中的相机 ID 过滤照片
   void _filterByCamera(String cameraId) {
     setState(() {
       _currentAlbumId = cameraId;
@@ -314,14 +255,12 @@ class _GalleryScreenState extends State<GalleryScreen> {
               orElse: () => const _AlbumEntry(id: 'all', name: '全部照片'))
           .name;
       _showAlbumDropdown = false;
-      if (cameraId == 'all') {
-        _assets = _allDazzAssets;
-      } else {
-        _assets = _allDazzAssets.where((asset) {
-          final title = (asset.title ?? '').toLowerCase();
-          return title.contains(cameraId.toLowerCase());
-        }).toList();
-      }
+      _assets = cameraId == 'all'
+          ? _allDazzAssets
+          : _allDazzAssets.where((asset) {
+              final title = (asset.title ?? '').toLowerCase();
+              return title.contains(cameraId.toLowerCase());
+            }).toList();
     });
   }
 
@@ -351,8 +290,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
     if (_selectedIds.isEmpty) return;
     final toDelete = _assets.where((a) => _selectedIds.contains(a.id)).map((a) => a.id).toList();
     await PhotoManager.editor.deleteWithIds(toDelete);
+    // 清除被删除照片的缩略图缓存
+    for (final id in toDelete) {
+      _ThumbCache.remove(id);
+    }
+    _GalleryCache.invalidate();
     setState(() {
       _assets.removeWhere((a) => _selectedIds.contains(a.id));
+      _allDazzAssets.removeWhere((a) => _selectedIds.contains(a.id));
       _selectedIds.clear();
       _isSelectionMode = false;
     });
@@ -364,12 +309,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // ── 主内容 ──
           Column(
             children: [
-              // 顶部导航栏
               _buildAppBar(),
-              // 网格
               Expanded(
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
@@ -377,7 +319,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
               ),
             ],
           ),
-          // ── 相机按钮（左下角，截图中有）──
           Positioned(
             bottom: MediaQuery.of(context).padding.bottom + 24,
             left: 24,
@@ -394,7 +335,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
               ),
             ),
           ),
-          // ── 相册分类下拉（截图 13085.jpg）──
           if (_showAlbumDropdown) _buildAlbumDropdown(),
         ],
       ),
@@ -408,12 +348,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
         height: 52,
         child: Row(
           children: [
-            // 左侧返回按鈕
             IconButton(
               icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            // 中间标题（Expanded 占满剩余空间）
             Expanded(
               child: GestureDetector(
                 onTap: _cameraAlbumEntries.length > 1
@@ -426,11 +364,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     Flexible(
                       child: Text(
                         _currentAlbumName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -446,7 +380,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 ),
               ),
             ),
-            // 右侧操作按鈕
             _isSelectionMode
                 ? Row(
                     mainAxisSize: MainAxisSize.min,
@@ -499,9 +432,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       );
     }
 
-    // 总 item 数 = 导入按钮(1) + 照片数
     final itemCount = _assets.length + 1;
-    // 每行3列，计算每格宽度
     return GridView.builder(
       padding: EdgeInsets.zero,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -510,11 +441,12 @@ class _GalleryScreenState extends State<GalleryScreen> {
         mainAxisSpacing: 0,
       ),
       itemCount: itemCount,
+      // 关键优化：addRepaintBoundaries=true 让每个 cell 独立重绘，避免全局重绘
+      addRepaintBoundaries: true,
       itemBuilder: (ctx, index) {
-        // 第一格：导入图片（截图左上角黑色格，橙色图标+文字）
         if (index == 0) {
           return GestureDetector(
-            onTap: () {}, // TODO: 导入图片
+            onTap: () {},
             child: Container(
               color: const Color(0xFF1A1A1A),
               child: Column(
@@ -568,32 +500,27 @@ class _GalleryScreenState extends State<GalleryScreen> {
     );
   }
 
-  // ── 相册分类下拉（参考截图 13085.jpg）──────────────────────────────────────
-  // 背景模糊，深色卡片列表，每行显示真实相机图标+名称+数量
   Widget _buildAlbumDropdown() {
     return GestureDetector(
       onTap: () => setState(() => _showAlbumDropdown = false),
       child: Stack(
         children: [
-          // 全屏模糊背景遮罩
           Positioned.fill(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Container(color: Colors.black.withAlpha(100)),
             ),
           ),
-          // 下拉列表（从顶部导航栏下方开始）
           Positioned(
             top: MediaQuery.of(context).padding.top + 52,
             left: 0,
             right: 0,
             child: GestureDetector(
-              onTap: () {}, // 阻止点击穿透
+              onTap: () {},
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (int i = 0; i < _cameraAlbumEntries.length; i++) ...
-                  [
+                  for (int i = 0; i < _cameraAlbumEntries.length; i++) ...[
                     _buildDropdownItem(_cameraAlbumEntries[i]),
                     if (i < _cameraAlbumEntries.length - 1)
                       Divider(
@@ -623,7 +550,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         child: Row(
           children: [
-            // 相机图标容器（64×64 圆角）
             Container(
               width: 64,
               height: 64,
@@ -649,7 +575,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     ),
             ),
             const SizedBox(width: 16),
-            // 相机名称
             Expanded(
               child: Text(
                 entry.name,
@@ -661,7 +586,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 ),
               ),
             ),
-            // 数量
             Text(
               '$count',
               style: TextStyle(
@@ -679,7 +603,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 复古相片格子（截图 13084.jpg：黄色边框卡片）
+// 复古相片格子（使用全局缩略图缓存，秒开）
 // ─────────────────────────────────────────────────────────────────────────────
 class _RetroPhotoCell extends StatefulWidget {
   final AssetEntity asset;
@@ -702,60 +626,65 @@ class _RetroPhotoCellState extends State<_RetroPhotoCell> {
   @override
   void initState() {
     super.initState();
-    _load();
+    // 优先从全局缓存取，命中则同步赋值，无需 setState
+    final cached = _ThumbCache.get(widget.asset.id);
+    if (cached != null) {
+      _thumb = cached;
+    } else {
+      _loadThumb();
+    }
   }
 
-  Future<void> _load() async {
+  Future<void> _loadThumb() async {
     final data = await widget.asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
-    if (mounted && data != null) setState(() => _thumb = data);
+    if (data != null) {
+      _ThumbCache.set(widget.asset.id, data);
+      if (mounted) setState(() => _thumb = data);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // 截图 12915.jpg：直接显示原图，无边框装饰
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 照片内容
         _thumb != null
-            ? Image.memory(_thumb!, fit: BoxFit.cover)
+            ? Image.memory(_thumb!, fit: BoxFit.cover, gaplessPlayback: true)
             : Container(color: const Color(0xFF1C1C1E)),
-          // 视频时长标记
-          if (widget.asset.type == AssetType.video)
-            Positioned(
-              bottom: 4,
-              right: 4,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  _formatDuration(widget.asset.videoDuration),
-                  style: const TextStyle(color: Colors.white, fontSize: 11),
-                ),
+        if (widget.asset.type == AssetType.video)
+          Positioned(
+            bottom: 4,
+            right: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                _formatDuration(widget.asset.videoDuration),
+                style: const TextStyle(color: Colors.white, fontSize: 11),
               ),
             ),
-          // 选择模式勾选框
-          if (widget.isSelectionMode)
-            Positioned(
-              top: 4,
-              right: 4,
-              child: Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: widget.isSelected ? Colors.blue : Colors.black.withAlpha(100),
-                  border: Border.all(color: Colors.white, width: 1.5),
-                ),
-                child: widget.isSelected
-                    ? const Icon(Icons.check, color: Colors.white, size: 14)
-                    : null,
+          ),
+        if (widget.isSelectionMode)
+          Positioned(
+            top: 4,
+            right: 4,
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: widget.isSelected ? Colors.blue : Colors.black.withAlpha(100),
+                border: Border.all(color: Colors.white, width: 1.5),
               ),
+              child: widget.isSelected
+                  ? const Icon(Icons.check, color: Colors.white, size: 14)
+                  : null,
             ),
-        ],
+          ),
+      ],
     );
   }
 
@@ -767,8 +696,7 @@ class _RetroPhotoCellState extends State<_RetroPhotoCell> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PhotoDetailPage — 相片详情页
-// 截图 12916.jpg：黑色背景，居中带相框照片，底部 # FQS、下载、删除
+// PhotoDetailPage — 相片详情页（支持手势缩放 + 滑动返回）
 // ─────────────────────────────────────────────────────────────────────────────
 class PhotoDetailPage extends StatefulWidget {
   final AssetEntity asset;
@@ -787,10 +715,21 @@ class PhotoDetailPage extends StatefulWidget {
 }
 
 class _PhotoDetailPageState extends State<PhotoDetailPage> {
-  Uint8List? _fullData;
   late int _currentIndex;
   late PageController _pageController;
-  String _cameraName = ''; // 拍摄相机名称（从 asset title 解析）
+  String _cameraName = '';
+
+  // 每页的图片数据缓存（key: assetId）
+  // 优先显示原图，如果原图未加载则显示缩略图占位（避免闪烁）
+  final Map<String, Uint8List> _fullDataCache = {};  // 原图数据
+  final Map<String, Uint8List> _thumbDataCache = {}; // 缩略图占位数据
+  // 每页的 PhotoViewScaleStateController（用于重置缩放）
+  final Map<int, PhotoViewScaleStateController> _scaleControllers = {};
+
+  // 滑动返回相关
+  double _dragOffset = 0.0;
+  bool _isDragging = false;
+  bool _isZoomed = false; // 当前页是否已缩放（缩放时禁用滑动返回）
 
   @override
   void initState() {
@@ -798,17 +737,22 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     _currentIndex = widget.allAssets.indexOf(widget.asset);
     if (_currentIndex < 0) _currentIndex = 0;
     _pageController = PageController(initialPage: _currentIndex);
-    _loadAsset(widget.asset);
     _parseCameraName(widget.asset);
+    // 预加载当前页 + 相邻页
+    _preloadPages(_currentIndex);
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    for (final c in _scaleControllers.values) {
+      c.dispose();
+    }
+    _fullDataCache.clear();
+    _thumbDataCache.clear();
     super.dispose();
   }
 
-  /// 从 asset title 解析相机名称（title 格式：dazz_grd_r_20240101_xxx.jpg）
   void _parseCameraName(AssetEntity asset) {
     final title = (asset.title ?? '').toLowerCase();
     for (final cam in kAllCameras) {
@@ -817,14 +761,43 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
         return;
       }
     }
-    // 解析失败时显示 DAZZ
     if (mounted) setState(() => _cameraName = 'DAZZ');
   }
 
+  /// 预加载当前页及相邻 ±1 页
+  void _preloadPages(int index) {
+    final indices = [index - 1, index, index + 1]
+        .where((i) => i >= 0 && i < widget.allAssets.length)
+        .toList();
+    for (final i in indices) {
+      final asset = widget.allAssets[i];
+      if (!_fullDataCache.containsKey(asset.id)) {
+        _loadAsset(asset);
+      }
+    }
+  }
+
   Future<void> _loadAsset(AssetEntity asset) async {
+    if (_fullDataCache.containsKey(asset.id)) return;
+    // 先用缩略图占位（如果缓存中有）——不触发 setState，避免闪烁
+    final thumb = _ThumbCache.get(asset.id);
+    if (thumb != null) {
+      _thumbDataCache[asset.id] = thumb;
+    }
+    // 加载原图（只更新 _fullDataCache，不替换占位图）
     final data = await asset.originBytes;
-    // 不清空旧图片，加载完成后直接替换，避免切换时闪白
-    if (mounted && data != null) setState(() => _fullData = data);
+    if (data != null && mounted) {
+      setState(() => _fullDataCache[asset.id] = data);
+    }
+  }
+
+  /// 获取某页应显示的图片数据：原图优先，其次缩略图，最后 null
+  Uint8List? _getDisplayData(String assetId) {
+    return _fullDataCache[assetId] ?? _thumbDataCache[assetId];
+  }
+
+  PhotoViewScaleStateController _getScaleController(int index) {
+    return _scaleControllers.putIfAbsent(index, () => PhotoViewScaleStateController());
   }
 
   Future<void> _shareAsset() async {
@@ -845,7 +818,6 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   }
 
   Future<void> _saveToGallery() async {
-    // 已在相册中，提示用户
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -878,6 +850,8 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     );
     if (confirmed == true) {
       await PhotoManager.editor.deleteWithIds([asset.id]);
+      _ThumbCache.remove(asset.id);
+      _GalleryCache.invalidate();
       if (mounted) Navigator.of(context).pop();
     }
   }
@@ -888,218 +862,160 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // ── 照片内容（可左右滑动）──
-          PageView.builder(
-            controller: _pageController,
-            itemCount: widget.allAssets.isEmpty ? 1 : widget.allAssets.length,
-            onPageChanged: (i) {
-              // 不清空 _fullData，保留旧图片直到新图加载完成，避免闪白
-              setState(() => _currentIndex = i);
-              _loadAsset(widget.allAssets[i]);
-              _parseCameraName(widget.allAssets[i]);
-            },
-            itemBuilder: (ctx, i) {
-              final pageAsset = widget.allAssets.isEmpty ? widget.asset : widget.allAssets[i];
-              // 当前页传入 fullData，非当前页传入 null（让 _PhotoFrame 自己加载缩略图预览）
-              return _PhotoFrame(asset: pageAsset, fullData: i == _currentIndex ? _fullData : null);
-            },
-          ),
+      body: GestureDetector(
+        // 滑动返回：向下拖动超过 120px 时返回
+        onVerticalDragStart: _isZoomed ? null : (details) {
+          setState(() {
+            _isDragging = true;
+            _dragOffset = 0.0;
+          });
+        },
+        onVerticalDragUpdate: _isZoomed ? null : (details) {
+          if (details.delta.dy > 0 || _dragOffset > 0) {
+            setState(() => _dragOffset += details.delta.dy);
+          }
+        },
+        onVerticalDragEnd: _isZoomed ? null : (details) {
+          if (_dragOffset > 120 || details.primaryVelocity! > 800) {
+            Navigator.of(context).pop();
+          } else {
+            setState(() {
+              _isDragging = false;
+              _dragOffset = 0.0;
+            });
+          }
+        },
+        onVerticalDragCancel: _isZoomed ? null : () {
+          setState(() {
+            _isDragging = false;
+            _dragOffset = 0.0;
+          });
+        },
+        child: AnimatedContainer(
+          duration: _isDragging ? Duration.zero : const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          transform: Matrix4.translationValues(0, _dragOffset.clamp(0.0, double.infinity), 0),
+          child: Stack(
+            children: [
+              // ── 照片内容（可左右滑动）──
+              PageView.builder(
+                controller: _pageController,
+                itemCount: widget.allAssets.isEmpty ? 1 : widget.allAssets.length,
+                // 缩放时禁用 PageView 的水平滑动（避免与 PhotoView 的手势冲突）
+                physics: _isZoomed ? const NeverScrollableScrollPhysics() : const PageScrollPhysics(),
+                onPageChanged: (i) {
+                  setState(() {
+                    _currentIndex = i;
+                    _isZoomed = false;
+                  });
+                  _parseCameraName(widget.allAssets[i]);
+                  _preloadPages(i);
+                },
+                itemBuilder: (ctx, i) {
+                  final pageAsset = widget.allAssets.isEmpty ? widget.asset : widget.allAssets[i];
+                  final data = _getDisplayData(pageAsset.id);
+                  final scaleController = _getScaleController(i);
 
-          // ── 顶部状态栏区域（纯黑）──
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: mq.padding.top,
-            child: Container(color: Colors.black),
-          ),
-
-          // ── 底部操作栏（截图：# FQS + 下载 + 删除）──
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              color: Colors.black,
-              padding: EdgeInsets.only(
-                bottom: mq.padding.bottom + 16,
-                top: 16,
-                left: 24,
-                right: 24,
+                  return _PhotoViewPage(
+                    asset: pageAsset,
+                    data: data,
+                    scaleController: scaleController,
+                    onScaleChanged: (isZoomed) {
+                      if (i == _currentIndex) {
+                        setState(() => _isZoomed = isZoomed);
+                      }
+                    },
+                  );
+                },
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // 左侧：拍摄相机名称
-                  if (_cameraName.isNotEmpty)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.camera_alt_outlined, color: Colors.white54, size: 14),
-                        const SizedBox(width: 5),
-                        Text(
-                          _cameraName,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  // 右侧：下载 + 删除
-                  Row(
+
+              // ── 顶部状态栏区域（纯黑）──
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: mq.padding.top,
+                child: Container(color: Colors.black),
+              ),
+
+              // ── 底部操作栏 ──
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  color: Colors.black,
+                  padding: EdgeInsets.only(
+                    bottom: mq.padding.bottom + 16,
+                    top: 16,
+                    left: 24,
+                    right: 24,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // 分享按钮
-                      GestureDetector(
-                        onTap: _shareAsset,
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF2C2C2E),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.ios_share_outlined, color: Colors.white, size: 24),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      // 下载按钮
-                      GestureDetector(
-                        onTap: _saveToGallery,
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF2C2C2E),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.download_outlined, color: Colors.white, size: 24),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      // 删除按钮
-                      GestureDetector(
-                        onTap: _deleteAsset,
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF2C2C2E),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.delete_outline, color: Colors.white, size: 24),
-                        ),
+                      if (_cameraName.isNotEmpty)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.camera_alt_outlined, color: Colors.white54, size: 14),
+                            const SizedBox(width: 5),
+                            Text(
+                              _cameraName,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        const SizedBox(),
+                      Row(
+                        children: [
+                          _ActionBtn(icon: Icons.ios_share_outlined, onTap: _shareAsset),
+                          const SizedBox(width: 12),
+                          _ActionBtn(icon: Icons.download_outlined, onTap: _saveToGallery),
+                          const SizedBox(width: 12),
+                          _ActionBtn(icon: Icons.delete_outline, onTap: _deleteAsset),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 相片相框组件（截图 12916.jpg：照片居中，带花纹相框背景）
+// 单页照片视图（PhotoView 手势缩放 + 缩略图占位）
 // ─────────────────────────────────────────────────────────────────────────────
-class _PhotoFrame extends StatefulWidget {
+class _PhotoViewPage extends StatelessWidget {
   final AssetEntity asset;
-  final Uint8List? fullData;
+  final Uint8List? data;
+  final PhotoViewScaleStateController scaleController;
+  final void Function(bool isZoomed) onScaleChanged;
 
-  const _PhotoFrame({required this.asset, this.fullData});
-
-  @override
-  State<_PhotoFrame> createState() => _PhotoFrameState();
-}
-
-class _PhotoFrameState extends State<_PhotoFrame>
-    with AutomaticKeepAliveClientMixin {
-  Uint8List? _data;
-  Uint8List? _thumbData; // 缩略图占位（加载原图期间显示）
-
-  @override
-  bool get wantKeepAlive => true; // 防止 PageView 滑动时重建
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.fullData != null) {
-      _data = widget.fullData;
-    } else {
-      _loadWithThumb();
-    }
-  }
-  @override
-  void didUpdateWidget(_PhotoFrame old) {
-    super.didUpdateWidget(old);
-    if (widget.fullData != null && widget.fullData != _data) {
-      // 新的全尺寸图到位，直接替换
-      setState(() => _data = widget.fullData);
-    } else if (widget.fullData == null && old.asset != widget.asset) {
-      // 资产切换时：不清空 _data，保留旧图直到新图加载完成，避免闪白闪动
-      _loadWithThumb();
-    }
-  }
-  /// 先加载缩略图作为占位，再加载原图替换，消除 loading 圈闪烁
-  Future<void> _loadWithThumb() async {
-    // 先加载缩略图（快，几十毫秒）
-    final thumb = await widget.asset.thumbnailDataWithSize(const ThumbnailSize(800, 800));
-    if (mounted && thumb != null && _data == null) {
-      setState(() => _thumbData = thumb);
-    }
-    // 再加载原图（慢，但有缩略图占位不会闪白）
-    final data = await widget.asset.originBytes;
-    if (mounted && data != null) {
-      setState(() {
-        _data = data;
-        _thumbData = null; // 原图加载完成，清除缩略图占位
-      });
-    }
-  }
-  Future<void> _load() async {
-    final data = await widget.asset.originBytes;
-    if (mounted && data != null) setState(() => _data = data);
-  }
+  const _PhotoViewPage({
+    required this.asset,
+    required this.data,
+    required this.scaleController,
+    required this.onScaleChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // AutomaticKeepAliveClientMixin 要求
     final mq = MediaQuery.of(context);
-    // 可用高度 = 屏幕高度 - 状态栏 - 底部操作栏(~90px)
-    final availH = mq.size.height - mq.padding.top - 90;
-    final availW = mq.size.width;
 
-    return Container(
-      color: Colors.black,
-      child: Column(
-        children: [
-          SizedBox(height: mq.padding.top),
-          Expanded(
-            child: Center(
-              child: SizedBox(
-                width: availW * 0.88,
-                height: availH * 0.88,
-                child: _buildFramedPhoto(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 90), // 底部操作栏占位
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFramedPhoto() {
-    // 截图 12916.jpg：直接显示成片原图（成片本身已带相框/滤镜效果，不需要再套框）
-    final displayData = _data ?? _thumbData;
-    if (displayData == null) {
+    if (data == null) {
+      // 数据未加载：显示占位
       return Container(
         color: Colors.black,
         child: const Center(
@@ -1107,10 +1023,63 @@ class _PhotoFrameState extends State<_PhotoFrame>
         ),
       );
     }
-    return Image.memory(
-      displayData,
-      fit: BoxFit.contain,
-      // 不指定 width/height，让外层 SizedBox 的约束自然传递，避免尺寸冲突报错
+
+    return Container(
+      color: Colors.black,
+      child: Column(
+        children: [
+          SizedBox(height: mq.padding.top),
+          Expanded(
+            child: PhotoView(
+              imageProvider: MemoryImage(data!),
+              scaleStateController: scaleController,
+              minScale: PhotoViewComputedScale.contained,
+              maxScale: PhotoViewComputedScale.covered * 4.0,
+              initialScale: PhotoViewComputedScale.contained,
+              backgroundDecoration: const BoxDecoration(color: Colors.black),
+              // 缩放状态变化回调
+              scaleStateChangedCallback: (state) {
+                final isZoomed = state != PhotoViewScaleState.initial &&
+                    state != PhotoViewScaleState.zoomedOut;
+                onScaleChanged(isZoomed);
+              },
+              // 双击恢复原始大小
+              enableRotation: false,
+              tightMode: false,
+              filterQuality: FilterQuality.medium,
+              // 加载时用模糊缩略图占位（gaplessPlayback）
+              loadingBuilder: (ctx, event) => Container(color: Colors.black),
+            ),
+          ),
+          const SizedBox(height: 90), // 底部操作栏占位
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 底部操作按钮
+// ─────────────────────────────────────────────────────────────────────────────
+class _ActionBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _ActionBtn({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: const Color(0xFF2C2C2E),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: Colors.white, size: 24),
+      ),
     );
   }
 }

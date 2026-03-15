@@ -206,13 +206,18 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
-  /// 触发拍照，返回文件路径
-  Future<String?> takePhoto() async {
+  /// 触发拍照，返回 {filePath, captureWidth, captureHeight}
+  Future<Map<String, dynamic>?> takePhoto() async {
     try {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('takePhoto', {
         'flashMode': 'auto',
       });
-      return result?['filePath'] as String?;
+      if (result == null) return null;
+      return {
+        'filePath': result['filePath'] as String?,
+        'captureWidth': (result['captureWidth'] as num?)?.toInt() ?? 0,
+        'captureHeight': (result['captureHeight'] as num?)?.toInt() ?? 0,
+      };
     } catch (e) {
       print('Error taking photo: $e');
       return null;

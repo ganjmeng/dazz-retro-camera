@@ -19,10 +19,18 @@ import 'preview_renderer.dart';
 ///  2. 输出画布最大边长 2048px（超出则等比缩放）
 ///  3. _drawFilmGrain 改用 Path 批量绘制，减少 draw call
 ///  4. 最终编码改用 JPEG（quality=92），比 PNG 快 5-10x
+/// 拍照处理结果，包含 JPEG 字节和输出分辨率
+class CaptureResult {
+  final Uint8List bytes;
+  final int outputWidth;
+  final int outputHeight;
+  const CaptureResult({required this.bytes, required this.outputWidth, required this.outputHeight});
+}
+
 class CapturePipeline {
   final CameraDefinition camera;
 
-  /// 输出图像最大边长（像素）。超过此值时等比缩小画布。
+  /// 输出图像最大边长（像素）。超过此値时等比缩小画布。
   /// 各清晰度档位的输出最大边长（像素）
   static const int kMaxDimLow    = 1920; // 低画质：1920p 长边，~2MP
   static const int kMaxDimMid    = 2688; // 中画质：2688p 长边，~4MP
@@ -34,8 +42,8 @@ class CapturePipeline {
 
   CapturePipeline({required this.camera});
 
-  /// 处理拍摄的图片文件，返回处理后的 JPEG 字节
-  Future<Uint8List?> process({
+  /// 处理拍摄的图片文件，返回包含 JPEG 字节和输出分辨率的 CaptureResult
+  Future<CaptureResult?> process({
     required String imagePath,
     required String selectedRatioId,
     required String selectedFrameId,
@@ -380,7 +388,7 @@ class CapturePipeline {
         quality: jpegQuality,
       );
       debugPrint('[CapturePipeline] output: ${finalW}x${finalH}, bytes=${jpegBytes.length}');
-      return jpegBytes;
+      return CaptureResult(bytes: jpegBytes, outputWidth: finalW, outputHeight: finalH);
     } catch (e, st) {
       debugPrint('[CapturePipeline] Error: $e\n$st');
       return null;

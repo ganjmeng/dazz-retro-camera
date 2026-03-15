@@ -4316,9 +4316,12 @@ class _DebugOverlay extends StatelessWidget {
       '── UI State ──',
       'Zoom: ${st.zoomLevel.toStringAsFixed(1)}x  Flash: ${st.flashMode}  Timer: ${st.timerSeconds}s',
       'WB: ${st.wbMode} (${st.colorTempK}K)  Front: ${st.isFrontCamera}',
-      'Sharpen: ${["低", "中", "高"][st.sharpenLevel]}  Grid: ${st.gridEnabled}  Minimap: ${st.minimapEnabled}',
+      'Sharpen: ${["\u4f4e", "\u4e2d", "\u9ad8"][st.sharpenLevel]}  Grid: ${st.gridEnabled}  Minimap: ${st.minimapEnabled}',
+      '',
+      '\u2500\u2500 Capture Resolution \u2500\u2500',
+      'Raw: ${st.lastCaptureRaw.isEmpty ? "(not captured yet)" : st.lastCaptureRaw}',
+      'Output: ${st.lastCaptureOutput.isEmpty ? "(not captured yet)" : st.lastCaptureOutput}',
     ];
-
     return IgnorePointer(
       child: Container(
         padding: const EdgeInsets.all(8),
