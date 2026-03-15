@@ -591,7 +591,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           style: TextStyle(
                             color: _kWhite,
                             fontSize: 16,
-                            letterSpacing: 2,
+                            letterSpacing: 0,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -898,7 +898,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               ),
             ),
           // ── 实时水印预览 overlay（水印开启时在取景框内展示）──
-          if (st.activeWatermark != null && !st.activeWatermark!.isNone)
+          if (false && st.activeWatermark != null && !st.activeWatermark!.isNone)
             IgnorePointer(
               child: _WatermarkPreviewOverlay(
                 watermark: st.activeWatermark!,
@@ -1297,20 +1297,26 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   ? Colors.white.withAlpha(230)
                   : Colors.black.withAlpha(160),
             ),
-            child: AnimatedBuilder(
-              animation: _rotateAngle,
-              builder: (_, __) => Transform.rotate(
-                angle: _rotateAngle.value,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedBuilder(
+                  animation: _rotateAngle,
+                  builder: (_, __) => Transform.rotate(
+                    angle: _rotateAngle.value,
+                    child: Icon(
                       _showExposureSlider ? Icons.keyboard_arrow_down : Icons.wb_sunny_outlined,
                       size: 14,
                       color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : _kWhite,
                     ),
-                    const SizedBox(width: 5),
-                    Text(
+                  ),
+                ),
+                const SizedBox(width: 5),
+                AnimatedBuilder(
+                  animation: _rotateAngle,
+                  builder: (_, __) => Transform.rotate(
+                    angle: _rotateAngle.value,
+                    child: Text(
                       st.exposureValue == 0
                           ? '0.0'
                           : (st.exposureValue > 0 ? '+' : '') +
@@ -1321,9 +1327,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
@@ -1434,19 +1440,25 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             GestureDetector(
               onTap: _openGallery,
               onLongPress: _openLatestPhotoDetail,
-              child: Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: _kDarkGray,
+              child: AnimatedBuilder(
+                animation: _rotateAngle,
+                builder: (_, __) => Transform.rotate(
+                  angle: _rotateAngle.value,
+                  child: Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      color: _kDarkGray,
+                    ),
+                    child: _latestThumb != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.memory(_latestThumb!, fit: BoxFit.cover),
+                          )
+                        : const Icon(Icons.photo_outlined, color: Colors.grey, size: 24),
+                  ),
                 ),
-                child: _latestThumb != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.memory(_latestThumb!, fit: BoxFit.cover),
-                      )
-                    : const Icon(Icons.photo_outlined, color: Colors.grey, size: 28),
               ),
             ),
             // 中间: 快门按钮（外圈白色线圈，内圆白色实心）
@@ -1502,18 +1514,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                               // 优先使用真实相机图标，如果没有则用系统图标
                               if (entry.iconPath != null)
                                 ClipRRect(
-                                  borderRadius: BorderRadius.circular(5),
+                                  borderRadius: BorderRadius.circular(7),
                                   child: Image.asset(
                                     entry.iconPath!,
-                                    width: 28,
-                                    height: 28,
+                                    width: 44,
+                                    height: 44,
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, __, ___) =>
-                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 22),
+                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 36),
                                   ),
                                 )
                               else
-                                const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 22),
+                                const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 36),
                               const SizedBox(height: 2),
                               Text(
                                 entry.name,
@@ -1547,7 +1559,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Widget _buildTopMenuOverlay(CameraAppState st) {
     final mq = MediaQuery.of(context);
     // 复刻截图样式：深棕色半透明圆角卡片，覆盖取景框顶部
-    final menuTop = mq.padding.top + kTopBarH;
+    final menuTop = mq.padding.top + kTopBarH - 30;
     final sharpenLabels = ['低', '中', '高'];
     // 按鈕实际宽度 = (屏幕宽 - 左右padding) / 4
     final screenW = mq.size.width;
@@ -3856,12 +3868,10 @@ class _MinimapOverlay extends StatelessWidget {
                 height: boxH,
                 child: Stack(
                   children: [
-                    // 圆角边框（clipBehavior 确保内容不溢出圆角外）
+                    // 直角边框（小窗模式四角无圆角）
                     Positioned.fill(
-                      child: Container(
-                        clipBehavior: Clip.hardEdge,
+                      child: DecoratedBox(
                         decoration: BoxDecoration(
-                          borderRadius: radius > 0 ? BorderRadius.circular(radius) : null,
                           border: Border.all(
                             color: Colors.white.withAlpha(220),
                             width: 1.5,
