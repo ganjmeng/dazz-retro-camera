@@ -332,7 +332,14 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         }
 
         PHPhotoLibrary.requestAuthorization { status in
-            guard status == .authorized || status == .limited else {
+            // .limited is only available on iOS 14+
+            let isGranted: Bool
+            if #available(iOS 14, *) {
+                isGranted = (status == .authorized || status == .limited)
+            } else {
+                isGranted = (status == .authorized)
+            }
+            guard isGranted else {
                 DispatchQueue.main.async {
                     result(FlutterError(code: "PERMISSION_DENIED", message: "Photo library access denied", details: nil))
                 }
