@@ -60,17 +60,17 @@ class CameraDefinition {
       supportsPhoto: json['supportsPhoto'] as bool? ?? true,
       supportsVideo: json['supportsVideo'] as bool? ?? false,
       focalLengthLabel: json['focalLengthLabel'] as String?,
-      sensor: SensorConfig.fromJson(json['sensor'] as Map<String, dynamic>),
-      defaultLook: DefaultLook.fromJson(json['defaultLook'] as Map<String, dynamic>),
-      modules: CameraModules.fromJson(json['modules'] as Map<String, dynamic>),
-      defaultSelection: DefaultSelection.fromJson(json['defaultSelection'] as Map<String, dynamic>),
-      uiCapabilities: UiCapabilities.fromJson(json['uiCapabilities'] as Map<String, dynamic>),
-      previewCapabilities: PreviewCapabilities.fromJson(json['previewCapabilities'] as Map<String, dynamic>),
-      previewPolicy: PreviewPolicy.fromJson(json['previewPolicy'] as Map<String, dynamic>),
-      exportPolicy: ExportPolicy.fromJson(json['exportPolicy'] as Map<String, dynamic>),
-      videoConfig: VideoConfig.fromJson(json['videoConfig'] as Map<String, dynamic>),
-      assets: CameraAssets.fromJson(json['assets'] as Map<String, dynamic>),
-      meta: CameraMeta.fromJson(json['meta'] as Map<String, dynamic>),
+      sensor: SensorConfig.fromJson(Map<String, dynamic>.from(json['sensor'] as Map)),
+      defaultLook: DefaultLook.fromJson(Map<String, dynamic>.from(json['defaultLook'] as Map)),
+      modules: CameraModules.fromJson(Map<String, dynamic>.from(json['modules'] as Map)),
+      defaultSelection: DefaultSelection.fromJson(Map<String, dynamic>.from(json['defaultSelection'] as Map)),
+      uiCapabilities: UiCapabilities.fromJson(Map<String, dynamic>.from(json['uiCapabilities'] as Map)),
+      previewCapabilities: PreviewCapabilities.fromJson(Map<String, dynamic>.from(json['previewCapabilities'] as Map)),
+      previewPolicy: PreviewPolicy.fromJson(Map<String, dynamic>.from(json['previewPolicy'] as Map)),
+      exportPolicy: ExportPolicy.fromJson(Map<String, dynamic>.from(json['exportPolicy'] as Map)),
+      videoConfig: VideoConfig.fromJson(Map<String, dynamic>.from(json['videoConfig'] as Map)),
+      assets: CameraAssets.fromJson(Map<String, dynamic>.from(json['assets'] as Map)),
+      meta: CameraMeta.fromJson(Map<String, dynamic>.from(json['meta'] as Map)),
     );
   }
 
@@ -248,11 +248,11 @@ class CameraModules {
   const CameraModules({required this.filters, required this.lenses, required this.ratios, required this.frames, required this.watermarks, required this.extras});
 
   factory CameraModules.fromJson(Map<String, dynamic> json) => CameraModules(
-    filters: (json['filters'] as List<dynamic>).map((e) => FilterDefinition.fromJson(e as Map<String, dynamic>)).toList(),
-    lenses: (json['lenses'] as List<dynamic>).map((e) => LensDefinition.fromJson(e as Map<String, dynamic>)).toList(),
-    ratios: (json['ratios'] as List<dynamic>).map((e) => RatioDefinition.fromJson(e as Map<String, dynamic>)).toList(),
-    frames: (json['frames'] as List<dynamic>).map((e) => FrameDefinition.fromJson(e as Map<String, dynamic>)).toList(),
-    watermarks: WatermarkModule.fromJson(json['watermarks'] as Map<String, dynamic>),
+    filters: (json['filters'] as List<dynamic>).map((e) => FilterDefinition.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+    lenses: (json['lenses'] as List<dynamic>).map((e) => LensDefinition.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+    ratios: (json['ratios'] as List<dynamic>).map((e) => RatioDefinition.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+    frames: (json['frames'] as List<dynamic>).map((e) => FrameDefinition.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+    watermarks: WatermarkModule.fromJson(Map<String, dynamic>.from(json['watermarks'] as Map)),
     extras: json['extras'] as List<dynamic>? ?? [],
   );
 }
@@ -477,13 +477,13 @@ class FrameDefinition {
     name: json['name'] as String,
     nameEn: json['nameEn'] as String? ?? json['name'] as String,
     asset: json['asset'] as String?,
-    ratioAssets: (json['ratioAssets'] as Map<String, dynamic>?)?.map(
+    ratioAssets: ((json['ratioAssets'] as Map?)?.cast<String, dynamic>())?.map(
       (k, v) => MapEntry(k, v as String),
     ) ?? const {},
     backgroundColor: json['backgroundColor'] as String? ?? '#FFFFFF',
-    inset: FrameInset.fromJson(json['inset'] as Map<String, dynamic>? ?? {}),
-    ratioInsets: (json['ratioInsets'] as Map<String, dynamic>?)?.map(
-      (k, v) => MapEntry(k, FrameInset.fromJson(v as Map<String, dynamic>)),
+    inset: FrameInset.fromJson((json['inset'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{}),
+    ratioInsets: ((json['ratioInsets'] as Map?)?.cast<String, dynamic>())?.map(
+      (k, v) => MapEntry(k, FrameInset.fromJson(Map<String, dynamic>.from(v as Map))),
     ) ?? const {},
     supportedRatios: (json['supportedRatios'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [],
     thumbnail: json['thumbnail'] as String?,
@@ -524,8 +524,8 @@ class WatermarkModule {
   const WatermarkModule({required this.presets, required this.editor});
 
   factory WatermarkModule.fromJson(Map<String, dynamic> json) => WatermarkModule(
-    presets: (json['presets'] as List<dynamic>).map((e) => WatermarkPreset.fromJson(e as Map<String, dynamic>)).toList(),
-    editor: WatermarkEditor.fromJson(json['editor'] as Map<String, dynamic>? ?? {}),
+    presets: (json['presets'] as List<dynamic>).map((e) => WatermarkPreset.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+    editor: WatermarkEditor.fromJson((json['editor'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{}),
   );
 }
 
