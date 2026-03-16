@@ -302,7 +302,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   Future<void> switchToCamera(String cameraId) async {
     // 持久化最后选择的相机
     await AppPrefsService.instance.setLastCameraId(cameraId);
-    if (state.activeCameraId == cameraId && state.camera != null) {
+    // 只有当 camera 对象已加载且 id 匹配时才 early return
+    // 不能用 activeCameraId 判断，因为 _loadCamera 第一行就设置了 activeCameraId
+    // 导致 camera 还是旧相机时就误判为「已加载」
+    if (state.camera != null && state.camera!.id == cameraId) {
       // Already loaded, just close manager
       state = state.copyWith(showCameraManager: false, clearPanel: true);
       return;
