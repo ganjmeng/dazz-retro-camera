@@ -1,40 +1,53 @@
 {
-  "id": "inst_s",
-  "name": "INST S",
+  "id": "sqc",
+  "name": "SQC",
   "category": "instant",
   "mode": "photo",
   "supportsPhoto": true,
   "supportsVideo": false,
-  "focalLengthLabel": "60mm",
+  "focalLengthLabel": "35mm",
   "sensor": {
     "type": "film",
     "dynamicRange": 9,
-    "baseNoise": 0.08,
+    "baseNoise": 0.1,
     "colorDepth": 8
   },
   "defaultLook": {
-    "baseLut": "assets/lut/cameras/inst_s.cube",
+    "baseLut": "assets/lut/cameras/inst_sq.cube",
+    "chromaticAberration": 0.03,
     "distortion": 0.0,
-    "chromaticAberration": 0.01,
     "flare": 0.0,
-    "temperature": -25,
-    "tint": 5.0,
-    "contrast": 0.85,
-    "highlights": -25.0,
-    "shadows": -3.0,
-    "whites": 8.0,
-    "blacks": -4.0,
-    "clarity": -5.0,
-    "saturation": 1.08,
-    "vibrance": 10.0,
-    "grain": 0.08,
-    "bloom": 0.06,
-    "vignette": 0.06,
-    "colorBiasR": 0.025,
-    "colorBiasG": 0.012,
-    "colorBiasB": -0.018,
-    "grainSize": 0.38,
-    "sharpness": 0.9
+    "temperature": 15,
+    "tint": 18.0,
+    "contrast": 0.88,
+    "highlights": -18.0,
+    "shadows": 5.0,
+    "whites": 15.0,
+    "blacks": -3.0,
+    "clarity": 4.0,
+    "saturation": 1.18,
+    "vibrance": 12.0,
+    "colorBiasR": 0.035,
+    "colorBiasG": 0.008,
+    "colorBiasB": -0.025,
+    "grain": 0.06,
+    "grainSize": 1.6,
+    "sharpness": 0.92,
+    "bloom": 0.14,
+    "halation": 0.06,
+    "highlightRolloff": 0.28,
+    "vignette": 0.04,
+    "edgeFalloff": 0.06,
+    "exposureVariation": 0.05,
+    "cornerWarmShift": 0.03,
+    "centerGain": 0.03,
+    "developmentSoftness": 0.04,
+    "chemicalIrregularity": 0.02,
+    "skinHueProtect": true,
+    "skinSatProtect": 0.95,
+    "skinLumaSoften": 0.04,
+    "skinRedLimit": 1.03,
+    "paperTexture": 0.05
   },
   "modules": {
     "filters": [],
@@ -370,9 +383,9 @@
     "watermarks": {
       "presets": [
         {
-          "id": "date_pink",
-          "name": "粉色日期",
-          "color": "#F4A7B9",
+          "id": "date_orange",
+          "name": "橙色日期",
+          "color": "#FF8A3D",
           "position": "bottom_right",
           "fontSize": 18,
           "fontFamily": "DigitalMono"
@@ -401,8 +414,8 @@
   },
   "defaultSelection": {
     "filterId": null,
-    "lensId": "vintage",
-    "ratioId": "ratio_3_4",
+    "lensId": "std",
+    "ratioId": "ratio_1_1",
     "frameId": "instant_default",
     "watermarkPresetId": "none",
     "extraId": null
@@ -418,8 +431,8 @@
   },
   "previewCapabilities": {
     "allowSmallViewport": true,
-    "allowGridOverlay": false,
-    "allowZoom": false,
+    "allowGridOverlay": true,
+    "allowZoom": true,
     "allowImportImage": true,
     "allowTimer": true,
     "allowFlash": true
@@ -459,24 +472,21 @@
     "videoBitrate": 8000000
   },
   "assets": {
-    "thumbnail": "assets/thumbnails/cameras/inst_s.jpg",
-    "icon": "assets/thumbnails/cameras/inst_s_icon.png"
+    "thumbnail": "assets/thumbnails/cameras/sqc.jpg",
+    "icon": "assets/thumbnails/cameras/sqc_icon.png"
   },
   "meta": {
     "version": "final",
     "premium": false,
-    "sortOrder": 7,
+    "sortOrder": 21,
     "tags": [
       "instant",
-      "soft",
+      "polaroid",
+      "square",
       "warm",
-      "romantic",
-      "pastel",
-      "fujifilm",
-      "instax"
-    ],
-    "hidden": true,
-    "disabledReason": "暂时关闭，待后续更新"
-  },
-  "enabled": false
+      "pink",
+      "flash",
+      "film"
+    ]
+  }
 }

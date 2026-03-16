@@ -410,6 +410,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 (look["edgeFalloff"]         as? Number)?.let { params["edgeFalloff"]         = it }
                 (look["exposureVariation"]   as? Number)?.let { params["exposureVariation"]   = it }
                 (look["cornerWarmShift"]     as? Number)?.let { params["cornerWarmShift"]     = it }
+                // SQC 专用字段
+                (look["centerGain"]           as? Number)?.let { params["centerGain"]           = it }
+                (look["developmentSoftness"]  as? Number)?.let { params["developmentSoftness"]  = it }
+                (look["chemicalIrregularity"] as? Number)?.let { params["chemicalIrregularity"] = it }
+                val skinProtect = look["skinHueProtect"]
+                if (skinProtect is Boolean) params["skinHueProtect"] = if (skinProtect) 1.0 else 0.0
+                else (skinProtect as? Number)?.let { params["skinHueProtect"] = it }
+                (look["skinSatProtect"]       as? Number)?.let { params["skinSatProtect"]       = it }
+                (look["skinLumaSoften"]       as? Number)?.let { params["skinLumaSoften"]       = it }
+                (look["skinRedLimit"]         as? Number)?.let { params["skinRedLimit"]         = it }
             }
 
             if (params.isNotEmpty()) {

@@ -254,12 +254,20 @@ void main() {
     private var uGrainSize: Int = -1
     private var uLuminanceNoise: Int = -1
     private var uChromaNoise: Int = -1
-    // Inst C 专有 uniform 位置（其他 Shader 中不存在，返回 -1，传入无效果）
+    // Inst C / SQC 共用 uniform 位置
     private var uHighlightRolloff: Int = -1
     private var uPaperTexture: Int = -1
     private var uEdgeFalloff: Int = -1
     private var uExposureVariation: Int = -1
     private var uCornerWarmShift: Int = -1
+    // SQC 专有 uniform 位置
+    private var uCenterGain: Int = -1
+    private var uDevelopmentSoftness: Int = -1
+    private var uChemicalIrregularity: Int = -1
+    private var uSkinHueProtect: Int = -1
+    private var uSkinSatProtect: Int = -1
+    private var uSkinLumaSoften: Int = -1
+    private var uSkinRedLimit: Int = -1
 
     // Attrib 位置（初始化时缓存，避免每帧 glGetAttribLocation 调用 — 关键热路径优化）
     // glGetAttribLocation 是同步 GPU driver 查询，每帧调用在高端机上约 0.1ms，低端机约 0.5ms
@@ -298,12 +306,20 @@ void main() {
     @Volatile private var grainSize: Float = 1.0f
     @Volatile private var luminanceNoise: Float = 0.0f
     @Volatile private var chromaNoise: Float = 0.0f
-    // Inst C 专用参数
+    // Inst C / SQC 共用参数
     @Volatile private var highlightRolloff: Float = 0.0f
     @Volatile private var paperTexture: Float = 0.0f
     @Volatile private var edgeFalloff: Float = 0.0f
     @Volatile private var exposureVariation: Float = 0.0f
     @Volatile private var cornerWarmShift: Float = 0.0f
+    // SQC 专用参数
+    @Volatile private var centerGain: Float = 0.0f
+    @Volatile private var developmentSoftness: Float = 0.0f
+    @Volatile private var chemicalIrregularity: Float = 0.0f
+    @Volatile private var skinHueProtect: Float = 0.0f
+    @Volatile private var skinSatProtect: Float = 1.0f
+    @Volatile private var skinLumaSoften: Float = 0.0f
+    @Volatile private var skinRedLimit: Float = 1.0f
     @Volatile private var previewWidth: Int = 1280
     @Volatile private var previewHeight: Int = 720
 
@@ -466,12 +482,20 @@ void main() {
         uGrainSize            = GLES30.glGetUniformLocation(programId, "uGrainSize")
         uLuminanceNoise       = GLES30.glGetUniformLocation(programId, "uLuminanceNoise")
         uChromaNoise          = GLES30.glGetUniformLocation(programId, "uChromaNoise")
-        // Inst C 专用 uniform（其他 Shader 中返回 -1，传入无效果）
+        // Inst C / SQC 共用 uniform（其他 Shader 中返回 -1，传入无效果）
         uHighlightRolloff     = GLES30.glGetUniformLocation(programId, "uHighlightRolloff")
         uPaperTexture         = GLES30.glGetUniformLocation(programId, "uPaperTexture")
         uEdgeFalloff          = GLES30.glGetUniformLocation(programId, "uEdgeFalloff")
         uExposureVariation    = GLES30.glGetUniformLocation(programId, "uExposureVariation")
         uCornerWarmShift      = GLES30.glGetUniformLocation(programId, "uCornerWarmShift")
+        // SQC 专用 uniform
+        uCenterGain           = GLES30.glGetUniformLocation(programId, "uCenterGain")
+        uDevelopmentSoftness  = GLES30.glGetUniformLocation(programId, "uDevelopmentSoftness")
+        uChemicalIrregularity = GLES30.glGetUniformLocation(programId, "uChemicalIrregularity")
+        uSkinHueProtect       = GLES30.glGetUniformLocation(programId, "uSkinHueProtect")
+        uSkinSatProtect       = GLES30.glGetUniformLocation(programId, "uSkinSatProtect")
+        uSkinLumaSoften       = GLES30.glGetUniformLocation(programId, "uSkinLumaSoften")
+        uSkinRedLimit         = GLES30.glGetUniformLocation(programId, "uSkinRedLimit")
 
         // ── 11. 顶点缓冲 ─────────────────────────────────────────────────────
         vertexBuffer = ByteBuffer.allocateDirect(QUAD_VERTICES.size * 4)
@@ -541,12 +565,20 @@ void main() {
         GLES30.glUniform1f(uGrainSize,           grainSize)
         GLES30.glUniform1f(uLuminanceNoise,      luminanceNoise)
         GLES30.glUniform1f(uChromaNoise,         chromaNoise)
-        // Inst C 专用 uniform（其他 Shader 中 location=-1，glUniform1f 是 no-op）
+        // Inst C / SQC 共用 uniform（其他 Shader 中 location=-1，glUniform1f 是 no-op）
         GLES30.glUniform1f(uHighlightRolloff,    highlightRolloff)
         GLES30.glUniform1f(uPaperTexture,        paperTexture)
         GLES30.glUniform1f(uEdgeFalloff,         edgeFalloff)
         GLES30.glUniform1f(uExposureVariation,   exposureVariation)
         GLES30.glUniform1f(uCornerWarmShift,     cornerWarmShift)
+        // SQC 专用 uniform
+        GLES30.glUniform1f(uCenterGain,          centerGain)
+        GLES30.glUniform1f(uDevelopmentSoftness, developmentSoftness)
+        GLES30.glUniform1f(uChemicalIrregularity, chemicalIrregularity)
+        GLES30.glUniform1f(uSkinHueProtect,      skinHueProtect)
+        GLES30.glUniform1f(uSkinSatProtect,      skinSatProtect)
+        GLES30.glUniform1f(uSkinLumaSoften,      skinLumaSoften)
+        GLES30.glUniform1f(uSkinRedLimit,        skinRedLimit)
         // 传入 SurfaceTexture 变换矩阵（修正 OES 纹理方向）
         GLES30.glUniformMatrix4fv(uSTMatrix, 1, false, stMatrix, 0)
         time += 0.016f
@@ -596,12 +628,20 @@ void main() {
         (params["grainSize"]           as? Number)?.let { grainSize           = it.toFloat() }
         (params["luminanceNoise"]      as? Number)?.let { luminanceNoise      = it.toFloat() }
         (params["chromaNoise"]         as? Number)?.let { chromaNoise         = it.toFloat() }
-        // Inst C 专用参数
+        // Inst C / SQC 共用参数
         (params["highlightRolloff"]    as? Number)?.let { highlightRolloff    = it.toFloat() }
         (params["paperTexture"]        as? Number)?.let { paperTexture        = it.toFloat() }
         (params["edgeFalloff"]         as? Number)?.let { edgeFalloff         = it.toFloat() }
         (params["exposureVariation"]   as? Number)?.let { exposureVariation   = it.toFloat() }
         (params["cornerWarmShift"]     as? Number)?.let { cornerWarmShift     = it.toFloat() }
+        // SQC 专用参数
+        (params["centerGain"]          as? Number)?.let { centerGain          = it.toFloat() }
+        (params["developmentSoftness"] as? Number)?.let { developmentSoftness = it.toFloat() }
+        (params["chemicalIrregularity"] as? Number)?.let { chemicalIrregularity = it.toFloat() }
+        (params["skinHueProtect"]      as? Number)?.let { skinHueProtect      = it.toFloat() }
+        (params["skinSatProtect"]      as? Number)?.let { skinSatProtect      = it.toFloat() }
+        (params["skinLumaSoften"]      as? Number)?.let { skinLumaSoften      = it.toFloat() }
+        (params["skinRedLimit"]        as? Number)?.let { skinRedLimit        = it.toFloat() }
     }
 
     /**
@@ -625,6 +665,7 @@ void main() {
                 "fqs"    -> FQSShaderSource.FRAGMENT_SHADER
                 "cpm35"  -> CPM35ShaderSource.FRAGMENT_SHADER
                 "inst_c" -> InstCShaderSource.FRAGMENT_SHADER
+                "sqc"    -> SQCGLRenderer.FRAGMENT_SHADER
                 else     -> FRAGMENT_SHADER
             }
             programId = createProgram(VERTEX_SHADER, fragShader)
@@ -658,12 +699,20 @@ void main() {
             uGrainSize            = GLES30.glGetUniformLocation(programId, "uGrainSize")
             uLuminanceNoise       = GLES30.glGetUniformLocation(programId, "uLuminanceNoise")
             uChromaNoise          = GLES30.glGetUniformLocation(programId, "uChromaNoise")
-            // Inst C 专用 uniform
+            // Inst C / SQC 共用 uniform
             uHighlightRolloff     = GLES30.glGetUniformLocation(programId, "uHighlightRolloff")
             uPaperTexture         = GLES30.glGetUniformLocation(programId, "uPaperTexture")
             uEdgeFalloff          = GLES30.glGetUniformLocation(programId, "uEdgeFalloff")
             uExposureVariation    = GLES30.glGetUniformLocation(programId, "uExposureVariation")
             uCornerWarmShift      = GLES30.glGetUniformLocation(programId, "uCornerWarmShift")
+            // SQC 专用 uniform
+            uCenterGain           = GLES30.glGetUniformLocation(programId, "uCenterGain")
+            uDevelopmentSoftness  = GLES30.glGetUniformLocation(programId, "uDevelopmentSoftness")
+            uChemicalIrregularity = GLES30.glGetUniformLocation(programId, "uChemicalIrregularity")
+            uSkinHueProtect       = GLES30.glGetUniformLocation(programId, "uSkinHueProtect")
+            uSkinSatProtect       = GLES30.glGetUniformLocation(programId, "uSkinSatProtect")
+            uSkinLumaSoften       = GLES30.glGetUniformLocation(programId, "uSkinLumaSoften")
+            uSkinRedLimit         = GLES30.glGetUniformLocation(programId, "uSkinRedLimit")
             Log.d(TAG, "setCameraId: shader recompiled for cameraId=$cameraId")
         }
     }

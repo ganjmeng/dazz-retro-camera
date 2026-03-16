@@ -201,6 +201,15 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             if let v = dl["edgeFalloff"]         as? NSNumber { shaderParams["edgeFalloff"]         = v.floatValue }
             if let v = dl["exposureVariation"]   as? NSNumber { shaderParams["exposureVariation"]   = v.floatValue }
             if let v = dl["cornerWarmShift"]     as? NSNumber { shaderParams["cornerWarmShift"]     = v.floatValue }
+            // SQC 专用字段
+            if let v = dl["centerGain"]           as? NSNumber { shaderParams["centerGain"]           = v.floatValue }
+            if let v = dl["developmentSoftness"]  as? NSNumber { shaderParams["developmentSoftness"]  = v.floatValue }
+            if let v = dl["chemicalIrregularity"] as? NSNumber { shaderParams["chemicalIrregularity"] = v.floatValue }
+            if let v = dl["skinHueProtect"] as? Bool { shaderParams["skinHueProtect"] = v ? Float(1.0) : Float(0.0) }
+            else if let v = dl["skinHueProtect"] as? NSNumber { shaderParams["skinHueProtect"] = v.floatValue }
+            if let v = dl["skinSatProtect"]       as? NSNumber { shaderParams["skinSatProtect"]       = v.floatValue }
+            if let v = dl["skinLumaSoften"]       as? NSNumber { shaderParams["skinLumaSoften"]       = v.floatValue }
+            if let v = dl["skinRedLimit"]         as? NSNumber { shaderParams["skinRedLimit"]         = v.floatValue }
             if let lutPath = dl["baseLut"] as? String, !lutPath.isEmpty { shaderParams["lut"] = lutPath }
         }
         if let lut = presetJson["lut"] as? String { shaderParams["lut"] = lut }

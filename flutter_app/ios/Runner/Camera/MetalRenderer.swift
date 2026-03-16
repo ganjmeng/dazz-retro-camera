@@ -37,11 +37,19 @@ struct CCDParams {
     var luminanceNoise: Float = 0.0   // 亮度噪声（FQS=0.08, CPM35=0.05）
     var chromaNoise: Float = 0.0      // 色度噪声（FQS=0.05, CPM35=0.03）
     // ── Inst C 专用扩展字段（其他相机的 Shader 忽略这些字段）──────────────────
-    var highlightRolloff: Float = 0.0   // 高光柔和滴落（Inst C=0.20）
-    var paperTexture: Float = 0.0       // 相纸纹理强度（Inst C=0.06）
-    var edgeFalloff: Float = 0.0        // 边缘曝光衰减（Inst C=0.05）
-    var exposureVariation: Float = 0.0  // 曝光不均匀幅度（Inst C=0.04）
-    var cornerWarmShift: Float = 0.0    // 边角偏暖强度（Inst C=0.02）
+    var highlightRolloff: Float = 0.0   // 高光柔和滴落（Inst C=0.20，SQC=0.28）
+    var paperTexture: Float = 0.0       // 相纸纹理强度（Inst C=0.06，SQC=0.05）
+    var edgeFalloff: Float = 0.0        // 边缘曝光衰减（Inst C=0.05，SQC=0.06）
+    var exposureVariation: Float = 0.0  // 曝光不均匀幅度（Inst C=0.04，SQC=0.05）
+    var cornerWarmShift: Float = 0.0    // 边角偏暖强度（Inst C=0.02，SQC=0.03）
+    // ── SQC 专用扩展字段（Instax Square 升级版）───────────────────────────────
+    var centerGain: Float = 0.0            // 中心增亮（主体感，SQC=0.03）
+    var developmentSoftness: Float = 0.0   // 显影柔化（SQC=0.04）
+    var chemicalIrregularity: Float = 0.0  // 化学不规则感（SQC=0.02）
+    var skinHueProtect: Float = 0.0        // 肤色色相保护（1.0=开启，0.0=关闭）
+    var skinSatProtect: Float = 1.0        // 肤色饱和度保护（SQC=0.95）
+    var skinLumaSoften: Float = 0.0        // 肤色亮度柔化（SQC=0.04）
+    var skinRedLimit: Float = 1.0          // 肤色红限（SQC=1.03）
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -185,6 +193,9 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         case "inst_c":
             vertexName   = "instcVertexShader"
             fragmentName = "instcFragmentShader"
+        case "sqc":
+            vertexName   = "sqcVertexShader"
+            fragmentName = "sqcFragmentShader"
         default:
             vertexName   = "vertexShader"
             fragmentName = "ccdFragmentShader"
@@ -280,12 +291,21 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = params["luminanceNoise"]      as? Float { ccdParams.luminanceNoise      = v }
         if let v = params["chromaNoise"]         as? Float { ccdParams.chromaNoise         = v }
 
-        // ── Inst C 专用参数 ───────────────────────────────────────────────
+        // ── Inst C / SQC 共用参数 ───────────────────────────────────────────
         if let v = params["highlightRolloff"]   as? Float { ccdParams.highlightRolloff   = v }
         if let v = params["paperTexture"]        as? Float { ccdParams.paperTexture        = v }
         if let v = params["edgeFalloff"]         as? Float { ccdParams.edgeFalloff         = v }
         if let v = params["exposureVariation"]   as? Float { ccdParams.exposureVariation   = v }
         if let v = params["cornerWarmShift"]     as? Float { ccdParams.cornerWarmShift     = v }
+
+        // ── SQC 专用参数 ───────────────────────────────────────────────────
+        if let v = params["centerGain"]          as? Float { ccdParams.centerGain          = v }
+        if let v = params["developmentSoftness"] as? Float { ccdParams.developmentSoftness = v }
+        if let v = params["chemicalIrregularity"] as? Float { ccdParams.chemicalIrregularity = v }
+        if let v = params["skinHueProtect"]      as? Float { ccdParams.skinHueProtect      = v }
+        if let v = params["skinSatProtect"]      as? Float { ccdParams.skinSatProtect      = v }
+        if let v = params["skinLumaSoften"]      as? Float { ccdParams.skinLumaSoften      = v }
+        if let v = params["skinRedLimit"]        as? Float { ccdParams.skinRedLimit        = v }
 
         // ── 纹理加载 ─────────────────────────────────────────────────────────
         if let lutAsset = params["lut"] as? String, !lutAsset.isEmpty {
