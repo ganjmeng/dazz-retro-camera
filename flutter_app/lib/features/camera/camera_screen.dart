@@ -527,6 +527,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
     // 双重曝光模式下，在快门按下时显示中间状态提示
     final s3 = sOf(ref.read(languageProvider));
+    // 记录拍照前的双重曝光状态：只有拍摄的是第二张（firstPath != null）才可能合成完成
+    final wasDoubleExpSecondShot = st.doubleExpEnabled && st.doubleExpFirstPath != null;
     if (st.doubleExpEnabled && st.doubleExpFirstPath == null) {
       _showViewfinderHint(s3.captured1);
     } else if (st.doubleExpEnabled && st.doubleExpFirstPath != null) {
@@ -541,9 +543,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       // 优先用 galleryAssetId 直接查资产（绕开相册查询，100% 可靠）
       if (result.galleryAssetId != null) {
         _loadThumbFromGalleryId(result.galleryAssetId!);
-        // 双重曝光合成完成提示
-        if (!st.doubleExpEnabled) {
-          // 双重曝光已关闭（notifier 内部处理后关闭）说明合成完成
+        // 双重曝光合成完成提示：仅当本次是第二张拍摄（合成完成后 notifier 会清空 firstPath 并关闭）
+        if (wasDoubleExpSecondShot) {
           _showViewfinderHint(s3.doubleExpDone);
         }
       } else {
@@ -960,7 +961,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // ── 双重曝光进度提示条 ──────────────────────────────────────────────────────────────
           if (st.doubleExpEnabled)
             Positioned(
-              left: 0, right: 0, bottom: 16,
+              // 上移至控制胶囊（kCapsuleH=40）上方，留出 12px 间距
+              // 控制胶囊 bottom = kBottomPanelH + bottomSafeH + kSliderAreaH + kCapsuleInsetBottom
+              // 指示器在取景框内部 Stack，bottom 相对于取景框底部
+              // 取景框底部 = 控制胶囊中心 - kCapsuleH/2，所以指示器需要在胶囊高度 + 间距以上
+              left: 0, right: 0, bottom: kCapsuleH + kCapsuleInsetBottom + 12,
               child: IgnorePointer(
                 child: Center(
                   child: Container(
