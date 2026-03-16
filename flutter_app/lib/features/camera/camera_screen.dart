@@ -297,12 +297,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
     /// 耗时操作过渡：黑屏 + App Icon 淡入，执行 [action]，然后淡出。
   /// [duration] 是黑屏持续时间（不含淡入淡出动画时间）。
-  Future<void> _showCameraTransition(VoidCallback action, {Duration duration = const Duration(milliseconds: 400)}) async {
+  Future<void> _showCameraTransition(FutureOr<void> Function() action, {Duration duration = const Duration(milliseconds: 400)}) async {
     _transitionTimer?.cancel();
     setState(() => _showTransition = true);
     // 等待淡入动画完成再执行操作
     await Future.delayed(const Duration(milliseconds: 200));
-    action();
+    // await action，确保相机加载完成后再淡出黑屏
+    await action();
     // 持续黑屏一段时间，然后淡出
     _transitionTimer = Timer(duration, () {
       if (mounted) setState(() => _showTransition = false);
@@ -1017,36 +1018,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
-          // ── 相框预览 overlay（activeFrameId 不为空时显示，仅当前比例支持相框）──
-          if (st.activeFrameId != null &&
-              st.activeFrameId!.isNotEmpty &&
-              st.activeFrameId != 'none' &&
-              st.activeFrameId != 'frame_none' &&
-              st.camera != null)
-            Builder(builder: (ctx) {
-              final frameOpt = st.camera!.modules.frames
-                  .where((f) => f.id == st.activeFrameId)
-                  .firstOrNull;
-              if (frameOpt == null) return const SizedBox.shrink();
-              // 当前比例不支持相框时不显示
-              final ratioId = st.activeRatioId ?? '';
-              if (frameOpt.supportedRatios.isNotEmpty &&
-                  !frameOpt.supportedRatios.contains(ratioId)) {
-                return const SizedBox.shrink();
-              }
-              final assetPath = frameOpt.assetForRatio(ratioId);
-              if (assetPath == null || assetPath.isEmpty) return const SizedBox.shrink();
-              return Positioned.fill(
-                child: IgnorePointer(
-                  child: Image.asset(
-                    assetPath,
-                    fit: BoxFit.fill,
-                    gaplessPlayback: true,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                  ),
-                ),
-              );
-            }),
+
           // ── 鱼眼圆圈默色边角鑉罩 overlay（fisheyeMode 开启时显示）──
           if (st.fisheyeMode)
             IgnorePointer(
@@ -2055,7 +2027,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 // ─────────────────────────────────────────────────────────────────────────────
 class _OptionsSheet extends ConsumerWidget {
   final VoidCallback onClose;
-  final void Function(VoidCallback action, {Duration duration}) onCameraTransition;
+  final Future<void> Function(FutureOr<void> Function() action, {Duration duration}) onCameraTransition;
 
   const _OptionsSheet({
     required this.onClose,
