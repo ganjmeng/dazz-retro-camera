@@ -258,7 +258,7 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
     super.dispose();
   }
 
-  /// 滚动相机列表使当前相机可见（仅在相机不在可视区域内时才滚动）
+  /// 滚动相机列表使当前相机可见
   void _scrollToActiveCamera(List<CameraEntry> orderedCameras, String activeCameraId) {
     if (_lastScrolledCameraId == activeCameraId) return;
     final idx = orderedCameras.indexWhere((c) => c.id == activeCameraId);
@@ -270,26 +270,11 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
       const cellW = 80.0;
       const sepW  = 12.0;
       const padL  = 16.0;
-      // 目标 cell 的左右边界（相对于列表内容起点）
-      final cellLeft  = padL + idx * (cellW + sepW);
-      final cellRight = cellLeft + cellW;
-      final currentOffset   = _cameraScrollCtrl.offset;
-      final viewportWidth   = _cameraScrollCtrl.position.viewportDimension;
-      final visibleLeft  = currentOffset;
-      final visibleRight = currentOffset + viewportWidth;
-      // 已完全在可视区域内，不需要滚动
-      if (cellLeft >= visibleLeft && cellRight <= visibleRight) return;
-      // 计算最小滚动量：偏左则左对齐（留 16px 边距），偏右则右对齐（留 16px 边距）
-      final double targetOffset;
-      if (cellLeft < visibleLeft) {
-        targetOffset = cellLeft - 16.0;
-      } else {
-        targetOffset = cellRight - viewportWidth + 16.0;
-      }
+      final targetOffset = padL + idx * (cellW + sepW) - 16.0;
       final maxOffset = _cameraScrollCtrl.position.maxScrollExtent;
       _cameraScrollCtrl.animateTo(
         targetOffset.clamp(0.0, maxOffset),
-        duration: const Duration(milliseconds: 300),
+        duration: const Duration(milliseconds: 350),
         curve: Curves.easeOut,
       );
     });
@@ -417,9 +402,8 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
             isFavorite: isFav,
             onTap: () {
               HapticFeedback.selectionClick();
-              // 点击的相机已在屏幕内（用户刚点了它），直接标记为已处理，
-              // 避免 build 重绘时触发不必要的 animateTo（动画会吞掉后续触摸事件）
-              _lastScrolledCameraId = entry.id;
+              // 切换相机后重置滚动标记，下次打开时自动滚到新相机
+              _lastScrolledCameraId = null;
               ref.read(cameraAppProvider.notifier).switchCamera(entry.id);
             },
           );
