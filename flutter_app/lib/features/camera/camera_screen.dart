@@ -1432,135 +1432,134 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-            // 左侧: 图库缩略图（单击→相册列表，长按→直接打开最新相片详情）
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: GestureDetector(
-                  onTap: _openGallery,
-                  onLongPress: _openLatestPhotoDetail,
-              child: AnimatedBuilder(
-                animation: _rotateAngle,
-                builder: (_, __) => Transform.rotate(
-                  angle: _rotateAngle.value,
-                  child: Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      color: _kDarkGray,
-                    ),
-                    child: _latestThumb != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: Image.memory(_latestThumb!, fit: BoxFit.cover),
-                          )
-                        : const Icon(Icons.photo_outlined, color: Colors.grey, size: 24),
-                  ),
-                ),
-                ),
-              ),
-            ),
-            ),
-            // 中间: 快门按钮（外圈白色线圈，内圆白色实心）
-            GestureDetector(
-              onTap: st.isTakingPhoto ? null : _handleShutter,
-              child: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.transparent,
-                  border: Border.all(color: _kWhite, width: 3.5),
-                ),
-                child: Center(
-                  child: Container(
-                    width: 66,
-                    height: 66,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _kWhite,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            // 右侧: 相机图标（虚线圆圈背景，点击打开相机配置）
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: GestureDetector(
-                  onTap: () => showCameraConfigSheet(context),
-              child: SizedBox(
-                width: 97,
-                height: 97,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // 虚线圆圈背景（圆圈大小 70，图标不变）
-                    CustomPaint(
-                      size: const Size(70, 70),
-                      painter: _DashedCirclePainter(),
-                    ),
-                    // 相机图标 + 名称（跟随设备方向旋转）
-                    AnimatedBuilder(
-                      animation: _rotateAngle,
-                      builder: (_, __) => Transform.rotate(
-                        angle: _rotateAngle.value,
-                        child: Builder(builder: (ctx) {
-                          final entry = kAllCameras.firstWhere(
-                            (e) => e.id == st.activeCameraId,
-                            orElse: () => kAllCameras.first,
-                          );
-                          return Column(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // 优先使用真实相机图标，如果没有则用系统图标
-                              if (entry.iconPath != null)
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Image.asset(
-                                    entry.iconPath!,
-                                    width: 69,
-                                    height: 69,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) =>
-                                        const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 68),
-                                  ),
-                                )
-                              else
-                                const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 36),
-                              Text(
-                                entry.name,
-                                style: const TextStyle(
-                                  color: _kWhite,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.3,
-                                  height: 1.0,
+                    // 左侧: 图库缩略图（单击→相册列表，长按→直接打开最新相片详情）
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: GestureDetector(
+                          onTap: _openGallery,
+                          onLongPress: _openLatestPhotoDetail,
+                          child: AnimatedBuilder(
+                            animation: _rotateAngle,
+                            builder: (_, __) => Transform.rotate(
+                              angle: _rotateAngle.value,
+                              child: Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  color: _kDarkGray,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                                child: _latestThumb != null
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Image.memory(_latestThumb!, fit: BoxFit.cover),
+                                      )
+                                    : const Icon(Icons.photo_outlined, color: Colors.grey, size: 24),
                               ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // 中间: 快门按钮（外圈白色线圈，内圆白色实心）
+                    GestureDetector(
+                      onTap: st.isTakingPhoto ? null : _handleShutter,
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.transparent,
+                          border: Border.all(color: _kWhite, width: 3.5),
+                        ),
+                        child: Center(
+                          child: Container(
+                            width: 66,
+                            height: 66,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _kWhite,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // 右侧: 相机图标（虚线圆圈背景，点击打开相机配置）
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: GestureDetector(
+                          onTap: () => showCameraConfigSheet(context),
+                          child: SizedBox(
+                            width: 97,
+                            height: 97,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                // 虚线圆圈背景（圆圈大小 70，图标不变）
+                                CustomPaint(
+                                  size: const Size(70, 70),
+                                  painter: _DashedCirclePainter(),
+                                ),
+                                // 相机图标 + 名称（跟随设备方向旋转）
+                                AnimatedBuilder(
+                                  animation: _rotateAngle,
+                                  builder: (_, __) => Transform.rotate(
+                                    angle: _rotateAngle.value,
+                                    child: Builder(builder: (ctx) {
+                                      final entry = kAllCameras.firstWhere(
+                                        (e) => e.id == st.activeCameraId,
+                                        orElse: () => kAllCameras.first,
+                                      );
+                                      return Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          // 优先使用真实相机图标，如果没有则用系统图标
+                                          if (entry.iconPath != null)
+                                            ClipRRect(
+                                              borderRadius: BorderRadius.circular(6),
+                                              child: Image.asset(
+                                                entry.iconPath!,
+                                                width: 69,
+                                                height: 69,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (_, __, ___) =>
+                                                    const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 68),
+                                              ),
+                                            )
+                                          else
+                                            const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 36),
+                                          Text(
+                                            entry.name,
+                                            style: const TextStyle(
+                                              color: _kWhite,
+                                              fontSize: 8,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 0.3,
+                                              height: 1.0,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      );
+                                    }),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
           ),
         ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
         const SizedBox(height: 10), // 底部安全区
       ],
     );
