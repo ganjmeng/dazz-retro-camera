@@ -363,10 +363,18 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private fun handleSetPreset(call: MethodCall, result: MethodChannel.Result) {
         val preset = call.argument<Map<*, *>>("preset")
         currentPresetJson = preset
-        Log.d(TAG, "setPreset: ${preset?.get("id")}")
-        // 将 preset 参数传递给 GL 渲染器
+        val cameraId = (preset?.get("cameraId") as? String) ?: (preset?.get("id") as? String) ?: ""
+        Log.d(TAG, "setPreset: cameraId=$cameraId")
+
         if (preset != null) {
+            // 1. 切换相机 ID → 触发 GL 线程重新编译对应专用 Shader（FQS/CPM35/通用）
+            if (cameraId.isNotEmpty()) {
+                glRenderer?.setCameraId(cameraId)
+            }
+
             val params = mutableMapOf<String, Any>()
+
+            // 2. 从 preset 顶层读取通用参数（旧路径兼容）
             (preset["contrast"]            as? Number)?.let { params["contrast"]            = it }
             (preset["saturation"]          as? Number)?.let { params["saturation"]          = it }
             (preset["temperatureShift"]    as? Number)?.let { params["temperatureShift"]    = it }
@@ -375,7 +383,37 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             (preset["vignette"]            as? Number)?.let { params["vignette"]            = it }
             (preset["grain"]               as? Number)?.let { params["grain"]               = it }
             (preset["sharpen"]             as? Number)?.let { params["sharpen"]             = it }
-            glRenderer?.updateParams(params)
+
+            // 3. 从 defaultLook 子对象读取完整参数（新路径，由 Flutter setCamera() 传入）
+            // 注意：JSON 键名与 Shader uniform 名可能不同，需要映射（与 iOS 侧保持一致）
+            @Suppress("UNCHECKED_CAST")
+            val look = preset["defaultLook"] as? Map<*, *>
+            if (look != null) {
+                // 通用参数（直接映射）
+                (look["contrast"]            as? Number)?.let { params["contrast"]            = it }
+                (look["saturation"]          as? Number)?.let { params["saturation"]          = it }
+                (look["vignette"]            as? Number)?.let { params["vignette"]            = it }
+                (look["chromaticAberration"] as? Number)?.let { params["chromaticAberration"] = it }
+                (look["grain"]               as? Number)?.let { params["grain"]               = it }
+                // 字段名映射（JSON 键名 → Shader uniform 名）
+                (look["temperature"]         as? Number)?.let { params["temperatureShift"]    = it }  // temperature → temperatureShift
+                (look["tint"]                as? Number)?.let { params["tintShift"]           = it }  // tint → tintShift
+                (look["halation"]            as? Number)?.let { params["halationAmount"]      = it }  // halation → halationAmount
+                (look["bloom"]               as? Number)?.let { params["bloomAmount"]         = it }  // bloom → bloomAmount
+                (look["sharpness"]           as? Number)?.let { params["sharpen"]             = it }  // sharpness → sharpen
+                // FQS/CPM35 专有参数（直接映射）
+                (look["colorBiasR"]          as? Number)?.let { params["colorBiasR"]          = it }
+                (look["colorBiasG"]          as? Number)?.let { params["colorBiasG"]          = it }
+                (look["colorBiasB"]          as? Number)?.let { params["colorBiasB"]          = it }
+                (look["grainSize"]           as? Number)?.let { params["grainSize"]           = it }
+                (look["luminanceNoise"]      as? Number)?.let { params["luminanceNoise"]      = it }
+                (look["chromaNoise"]         as? Number)?.let { params["chromaNoise"]         = it }
+                (look["highlightWarmAmount"] as? Number)?.let { params["highlightWarmAmount"] = it }
+            }
+
+            if (params.isNotEmpty()) {
+                glRenderer?.updateParams(params)
+            }
         }
         result.success(null)
     }

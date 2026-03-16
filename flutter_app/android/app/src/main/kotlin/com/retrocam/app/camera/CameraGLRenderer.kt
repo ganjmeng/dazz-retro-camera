@@ -240,6 +240,16 @@ void main() {
     private var uFisheyeMode: Int = -1
     private var uAspectRatio: Int = -1
     private var uCameraTexture: Int = -1  // 性能优化：缓存 sampler uniform 位置
+    // FQS/CPM35 专有 uniform 位置（通用 Shader 中不存在，glGetUniformLocation 返回 -1，glUniform1f(-1,...) 是 no-op）
+    private var uColorBiasR: Int = -1
+    private var uColorBiasG: Int = -1
+    private var uColorBiasB: Int = -1
+    private var uTintShift: Int = -1
+    private var uHalationAmount: Int = -1
+    private var uBloomAmount: Int = -1
+    private var uGrainSize: Int = -1
+    private var uLuminanceNoise: Int = -1
+    private var uChromaNoise: Int = -1
 
     // Attrib 位置（初始化时缓存，避免每帧 glGetAttribLocation 调用 — 关键热路径优化）
     // glGetAttribLocation 是同步 GPU driver 查询，每帧调用在高端机上约 0.1ms，低端机约 0.5ms
@@ -254,6 +264,9 @@ void main() {
     private var inputSurfaceTexture: SurfaceTexture? = null
     private var inputSurface: Surface? = null
 
+    // ── 当前相机 ID（用于切换专用 Shader）────────────────────────────────────
+    @Volatile private var currentCameraId: String = ""
+
     // ── 渲染参数 ─────────────────────────────────────────────────────────────
     @Volatile private var contrast: Float = 1.0f
     @Volatile private var saturation: Float = 1.0f
@@ -265,6 +278,16 @@ void main() {
     @Volatile private var sharpen: Float = 0.0f
     @Volatile private var time: Float = 0.0f
     @Volatile private var fisheyeMode: Float = 0.0f // 0=normal, 1=circular fisheye
+    // FQS/CPM35 专有参数
+    @Volatile private var colorBiasR: Float = 0.0f
+    @Volatile private var colorBiasG: Float = 0.0f
+    @Volatile private var colorBiasB: Float = 0.0f
+    @Volatile private var tintShift: Float = 0.0f
+    @Volatile private var halationAmount: Float = 0.0f
+    @Volatile private var bloomAmount: Float = 0.0f
+    @Volatile private var grainSize: Float = 1.0f
+    @Volatile private var luminanceNoise: Float = 0.0f
+    @Volatile private var chromaNoise: Float = 0.0f
     @Volatile private var previewWidth: Int = 1280
     @Volatile private var previewHeight: Int = 720
 
@@ -367,8 +390,13 @@ void main() {
             return
         }
 
-        // ── 7. 编译着色器 ────────────────────────────────────────────────────
-        programId = createProgram(VERTEX_SHADER, FRAGMENT_SHADER)
+        // ── 7. 编译着色器（根据 cameraId 选择专用 Shader）──────────────────
+        val fragShader = when (currentCameraId) {
+            "fqs"   -> FQSShaderSource.FRAGMENT_SHADER
+            "cpm35" -> CPM35ShaderSource.FRAGMENT_SHADER
+            else    -> FRAGMENT_SHADER
+        }
+        programId = createProgram(VERTEX_SHADER, fragShader)
         if (programId == 0) {
             Log.e(TAG, "Failed to create shader program")
             return
@@ -411,6 +439,16 @@ void main() {
         uCameraTexture        = GLES30.glGetUniformLocation(programId, "uCameraTexture")
         aPositionLoc          = GLES30.glGetAttribLocation(programId, "aPosition")
         aTexCoordLoc          = GLES30.glGetAttribLocation(programId, "aTexCoord")
+        // FQS/CPM35 专有 uniform（通用 Shader 中返回 -1，glUniform1f(-1,...) 是 no-op，安全）
+        uColorBiasR           = GLES30.glGetUniformLocation(programId, "uColorBiasR")
+        uColorBiasG           = GLES30.glGetUniformLocation(programId, "uColorBiasG")
+        uColorBiasB           = GLES30.glGetUniformLocation(programId, "uColorBiasB")
+        uTintShift            = GLES30.glGetUniformLocation(programId, "uTintShift")
+        uHalationAmount       = GLES30.glGetUniformLocation(programId, "uHalationAmount")
+        uBloomAmount          = GLES30.glGetUniformLocation(programId, "uBloomAmount")
+        uGrainSize            = GLES30.glGetUniformLocation(programId, "uGrainSize")
+        uLuminanceNoise       = GLES30.glGetUniformLocation(programId, "uLuminanceNoise")
+        uChromaNoise          = GLES30.glGetUniformLocation(programId, "uChromaNoise")
 
         // ── 11. 顶点缓冲 ─────────────────────────────────────────────────────
         vertexBuffer = ByteBuffer.allocateDirect(QUAD_VERTICES.size * 4)
@@ -470,6 +508,16 @@ void main() {
             1f / previewHeight.toFloat())
         GLES30.glUniform1f(uFisheyeMode,         fisheyeMode)
         GLES30.glUniform1f(uAspectRatio,         previewWidth.toFloat() / previewHeight.toFloat())
+        // FQS/CPM35 专有 uniform（通用 Shader 中 location=-1，glUniform1f 是 no-op）
+        GLES30.glUniform1f(uColorBiasR,          colorBiasR)
+        GLES30.glUniform1f(uColorBiasG,          colorBiasG)
+        GLES30.glUniform1f(uColorBiasB,          colorBiasB)
+        GLES30.glUniform1f(uTintShift,           tintShift)
+        GLES30.glUniform1f(uHalationAmount,      halationAmount)
+        GLES30.glUniform1f(uBloomAmount,         bloomAmount)
+        GLES30.glUniform1f(uGrainSize,           grainSize)
+        GLES30.glUniform1f(uLuminanceNoise,      luminanceNoise)
+        GLES30.glUniform1f(uChromaNoise,         chromaNoise)
         // 传入 SurfaceTexture 变换矩阵（修正 OES 纹理方向）
         GLES30.glUniformMatrix4fv(uSTMatrix, 1, false, stMatrix, 0)
         time += 0.016f
@@ -509,6 +557,73 @@ void main() {
         (params["vignette"]            as? Number)?.let { vignetteAmount      = it.toFloat() }
         (params["grain"]               as? Number)?.let { grainAmount         = it.toFloat() }
         (params["sharpen"]             as? Number)?.let { sharpen             = it.toFloat() }
+        // FQS/CPM35 专有参数
+        (params["colorBiasR"]          as? Number)?.let { colorBiasR          = it.toFloat() }
+        (params["colorBiasG"]          as? Number)?.let { colorBiasG          = it.toFloat() }
+        (params["colorBiasB"]          as? Number)?.let { colorBiasB          = it.toFloat() }
+        (params["tintShift"]           as? Number)?.let { tintShift           = it.toFloat() }
+        (params["halationAmount"]      as? Number)?.let { halationAmount      = it.toFloat() }
+        (params["bloomAmount"]         as? Number)?.let { bloomAmount         = it.toFloat() }
+        (params["grainSize"]           as? Number)?.let { grainSize           = it.toFloat() }
+        (params["luminanceNoise"]      as? Number)?.let { luminanceNoise      = it.toFloat() }
+        (params["chromaNoise"]         as? Number)?.let { chromaNoise         = it.toFloat() }
+    }
+
+    /**
+     * 切换相机 ID，重新编译对应的专用 Fragment Shader（FQS/CPM35/通用）。
+     * 必须在 GL 线程上执行（通过 glExecutor 调度），因为需要操作 GL 资源。
+     * 调用后下一帧自动使用新 Shader。
+     */
+    fun setCameraId(cameraId: String) {
+        if (currentCameraId == cameraId) return // 同一相机无需重编译
+        currentCameraId = cameraId
+        if (!initialized.get()) return // 未初始化时只记录 ID，initialize() 会用正确的 Shader
+        glExecutor.execute {
+            if (!EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) return@execute
+            // 删除旧 program
+            if (programId != 0) {
+                GLES30.glDeleteProgram(programId)
+                programId = 0
+            }
+            // 编译新 Shader
+            val fragShader = when (cameraId) {
+                "fqs"   -> FQSShaderSource.FRAGMENT_SHADER
+                "cpm35" -> CPM35ShaderSource.FRAGMENT_SHADER
+                else    -> FRAGMENT_SHADER
+            }
+            programId = createProgram(VERTEX_SHADER, fragShader)
+            if (programId == 0) {
+                Log.e(TAG, "setCameraId: failed to recompile shader for cameraId=$cameraId")
+                return@execute
+            }
+            // 重新缓存 uniform 位置
+            uContrast             = GLES30.glGetUniformLocation(programId, "uContrast")
+            uSaturation           = GLES30.glGetUniformLocation(programId, "uSaturation")
+            uTemperatureShift     = GLES30.glGetUniformLocation(programId, "uTemperatureShift")
+            uChromaticAberration  = GLES30.glGetUniformLocation(programId, "uChromaticAberration")
+            uNoiseAmount          = GLES30.glGetUniformLocation(programId, "uNoiseAmount")
+            uVignetteAmount       = GLES30.glGetUniformLocation(programId, "uVignetteAmount")
+            uGrainAmount          = GLES30.glGetUniformLocation(programId, "uGrainAmount")
+            uSharpen              = GLES30.glGetUniformLocation(programId, "uSharpen")
+            uTime                 = GLES30.glGetUniformLocation(programId, "uTime")
+            uTexelSize            = GLES30.glGetUniformLocation(programId, "uTexelSize")
+            uSTMatrix             = GLES30.glGetUniformLocation(programId, "uSTMatrix")
+            uFisheyeMode          = GLES30.glGetUniformLocation(programId, "uFisheyeMode")
+            uAspectRatio          = GLES30.glGetUniformLocation(programId, "uAspectRatio")
+            uCameraTexture        = GLES30.glGetUniformLocation(programId, "uCameraTexture")
+            aPositionLoc          = GLES30.glGetAttribLocation(programId, "aPosition")
+            aTexCoordLoc          = GLES30.glGetAttribLocation(programId, "aTexCoord")
+            uColorBiasR           = GLES30.glGetUniformLocation(programId, "uColorBiasR")
+            uColorBiasG           = GLES30.glGetUniformLocation(programId, "uColorBiasG")
+            uColorBiasB           = GLES30.glGetUniformLocation(programId, "uColorBiasB")
+            uTintShift            = GLES30.glGetUniformLocation(programId, "uTintShift")
+            uHalationAmount       = GLES30.glGetUniformLocation(programId, "uHalationAmount")
+            uBloomAmount          = GLES30.glGetUniformLocation(programId, "uBloomAmount")
+            uGrainSize            = GLES30.glGetUniformLocation(programId, "uGrainSize")
+            uLuminanceNoise       = GLES30.glGetUniformLocation(programId, "uLuminanceNoise")
+            uChromaNoise          = GLES30.glGetUniformLocation(programId, "uChromaNoise")
+            Log.d(TAG, "setCameraId: shader recompiled for cameraId=$cameraId")
+        }
     }
 
     fun setSharpen(level: Float) {

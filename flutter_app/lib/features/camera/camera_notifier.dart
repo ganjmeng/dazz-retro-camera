@@ -374,8 +374,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         fisheyeMode: camera.lensById(defaults.lensId)?.fisheyeMode ?? false,
         clearPanel: true,
       );
-      // 关键修复：加载相机后立即将默认镜头参数同步到原生 GPU shader
-      // 不调用此就会导致切换相机后默认镜头效果不生效，必须手动点击一次才触发
+      // 关键修复：加载相机后立即将 defaultLook 色彩参数同步到原生 GPU shader
+      // 修复 FQS 紫色偏色问题：确保 colorBiasR/G/B、grainSize、sharpness 等专用字段正确传递
+      await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
+      // 同步默认镜头参数到原生 GPU shader
       final defaultLens = camera.lensById(defaults.lensId);
       _ref.read(cameraServiceProvider.notifier).updateLensParams(
         distortion: defaultLens?.distortion ?? 0.0,

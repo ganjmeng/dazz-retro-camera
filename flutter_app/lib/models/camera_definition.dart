@@ -231,6 +231,32 @@ class DefaultLook {
     grainSize: (json['grainSize'] as num? ?? 1.0).toDouble(),
     sharpness: (json['sharpness'] as num? ?? 1.0).toDouble(),
   );
+
+  Map<String, dynamic> toJson() => {
+    if (baseLut != null) 'baseLut': baseLut,
+    'temperature': temperature,
+    'tint': tint,
+    'contrast': contrast,
+    'highlights': highlights,
+    'shadows': shadows,
+    'whites': whites,
+    'blacks': blacks,
+    'clarity': clarity,
+    'vibrance': vibrance,
+    'saturation': saturation,
+    'vignette': vignette,
+    'distortion': distortion,
+    'chromaticAberration': chromaticAberration,
+    'bloom': bloom,
+    'flare': flare,
+    'grain': grain,
+    'colorBiasR': colorBiasR,
+    'colorBiasG': colorBiasG,
+    'colorBiasB': colorBiasB,
+    'halation': halation,
+    'grainSize': grainSize,
+    'sharpness': sharpness,
+  };
 }
 
 // ─────────────────────────────────────────────

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../models/preset.dart';
+import '../models/camera_definition.dart';
 import '../core/constants.dart';
 
 /// 相机状态模型
@@ -125,6 +126,21 @@ class CameraService extends StateNotifier<CameraState> {
       state = state.copyWith(currentPreset: preset);
     } catch (e) {
       print('Error setting preset: $e');
+    }
+  }
+
+  /// 切换相机（CameraDefinition），将 defaultLook 色彩参数传递给原生渲染器
+  /// 这是修复 FQS 紫色偏色的关键方法：确保 colorBiasR/G/B、grainSize、sharpness 等
+  /// 专用字段从 defaultLook JSON 正确传递到 iOS Metal Shader 和 Android GLSL Shader
+  Future<void> setCamera(CameraDefinition camera) async {
+    try {
+      final presetPayload = <String, dynamic>{
+        'cameraId': camera.id,
+        'defaultLook': camera.defaultLook.toJson(),
+      };
+      await _channel.invokeMethod('setPreset', {'preset': presetPayload});
+    } catch (e) {
+      print('Error setting camera: \$e');
     }
   }
 

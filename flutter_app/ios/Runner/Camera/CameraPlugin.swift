@@ -165,6 +165,37 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             if let ca = params["chromaticAberration"] as? NSNumber { shaderParams["chromaticAberration"] = ca.floatValue }
             if let bloom = params["bloomAmount"] as? NSNumber { shaderParams["bloom"] = bloom.floatValue }
             if let halation = params["halationAmount"] as? NSNumber { shaderParams["halation"] = halation.floatValue }
+            // ── FQS / CPM35 专用字段 ──────────────────────────────────────────────────
+            if let v = params["colorBiasR"]          as? NSNumber { shaderParams["colorBiasR"]          = v.floatValue }
+            if let v = params["colorBiasG"]          as? NSNumber { shaderParams["colorBiasG"]          = v.floatValue }
+            if let v = params["colorBiasB"]          as? NSNumber { shaderParams["colorBiasB"]          = v.floatValue }
+            if let v = params["grainSize"]           as? NSNumber { shaderParams["grainSize"]           = v.floatValue }
+            if let v = params["sharpness"]           as? NSNumber { shaderParams["sharpness"]           = v.floatValue }
+            if let v = params["highlightWarmAmount"] as? NSNumber { shaderParams["highlightWarmAmount"] = v.floatValue }
+            if let v = params["luminanceNoise"]      as? NSNumber { shaderParams["luminanceNoise"]      = v.floatValue }
+            if let v = params["chromaNoise"]         as? NSNumber { shaderParams["chromaNoise"]         = v.floatValue }
+        }
+        // ── 解析 defaultLook 子对象（直接从 CameraDefinition.defaultLook 传入） ──────────────────────
+        if let dl = presetJson["defaultLook"] as? [String: Any] {
+            if let v = dl["contrast"]            as? NSNumber { shaderParams["contrast"]            = v.floatValue }
+            if let v = dl["saturation"]          as? NSNumber { shaderParams["saturation"]          = v.floatValue }
+            if let v = dl["temperature"]         as? NSNumber { shaderParams["temperatureShift"]    = v.floatValue }
+            if let v = dl["tint"]                as? NSNumber { shaderParams["tintShift"]           = v.floatValue }
+            if let v = dl["grain"]               as? NSNumber { shaderParams["grainAmount"]         = v.floatValue }
+            if let v = dl["vignette"]            as? NSNumber { shaderParams["vignette"]            = v.floatValue }
+            if let v = dl["chromaticAberration"] as? NSNumber { shaderParams["chromaticAberration"] = v.floatValue }
+            if let v = dl["bloom"]               as? NSNumber { shaderParams["bloom"]               = v.floatValue }
+            if let v = dl["halation"]            as? NSNumber { shaderParams["halation"]            = v.floatValue }
+            // FQS / CPM35 专用
+            if let v = dl["colorBiasR"]          as? NSNumber { shaderParams["colorBiasR"]          = v.floatValue }
+            if let v = dl["colorBiasG"]          as? NSNumber { shaderParams["colorBiasG"]          = v.floatValue }
+            if let v = dl["colorBiasB"]          as? NSNumber { shaderParams["colorBiasB"]          = v.floatValue }
+            if let v = dl["grainSize"]           as? NSNumber { shaderParams["grainSize"]           = v.floatValue }
+            if let v = dl["sharpness"]           as? NSNumber { shaderParams["sharpness"]           = v.floatValue }
+            if let v = dl["highlightWarmAmount"] as? NSNumber { shaderParams["highlightWarmAmount"] = v.floatValue }
+            if let v = dl["luminanceNoise"]      as? NSNumber { shaderParams["luminanceNoise"]      = v.floatValue }
+            if let v = dl["chromaNoise"]         as? NSNumber { shaderParams["chromaNoise"]         = v.floatValue }
+            if let lutPath = dl["baseLut"] as? String, !lutPath.isEmpty { shaderParams["lut"] = lutPath }
         }
         if let lut = presetJson["lut"] as? String { shaderParams["lut"] = lut }
         if let grain = presetJson["grain"] as? String { shaderParams["grain"] = grain }
