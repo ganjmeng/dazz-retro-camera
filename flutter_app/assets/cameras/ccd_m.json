@@ -141,7 +141,7 @@
         "label": "2:3",
         "width": 2,
         "height": 3,
-        "supportsFrame": true
+        "supportsFrame": false
       },
       {
         "id": "ratio_3_4",
@@ -155,180 +155,261 @@
         "label": "9:16",
         "width": 9,
         "height": 16,
-        "supportsFrame": true
+        "supportsFrame": false
       }
     ],
     "frames": [
       {
-        "id": "ccd_frame",
-        "name": "CCD 边框",
-        "nameEn": "CCD Frame",
-        "backgroundColor": "#F8F8F6",
-        "cornerRadius": 0,
-        "innerShadow": false,
-        "inset": {
-          "top": 30,
-          "bottom": 30,
-          "left": 36,
-          "right": 36
-        },
+        "id": "instant_default",
+        "name": "冷白",
+        "nameEn": "Default",
         "ratioAssets": {
-          "ratio_1_1": "assets/frames/ccd_frame_1x1.png",
-          "ratio_2_3": "assets/frames/ccd_frame_2x3.png",
-          "ratio_3_4": "assets/frames/ccd_frame_3x4.png",
-          "ratio_9_16": "assets/frames/ccd_frame_9x16.png"
+          "ratio_1_1": "assets/frames/polaroid_default_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_default_3x4.png"
+        },
+        "backgroundColor": "#F5F6FA",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 138,
+          "right": 119,
+          "bottom": 99,
+          "left": 119
         },
         "ratioInsets": {
           "ratio_1_1": {
-            "top": 30,
-            "bottom": 30,
-            "left": 36,
-            "right": 36
-          },
-          "ratio_2_3": {
-            "top": 30,
-            "bottom": 30,
-            "left": 36,
-            "right": 36
+            "top": 420,
+            "right": 360,
+            "bottom": 980,
+            "left": 360
           },
           "ratio_3_4": {
-            "top": 30,
-            "bottom": 30,
-            "left": 36,
-            "right": 36
-          },
-          "ratio_9_16": {
-            "top": 30,
-            "bottom": 30,
-            "left": 36,
-            "right": 36
+            "top": 136,
+            "right": 117,
+            "bottom": 136,
+            "left": 117
           }
         },
         "supportedRatios": [
           "ratio_1_1",
-          "ratio_2_3",
-          "ratio_3_4",
-          "ratio_9_16"
+          "ratio_3_4"
         ],
-        "thumbnail": "assets/thumbnails/frames/ccd_frame.jpg",
+        "thumbnail": "assets/thumbnails/frames/instant_default.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#FFFFFF",
-        "lightLeak": 0.0,
-        "shake": 0.0
+        "outerBackgroundColor": "#F5F6FA",
+        "supportsBackground": true
       },
       {
-        "id": "date_frame",
-        "name": "日期边框",
-        "nameEn": "Date Frame",
-        "backgroundColor": "#FAFAF7",
-        "cornerRadius": 0,
-        "innerShadow": false,
-        "inset": {
-          "top": 30,
-          "bottom": 30,
-          "left": 36,
-          "right": 36
-        },
+        "id": "instant_lavender",
+        "name": "薰衣草",
+        "nameEn": "Lavender",
         "ratioAssets": {
-          "ratio_1_1": "assets/frames/date_frame_1x1.png",
-          "ratio_2_3": "assets/frames/date_frame_2x3.png",
-          "ratio_3_4": "assets/frames/date_frame_3x4.png",
-          "ratio_9_16": "assets/frames/date_frame_9x16.png"
+          "ratio_1_1": "assets/frames/polaroid_lavender_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_lavender_3x4.png"
+        },
+        "backgroundColor": "#EBE6F8",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 138,
+          "right": 119,
+          "bottom": 99,
+          "left": 119
         },
         "ratioInsets": {
           "ratio_1_1": {
-            "top": 30,
-            "bottom": 30,
-            "left": 36,
-            "right": 36
-          },
-          "ratio_2_3": {
-            "top": 30,
-            "bottom": 30,
-            "left": 36,
-            "right": 36
+            "top": 420,
+            "right": 360,
+            "bottom": 980,
+            "left": 360
           },
           "ratio_3_4": {
-            "top": 30,
-            "bottom": 30,
-            "left": 36,
-            "right": 36
-          },
-          "ratio_9_16": {
-            "top": 30,
-            "bottom": 30,
-            "left": 36,
-            "right": 36
+            "top": 136,
+            "right": 117,
+            "bottom": 136,
+            "left": 117
           }
         },
         "supportedRatios": [
           "ratio_1_1",
-          "ratio_2_3",
-          "ratio_3_4",
-          "ratio_9_16"
+          "ratio_3_4"
         ],
-        "thumbnail": "assets/thumbnails/frames/date_frame.jpg",
+        "thumbnail": "assets/thumbnails/frames/instant_lavender.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#FFFFFF",
-        "lightLeak": 0.0,
-        "shake": 0.0
+        "outerBackgroundColor": "#EBE6F8",
+        "supportsBackground": true
       },
       {
-        "id": "film_border_ccd",
-        "name": "胶片边框",
-        "nameEn": "Film Border",
-        "backgroundColor": "#1C1C1C",
-        "cornerRadius": 0,
-        "innerShadow": false,
-        "inset": {
-          "top": 30,
-          "bottom": 30,
-          "left": 36,
-          "right": 36
-        },
+        "id": "instant_peach",
+        "name": "蜜桃橙",
+        "nameEn": "Peach",
         "ratioAssets": {
-          "ratio_1_1": "assets/frames/film_border_ccd_1x1.png",
-          "ratio_2_3": "assets/frames/film_border_ccd_2x3.png",
-          "ratio_3_4": "assets/frames/film_border_ccd_3x4.png",
-          "ratio_9_16": "assets/frames/film_border_ccd_9x16.png"
+          "ratio_1_1": "assets/frames/polaroid_peach_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_peach_3x4.png"
+        },
+        "backgroundColor": "#FCEEE1",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 138,
+          "right": 119,
+          "bottom": 99,
+          "left": 119
         },
         "ratioInsets": {
           "ratio_1_1": {
-            "top": 30,
-            "bottom": 30,
-            "left": 36,
-            "right": 36
-          },
-          "ratio_2_3": {
-            "top": 30,
-            "bottom": 30,
-            "left": 36,
-            "right": 36
+            "top": 420,
+            "right": 360,
+            "bottom": 980,
+            "left": 360
           },
           "ratio_3_4": {
-            "top": 30,
-            "bottom": 30,
-            "left": 36,
-            "right": 36
-          },
-          "ratio_9_16": {
-            "top": 30,
-            "bottom": 30,
-            "left": 36,
-            "right": 36
+            "top": 136,
+            "right": 117,
+            "bottom": 136,
+            "left": 117
           }
         },
         "supportedRatios": [
           "ratio_1_1",
-          "ratio_2_3",
-          "ratio_3_4",
-          "ratio_9_16"
+          "ratio_3_4"
         ],
-        "thumbnail": "assets/thumbnails/frames/film_border_ccd.jpg",
+        "thumbnail": "assets/thumbnails/frames/instant_peach.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#1C1C1C",
-        "lightLeak": 0.0,
-        "shake": 0.0
+        "outerBackgroundColor": "#FCEEE1",
+        "supportsBackground": true
+      },
+      {
+        "id": "instant_mint",
+        "name": "薄荷绿",
+        "nameEn": "Mint",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_mint_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_mint_3x4.png"
+        },
+        "backgroundColor": "#E1F8EE",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 138,
+          "right": 119,
+          "bottom": 99,
+          "left": 119
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 420,
+            "right": 360,
+            "bottom": 980,
+            "left": 360
+          },
+          "ratio_3_4": {
+            "top": 136,
+            "right": 117,
+            "bottom": 136,
+            "left": 117
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_mint.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#E1F8EE",
+        "supportsBackground": true
+      },
+      {
+        "id": "instant_sky",
+        "name": "天空蓝",
+        "nameEn": "Sky",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_sky_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_sky_3x4.png"
+        },
+        "backgroundColor": "#E1EEFC",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 138,
+          "right": 119,
+          "bottom": 99,
+          "left": 119
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 420,
+            "right": 360,
+            "bottom": 980,
+            "left": 360
+          },
+          "ratio_3_4": {
+            "top": 136,
+            "right": 117,
+            "bottom": 136,
+            "left": 117
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_sky.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#E1EEFC",
+        "supportsBackground": true
+      },
+      {
+        "id": "instant_rose",
+        "name": "玫瑰粉",
+        "nameEn": "Rose",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_rose_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_rose_3x4.png"
+        },
+        "backgroundColor": "#FCE6F0",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 138,
+          "right": 119,
+          "bottom": 99,
+          "left": 119
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 420,
+            "right": 360,
+            "bottom": 980,
+            "left": 360
+          },
+          "ratio_3_4": {
+            "top": 136,
+            "right": 117,
+            "bottom": 136,
+            "left": 117
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_rose.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#FCE6F0",
+        "supportsBackground": true
       }
     ],
     "watermarks": {
@@ -367,7 +448,7 @@
     "filterId": null,
     "lensId": "std",
     "ratioId": "ratio_3_4",
-    "frameId": "date_frame",
+    "frameId": "instant_default",
     "watermarkPresetId": "none",
     "extraId": null
   },

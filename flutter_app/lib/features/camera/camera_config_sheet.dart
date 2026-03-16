@@ -647,6 +647,7 @@ class _SubPanelState extends ConsumerState<_SubPanel>
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
                     _title(s),
@@ -656,6 +657,20 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                  // 比例面板：在标题旁显示相框限制提示
+                  if (widget.type == _SubPanelType.ratio &&
+                      widget.camera.modules.ratios.any((r) => !r.supportsFrame)) ...
+                    [
+                      const SizedBox(width: 8),
+                      Text(
+                        s.frameRatioHint,
+                        style: const TextStyle(
+                          color: Color(0xFF8E8E93),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
                   const Spacer(),
                   // 右上角操作按鈕（无水印开关 / 无边框）
                   if (widget.type == _SubPanelType.watermark) (() {
@@ -1383,19 +1398,7 @@ class _SubPanelState extends ConsumerState<_SubPanel>
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 提示文字：仁1:1和4:3支持边框
-        if (hasFrameRestriction)
-          Padding(
-            padding: const EdgeInsets.only(left: 20, right: 20, bottom: 4),
-            child: Text(
-              s.frameRatioHint,
-              style: const TextStyle(
-                color: Color(0xFF8E8E93),
-                fontSize: 13,
-              ),
-            ),
-          ),
-        // 比例选项行
+        // 比例选项行（提示文字已移至标题行）
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           child: Row(
