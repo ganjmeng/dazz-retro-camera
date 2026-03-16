@@ -258,7 +258,7 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
     super.dispose();
   }
 
-  /// 滚动相机列表使当前相机可见
+  /// 滚动相机列表使当前相机可见（仅在相机不在可视区域内时才滚动）
   void _scrollToActiveCamera(List<CameraEntry> orderedCameras, String activeCameraId) {
     if (_lastScrolledCameraId == activeCameraId) return;
     final idx = orderedCameras.indexWhere((c) => c.id == activeCameraId);
@@ -270,11 +270,26 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
       const cellW = 80.0;
       const sepW  = 12.0;
       const padL  = 16.0;
-      final targetOffset = padL + idx * (cellW + sepW) - 16.0;
+      // 目标 cell 的左右边界（相对于列表内容起点）
+      final cellLeft  = padL + idx * (cellW + sepW);
+      final cellRight = cellLeft + cellW;
+      final currentOffset   = _cameraScrollCtrl.offset;
+      final viewportWidth   = _cameraScrollCtrl.position.viewportDimension;
+      final visibleLeft  = currentOffset;
+      final visibleRight = currentOffset + viewportWidth;
+      // 已完全在可视区域内，不需要滚动
+      if (cellLeft >= visibleLeft && cellRight <= visibleRight) return;
+      // 计算最小滚动量：偏左则左对齐（留 16px 边距），偏右则右对齐（留 16px 边距）
+      final double targetOffset;
+      if (cellLeft < visibleLeft) {
+        targetOffset = cellLeft - 16.0;
+      } else {
+        targetOffset = cellRight - viewportWidth + 16.0;
+      }
       final maxOffset = _cameraScrollCtrl.position.maxScrollExtent;
       _cameraScrollCtrl.animateTo(
         targetOffset.clamp(0.0, maxOffset),
-        duration: const Duration(milliseconds: 350),
+        duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
     });
