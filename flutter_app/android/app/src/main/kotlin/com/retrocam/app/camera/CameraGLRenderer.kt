@@ -825,6 +825,7 @@ void main() {
                 "sqc"    -> SQCGLRenderer.FRAGMENT_SHADER
                 "grd_r"  -> GRDRGLRenderer.FRAGMENT_SHADER
                 "u300"   -> U300GLRenderer.FRAGMENT_SHADER
+                "ccd_r"  -> CCDRGLRenderer.FRAGMENT_SHADER
                 else     -> FRAGMENT_SHADER
             }
             programId = createProgram(VERTEX_SHADER, fragShader)
