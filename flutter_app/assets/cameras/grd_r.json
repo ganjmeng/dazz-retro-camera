@@ -182,30 +182,30 @@
       {
         "id": "ratio_1_1",
         "label": "1:1",
+        "supportsFrame": true,
         "width": 1,
-        "height": 1,
-        "supportsFrame": true
+        "height": 1
       },
       {
         "id": "ratio_2_3",
         "label": "2:3",
+        "supportsFrame": false,
         "width": 2,
-        "height": 3,
-        "supportsFrame": true
+        "height": 3
       },
       {
         "id": "ratio_3_4",
         "label": "3:4",
+        "supportsFrame": true,
         "width": 3,
-        "height": 4,
-        "supportsFrame": true
+        "height": 4
       },
       {
         "id": "ratio_9_16",
         "label": "9:16",
+        "supportsFrame": false,
         "width": 9,
-        "height": 16,
-        "supportsFrame": true
+        "height": 16
       }
     ],
     "frames": [
@@ -257,9 +257,7 @@
         "nameEn": "Ice Blue",
         "ratioAssets": {
           "ratio_1_1": "assets/frames/polaroid_blue_1x1.png",
-          "ratio_2_3": "assets/frames/polaroid_blue_3x4.png",
-          "ratio_3_4": "assets/frames/polaroid_blue_3x4.png",
-          "ratio_9_16": "assets/frames/polaroid_blue_3x4.png"
+          "ratio_3_4": "assets/frames/polaroid_blue_3x4.png"
         },
         "backgroundColor": "#E8F4FD",
         "cornerRadius": 0,
@@ -286,9 +284,7 @@
         },
         "supportedRatios": [
           "ratio_1_1",
-          "ratio_2_3",
-          "ratio_3_4",
-          "ratio_9_16"
+          "ratio_3_4"
         ],
         "thumbnail": "assets/thumbnails/frames/instant_blue.jpg",
         "lightLeak": 0.2,
@@ -303,9 +299,7 @@
         "nameEn": "Matcha",
         "ratioAssets": {
           "ratio_1_1": "assets/frames/polaroid_green_1x1.png",
-          "ratio_2_3": "assets/frames/polaroid_green_3x4.png",
-          "ratio_3_4": "assets/frames/polaroid_green_3x4.png",
-          "ratio_9_16": "assets/frames/polaroid_green_3x4.png"
+          "ratio_3_4": "assets/frames/polaroid_green_3x4.png"
         },
         "backgroundColor": "#E8F5E9",
         "cornerRadius": 0,
@@ -332,9 +326,7 @@
         },
         "supportedRatios": [
           "ratio_1_1",
-          "ratio_2_3",
-          "ratio_3_4",
-          "ratio_9_16"
+          "ratio_3_4"
         ],
         "thumbnail": "assets/thumbnails/frames/instant_green.jpg",
         "lightLeak": 0.2,
@@ -349,9 +341,7 @@
         "nameEn": "Tangerine",
         "ratioAssets": {
           "ratio_1_1": "assets/frames/polaroid_orange_1x1.png",
-          "ratio_2_3": "assets/frames/polaroid_orange_3x4.png",
-          "ratio_3_4": "assets/frames/polaroid_orange_3x4.png",
-          "ratio_9_16": "assets/frames/polaroid_orange_3x4.png"
+          "ratio_3_4": "assets/frames/polaroid_orange_3x4.png"
         },
         "backgroundColor": "#FFF3E0",
         "cornerRadius": 0,
@@ -378,9 +368,7 @@
         },
         "supportedRatios": [
           "ratio_1_1",
-          "ratio_2_3",
-          "ratio_3_4",
-          "ratio_9_16"
+          "ratio_3_4"
         ],
         "thumbnail": "assets/thumbnails/frames/instant_orange.jpg",
         "lightLeak": 0.2,
@@ -395,9 +383,7 @@
         "nameEn": "Blossom",
         "ratioAssets": {
           "ratio_1_1": "assets/frames/polaroid_pink_1x1.png",
-          "ratio_2_3": "assets/frames/polaroid_pink_3x4.png",
-          "ratio_3_4": "assets/frames/polaroid_pink_3x4.png",
-          "ratio_9_16": "assets/frames/polaroid_pink_3x4.png"
+          "ratio_3_4": "assets/frames/polaroid_pink_3x4.png"
         },
         "backgroundColor": "#FCE4EC",
         "cornerRadius": 0,
@@ -424,9 +410,7 @@
         },
         "supportedRatios": [
           "ratio_1_1",
-          "ratio_2_3",
-          "ratio_3_4",
-          "ratio_9_16"
+          "ratio_3_4"
         ],
         "thumbnail": "assets/thumbnails/frames/instant_pink.jpg",
         "lightLeak": 0.2,
@@ -441,9 +425,7 @@
         "nameEn": "Rose",
         "ratioAssets": {
           "ratio_1_1": "assets/frames/polaroid_rose_1x1.png",
-          "ratio_2_3": "assets/frames/polaroid_rose_3x4.png",
-          "ratio_3_4": "assets/frames/polaroid_rose_3x4.png",
-          "ratio_9_16": "assets/frames/polaroid_rose_3x4.png"
+          "ratio_3_4": "assets/frames/polaroid_rose_3x4.png"
         },
         "backgroundColor": "#F8E8EE",
         "cornerRadius": 0,
@@ -470,9 +452,7 @@
         },
         "supportedRatios": [
           "ratio_1_1",
-          "ratio_2_3",
-          "ratio_3_4",
-          "ratio_9_16"
+          "ratio_3_4"
         ],
         "thumbnail": "assets/thumbnails/frames/instant_rose.jpg",
         "lightLeak": 0.2,

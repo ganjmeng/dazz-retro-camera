@@ -175,90 +175,277 @@
       {
         "id": "ratio_1_1",
         "label": "1:1",
+        "supportsFrame": true,
         "width": 1,
-        "height": 1,
-        "supportsFrame": false
+        "height": 1
       },
       {
         "id": "ratio_2_3",
         "label": "2:3",
+        "supportsFrame": false,
         "width": 2,
-        "height": 3,
-        "supportsFrame": true
+        "height": 3
+      },
+      {
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "supportsFrame": true,
+        "width": 3,
+        "height": 4
       }
     ],
     "frames": [
       {
-        "id": "film_classic_black",
-        "name": "经典黑框",
-        "nameEn": "Classic Black",
-        "asset": "assets/frames/film_classic_black.png",
-        "backgroundColor": "#000000",
-        "cornerRadius": 0,
-        "innerShadow": false,
-        "inset": {
-          "top": 80,
-          "bottom": 80,
-          "left": 90,
-          "right": 90
+        "id": "instant_default",
+        "name": "冷白",
+        "nameEn": "Default",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_default_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_default_3x4.png"
         },
-        "thumbnail": "assets/thumbnails/frames/film_classic_black.jpg",
+        "backgroundColor": "#F5F6FA",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 151,
+          "right": 137,
+          "bottom": 344,
+          "left": 134
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 159,
+            "right": 139,
+            "bottom": 340,
+            "left": 137
+          },
+          "ratio_3_4": {
+            "top": 151,
+            "right": 137,
+            "bottom": 344,
+            "left": 134
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_default.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#000000"
+        "outerBackgroundColor": "#F5F6FA",
+        "supportsBackground": true
       },
       {
-        "id": "film_warm_amber",
-        "name": "暖棕胶片",
-        "nameEn": "Warm Amber",
-        "asset": "assets/frames/film_warm_amber.png",
-        "backgroundColor": "#2A1C0C",
-        "cornerRadius": 0,
-        "innerShadow": false,
-        "inset": {
-          "top": 90,
-          "bottom": 90,
-          "left": 80,
-          "right": 80
+        "id": "instant_blue",
+        "name": "冰蓝",
+        "nameEn": "Ice Blue",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_blue_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_blue_3x4.png"
         },
-        "thumbnail": "assets/thumbnails/frames/film_warm_amber.jpg",
+        "backgroundColor": "#E8F4FD",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 151,
+          "right": 137,
+          "bottom": 344,
+          "left": 134
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 159,
+            "right": 139,
+            "bottom": 340,
+            "left": 137
+          },
+          "ratio_3_4": {
+            "top": 151,
+            "right": 137,
+            "bottom": 344,
+            "left": 134
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_blue.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#2A1C0C"
+        "outerBackgroundColor": "#E8F4FD",
+        "supportsBackground": true
       },
       {
-        "id": "film_white_matte",
-        "name": "白色哑光",
-        "nameEn": "White Matte",
-        "asset": "assets/frames/film_white_matte.png",
-        "backgroundColor": "#F5F2EB",
-        "cornerRadius": 0,
-        "innerShadow": false,
-        "inset": {
-          "top": 70,
-          "bottom": 70,
-          "left": 60,
-          "right": 60
+        "id": "instant_green",
+        "name": "抹茶",
+        "nameEn": "Matcha",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_green_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_green_3x4.png"
         },
-        "thumbnail": "assets/thumbnails/frames/film_white_matte.jpg",
+        "backgroundColor": "#E8F5E9",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 151,
+          "right": 137,
+          "bottom": 344,
+          "left": 134
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 159,
+            "right": 139,
+            "bottom": 340,
+            "left": 137
+          },
+          "ratio_3_4": {
+            "top": 151,
+            "right": 137,
+            "bottom": 344,
+            "left": 134
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_green.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#F5F2EB"
+        "outerBackgroundColor": "#E8F5E9",
+        "supportsBackground": true
       },
       {
-        "id": "film_dark_grain",
-        "name": "深色颗粒",
-        "nameEn": "Dark Grain",
-        "asset": "assets/frames/film_dark_grain.png",
-        "backgroundColor": "#12100E",
-        "cornerRadius": 0,
-        "innerShadow": false,
-        "inset": {
-          "top": 75,
-          "bottom": 75,
-          "left": 100,
-          "right": 100
+        "id": "instant_orange",
+        "name": "橙意",
+        "nameEn": "Tangerine",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_orange_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_orange_3x4.png"
         },
-        "thumbnail": "assets/thumbnails/frames/film_dark_grain.jpg",
+        "backgroundColor": "#FFF3E0",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 151,
+          "right": 137,
+          "bottom": 344,
+          "left": 134
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 159,
+            "right": 139,
+            "bottom": 340,
+            "left": 137
+          },
+          "ratio_3_4": {
+            "top": 151,
+            "right": 137,
+            "bottom": 344,
+            "left": 134
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_orange.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#12100E"
+        "outerBackgroundColor": "#FFF3E0",
+        "supportsBackground": true
+      },
+      {
+        "id": "instant_pink",
+        "name": "樱粉",
+        "nameEn": "Blossom",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_pink_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_pink_3x4.png"
+        },
+        "backgroundColor": "#FCE4EC",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 151,
+          "right": 137,
+          "bottom": 344,
+          "left": 134
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 159,
+            "right": 139,
+            "bottom": 340,
+            "left": 137
+          },
+          "ratio_3_4": {
+            "top": 151,
+            "right": 137,
+            "bottom": 344,
+            "left": 134
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_pink.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#FCE4EC",
+        "supportsBackground": true
+      },
+      {
+        "id": "instant_rose",
+        "name": "玫瑰",
+        "nameEn": "Rose",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_rose_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_rose_3x4.png"
+        },
+        "backgroundColor": "#F8E8EE",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 151,
+          "right": 137,
+          "bottom": 344,
+          "left": 134
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 159,
+            "right": 139,
+            "bottom": 340,
+            "left": 137
+          },
+          "ratio_3_4": {
+            "top": 151,
+            "right": 137,
+            "bottom": 344,
+            "left": 134
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_rose.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#F8E8EE",
+        "supportsBackground": true
       }
     ],
     "watermarks": {

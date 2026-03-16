@@ -174,32 +174,25 @@
     ],
     "ratios": [
       {
-        "id": "ratio_3_4",
-        "label": "3:4",
-        "width": 3,
-        "height": 4,
-        "supportsFrame": true
-      },
-      {
         "id": "ratio_1_1",
         "label": "1:1",
+        "supportsFrame": true,
         "width": 1,
-        "height": 1,
-        "supportsFrame": true
+        "height": 1
       },
       {
-        "id": "ratio_3_2",
-        "label": "3:2",
+        "id": "ratio_2_3",
+        "label": "2:3",
+        "supportsFrame": false,
+        "width": 2,
+        "height": 3
+      },
+      {
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "supportsFrame": true,
         "width": 3,
-        "height": 2,
-        "supportsFrame": false
-      },
-      {
-        "id": "ratio_9_16",
-        "label": "9:16",
-        "width": 9,
-        "height": 16,
-        "supportsFrame": false
+        "height": 4
       }
     ],
     "frames": [
@@ -239,8 +232,8 @@
           "ratio_3_4"
         ],
         "thumbnail": "assets/thumbnails/frames/instant_default.jpg",
-        "lightLeak": 0.15,
-        "shake": 0.12,
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
         "outerBackgroundColor": "#F5F6FA",
         "supportsBackground": true
@@ -250,8 +243,8 @@
         "name": "冰蓝",
         "nameEn": "Ice Blue",
         "ratioAssets": {
-          "ratio_3_4": "assets/frames/polaroid_blue_3x4.png",
-          "ratio_1_1": "assets/frames/polaroid_blue_1x1.png"
+          "ratio_1_1": "assets/frames/polaroid_blue_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_blue_3x4.png"
         },
         "backgroundColor": "#E8F4FD",
         "cornerRadius": 0,
@@ -277,12 +270,12 @@
           }
         },
         "supportedRatios": [
-          "ratio_3_4",
-          "ratio_1_1"
+          "ratio_1_1",
+          "ratio_3_4"
         ],
         "thumbnail": "assets/thumbnails/frames/instant_blue.jpg",
-        "lightLeak": 0.15,
-        "shake": 0.12,
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
         "outerBackgroundColor": "#E8F4FD",
         "supportsBackground": true
@@ -292,8 +285,8 @@
         "name": "抹茶",
         "nameEn": "Matcha",
         "ratioAssets": {
-          "ratio_3_4": "assets/frames/polaroid_green_3x4.png",
-          "ratio_1_1": "assets/frames/polaroid_green_1x1.png"
+          "ratio_1_1": "assets/frames/polaroid_green_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_green_3x4.png"
         },
         "backgroundColor": "#E8F5E9",
         "cornerRadius": 0,
@@ -319,12 +312,12 @@
           }
         },
         "supportedRatios": [
-          "ratio_3_4",
-          "ratio_1_1"
+          "ratio_1_1",
+          "ratio_3_4"
         ],
         "thumbnail": "assets/thumbnails/frames/instant_green.jpg",
-        "lightLeak": 0.15,
-        "shake": 0.12,
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
         "outerBackgroundColor": "#E8F5E9",
         "supportsBackground": true
@@ -334,8 +327,8 @@
         "name": "橙意",
         "nameEn": "Tangerine",
         "ratioAssets": {
-          "ratio_3_4": "assets/frames/polaroid_orange_3x4.png",
-          "ratio_1_1": "assets/frames/polaroid_orange_1x1.png"
+          "ratio_1_1": "assets/frames/polaroid_orange_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_orange_3x4.png"
         },
         "backgroundColor": "#FFF3E0",
         "cornerRadius": 0,
@@ -361,12 +354,12 @@
           }
         },
         "supportedRatios": [
-          "ratio_3_4",
-          "ratio_1_1"
+          "ratio_1_1",
+          "ratio_3_4"
         ],
         "thumbnail": "assets/thumbnails/frames/instant_orange.jpg",
-        "lightLeak": 0.15,
-        "shake": 0.12,
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
         "outerBackgroundColor": "#FFF3E0",
         "supportsBackground": true
@@ -376,8 +369,8 @@
         "name": "樱粉",
         "nameEn": "Blossom",
         "ratioAssets": {
-          "ratio_3_4": "assets/frames/polaroid_pink_3x4.png",
-          "ratio_1_1": "assets/frames/polaroid_pink_1x1.png"
+          "ratio_1_1": "assets/frames/polaroid_pink_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_pink_3x4.png"
         },
         "backgroundColor": "#FCE4EC",
         "cornerRadius": 0,
@@ -403,12 +396,12 @@
           }
         },
         "supportedRatios": [
-          "ratio_3_4",
-          "ratio_1_1"
+          "ratio_1_1",
+          "ratio_3_4"
         ],
         "thumbnail": "assets/thumbnails/frames/instant_pink.jpg",
-        "lightLeak": 0.15,
-        "shake": 0.12,
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
         "outerBackgroundColor": "#FCE4EC",
         "supportsBackground": true
@@ -418,8 +411,8 @@
         "name": "玫瑰",
         "nameEn": "Rose",
         "ratioAssets": {
-          "ratio_3_4": "assets/frames/polaroid_rose_3x4.png",
-          "ratio_1_1": "assets/frames/polaroid_rose_1x1.png"
+          "ratio_1_1": "assets/frames/polaroid_rose_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_rose_3x4.png"
         },
         "backgroundColor": "#F8E8EE",
         "cornerRadius": 0,
@@ -445,12 +438,12 @@
           }
         },
         "supportedRatios": [
-          "ratio_3_4",
-          "ratio_1_1"
+          "ratio_1_1",
+          "ratio_3_4"
         ],
         "thumbnail": "assets/thumbnails/frames/instant_rose.jpg",
-        "lightLeak": 0.15,
-        "shake": 0.12,
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
         "outerBackgroundColor": "#F8E8EE",
         "supportsBackground": true
@@ -491,7 +484,7 @@
   "defaultSelection": {
     "filterId": "fxnr_standard",
     "lensId": "std",
-    "ratioId": "ratio_3_4",
+    "ratioId": "ratio_2_3",
     "frameId": null,
     "watermarkPresetId": "none",
     "extraId": null

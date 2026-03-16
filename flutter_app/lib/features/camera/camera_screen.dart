@@ -262,6 +262,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       _transitionTimer = Timer(const Duration(milliseconds: 600), () {
         if (mounted) setState(() => _showTransition = false);
       });
+    } else if (state == AppLifecycleState.paused ||
+               state == AppLifecycleState.inactive) {
+      // App 进入后台或切到其他 App：保存当前相机快照，确保下次打开能恢复设定
+      ref.read(cameraAppProvider.notifier).saveCurrentSnapshot();
     }
   }
 

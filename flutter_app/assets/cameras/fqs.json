@@ -191,32 +191,25 @@
     ],
     "ratios": [
       {
-        "id": "ratio_3_2",
-        "label": "3:2",
-        "width": 3,
-        "height": 2,
-        "supportsFrame": false
-      },
-      {
         "id": "ratio_1_1",
         "label": "1:1",
+        "supportsFrame": true,
         "width": 1,
-        "height": 1,
-        "supportsFrame": true
+        "height": 1
       },
       {
         "id": "ratio_2_3",
         "label": "2:3",
+        "supportsFrame": false,
         "width": 2,
-        "height": 3,
-        "supportsFrame": false
+        "height": 3
       },
       {
         "id": "ratio_3_4",
         "label": "3:4",
+        "supportsFrame": true,
         "width": 3,
-        "height": 4,
-        "supportsFrame": true
+        "height": 4
       }
     ],
     "frames": [
@@ -508,7 +501,7 @@
   "defaultSelection": {
     "filterId": "fuji_superia_400",
     "lensId": "std",
-    "ratioId": "ratio_3_2",
+    "ratioId": "ratio_2_3",
     "frameId": null,
     "watermarkPresetId": "none",
     "extraId": null

@@ -354,8 +354,15 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           ? snapshot.exposureValue : 0;
       final double zoom       = (retainState.retainZoom && snapshot != null)
           ? snapshot.zoomLevel : 1.0;
-      final String? frameId   = (retainState.retainFrame && snapshot != null && snapshot.frameId != null)
-          ? snapshot.frameId : defaults.frameId;
+      // retainFrame 开启时：有快照则恢复快照值（含 null=关闭相框）；无快照则用默认值
+      // retainFrame 关闭时：始终使用 defaults.frameId
+      final String? frameId;
+      if (retainState.retainFrame && snapshot != null) {
+        // 快照存在时，直接使用快照中的 frameId（null 表示用户主动关闭了相框）
+        frameId = snapshot.frameId;
+      } else {
+        frameId = defaults.frameId;
+      }
 
       state = state.copyWith(
         camera: camera,
@@ -535,6 +542,17 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   /// Alias for switchToCamera (used by CameraConfigSheet)
   Future<void> switchCamera(String cameraId) => switchToCamera(cameraId);
+
+  /// 供外部（如 AppLifecycle 监听）调用，保存当前相机快照
+  Future<void> saveCurrentSnapshot() => _saveCurrentSnapshot();
+
+  @override
+  void dispose() {
+    // Notifier 销毁时同步保存一次快照（App 退出 / Provider 被释放时触发）
+    // 注意：dispose 不能 await，使用 unawaited fire-and-forget
+    _saveCurrentSnapshot();
+    super.dispose();
+  }
 
   // ── Camera controls ──
 
