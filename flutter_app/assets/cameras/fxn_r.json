@@ -1,72 +1,82 @@
 {
   "id": "fxn_r",
-  "name": "FXN R",
-  "category": "digital",
+  "name": "FXN-R",
+  "category": "film",
   "mode": "photo",
   "supportsPhoto": true,
   "supportsVideo": false,
   "focalLengthLabel": "35mm",
   "sensor": {
-    "type": "cmos",
-    "dynamicRange": 10,
-    "baseNoise": 0.08,
-    "colorDepth": 12
+    "type": "film_scan",
+    "dynamicRange": 12.0,
+    "baseNoise": 0.06,
+    "colorDepth": 14
   },
   "defaultLook": {
-    "baseLut": "assets/lut/cameras/fxn_r.cube",
-    "distortion": 0.0,
-    "chromaticAberration": 0.0,
-    "flare": 0.0,
-    "temperature": -25,
-    "tint": -2.0,
-    "contrast": 1.05,
-    "highlights": -5.0,
-    "shadows": 4.0,
+    "baseLut": "assets/lut/cameras/fxnr_33.cube",
+    "temperature": -80.0,
+    "tint": -10.0,
+    "contrast": 1.06,
+    "highlights": -12.0,
+    "shadows": -6.0,
     "whites": 2.0,
-    "blacks": -3.0,
-    "clarity": 6.0,
-    "saturation": 1.02,
-    "vibrance": 3.0,
-    "grain": 0.06,
-    "bloom": 0.0,
-    "vignette": 0.03,
+    "blacks": -4.0,
+    "clarity": 2.0,
+    "vibrance": 1.0,
+    "saturation": 1.07,
+    "vignette": 0.12,
+    "distortion": 0.01,
+    "chromaticAberration": 0.18,
+    "bloom": 0.07,
+    "flare": 0.0,
+    "grain": 0.14,
     "colorBiasR": -0.03,
-    "colorBiasG": 0.02,
-    "colorBiasB": 0.05
+    "colorBiasG": 0.04,
+    "colorBiasB": 0.03,
+    "halation": 0.04,
+    "grainSize": 1.5,
+    "sharpness": 1.04
   },
   "modules": {
     "filters": [
       {
-        "id": "35mm_clean",
-        "name": "35mm Clean",
-        "nameEn": "35mm Clean",
-        "lut": null,
-        "contrast": 1.02,
-        "saturation": 0.98,
+        "id": "fxnr_standard",
+        "name": "标准",
+        "nameEn": "Standard",
+        "lut": "assets/lut/cameras/fxnr_33.cube",
+        "contrast": 1.06,
+        "saturation": 1.07,
         "grain": "light",
-        "thumbnail": null,
-        "filmRollType": "advance",
-        "filmRollStyle": "35mm",
-        "advanceDuration": 650,
-        "slideDistance": 1.0,
-        "motionBlur": 0.08,
-        "sound": "film_advance"
+        "grainSize": 1.5,
+        "vignette": 0.12,
+        "sharpness": 1.04,
+        "halation": 0.04
       },
       {
-        "id": "35mm_mechanical",
-        "name": "35mm Mechanical",
-        "nameEn": "35mm Mechanical",
-        "lut": null,
-        "contrast": 1.04,
-        "saturation": 0.95,
+        "id": "fxnr_cool",
+        "name": "冷调",
+        "nameEn": "Cool",
+        "lut": "assets/lut/cameras/fxnr_33.cube",
+        "contrast": 1.08,
+        "saturation": 1.05,
+        "grain": "light",
+        "grainSize": 1.5,
+        "vignette": 0.14,
+        "sharpness": 1.06,
+        "halation": 0.02
+      },
+      {
+        "id": "fxnr_fade",
+        "name": "褪色",
+        "nameEn": "Fade",
+        "lut": "assets/lut/cameras/fxnr_33.cube",
+        "contrast": 0.98,
+        "saturation": 0.94,
         "grain": "medium",
-        "thumbnail": null,
-        "filmRollType": "advance",
-        "filmRollStyle": "35mm_mechanical",
-        "advanceDuration": 780,
-        "slideDistance": 1.08,
-        "motionBlur": 0.1,
-        "sound": "film_advance_heavy"
+        "grainSize": 1.6,
+        "vignette": 0.15,
+        "sharpness": 0.96,
+        "halation": 0.03
       }
     ],
     "lenses": [
@@ -75,17 +85,17 @@
         "name": "标准",
         "nameEn": "Standard",
         "zoomFactor": 1.0,
-        "distortion": 0.0,
-        "vignette": 0.02,
-        "chromaticAberration": 0.0,
+        "distortion": 0.01,
+        "vignette": 0.12,
+        "chromaticAberration": 0.18,
         "edgeBlur": 0.0,
         "exposure": 0.0,
         "contrast": 0.0,
         "saturation": 0.0,
         "highlightCompression": 0.0,
-        "bloom": 0.0,
+        "bloom": 0.07,
         "flare": 0.0,
-        "softFocus": 0.0,
+        "softFocus": 0.02,
         "refraction": 0.0,
         "iconPath": "assets/lenses/lens_std.png"
       },
@@ -93,20 +103,39 @@
         "id": "wide",
         "name": "广角",
         "nameEn": "Wide",
-        "zoomFactor": 0.8,
-        "distortion": 0.06,
-        "vignette": 0.08,
-        "chromaticAberration": 0.01,
-        "edgeBlur": 0.0,
+        "zoomFactor": 0.7,
+        "distortion": 0.02,
+        "vignette": 0.16,
+        "chromaticAberration": 0.24,
+        "edgeBlur": 0.02,
         "exposure": 0.0,
         "contrast": 0.0,
         "saturation": 0.0,
         "highlightCompression": 0.0,
-        "bloom": 0.0,
-        "flare": 0.0,
-        "softFocus": 0.0,
+        "bloom": 0.06,
+        "flare": 0.01,
+        "softFocus": 0.01,
         "refraction": 0.0,
         "iconPath": "assets/lenses/lens_wide.png"
+      },
+      {
+        "id": "portrait",
+        "name": "人像",
+        "nameEn": "Portrait",
+        "zoomFactor": 1.5,
+        "distortion": 0.0,
+        "vignette": 0.1,
+        "chromaticAberration": 0.1,
+        "edgeBlur": 0.03,
+        "exposure": 0.02,
+        "contrast": -0.02,
+        "saturation": 0.02,
+        "highlightCompression": 0.0,
+        "bloom": 0.08,
+        "flare": 0.0,
+        "softFocus": 0.04,
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_tele.png"
       },
       {
         "id": "vintage",
@@ -114,35 +143,21 @@
         "nameEn": "Vintage",
         "zoomFactor": 1.0,
         "distortion": 0.02,
-        "vignette": 0.12,
-        "chromaticAberration": 0.03,
+        "vignette": 0.16,
+        "chromaticAberration": 0.28,
         "edgeBlur": 0.04,
         "exposure": -0.02,
         "contrast": -0.04,
         "saturation": -0.02,
         "highlightCompression": 0.0,
-        "bloom": 0.0,
-        "flare": 0.0,
-        "softFocus": 0.0,
+        "bloom": 0.05,
+        "flare": 0.02,
+        "softFocus": 0.03,
         "refraction": 0.0,
         "iconPath": "assets/lenses/lens_vintage.png"
       }
     ],
     "ratios": [
-      {
-        "id": "ratio_1_1",
-        "label": "1:1",
-        "width": 1,
-        "height": 1,
-        "supportsFrame": true
-      },
-      {
-        "id": "ratio_2_3",
-        "label": "2:3",
-        "width": 2,
-        "height": 3,
-        "supportsFrame": true
-      },
       {
         "id": "ratio_3_4",
         "label": "3:4",
@@ -151,11 +166,25 @@
         "supportsFrame": true
       },
       {
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_3_2",
+        "label": "3:2",
+        "width": 3,
+        "height": 2,
+        "supportsFrame": false
+      },
+      {
         "id": "ratio_9_16",
         "label": "9:16",
         "width": 9,
         "height": 16,
-        "supportsFrame": true
+        "supportsFrame": false
       }
     ],
     "frames": [
@@ -195,22 +224,232 @@
           "ratio_3_4"
         ],
         "thumbnail": "assets/thumbnails/frames/instant_default.jpg",
-        "lightLeak": 0.2,
-        "shake": 0.15,
+        "lightLeak": 0.15,
+        "shake": 0.12,
         "outerPadding": 0,
         "outerBackgroundColor": "#F5F6FA",
+        "supportsBackground": true
+      },
+      {
+        "id": "instant_blue",
+        "name": "冰蓝",
+        "nameEn": "Ice Blue",
+        "ratioAssets": {
+          "ratio_3_4": "assets/frames/polaroid_blue_3x4.png",
+          "ratio_1_1": "assets/frames/polaroid_blue_1x1.png"
+        },
+        "backgroundColor": "#E8F4FD",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 151,
+          "right": 137,
+          "bottom": 344,
+          "left": 134
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 159,
+            "right": 139,
+            "bottom": 340,
+            "left": 137
+          },
+          "ratio_3_4": {
+            "top": 151,
+            "right": 137,
+            "bottom": 344,
+            "left": 134
+          }
+        },
+        "supportedRatios": [
+          "ratio_3_4",
+          "ratio_1_1"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_blue.jpg",
+        "lightLeak": 0.15,
+        "shake": 0.12,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#E8F4FD",
+        "supportsBackground": true
+      },
+      {
+        "id": "instant_green",
+        "name": "抹茶",
+        "nameEn": "Matcha",
+        "ratioAssets": {
+          "ratio_3_4": "assets/frames/polaroid_green_3x4.png",
+          "ratio_1_1": "assets/frames/polaroid_green_1x1.png"
+        },
+        "backgroundColor": "#E8F5E9",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 151,
+          "right": 137,
+          "bottom": 344,
+          "left": 134
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 159,
+            "right": 139,
+            "bottom": 340,
+            "left": 137
+          },
+          "ratio_3_4": {
+            "top": 151,
+            "right": 137,
+            "bottom": 344,
+            "left": 134
+          }
+        },
+        "supportedRatios": [
+          "ratio_3_4",
+          "ratio_1_1"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_green.jpg",
+        "lightLeak": 0.15,
+        "shake": 0.12,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#E8F5E9",
+        "supportsBackground": true
+      },
+      {
+        "id": "instant_orange",
+        "name": "橙意",
+        "nameEn": "Tangerine",
+        "ratioAssets": {
+          "ratio_3_4": "assets/frames/polaroid_orange_3x4.png",
+          "ratio_1_1": "assets/frames/polaroid_orange_1x1.png"
+        },
+        "backgroundColor": "#FFF3E0",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 151,
+          "right": 137,
+          "bottom": 344,
+          "left": 134
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 159,
+            "right": 139,
+            "bottom": 340,
+            "left": 137
+          },
+          "ratio_3_4": {
+            "top": 151,
+            "right": 137,
+            "bottom": 344,
+            "left": 134
+          }
+        },
+        "supportedRatios": [
+          "ratio_3_4",
+          "ratio_1_1"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_orange.jpg",
+        "lightLeak": 0.15,
+        "shake": 0.12,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#FFF3E0",
+        "supportsBackground": true
+      },
+      {
+        "id": "instant_pink",
+        "name": "樱粉",
+        "nameEn": "Blossom",
+        "ratioAssets": {
+          "ratio_3_4": "assets/frames/polaroid_pink_3x4.png",
+          "ratio_1_1": "assets/frames/polaroid_pink_1x1.png"
+        },
+        "backgroundColor": "#FCE4EC",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 151,
+          "right": 137,
+          "bottom": 344,
+          "left": 134
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 159,
+            "right": 139,
+            "bottom": 340,
+            "left": 137
+          },
+          "ratio_3_4": {
+            "top": 151,
+            "right": 137,
+            "bottom": 344,
+            "left": 134
+          }
+        },
+        "supportedRatios": [
+          "ratio_3_4",
+          "ratio_1_1"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_pink.jpg",
+        "lightLeak": 0.15,
+        "shake": 0.12,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#FCE4EC",
+        "supportsBackground": true
+      },
+      {
+        "id": "instant_rose",
+        "name": "玫瑰",
+        "nameEn": "Rose",
+        "ratioAssets": {
+          "ratio_3_4": "assets/frames/polaroid_rose_3x4.png",
+          "ratio_1_1": "assets/frames/polaroid_rose_1x1.png"
+        },
+        "backgroundColor": "#F8E8EE",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 151,
+          "right": 137,
+          "bottom": 344,
+          "left": 134
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 159,
+            "right": 139,
+            "bottom": 340,
+            "left": 137
+          },
+          "ratio_3_4": {
+            "top": 151,
+            "right": 137,
+            "bottom": 344,
+            "left": 134
+          }
+        },
+        "supportedRatios": [
+          "ratio_3_4",
+          "ratio_1_1"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_rose.jpg",
+        "lightLeak": 0.15,
+        "shake": 0.12,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#F8E8EE",
         "supportsBackground": true
       }
     ],
     "watermarks": {
       "presets": [
         {
-          "id": "date_orange",
-          "name": "橙色日期",
-          "color": "#FF8A3D",
+          "id": "date_cyan",
+          "name": "青色日期",
+          "color": "#4ECDC4",
           "position": "bottom_right",
           "fontSize": 18,
-          "fontFamily": "monospace"
+          "fontFamily": "DigitalMono"
         },
         {
           "id": "date_white",
@@ -218,7 +457,7 @@
           "color": "#FFFFFF",
           "position": "bottom_right",
           "fontSize": 18,
-          "fontFamily": "monospace"
+          "fontFamily": "DigitalMono"
         },
         {
           "id": "none",
@@ -235,8 +474,8 @@
     "extras": []
   },
   "defaultSelection": {
-    "filterId": "35mm_clean",
-    "lensId": "vintage",
+    "filterId": "fxnr_standard",
+    "lensId": "std",
     "ratioId": "ratio_3_4",
     "frameId": null,
     "watermarkPresetId": "none",
@@ -249,7 +488,7 @@
     "enableFrame": true,
     "enableWatermark": true,
     "enableExtra": false,
-    "enableFilmRoll": false
+    "enableFilmRoll": true
   },
   "previewCapabilities": {
     "allowSmallViewport": true,
@@ -260,20 +499,20 @@
     "allowFlash": true
   },
   "previewPolicy": {
-    "enableLut": false,
+    "enableLut": true,
     "enableTemperature": true,
     "enableContrast": true,
     "enableSaturation": true,
     "enableVignette": true,
     "enableLightLensEffect": true,
     "enableGrain": true,
-    "enableBloom": false,
+    "enableBloom": true,
     "enableChromaticAberration": true,
-    "enableFrameComposite": false,
+    "enableFrameComposite": true,
     "enableWatermarkComposite": true
   },
   "exportPolicy": {
-    "jpegQuality": 0.92,
+    "jpegQuality": 0.94,
     "applyRatioCrop": true,
     "applyFrameOnExport": true,
     "applyWatermarkOnExport": true,
@@ -283,32 +522,35 @@
     "enabled": false,
     "fpsOptions": [
       24,
-      30,
-      60
+      30
     ],
     "resolutionOptions": [
-      "SD",
-      "HD",
-      "4K"
+      "HD"
     ],
-    "defaultFps": 30,
+    "defaultFps": 24,
     "defaultResolution": "HD",
-    "supportsAudio": true,
-    "videoBitrate": 12000000
+    "supportsAudio": false,
+    "videoBitrate": 10000000
   },
   "assets": {
     "thumbnail": "assets/thumbnails/cameras/fxn_r.jpg",
     "icon": "assets/thumbnails/cameras/fxn_r_icon.png"
   },
   "meta": {
-    "version": "final",
+    "version": "2.0",
     "premium": false,
     "sortOrder": 30,
     "tags": [
-      "retro",
       "film",
-      "toy",
-      "warm"
+      "fuji",
+      "cool",
+      "cyan",
+      "x100",
+      "superia",
+      "c200",
+      "street",
+      "rain",
+      "green"
     ]
   }
 }
