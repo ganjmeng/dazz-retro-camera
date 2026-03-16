@@ -72,6 +72,18 @@ struct CPM35Params {
     float highlightWarmAmount; // 暖高光强度（CPM35=0.06）
     float luminanceNoise;      // 亮度噪声（CPM35=0.05）
     float chromaNoise;         // 色度噪声（CPM35=0.03）
+    // ── 胶片/数码通用参数（Inst C / SQC / FXN-R / CPM35 共用）──────────────
+    float highlightRolloff;    // 高光柔和滴落（CPM35=0.14，Kodak 特征）
+    float edgeFalloff;         // 边缘曝光衰减（CPM35=0.030）
+    float exposureVariation;   // 曝光波动（CPM35=0.018）
+    float cornerWarmShift;     // 角落偏移（CPM35=+0.022，偏暖橙）
+    float centerGain;          // 中心增亮（CPM35=0.015）
+    float developmentSoftness; // 显影柔化（CPM35=0.028，Kodak 冲洗扩散）
+    float chemicalIrregularity;// 化学不规则感（CPM35=0.020）
+    float skinHueProtect;      // 肤色保护开关（CPM35=1.0，开启）
+    float skinSatProtect;      // 肤色饱和度保护（CPM35=0.90）
+    float skinLumaSoften;      // 肤色亮度柔化（CPM35=0.04）
+    float skinRedLimit;        // 肤色红限（CPM35=1.05，防止过橙）
 };
 
 // MARK: - 工具函数
@@ -171,6 +183,65 @@ float cpm35Vignette(float2 uv, float amount) {
     return clamp(1.0 - dot(d, d) * amount * 2.5, 0.0, 1.0);
 }
 
+/// Highlight Rolloff（胶片高光保护，0.14）
+float3 cpm35HighlightRolloff(float3 c, float rolloff) {
+    if (rolloff <= 0.0) return c;
+    float lum = dot(c, float3(0.2126, 0.7152, 0.0722));
+    float threshold = 1.0 - rolloff;
+    float highlight = clamp((lum - threshold) / rolloff, 0.0, 1.0);
+    float compress = 1.0 - highlight * highlight * 0.40;
+    return clamp(c * compress, 0.0, 1.0);
+}
+
+/// 肤色保护（CPM35 肤色是卖点，防止暖调让肤色过橙）
+float3 cpm35SkinProtect(float3 c, float skinHueProtect, float skinSatProtect,
+                        float skinLumaSoften, float skinRedLimit) {
+    if (skinHueProtect < 0.5) return c;
+    float maxC = max(c.r, max(c.g, c.b));
+    float minC = min(c.r, min(c.g, c.b));
+    float chroma = maxC - minC;
+    if (chroma < 0.05 || maxC < 0.2) return c;
+    float hue = 0.0;
+    if (maxC == c.r) {
+        hue = (c.g - c.b) / chroma;
+        if (hue < 0.0) hue += 6.0;
+    } else {
+        return c;
+    }
+    float skinMask = clamp(1.0 - abs(hue - 0.4) / 0.8, 0.0, 1.0);
+    float lum2 = dot(c, float3(0.2126, 0.7152, 0.0722));
+    float3 desatColor = float3(lum2);
+    float3 protectedColor = mix(c, desatColor, (1.0 - skinSatProtect) * skinMask);
+    protectedColor.r = min(protectedColor.r, lum2 * skinRedLimit);
+    if (skinLumaSoften > 0.0) {
+        float softLum = lum2 * (1.0 + skinLumaSoften * 0.15);
+        protectedColor = mix(protectedColor, protectedColor * (softLum / max(lum2, 0.001)), skinMask * skinLumaSoften);
+    }
+    return clamp(protectedColor, 0.0, 1.0);
+}
+
+/// 传感器非均匀性（35mm 胶片相机，中心增亮+边缘衰减+角落偏暖）
+float3 cpm35CenterEdge(float3 c, float2 uv, float centerGain, float edgeFalloff,
+                       float cornerWarmShift, float exposureVariation, float time) {
+    float2 d = uv - 0.5;
+    float dist = length(d);
+    float center = 1.0 + centerGain * (1.0 - dist * 2.0);
+    float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
+    float factor = clamp(center * edge, 0.5, 1.5);
+    c = clamp(c * factor, 0.0, 1.0);
+    if (cornerWarmShift > 0.0) {
+        float cornerMask = clamp(dist * dist * 4.0 - 0.5, 0.0, 1.0);
+        c.r = clamp(c.r + cornerWarmShift * cornerMask * 0.5, 0.0, 1.0);
+        c.b = clamp(c.b - cornerWarmShift * cornerMask * 0.4, 0.0, 1.0);
+    }
+    if (exposureVariation > 0.0) {
+        float2 blockUV = floor(uv * 8.0) / 8.0;
+        float evn = (cpm35Random(blockUV, time * 0.01) - 0.5) * exposureVariation * 0.4;
+        c = clamp(c + evn, 0.0, 1.0);
+    }
+    return c;
+}
+
 // MARK: - CPM35 片段着色器
 
 fragment float4 cpm35FragmentShader(
@@ -216,29 +287,56 @@ fragment float4 cpm35FragmentShader(
     // ── Pass 6: 色温 + Tint（+120K 暖色，+4 tint 轻微品红）─────────────────
     color = cpm35TemperatureTint(color, params.temperatureShift, params.tintShift);
 
-    // ── Pass 7: Kodak 暖高光（高光区额外暖推）────────────────────────────────
+    // ── Pass 7: Highlight Rolloff（胶片高光保护，0.14）──────────────────────────────
+    color = cpm35HighlightRolloff(color, params.highlightRolloff);
+
+    // ── Pass 8: Kodak 暖高光（高光区额外暖推）────────────────────────────────────────────
     color = cpm35HighlightWarmth(color, params.highlightWarmAmount);
 
-    // ── Pass 8: Halation（克制的高光溢出，0.06）──────────────────────────────
+    // ── Pass 9: Halation（橙红色，0.07，Kodak 胶片特征）──────────────────────────────────────
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
-    if (params.halationAmount > 0.001 && lum > 0.80) {
-        float halationMask = clamp((lum - 0.80) / 0.20, 0.0, 1.0);
+    if (params.halationAmount > 0.001 && lum > 0.78) {
+        float halationMask = clamp((lum - 0.78) / 0.22, 0.0, 1.0);
         halationMask = halationMask * halationMask;
         float3 halationColor = float3(
-            color.r * 1.08,
-            color.g * 1.02,
-            color.b * 0.90
+            color.r * 1.10,   // 橙红色 halation（Kodak 特征）
+            color.g * 1.03,
+            color.b * 0.88
         );
-        color = mix(color, halationColor, halationMask * params.halationAmount * 0.5);
+        color = mix(color, halationColor, halationMask * params.halationAmount * 0.55);
     }
 
-    // ── Pass 9: Bloom（轻柔光，0.05）─────────────────────────────────────────
+    // ── Pass 10: Bloom（轻柔光，0.05）───────────────────────────────────────────────
     if (params.bloomAmount > 0.001 && lum > 0.82) {
         float bloom = clamp((lum - 0.82) * params.bloomAmount * 2.0, 0.0, 0.2);
-        color = clamp(color + float3(bloom * 0.9, bloom * 0.75, bloom * 0.55), 0.0, 1.0);
+        // Leica 镜头 bloom 偏暖白
+        color = clamp(color + float3(bloom * 0.95, bloom * 0.80, bloom * 0.60), 0.0, 1.0);
     }
 
-    // ── Pass 10: 胶片颗粒（Film Grain，轻颗粒）──────────────────────────────
+    // ── Pass 11: 肤色保护（skinRedLimit=1.05，防止肤色过橙）─────────────────────────────────────
+    color = cpm35SkinProtect(color, params.skinHueProtect, params.skinSatProtect,
+                             params.skinLumaSoften, params.skinRedLimit);
+
+    // ── Pass 12: 传感器非均匀性（centerGain+edgeFalloff+cornerWarmShift）──────────────────────────────
+    color = cpm35CenterEdge(color, uv, params.centerGain, params.edgeFalloff,
+                            params.cornerWarmShift, params.exposureVariation, params.time);
+
+    // ── Pass 13: 显影柔化（developmentSoftness=0.028，Kodak 冲洗扩散）────────────────────────────────
+    if (params.developmentSoftness > 0.0) {
+        float2 ts = float2(1.0 / 1080.0, 1.0 / 1440.0);
+        float3 s1 = cameraTexture.sample(s, uv + float2(ts.x, 0.0)).rgb;
+        float3 s2 = cameraTexture.sample(s, uv - float2(ts.x, 0.0)).rgb;
+        float3 s3 = cameraTexture.sample(s, uv + float2(0.0, ts.y)).rgb;
+        float3 s4 = cameraTexture.sample(s, uv - float2(0.0, ts.y)).rgb;
+        float3 blurred = (s1 + s2 + s3 + s4) * 0.25;
+        blurred.r = cpm35ToneCurve(blurred.r) * (1.0 + params.colorBiasR);
+        blurred.g = cpm35ToneCurve(blurred.g) * (1.0 + params.colorBiasG);
+        blurred.b = cpm35ToneCurve(blurred.b) * (1.0 + params.colorBiasB);
+        color = mix(color, blurred, params.developmentSoftness);
+        color = clamp(color, 0.0, 1.0);
+    }
+
+    // ── Pass 14: 胶片颗粒（Film Grain，彩色颗粒 30%）──────────────────────────────────────────
     if (params.grainAmount > 0.001) {
         float2 grainUV = uv * max(params.grainSize, 0.1);
         float3 grainSample = grainTexture.sample(s, grainUV).rgb;
