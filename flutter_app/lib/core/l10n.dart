@@ -255,6 +255,45 @@ class S {
   String get low                 => get('low');
   String get medium              => get('medium');
   String get high                => get('high');
+
+  // ── 别名：水印位置（posXxx → 复用 topLeft 等已有翻译）──
+  String get posTopLeft          => get('topLeft');
+  String get posTopCenter        => get('topCenter');
+  String get posTopRight         => get('topRight');
+  String get posBottomLeft       => get('bottomLeft');
+  String get posBottomCenter     => get('bottomCenter');
+  String get posBottomRight      => get('bottomRight');
+
+  // ── 别名：水印方向/大小（复用已有翻译）──
+  String get wmHorizontal        => get('horizontal');
+  String get wmVertical          => get('vertical');
+  String get small               => get('sizeSmall');
+  String get large               => get('sizeLarge');
+
+  // ── 别名：相机管理（复用 noFavCam / noCam）──
+  String get noFavCameras        => get('noFavCam');
+  String get noCameras           => get('noCam');
+
+  // ── 新增：水印/相框配置面板 Tab 标签 ──
+  String get wmColor             => get('wmColor');
+  String get wmStyle             => get('wmStyle');
+  String get wmPosition          => get('wmPosition');
+  String get wmDirection         => get('wmDirection');
+  String get wmSize              => get('wmSize');
+  String get frameBackground     => get('frameBackground');
+  String get lens                => get('lens');
+
+  // ── 新增：相册权限/空状态/删除确认 ──
+  String get galleryPermissionHint => get('galleryPermissionHint');
+  String get noPhotosHint          => get('noPhotosHint');
+  String get deletePhotoConfirm    => get('deletePhotoConfirm');
+
+  // ── 新增：图片编辑 ──
+  String get imageProcessFailed  => get('imageProcessFailed');
+  String get needGalleryPermission => get('needGalleryPermission');
+  String get saveError           => get('saveError');
+  String get flip                => get('flip');
+  String get crop                => get('crop');
 }
 
 // 全局翻译表
@@ -1104,6 +1143,84 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.zhHans: '高', AppLanguage.zhHant: '高',
     AppLanguage.en: 'High', AppLanguage.ms: 'Tinggi',
     AppLanguage.ja: '高', AppLanguage.ko: '높음',
+  },
+  // ── 水印/相框配置面板 Tab 标签 ──
+  'wmColor': {
+    AppLanguage.zhHans: '颜色', AppLanguage.zhHant: '顏色',
+    AppLanguage.en: 'Color', AppLanguage.ms: 'Warna',
+    AppLanguage.ja: 'カラー', AppLanguage.ko: '색상',
+  },
+  'wmStyle': {
+    AppLanguage.zhHans: '样式', AppLanguage.zhHant: '樣式',
+    AppLanguage.en: 'Style', AppLanguage.ms: 'Gaya',
+    AppLanguage.ja: 'スタイル', AppLanguage.ko: '스타일',
+  },
+  'wmPosition': {
+    AppLanguage.zhHans: '位置', AppLanguage.zhHant: '位置',
+    AppLanguage.en: 'Position', AppLanguage.ms: 'Kedudukan',
+    AppLanguage.ja: '位置', AppLanguage.ko: '위치',
+  },
+  'wmDirection': {
+    AppLanguage.zhHans: '方向', AppLanguage.zhHant: '方向',
+    AppLanguage.en: 'Direction', AppLanguage.ms: 'Arah',
+    AppLanguage.ja: '方向', AppLanguage.ko: '방향',
+  },
+  'wmSize': {
+    AppLanguage.zhHans: '大小', AppLanguage.zhHant: '大小',
+    AppLanguage.en: 'Size', AppLanguage.ms: 'Saiz',
+    AppLanguage.ja: 'サイズ', AppLanguage.ko: '크기',
+  },
+  'frameBackground': {
+    AppLanguage.zhHans: '背景', AppLanguage.zhHant: '背景',
+    AppLanguage.en: 'Background', AppLanguage.ms: 'Latar',
+    AppLanguage.ja: '背景', AppLanguage.ko: '배경',
+  },
+  'lens': {
+    AppLanguage.zhHans: '镜头', AppLanguage.zhHant: '鏡頭',
+    AppLanguage.en: 'Lens', AppLanguage.ms: 'Kanta',
+    AppLanguage.ja: 'レンズ', AppLanguage.ko: '렌즈',
+  },
+  // ── 相册权限/空状态/删除确认 ──
+  'galleryPermissionHint': {
+    AppLanguage.zhHans: '请开启相册访问权限', AppLanguage.zhHant: '請開啟相册存取權限',
+    AppLanguage.en: 'Please grant photo library access', AppLanguage.ms: 'Sila benarkan akses galeri',
+    AppLanguage.ja: 'フォトライブラリのアクセスを許可してください', AppLanguage.ko: '사진 라이브러리 접근을 허용해주세요',
+  },
+  'noPhotosHint': {
+    AppLanguage.zhHans: '还没有用 DAZZ 拍的照片', AppLanguage.zhHant: '還沒有用 DAZZ 拍的照片',
+    AppLanguage.en: 'No photos taken with DAZZ yet', AppLanguage.ms: 'Tiada foto diambil dengan DAZZ lagi',
+    AppLanguage.ja: 'DAZZで撮影した写真はまだありません', AppLanguage.ko: 'DAZZ로 찍은 사진이 없습니다',
+  },
+  'deletePhotoConfirm': {
+    AppLanguage.zhHans: '确定删除这张照片？', AppLanguage.zhHant: '確定刪除這張照片？',
+    AppLanguage.en: 'Delete this photo?', AppLanguage.ms: 'Padam foto ini?',
+    AppLanguage.ja: 'この写真を削除しますか？', AppLanguage.ko: '이 사진을 삭제하시겠습니까?',
+  },
+  // ── 图片编辑 ──
+  'imageProcessFailed': {
+    AppLanguage.zhHans: '图片处理失败', AppLanguage.zhHant: '圖片處理失敗',
+    AppLanguage.en: 'Image processing failed', AppLanguage.ms: 'Pemprosesan imej gagal',
+    AppLanguage.ja: '画像処理に失敗しました', AppLanguage.ko: '이미지 처리 실패',
+  },
+  'needGalleryPermission': {
+    AppLanguage.zhHans: '需要相册权限才能保存', AppLanguage.zhHant: '需要相册權限才能儲存',
+    AppLanguage.en: 'Gallery permission required to save', AppLanguage.ms: 'Kebenaran galeri diperlukan untuk simpan',
+    AppLanguage.ja: '保存にはフォトライブラリの権限が必要です', AppLanguage.ko: '저장하려면 갤러리 권한이 필요합니다',
+  },
+  'saveError': {
+    AppLanguage.zhHans: '保存失败，请重试', AppLanguage.zhHant: '儲存失敗，請重試',
+    AppLanguage.en: 'Save failed, please try again', AppLanguage.ms: 'Simpan gagal, cuba lagi',
+    AppLanguage.ja: '保存に失敗しました。再試してください', AppLanguage.ko: '저장 실패, 다시 시도해주세요',
+  },
+  'flip': {
+    AppLanguage.zhHans: '翻转', AppLanguage.zhHant: '翻轉',
+    AppLanguage.en: 'Flip', AppLanguage.ms: 'Balik',
+    AppLanguage.ja: '反転', AppLanguage.ko: '플립',
+  },
+  'crop': {
+    AppLanguage.zhHans: '裁剪', AppLanguage.zhHant: '裁剪',
+    AppLanguage.en: 'Crop', AppLanguage.ms: 'Potong',
+    AppLanguage.ja: 'トリミング', AppLanguage.ko: '자르기',
   },
 };
 
