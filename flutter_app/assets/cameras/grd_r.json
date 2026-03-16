@@ -14,26 +14,89 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/grd_r.cube",
-    "distortion": 0.0,
-    "chromaticAberration": 0.0,
-    "flare": 0.0,
-    "temperature": -5,
-    "tint": 2.0,
-    "contrast": 1.18,
-    "highlights": -10.0,
-    "shadows": -18.0,
-    "whites": 12.0,
-    "blacks": -22.0,
-    "clarity": 25.0,
-    "saturation": 0.95,
-    "vibrance": 0.9,
-    "grain": 0.12,
-    "bloom": 0.0,
-    "vignette": 0.08,
-    "colorBiasR": 0.0,
+    "lutStrength": 0.85,
+    "toneCurveStrength": 1.0,
+    "exposure": -0.03,
+    "contrast": 1.1,
+    "saturation": 0.92,
+    "temperature": -20,
+    "tint": -2,
+    "highlights": -6,
+    "shadows": -8,
+    "whites": 4,
+    "blacks": -10,
+    "clarity": 8,
+    "dehaze": 4,
+    "sharpness": 1.12,
+    "colorBiasR": -0.02,
     "colorBiasG": 0.0,
-    "colorBiasB": 0.0,
-    "sharpness": 1.35
+    "colorBiasB": 0.02,
+    "grain": 0.08,
+    "grainSize": 1.2,
+    "highlightRolloff": 0.1,
+    "bloom": 0.02,
+    "halation": 0.0,
+    "vignette": 0.05,
+    "chromaticAberration": 0.05,
+    "distortion": 0.0,
+    "sharpen": 0.12,
+    "centerGain": 0.005,
+    "edgeFalloff": 0.015,
+    "exposureVariation": 0.01,
+    "cornerWarmShift": -0.005,
+    "developmentSoftness": 0.0,
+    "chemicalIrregularity": 0.0,
+    "skinHueProtect": 1.0,
+    "skinSatProtect": 0.95,
+    "skinLumaSoften": 0.02,
+    "skinRedLimit": 1.03,
+    "toneCurvePoints": [
+      [
+        0,
+        0
+      ],
+      [
+        16,
+        10
+      ],
+      [
+        32,
+        22
+      ],
+      [
+        64,
+        50
+      ],
+      [
+        96,
+        90
+      ],
+      [
+        128,
+        132
+      ],
+      [
+        160,
+        180
+      ],
+      [
+        192,
+        215
+      ],
+      [
+        224,
+        240
+      ],
+      [
+        255,
+        255
+      ]
+    ],
+    "luminanceNoise": 0.06,
+    "chromaNoise": 0.0,
+    "flare": 0.0,
+    "vibrance": 0.0,
+    "tintShift": -2
   },
   "modules": {
     "filters": [],
@@ -518,15 +581,16 @@
     "icon": "assets/thumbnails/cameras/grd_r_icon.png"
   },
   "meta": {
-    "version": "final",
+    "version": "v2.0",
     "premium": false,
     "sortOrder": 0,
     "tags": [
       "street",
-      "ccd",
+      "digital",
       "ricoh",
       "28mm",
-      "high-contrast"
+      "high-contrast",
+      "cold"
     ]
   }
 }
