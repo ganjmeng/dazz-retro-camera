@@ -1,0 +1,295 @@
+{
+  "id": "fqs",
+  "name": "FQS",
+  "nameEn": "FQS",
+  "category": "film",
+  "mode": "photo",
+  "sensor": {
+    "type": "film_scan",
+    "dynamicRange": 11.5,
+    "baseNoise": 0.28,
+    "colorDepth": 8
+  },
+  "defaultLook": {
+    "baseLut": "assets/lut/cameras/fqs_fuji_portra.cube",
+    "distortion": 0.0,
+    "chromaticAberration": 0.4,
+    "flare": 0.0,
+    "temperature": -40,
+    "tint": -18.0,
+    "contrast": 0.92,
+    "highlights": -8.0,
+    "shadows": -12.0,
+    "whites": 6.0,
+    "blacks": -10.0,
+    "clarity": 8.0,
+    "saturation": 1.05,
+    "vibrance": 1.08,
+    "grain": 0.28,
+    "grainSize": 1.8,
+    "bloom": 0.10,
+    "vignette": 0.15,
+    "colorBiasR": -0.04,
+    "colorBiasG": 0.05,
+    "colorBiasB": 0.02,
+    "sharpness": 0.85,
+    "halation": 0.15
+  },
+  "modules": {
+    "filters": [
+      {
+        "id": "fuji_superia_400",
+        "name": "Fuji Superia 400",
+        "nameEn": "Fuji Superia 400",
+        "lut": "assets/lut/cameras/fqs_fuji_portra.cube",
+        "contrast": 0.92,
+        "saturation": 1.05,
+        "grain": "medium",
+        "grainSize": 1.8,
+        "vignette": 0.15,
+        "sharpness": 0.85,
+        "thumbnail": null,
+        "filmRollType": "advance",
+        "filmRollStyle": "35mm",
+        "advanceDuration": 680,
+        "slideDistance": 1.0,
+        "motionBlur": 0.07,
+        "sound": "film_advance"
+      },
+      {
+        "id": "kodak_portra_400",
+        "name": "Kodak Portra 400",
+        "nameEn": "Kodak Portra 400",
+        "lut": "assets/lut/cameras/fqs_fuji_portra.cube",
+        "contrast": 0.88,
+        "saturation": 1.02,
+        "grain": "light",
+        "grainSize": 1.4,
+        "vignette": 0.12,
+        "sharpness": 0.90,
+        "thumbnail": null,
+        "filmRollType": "advance",
+        "filmRollStyle": "35mm",
+        "advanceDuration": 650,
+        "slideDistance": 0.95,
+        "motionBlur": 0.05,
+        "sound": "film_advance"
+      }
+    ],
+    "lenses": [
+      {
+        "id": "std",
+        "name": "标准",
+        "nameEn": "Standard",
+        "zoomFactor": 1.0,
+        "distortion": 0.0,
+        "vignette": 0.03,
+        "chromaticAberration": 0.0,
+        "edgeBlur": 0.0,
+        "exposure": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "highlightCompression": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_std.png"
+      },
+      {
+        "id": "wide",
+        "name": "广角",
+        "nameEn": "Wide",
+        "zoomFactor": 0.8,
+        "distortion": 0.04,
+        "vignette": 0.10,
+        "chromaticAberration": 0.02,
+        "edgeBlur": 0.01,
+        "exposure": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "highlightCompression": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_wide.png"
+      },
+      {
+        "id": "tele",
+        "name": "长焦",
+        "nameEn": "Tele",
+        "zoomFactor": 2.0,
+        "distortion": -0.01,
+        "vignette": 0.05,
+        "chromaticAberration": 0.01,
+        "edgeBlur": 0.0,
+        "exposure": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "highlightCompression": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_tele.png"
+      },
+      {
+        "id": "vintage",
+        "name": "复古",
+        "nameEn": "Vintage",
+        "zoomFactor": 1.0,
+        "distortion": 0.03,
+        "vignette": 0.18,
+        "chromaticAberration": 0.05,
+        "edgeBlur": 0.06,
+        "exposure": -0.03,
+        "contrast": -0.05,
+        "saturation": -0.03,
+        "highlightCompression": 0.0,
+        "bloom": 0.05,
+        "flare": 0.02,
+        "softFocus": 0.04,
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_vintage.png"
+      }
+    ],
+    "ratios": [
+      {
+        "id": "ratio_3_2",
+        "label": "3:2",
+        "width": 3,
+        "height": 2,
+        "supportsFrame": false
+      },
+      {
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
+        "supportsFrame": false
+      },
+      {
+        "id": "ratio_2_3",
+        "label": "2:3",
+        "width": 2,
+        "height": 3,
+        "supportsFrame": false
+      },
+      {
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "width": 3,
+        "height": 4,
+        "supportsFrame": false
+      }
+    ],
+    "frames": [],
+    "watermarks": {
+      "presets": [
+        {
+          "id": "date_orange",
+          "name": "橙色日期",
+          "color": "#FF8A3D",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "date_white",
+          "name": "白色日期",
+          "color": "#FFFFFF",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "none",
+          "name": "无水印"
+        }
+      ],
+      "editor": {
+        "allowColorChange": true,
+        "allowPositionChange": true,
+        "allowSizeChange": true,
+        "allowOrientationChange": true
+      }
+    },
+    "extras": []
+  },
+  "defaultSelection": {
+    "filterId": "fuji_superia_400",
+    "lensId": "std",
+    "ratioId": "ratio_3_2",
+    "frameId": null,
+    "watermarkPresetId": "none",
+    "extraId": null
+  },
+  "uiCapabilities": {
+    "enableFilter": true,
+    "enableLens": true,
+    "enableRatio": true,
+    "enableFrame": false,
+    "enableWatermark": true,
+    "enableExtra": false,
+    "enableFilmRoll": true
+  },
+  "previewCapabilities": {
+    "allowSmallViewport": true,
+    "allowGridOverlay": true,
+    "allowZoom": true,
+    "allowImportImage": false,
+    "allowTimer": true,
+    "allowFlash": false
+  },
+  "previewPolicy": {
+    "enableLut": true,
+    "enableTemperature": true,
+    "enableContrast": true,
+    "enableSaturation": true,
+    "enableVignette": true,
+    "enableLightLensEffect": true,
+    "enableGrain": true,
+    "enableBloom": true,
+    "enableChromaticAberration": true,
+    "enableFrameComposite": false,
+    "enableWatermarkComposite": true
+  },
+  "exportPolicy": {
+    "jpegQuality": 0.92,
+    "applyRatioCrop": true,
+    "applyFrameOnExport": false,
+    "applyWatermarkOnExport": true,
+    "preserveMetadata": true
+  },
+  "videoConfig": {
+    "enabled": false,
+    "fpsOptions": [24, 30],
+    "resolutionOptions": ["HD"],
+    "defaultFps": 24,
+    "defaultResolution": "HD",
+    "supportsAudio": false,
+    "videoBitrate": 8000000
+  },
+  "assets": {
+    "thumbnail": "assets/thumbnails/cameras/fqs_icon.png",
+    "icon": "assets/thumbnails/cameras/fqs_icon.png"
+  },
+  "meta": {
+    "version": "1.0",
+    "premium": false,
+    "sortOrder": 11,
+    "tags": [
+      "film",
+      "35mm",
+      "slr",
+      "fuji",
+      "kodak",
+      "portra",
+      "superia",
+      "green-tone",
+      "soft",
+      "grain"
+    ]
+  }
+}

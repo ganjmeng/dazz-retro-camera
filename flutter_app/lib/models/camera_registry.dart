@@ -213,6 +213,23 @@ const List<CameraEntry> kAllCameras = [
       'assets/samples/fisheye_sample_3.jpg',
     ],
   ),
+  CameraEntry(
+    id: 'fqs',
+    name: 'FQS',
+    assetPath: 'assets/cameras/fqs.json',
+    category: 'film',
+    focalLengthLabel: '50mm',
+    premium: false,
+    sortOrder: 110,
+    iconPath: 'assets/thumbnails/cameras/fqs_icon.png',
+    description: 'Fuji Superia 400 + Kodak Portra 400 双胶卷融合，柔和绿调，肤色自然，颗粒感明显。2000年代 35mm SLR 经典质感。',
+    tags: ['胶片', '绿调', '柔和', 'Fuji', 'Kodak', '35mm', 'SLR'],
+    samplePhotos: [
+      'assets/samples/fxn_r_sample_1.jpg',
+      'assets/samples/fxn_r_sample_2.jpg',
+      'assets/samples/fxn_r_sample_3.jpg',
+    ],
+  ),
 ];
 
 /// Load a full CameraDefinition by camera id.
