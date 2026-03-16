@@ -71,6 +71,10 @@ class CameraAppState {
   final bool mirrorFrontCamera;   // 前置摄像头镜像开关
   final bool shutterVibrationEnabled; // 快门振动开关
   final bool fisheyeMode;              // 鱼眼圆圈模式
+  // ── 双重曝光 ──────────────────────────────────────────────────────────────
+  final bool doubleExpEnabled;       // 双重曝光开关
+  final String? doubleExpFirstPath;  // 第一张照片本地路径（待合成）
+  final double doubleExpBlend;       // 混合比例 0.3~0.7，默认 0.5
   // Debug: 最近一次拍照的分辨率信息
   final String lastCaptureRaw;    // e.g. "4032×3024" 原始分辨率
   final String lastCaptureOutput; // e.g. "3024×3024" 输出分辨率
@@ -115,6 +119,9 @@ class CameraAppState {
     this.mirrorFrontCamera = true,
      this.shutterVibrationEnabled = true,
     this.fisheyeMode = false,
+    this.doubleExpEnabled = false,
+    this.doubleExpFirstPath,
+    this.doubleExpBlend = 0.5,
     this.lastCaptureRaw = '',
     this.lastCaptureOutput = '',
   });
@@ -159,6 +166,10 @@ class CameraAppState {
     bool? mirrorFrontCamera,
     bool? shutterVibrationEnabled,
     bool? fisheyeMode,
+    bool? doubleExpEnabled,
+    String? doubleExpFirstPath,
+    bool clearDoubleExpFirst = false,
+    double? doubleExpBlend,
     String? lastCaptureRaw,
     String? lastCaptureOutput,
     bool clearPanel = false,
@@ -205,6 +216,9 @@ class CameraAppState {
       mirrorFrontCamera: mirrorFrontCamera ?? this.mirrorFrontCamera,
       shutterVibrationEnabled: shutterVibrationEnabled ?? this.shutterVibrationEnabled,
       fisheyeMode: fisheyeMode ?? this.fisheyeMode,
+      doubleExpEnabled: doubleExpEnabled ?? this.doubleExpEnabled,
+      doubleExpFirstPath: clearDoubleExpFirst ? null : (doubleExpFirstPath ?? this.doubleExpFirstPath),
+      doubleExpBlend: doubleExpBlend ?? this.doubleExpBlend,
       lastCaptureRaw: lastCaptureRaw ?? this.lastCaptureRaw,
       lastCaptureOutput: lastCaptureOutput ?? this.lastCaptureOutput,
     );
@@ -565,6 +579,32 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     state = state.copyWith(showDebugOverlay: !state.showDebugOverlay);
   }
 
+  // ── 双重曝光 ──────────────────────────────────────────────────────────────
+
+  /// 开关双重曝光模式，开启时清除第一张照片缓存
+  void toggleDoubleExp() {
+    final next = !state.doubleExpEnabled;
+    state = state.copyWith(
+      doubleExpEnabled: next,
+      clearDoubleExpFirst: true, // 切换时清空第一张照片
+    );
+  }
+
+  /// 设置双重曝光第一张照片路径
+  void setDoubleExpFirstPath(String path) {
+    state = state.copyWith(doubleExpFirstPath: path);
+  }
+
+  /// 清除双重曝光第一张照片（重新拍摄）
+  void clearDoubleExpFirst() {
+    state = state.copyWith(clearDoubleExpFirst: true);
+  }
+
+  /// 设置双重曝光混合比例
+  void setDoubleExpBlend(double blend) {
+    state = state.copyWith(doubleExpBlend: blend.clamp(0.1, 0.9));
+  }
+
   Future<LocationToggleResult> toggleLocation() async {
     if (state.locationEnabled) {
       // 当前开启 → 直接关闭
@@ -661,32 +701,123 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
               2 => CapturePipeline.kJpegQualityHigh,
               _ => CapturePipeline.kJpegQualityMid,
             };
-            final processed = await pipeline.process(
-              imagePath: path,
-              selectedRatioId: state.activeRatioId ?? '',
-              selectedFrameId: state.activeFrameId ?? '',
-              selectedWatermarkId: state.activeWatermarkId ?? '',
-              frameBackgroundColor: state.frameBackgroundColor,
-              watermarkColorOverride: state.watermarkColor,
-              watermarkPositionOverride: state.watermarkPosition,
-              watermarkSizeOverride: state.watermarkSize,
-              watermarkDirectionOverride: state.watermarkDirection,
-              watermarkStyleOverride: state.watermarkStyle,
-              renderParams: state.renderParams,
-              minimapNormalizedRect: minimapNormalizedRect,
-              deviceQuarter: deviceQuarter,
-              maxDimension: maxDim,
-              jpegQuality: jpegQ,
-            );
-            if (processed != null) {
-              await File(path).writeAsBytes(processed.bytes);
-              // 存储输出分辨率到 debug overlay
-              state = state.copyWith(
-                lastCaptureOutput: '${processed.outputWidth}×${processed.outputHeight}',
-              );
-              debugPrint('[CameraNotifier] Post-process done, wrote ${processed.bytes.length} bytes to $path (${processed.outputWidth}x${processed.outputHeight})');
+
+            // ── 双重曝光处理逻辑 ──────────────────────────────────────────────────────────────
+            if (state.doubleExpEnabled) {
+              final firstPath = state.doubleExpFirstPath;
+              if (firstPath == null) {
+                // 第一张：仅做单张后处理，不合成，保存到临时目录
+                final processed = await pipeline.process(
+                  imagePath: path,
+                  selectedRatioId: state.activeRatioId ?? '',
+                  selectedFrameId: 'frame_none',  // 第一张不加相框
+                  selectedWatermarkId: 'none',     // 第一张不加水印
+                  renderParams: state.renderParams,
+                  minimapNormalizedRect: minimapNormalizedRect,
+                  deviceQuarter: deviceQuarter,
+                  maxDimension: maxDim,
+                  jpegQuality: jpegQ,
+                );
+                if (processed != null) {
+                  // 将处理后的第一张写入临时文件
+                  final tmpDir = Directory.systemTemp;
+                  final firstSavePath = '${tmpDir.path}/dazz_double_exp_first_${DateTime.now().millisecondsSinceEpoch}.jpg';
+                  await File(firstSavePath).writeAsBytes(processed.bytes);
+                  state = state.copyWith(doubleExpFirstPath: firstSavePath);
+                  debugPrint('[DoubleExp] First photo saved: $firstSavePath');
+                }
+                // 第一张不保存到相册，直接返回 null
+                state = state.copyWith(isTakingPhoto: false);
+                return null;
+              } else {
+                // 第二张：合成两张照片
+                final processed2 = await pipeline.process(
+                  imagePath: path,
+                  selectedRatioId: state.activeRatioId ?? '',
+                  selectedFrameId: 'frame_none',
+                  selectedWatermarkId: 'none',
+                  renderParams: state.renderParams,
+                  minimapNormalizedRect: minimapNormalizedRect,
+                  deviceQuarter: deviceQuarter,
+                  maxDimension: maxDim,
+                  jpegQuality: jpegQ,
+                );
+                if (processed2 != null) {
+                  // 合成两张照片
+                  final blended = await CapturePipeline.blendDoubleExposure(
+                    firstImagePath: firstPath,
+                    secondImageBytes: processed2.bytes,
+                    blend: state.doubleExpBlend,
+                  );
+                  if (blended != null) {
+                    // 将合成结果再过一遍完整的 pipeline（加相框、水印等）
+                    final tmpBlendPath = '${Directory.systemTemp.path}/dazz_blend_${DateTime.now().millisecondsSinceEpoch}.jpg';
+                    await File(tmpBlendPath).writeAsBytes(blended);
+                    final finalProcessed = await pipeline.process(
+                      imagePath: tmpBlendPath,
+                      selectedRatioId: state.activeRatioId ?? '',
+                      selectedFrameId: state.activeFrameId ?? '',
+                      selectedWatermarkId: state.activeWatermarkId ?? '',
+                      frameBackgroundColor: state.frameBackgroundColor,
+                      watermarkColorOverride: state.watermarkColor,
+                      watermarkPositionOverride: state.watermarkPosition,
+                      watermarkSizeOverride: state.watermarkSize,
+                      watermarkDirectionOverride: state.watermarkDirection,
+                      watermarkStyleOverride: state.watermarkStyle,
+                      renderParams: null, // 已经应用过滞色矩阵，不重复
+                      deviceQuarter: 0,   // 已经旋转过
+                      maxDimension: maxDim,
+                      jpegQuality: jpegQ,
+                    );
+                    if (finalProcessed != null) {
+                      await File(path).writeAsBytes(finalProcessed.bytes);
+                      state = state.copyWith(
+                        lastCaptureOutput: '${finalProcessed.outputWidth}×${finalProcessed.outputHeight}',
+                      );
+                    } else {
+                      await File(path).writeAsBytes(blended);
+                    }
+                    // 清理临时文件
+                    try { File(tmpBlendPath).deleteSync(); } catch (_) {}
+                  }
+                  // 清理第一张临时文件
+                  try { File(firstPath).deleteSync(); } catch (_) {}
+                }
+                // 合成完成，关闭双重曝光模式
+                state = state.copyWith(
+                  doubleExpEnabled: false,
+                  clearDoubleExpFirst: true,
+                );
+                debugPrint('[DoubleExp] Blend complete, double exp mode closed');
+              }
             } else {
-              debugPrint('[CameraNotifier] Post-process returned null, keeping original');
+              // 普通拍照流程
+              final processed = await pipeline.process(
+                imagePath: path,
+                selectedRatioId: state.activeRatioId ?? '',
+                selectedFrameId: state.activeFrameId ?? '',
+                selectedWatermarkId: state.activeWatermarkId ?? '',
+                frameBackgroundColor: state.frameBackgroundColor,
+                watermarkColorOverride: state.watermarkColor,
+                watermarkPositionOverride: state.watermarkPosition,
+                watermarkSizeOverride: state.watermarkSize,
+                watermarkDirectionOverride: state.watermarkDirection,
+                watermarkStyleOverride: state.watermarkStyle,
+                renderParams: state.renderParams,
+                minimapNormalizedRect: minimapNormalizedRect,
+                deviceQuarter: deviceQuarter,
+                maxDimension: maxDim,
+                jpegQuality: jpegQ,
+              );
+              if (processed != null) {
+                await File(path).writeAsBytes(processed.bytes);
+                state = state.copyWith(
+                  lastCaptureOutput: '${processed.outputWidth}×${processed.outputHeight}',
+                );
+                debugPrint('[CameraNotifier] Post-process done, wrote ${processed.bytes.length} bytes to $path (${processed.outputWidth}x${processed.outputHeight})');
+              } else {
+                debugPrint('[CameraNotifier] Post-process returned null, keeping original');
+              }
             }
           } catch (e, st) {
             debugPrint('[CameraNotifier] Post-process error: $e\n$st');

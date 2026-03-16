@@ -13,6 +13,7 @@
 // └──────────────────────────────────────────────────────────────────────────┘
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
@@ -494,6 +495,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (st.minimapEnabled) {
       minimapRect = _MinimapOverlay.calcNormalizedRect(st.zoomLevel);
     }
+
+    // 双重曝光模式下，在快门按下时显示中间状态提示
+    if (st.doubleExpEnabled && st.doubleExpFirstPath == null) {
+      _showViewfinderHint('已捕捉第 1 张，请拍第 2 张');
+    } else if (st.doubleExpEnabled && st.doubleExpFirstPath != null) {
+      _showViewfinderHint('合成中…');
+    }
+
     final result = await ref.read(cameraAppProvider.notifier).takePhoto(
       minimapNormalizedRect: minimapRect,
       deviceQuarter: _deviceQuarter,
@@ -502,6 +511,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       // 优先用 galleryAssetId 直接查资产（绕开相册查询，100% 可靠）
       if (result.galleryAssetId != null) {
         _loadThumbFromGalleryId(result.galleryAssetId!);
+        // 双重曝光合成完成提示
+        if (!st.doubleExpEnabled) {
+          // 双重曝光已关闭（notifier 内部处理后关闭）说明合成完成
+          _showViewfinderHint('双重曝光已完成');
+        }
       } else {
         // fallback: 相册查询（仅当 saveToGallery 未返回 URI 时）
         _loadLatestThumb();
@@ -896,7 +910,73 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               ),
             ),
 
-          // ── 鱼眼圆圈默色边角阒罩 overlay（fisheyeMode 开启时显示）──
+          // ── 双重曝光：第一张半透明预览叠加层 ─────────────────────────────────────────────
+          if (st.doubleExpEnabled && st.doubleExpFirstPath != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: 0.45,
+                  child: Image.file(
+                    File(st.doubleExpFirstPath!),
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                  ),
+                ),
+              ),
+            ),
+          // ── 双重曝光进度提示条 ──────────────────────────────────────────────────────────────
+          if (st.doubleExpEnabled)
+            Positioned(
+              left: 0, right: 0, bottom: 16,
+              child: IgnorePointer(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withAlpha(180),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFFFFD700).withAlpha(200),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 进度点
+                        _DoubleExpDot(filled: st.doubleExpFirstPath != null),
+                        const SizedBox(width: 6),
+                        _DoubleExpDot(filled: false),
+                        const SizedBox(width: 10),
+                        Text(
+                          st.doubleExpFirstPath == null
+                              ? '双重曝光 • 第 1 张'
+                              : '双重曝光 • 第 2 张',
+                          style: const TextStyle(
+                            color: Color(0xFFFFD700),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        if (st.doubleExpFirstPath != null) ...[
+                          const SizedBox(width: 10),
+                          GestureDetector(
+                            onTap: () => ref.read(cameraAppProvider.notifier).clearDoubleExpFirst(),
+                            child: const Icon(
+                              Icons.refresh,
+                              color: Color(0xFFFFD700),
+                              size: 16,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          // ── 鱼眼圆圈默色边角鑉罩 overlay（fisheyeMode 开启时显示）──
           if (st.fisheyeMode)
             IgnorePointer(
               child: CustomPaint(
@@ -1669,10 +1749,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           ),
                           // 4. 双重曝光
                           _TopMenuBtn(
-                            icon: Icons.exposure,
-                            label: '双重曝光关闭',
+                            icon: st.doubleExpEnabled
+                                ? Icons.exposure
+                                : Icons.exposure_outlined,
+                            label: st.doubleExpEnabled ? '双重曝光开启' : '双重曝光关闭',
                             btnW: btnW,
-                            onTap: () {},
+                            onTap: () {
+                              final willEnable = !st.doubleExpEnabled;
+                              ref.read(cameraAppProvider.notifier).toggleDoubleExp();
+                              ref.read(cameraAppProvider.notifier).toggleTopMenu();
+                              _showViewfinderHint(willEnable
+                                  ? '双重曝光开启，请拍第 1 张'
+                                  : '双重曝光已关闭');
+                            },
                           ),
                         ],
                       ),
@@ -4426,4 +4515,26 @@ class _FisheyeCirclePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_FisheyeCirclePainter oldDelegate) => false;
+}
+
+// ─── 双重曝光进度指示点 ──────────────────────────────────────────────────────────
+class _DoubleExpDot extends StatelessWidget {
+  final bool filled;
+  const _DoubleExpDot({required this.filled});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: filled ? const Color(0xFFFFD700) : Colors.transparent,
+        border: Border.all(
+          color: const Color(0xFFFFD700),
+          width: 1.5,
+        ),
+      ),
+    );
+  }
 }

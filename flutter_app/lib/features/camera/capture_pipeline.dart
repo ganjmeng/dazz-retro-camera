@@ -59,6 +59,7 @@ class CapturePipeline {
     int deviceQuarter = 0, // 设备方向：0=竖屏, 1=逆时针横屏(左转90°), 2=倒竖, 3=顺时针横屏(右转90°)
     int maxDimension = kMaxDimMid,   // 输出最大边长（由调用方按清晰度档位传入）
     int jpegQuality  = kJpegQualityMid, // JPEG 编码质量（由调用方按清晰度档位传入）
+    bool fisheyeMode = false,           // 鱼眼圆圈模式：在成片四角绘制默色阒罩
   }) async {
     try {
           // ── 1. 读取原始图片（解码时限制最大边长，避免 12MP 全量解码）──────────────
@@ -951,9 +952,98 @@ class CapturePipeline {
     }
   }
 
-  // ── RGBA bytes → JPEG bytes（使用 compute() 在独立 Isolate 中编码，不阻塞 UI 线程）─────────
+  //  // ── RGBA bytes → JPEG bytes（使用 compute() 在独立 Isolate 中编码，不阻塞 UI 线程）─────
   Future<Uint8List> _encodeJpeg(Uint8List rgba, int w, int h, {int quality = 82}) {
     return compute(_encodeJpegIsolate, _JpegEncodeParams(rgba, w, h, quality));
+  }
+
+  // ── 双重曝光图层合成 ──────────────────────────────────────────────────────────────
+  /// 将两张照片合成为双重曝光效果。
+  /// - [firstImagePath] 第一张照片的本地文件路径（已经过后处理）
+  /// - [secondImageBytes] 第二张照片的 JPEG 字节（已经过后处理）
+  /// - [blend] 第一张权重 0.3~0.7，默认 0.5
+  /// 合成算法：两张各降曝光后用 BlendMode.screen 叠加，最接近胶片双重曝光效果
+  static Future<Uint8List?> blendDoubleExposure({
+    required String firstImagePath,
+    required Uint8List secondImageBytes,
+    double blend = 0.5,
+  }) async {
+    try {
+      // 解码两张图片
+      final firstBytes = await File(firstImagePath).readAsBytes();
+      final firstCodec = await ui.instantiateImageCodec(firstBytes);
+      final firstFrame = await firstCodec.getNextFrame();
+      final firstImg = firstFrame.image;
+
+      final secondCodec = await ui.instantiateImageCodec(secondImageBytes);
+      final secondFrame = await secondCodec.getNextFrame();
+      final secondImg = secondFrame.image;
+
+      // 以第一张尺寸为基准
+      final w = firstImg.width;
+      final h = firstImg.height;
+
+      // 创建画布
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+
+      // ── 双重曝光合成算法 ──────────────────────────────────────────────────────────────
+      // 第一张：降曝光到 blend 权重（默认 0.5）
+      // 第二张：降曝光到 (1-blend) 权重
+      // 用 BlendMode.screen 叠加：亮部叠加增强，暗部透出对方细节
+      // 这最接近胶片相机在同一张胶片上曝光两次的物理效果
+
+      final destRect = Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble());
+      final srcRect1 = Rect.fromLTWH(0, 0, firstImg.width.toDouble(), firstImg.height.toDouble());
+      final srcRect2 = Rect.fromLTWH(0, 0, secondImg.width.toDouble(), secondImg.height.toDouble());
+
+      // 第一张：默认模式绘制，降亮度到 blend 权重
+      canvas.drawImageRect(
+        firstImg,
+        srcRect1,
+        destRect,
+        Paint()
+          ..filterQuality = FilterQuality.high
+          ..colorFilter = ColorFilter.matrix([
+            blend, 0, 0, 0, 0,
+            0, blend, 0, 0, 0,
+            0, 0, blend, 0, 0,
+            0, 0, 0, 1, 0,
+          ]),
+      );
+
+      // 第二张：用 BlendMode.screen 叠加，降亮度到 (1-blend) 权重
+      final secondBlend = 1.0 - blend;
+      canvas.drawImageRect(
+        secondImg,
+        srcRect2,
+        destRect,
+        Paint()
+          ..filterQuality = FilterQuality.high
+          ..blendMode = BlendMode.screen
+          ..colorFilter = ColorFilter.matrix([
+            secondBlend, 0, 0, 0, 0,
+            0, secondBlend, 0, 0, 0,
+            0, 0, secondBlend, 0, 0,
+            0, 0, 0, 1, 0,
+          ]),
+      );
+
+      // 输出图像
+      final picture = recorder.endRecording();
+      final outputImage = await picture.toImage(w, h);
+      final byteData = await outputImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (byteData == null) return null;
+      final rgba = byteData.buffer.asUint8List();
+
+      // 编码为 JPEG
+      final result = await compute(_encodeJpegIsolate, _JpegEncodeParams(rgba, w, h, 90));
+      debugPrint('[DoubleExp] Blend complete: ${w}x${h}, ${result.length} bytes');
+      return result;
+    } catch (e, st) {
+      debugPrint('[DoubleExp] blendDoubleExposure error: $e\n$st');
+      return null;
+    }
   }
 }
 // ── Isolate 顶层函数（必须是顶层函数，不能是类方法）────────────────────────────────────
