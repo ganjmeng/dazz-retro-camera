@@ -413,7 +413,10 @@ vec3 instcSkinProtect(vec3 color, float skinHueProtect,
     }
 
     fragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
-}   /**
+}
+"""
+
+    /**
      * Inst C 默认参数值（对应 inst_c.json 的 defaultLook）
      * 在 CameraGLRenderer.updateParams() 中通过 key 传入
      */
