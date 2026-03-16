@@ -445,9 +445,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       if (a.name.toUpperCase().contains('DAZZ')) { target = a; break; }
     }
     target ??= albums.firstWhere((a) => a.isAll, orElse: () => albums.first);
-    final assets = await target.getAssetListRange(start: 0, end: 1);
-    if (assets.isNotEmpty && mounted) {
-      await _applyThumbFromAsset(assets.first);
+    // 过滤掉非 DAZZ 拍摄的文件（如相框素材 polaroid_default_*.png 被误入 MediaStore）
+    final count = await target.assetCountAsync;
+    final rawAssets = await target.getAssetListRange(start: 0, end: count.clamp(0, 50));
+    final filtered = rawAssets.where((a) {
+      final title = (a.title ?? '').toLowerCase();
+      return title.startsWith('dazz_');
+    }).toList();
+    if (filtered.isNotEmpty && mounted) {
+      await _applyThumbFromAsset(filtered.first);
     }
   }
 
@@ -2588,6 +2594,8 @@ class _GallerySheetState extends ConsumerState<_GallerySheet> {
     if (!perm.hasAccess) { if (mounted) setState(() => _loading = false); return; }
     final albums = await PhotoManager.getAssetPathList(
       type: RequestType.image,
+      hasAll: true,
+      onlyAll: false,
       filterOption: FilterOptionGroup(
         orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
       ),
