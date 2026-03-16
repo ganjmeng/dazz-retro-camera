@@ -1,0 +1,286 @@
+{
+  "id": "cpm35",
+  "name": "CPM35",
+  "category": "film",
+  "mode": "photo",
+  "supportsPhoto": true,
+  "supportsVideo": false,
+  "focalLengthLabel": "35mm",
+  "sensor": {
+    "type": "film_scan",
+    "dynamicRange": 10.8,
+    "baseNoise": 0.08,
+    "colorDepth": 12
+  },
+  "defaultLook": {
+    "baseLut": "assets/lut/cameras/cpm35_kodak_warm_clean.cube",
+    "temperature": 120.0,
+    "tint": 4.0,
+    "contrast": 1.02,
+    "highlights": -8.0,
+    "shadows": -4.0,
+    "whites": 3.0,
+    "blacks": -3.0,
+    "clarity": -2.0,
+    "vibrance": 1.0,
+    "saturation": 1.08,
+    "vignette": 0.10,
+    "distortion": 0.01,
+    "chromaticAberration": 0.15,
+    "bloom": 0.05,
+    "flare": 0.0,
+    "grain": 0.16,
+    "colorBiasR": 0.04,
+    "colorBiasG": 0.02,
+    "colorBiasB": -0.04,
+    "halation": 0.06,
+    "grainSize": 1.6,
+    "sharpness": 0.97
+  },
+  "modules": {
+    "filters": [
+      {
+        "id": "cpm35_standard",
+        "name": "标准",
+        "nameEn": "Standard",
+        "lut": "assets/lut/cameras/cpm35_kodak_warm_clean.cube",
+        "contrast": 1.02,
+        "saturation": 1.08,
+        "grain": "light",
+        "grainSize": 1.6,
+        "vignette": 0.10,
+        "sharpness": 0.97,
+        "halation": 0.06
+      },
+      {
+        "id": "cpm35_warm",
+        "name": "暖调",
+        "nameEn": "Warm",
+        "lut": "assets/lut/cameras/cpm35_kodak_warm_clean.cube",
+        "contrast": 1.04,
+        "saturation": 1.12,
+        "grain": "light",
+        "grainSize": 1.6,
+        "vignette": 0.12,
+        "sharpness": 0.95,
+        "halation": 0.08
+      },
+      {
+        "id": "cpm35_fade",
+        "name": "褪色",
+        "nameEn": "Fade",
+        "lut": "assets/lut/cameras/cpm35_kodak_warm_clean.cube",
+        "contrast": 0.96,
+        "saturation": 0.92,
+        "grain": "medium",
+        "grainSize": 1.8,
+        "vignette": 0.14,
+        "sharpness": 0.90,
+        "halation": 0.04
+      }
+    ],
+    "lenses": [
+      {
+        "id": "std",
+        "name": "标准",
+        "nameEn": "Standard",
+        "zoomFactor": 1.0,
+        "distortion": 0.01,
+        "vignette": 0.10,
+        "chromaticAberration": 0.15,
+        "edgeBlur": 0.0,
+        "exposure": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "highlightCompression": 0.0,
+        "bloom": 0.05,
+        "flare": 0.0,
+        "softFocus": 0.03,
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_std.png"
+      },
+      {
+        "id": "wide",
+        "name": "广角",
+        "nameEn": "Wide",
+        "zoomFactor": 0.7,
+        "distortion": 0.02,
+        "vignette": 0.14,
+        "chromaticAberration": 0.20,
+        "edgeBlur": 0.02,
+        "exposure": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "highlightCompression": 0.0,
+        "bloom": 0.04,
+        "flare": 0.01,
+        "softFocus": 0.02,
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_wide.png"
+      },
+      {
+        "id": "portrait",
+        "name": "人像",
+        "nameEn": "Portrait",
+        "zoomFactor": 1.5,
+        "distortion": 0.0,
+        "vignette": 0.08,
+        "chromaticAberration": 0.08,
+        "edgeBlur": 0.04,
+        "exposure": 0.02,
+        "contrast": -0.02,
+        "saturation": 0.02,
+        "highlightCompression": 0.0,
+        "bloom": 0.06,
+        "flare": 0.0,
+        "softFocus": 0.05,
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_tele.png"
+      }
+    ],
+    "ratios": [
+      {
+        "id": "ratio_3_2",
+        "label": "3:2",
+        "width": 3,
+        "height": 2,
+        "supportsFrame": false
+      },
+      {
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
+        "supportsFrame": false
+      },
+      {
+        "id": "ratio_2_3",
+        "label": "2:3",
+        "width": 2,
+        "height": 3,
+        "supportsFrame": false
+      },
+      {
+        "id": "ratio_4_3",
+        "label": "4:3",
+        "width": 4,
+        "height": 3,
+        "supportsFrame": false
+      },
+      {
+        "id": "ratio_16_9",
+        "label": "16:9",
+        "width": 16,
+        "height": 9,
+        "supportsFrame": false
+      }
+    ],
+    "frames": [],
+    "watermarks": {
+      "presets": [
+        {
+          "id": "date_orange",
+          "name": "橙色日期",
+          "color": "#FF8A3D",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "date_white",
+          "name": "白色日期",
+          "color": "#FFFFFF",
+          "position": "bottom_right",
+          "fontSize": 18,
+          "fontFamily": "DigitalMono"
+        },
+        {
+          "id": "none",
+          "name": "无水印"
+        }
+      ],
+      "editor": {
+        "allowColorChange": true,
+        "allowPositionChange": true,
+        "allowSizeChange": true,
+        "allowOrientationChange": true
+      }
+    },
+    "extras": []
+  },
+  "defaultSelection": {
+    "filterId": "cpm35_standard",
+    "lensId": "std",
+    "ratioId": "ratio_3_2",
+    "frameId": null,
+    "watermarkPresetId": "none",
+    "extraId": null
+  },
+  "uiCapabilities": {
+    "enableFilter": true,
+    "enableLens": true,
+    "enableRatio": true,
+    "enableFrame": false,
+    "enableWatermark": true,
+    "enableExtra": false,
+    "enableFilmRoll": true
+  },
+  "previewCapabilities": {
+    "allowSmallViewport": true,
+    "allowGridOverlay": true,
+    "allowZoom": true,
+    "allowImportImage": false,
+    "allowTimer": true,
+    "allowFlash": true
+  },
+  "previewPolicy": {
+    "enableLut": true,
+    "enableTemperature": true,
+    "enableContrast": true,
+    "enableSaturation": true,
+    "enableVignette": true,
+    "enableLightLensEffect": true,
+    "enableGrain": true,
+    "enableBloom": true,
+    "enableChromaticAberration": true,
+    "enableFrameComposite": false,
+    "enableWatermarkComposite": true
+  },
+  "exportPolicy": {
+    "jpegQuality": 0.92,
+    "applyRatioCrop": true,
+    "applyFrameOnExport": false,
+    "applyWatermarkOnExport": true,
+    "preserveMetadata": true
+  },
+  "videoConfig": {
+    "enabled": false,
+    "fpsOptions": [24, 30],
+    "resolutionOptions": ["HD"],
+    "defaultFps": 24,
+    "defaultResolution": "HD",
+    "supportsAudio": false,
+    "videoBitrate": 8000000
+  },
+  "assets": {
+    "thumbnail": "assets/thumbnails/cameras/cpm35_icon.png",
+    "icon": "assets/thumbnails/cameras/cpm35_icon.png"
+  },
+  "meta": {
+    "version": "1.0",
+    "premium": false,
+    "sortOrder": 12,
+    "tags": [
+      "film",
+      "35mm",
+      "compact",
+      "pointandshoot",
+      "kodak",
+      "gold",
+      "colorplus",
+      "warm",
+      "vintage",
+      "everyday"
+    ]
+  }
+}

@@ -230,6 +230,23 @@ const List<CameraEntry> kAllCameras = [
       'assets/samples/fxn_r_sample_3.jpg',
     ],
   ),
+  CameraEntry(
+    id: 'cpm35',
+    name: 'CPM35',
+    assetPath: 'assets/cameras/cpm35.json',
+    category: 'film',
+    focalLengthLabel: '35mm',
+    premium: false,
+    sortOrder: 120,
+    iconPath: 'assets/thumbnails/cameras/cpm35_icon.png',
+    description: 'Kodak Gold 200 / ColorPlus 200 风格，暖色复古，轻颗粒，干净出片。90s 傻瓜机日常胶片质感，旅行、街拍、人像通吃。',
+    tags: ['胶片', '暖色', '复古', 'Kodak', '35mm', '傻瓜机', '日常'],
+    samplePhotos: [
+      'assets/samples/fxn_r_sample_1.jpg',
+      'assets/samples/fxn_r_sample_2.jpg',
+      'assets/samples/fxn_r_sample_3.jpg',
+    ],
+  ),
 ];
 
 /// Load a full CameraDefinition by camera id.
