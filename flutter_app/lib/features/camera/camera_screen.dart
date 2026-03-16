@@ -1583,7 +1583,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                               children: [
                                 // 虚线圆圈背景（圆圈大小 70，图标不变）
                                 CustomPaint(
-                                  size: const Size(70, 70),
+                                  size: const Size(82, 82),
                                   painter: _DashedCirclePainter(),
                                 ),
                                 // 相机图标 + 名称（跟随设备方向旋转）
