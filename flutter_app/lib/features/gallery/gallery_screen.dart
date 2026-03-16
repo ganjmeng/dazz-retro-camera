@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/camera_registry.dart';
+import '../../core/l10n.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 全局缩略图字节缓存（内存级，App 存活期间有效，避免重复解码）
@@ -84,11 +86,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
   Set<String> _selectedIds = {};
   bool _showAlbumDropdown = false;
   String _currentAlbumId = 'all';
-  String _currentAlbumName = '全部照片';
+  String _currentAlbumName = '';
   Map<String, int> _albumCounts = {};
-  List<_AlbumEntry> _cameraAlbumEntries = [
-    const _AlbumEntry(id: 'all', name: '全部照片', icon: Icons.photo_library_outlined),
-  ];
+  List<_AlbumEntry> _cameraAlbumEntries = [];
 
   @override
   void initState() {
@@ -137,9 +137,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('请在设置中开启相册访问权限，才能查看成片'),
-            backgroundColor: Color(0xFF3A3A3C),
+          SnackBar(
+            content: Text(_s().galleryPermissionHint),
+            backgroundColor: const Color(0xFF3A3A3C),
           ),
         );
       }
@@ -221,8 +221,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
         }
       }
     }
+    final s = sOf(ProviderScope.containerOf(context).read(languageProvider));
     final entries = <_AlbumEntry>[
-      const _AlbumEntry(id: 'all', name: '全部照片', icon: Icons.photo_library_outlined),
+      _AlbumEntry(id: 'all', name: s.allPhotos, icon: Icons.photo_library_outlined),
     ];
     for (final cam in kAllCameras) {
       if (cameraIdsFound.contains(cam.id)) {
@@ -236,6 +237,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _albumCounts = counts;
         _cameraAlbumEntries = entries;
         _isLoading = showLoading;
+        if (_currentAlbumName.isEmpty) _currentAlbumName = entries.first.name;
       });
       _applyInitialCameraFilter();
     }
@@ -254,7 +256,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       _currentAlbumId = cameraId;
       _currentAlbumName = _cameraAlbumEntries
           .firstWhere((e) => e.id == cameraId,
-              orElse: () => const _AlbumEntry(id: 'all', name: '全部照片'))
+              orElse: () => _AlbumEntry(id: 'all', name: _s().allPhotos))
           .name;
       _showAlbumDropdown = false;
       _assets = cameraId == 'all'
@@ -304,6 +306,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
       _isSelectionMode = false;
     });
   }
+
+  S _s() => sOf(ProviderScope.containerOf(context).read(languageProvider));
 
   @override
   Widget build(BuildContext context) {
@@ -396,13 +400,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
                           _isSelectionMode = false;
                           _selectedIds.clear();
                         }),
-                        child: const Text('取消', style: TextStyle(color: Colors.white, fontSize: 15)),
+                        child: Text(_s().cancel, style: const TextStyle(color: Colors.white, fontSize: 15)),
                       ),
                     ],
                   )
                 : TextButton(
                     onPressed: () => setState(() => _isSelectionMode = true),
-                    child: const Text('选择', style: TextStyle(color: Colors.white, fontSize: 15)),
+                    child: Text(_s().select, style: const TextStyle(color: Colors.white, fontSize: 15)),
                   ),
           ],
         ),
@@ -426,9 +430,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
               child: const Icon(Icons.camera_alt_outlined, color: Color(0xFFFF8C00), size: 40),
             ),
             const SizedBox(height: 16),
-            const Text('还没有照片', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+            Text(_s().noPhotos, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            const Text('用 DAZZ 拍摄的照片会出现在这里', style: TextStyle(color: Colors.grey, fontSize: 14)),
+            Text(_s().noPhotosHint, style: const TextStyle(color: Colors.grey, fontSize: 14)),
           ],
         ),
       );
@@ -464,7 +468,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     child: const Icon(Icons.add_photo_alternate_outlined, color: Color(0xFFFF8C00), size: 28),
                   ),
                   const SizedBox(height: 8),
-                  const Text('导入图片', style: TextStyle(color: Color(0xFFFF8C00), fontSize: 12)),
+                  Text(_s().importPhoto, style: const TextStyle(color: Color(0xFFFF8C00), fontSize: 12)),
                 ],
               ),
             ),
@@ -721,6 +725,8 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   late PageController _pageController;
   String _cameraName = '';
 
+  S _s() => sOf(ProviderScope.containerOf(context).read(languageProvider));
+
   // 每页的图片数据缓存（key: assetId）
   // 优先显示原图，如果原图未加载则显示缩略图占位（避免闪烁）
   final Map<String, Uint8List> _fullDataCache = {};  // 原图数据
@@ -814,7 +820,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('分享失败'), backgroundColor: Color(0xFF2C2C2E)),
+        SnackBar(content: Text(_s().shareFailed), backgroundColor: const Color(0xFF2C2C2E)),
       );
     }
   }
@@ -822,10 +828,10 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   Future<void> _saveToGallery() async {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('照片已保存在相册中'),
-        backgroundColor: Color(0xFF2C2C2E),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(_s().photoSaved),
+        backgroundColor: const Color(0xFF2C2C2E),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -836,16 +842,16 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF2C2C2E),
-        title: const Text('删除照片', style: TextStyle(color: Colors.white)),
-        content: const Text('确定要删除这张照片吗？', style: TextStyle(color: Colors.white70)),
+        title: Text(_s().deletePhoto, style: const TextStyle(color: Colors.white)),
+        content: Text(_s().deletePhotoConfirm, style: const TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消', style: TextStyle(color: Colors.white54)),
+            child: Text(_s().cancel, style: const TextStyle(color: Colors.white54)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('删除', style: TextStyle(color: Colors.red)),
+            child: Text(_s().delete, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),

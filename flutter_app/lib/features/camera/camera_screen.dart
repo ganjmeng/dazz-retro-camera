@@ -37,6 +37,7 @@ import 'camera_sample_screen.dart';
 import '../image_edit/image_edit_screen.dart';
 import '../../services/camera_manager_service.dart';
 import '../../models/watermark_styles.dart';
+import '../../core/l10n.dart';
 // ─── 颜色常量 ─────────────────────────────────────────────────────────────────────────────
 const _kBlack = Color(0xFF000000);
 const _kDarkGray = Color(0xFF1C1C1E);
@@ -395,26 +396,27 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
     final cameraGranted = statuses[Permission.camera]?.isGranted == true;
     if (!cameraGranted && mounted) {
+      final s2 = sOf(ref.read(languageProvider));
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
-          title: const Text('需要相机权限', style: TextStyle(color: Colors.white)),
-          content: const Text(
-            '请在设置中开启相机权限以使用拍照功能',
-            style: TextStyle(color: Colors.grey),
+          title: Text(s2.cameraPerm, style: const TextStyle(color: Colors.white)),
+          content: Text(
+            s2.cameraPermDesc,
+            style: const TextStyle(color: Colors.grey),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消', style: TextStyle(color: Colors.grey)),
+              child: Text(s2.cancel, style: const TextStyle(color: Colors.grey)),
             ),
             TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
                 openAppSettings();
               },
-              child: const Text('去设置', style: TextStyle(color: Color(0xFFFF9500))),
+              child: Text(s2.goToSettings, style: const TextStyle(color: Color(0xFFFF9500))),
             ),
           ],
         ),
@@ -494,11 +496,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
     // 连拍模式：调用连拍入口
     if (st.burstCount > 0) {
+      final s2 = sOf(ref.read(languageProvider));
       // 播放快门声音（连拍只播放一次）
       if (st.shutterSoundEnabled) {
         ShutterSoundService.instance.play(st.activeCameraId);
       }
-      _showViewfinderHint('连拍 ${st.burstCount} 张开始…');
+      _showViewfinderHint(s2.burstStart(st.burstCount));
       final results = await ref.read(cameraAppProvider.notifier).takeBurstPhotos(
         minimapNormalizedRect: minimapRect,
         deviceQuarter: _deviceQuarter,
@@ -511,7 +514,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         } else {
           _loadLatestThumb();
         }
-        _showViewfinderHint('连拍完成，共 ${results.length} 张');
+        _showViewfinderHint(s2.burstDone(results.length));
       }
       return;
     }
@@ -523,10 +526,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
 
     // 双重曝光模式下，在快门按下时显示中间状态提示
+    final s3 = sOf(ref.read(languageProvider));
     if (st.doubleExpEnabled && st.doubleExpFirstPath == null) {
-      _showViewfinderHint('已捕捉第 1 张，请拍第 2 张');
+      _showViewfinderHint(s3.captured1);
     } else if (st.doubleExpEnabled && st.doubleExpFirstPath != null) {
-      _showViewfinderHint('合成中…');
+      _showViewfinderHint(s3.compositing);
     }
 
     final result = await ref.read(cameraAppProvider.notifier).takePhoto(
@@ -540,7 +544,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         // 双重曝光合成完成提示
         if (!st.doubleExpEnabled) {
           // 双重曝光已关闭（notifier 内部处理后关闭）说明合成完成
-          _showViewfinderHint('双重曝光已完成');
+          _showViewfinderHint(s3.doubleExpDone);
         }
       } else {
         // fallback: 相册查询（仅当 saveToGallery 未返回 URI 时）
@@ -561,6 +565,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   @override
   Widget build(BuildContext context) {
     final st = ref.watch(cameraAppProvider);
+    final lang = ref.watch(languageProvider);
+    final s = sOf(lang);
     final camSvc = ref.watch(cameraServiceProvider);
     final mq = MediaQuery.of(context);
     final screenW = mq.size.width;
@@ -718,10 +724,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                       ref.read(cameraAppProvider.notifier).setColorTempK(k),
                   onPreset: (mode) {
                     ref.read(cameraAppProvider.notifier).setWhiteBalance(mode);
+                    final sl = sOf(ref.read(languageProvider));
                     final labels = {
-                      'auto': '自动',
-                      'daylight': '日光',
-                      'incandescent': '白炎灯',
+                      'auto': sl.wbAuto,
+                      'daylight': sl.wbDaylight,
+                      'incandescent': sl.wbIncandescent,
                     };
                     _showViewfinderHint(labels[mode] ?? mode);
                   },
@@ -976,8 +983,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                         const SizedBox(width: 10),
                         Text(
                           st.doubleExpFirstPath == null
-                              ? '双重曝光 • 第 1 张'
-                              : '双重曝光 • 第 2 张',
+                              ? s.doubleExpLabel1
+                              : s.doubleExpLabel2,
                           style: const TextStyle(
                             color: Color(0xFFFFD700),
                             fontSize: 13,
@@ -1061,9 +1068,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // 照片 tab（激活）
           GestureDetector(
             onTap: () {},
-            child: const Text(
-              '照片',
-              style: TextStyle(
+            child: Text(
+              s.photo,
+              style: const TextStyle(
                 color: _kWhite,
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
@@ -1074,9 +1081,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // 视频 tab
           GestureDetector(
             onTap: () {},
-            child: const Text(
-              '视频',
-              style: TextStyle(
+            child: Text(
+              s.video,
+              style: const TextStyle(
                 color: Colors.grey,
                 fontSize: 17,
                 fontWeight: FontWeight.w400,
@@ -1112,7 +1119,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     );
                   }),
                   const SizedBox(width: 5),
-                  const Text('样图', style: TextStyle(color: _kWhite, fontSize: 13)),
+                  Text(s.sample, style: const TextStyle(color: _kWhite, fontSize: 13)),
                 ],
               ),
             ),
@@ -1129,12 +1136,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 color: const Color(0xFF3A3A3C),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.photo_camera_outlined, color: _kWhite, size: 14),
-                  SizedBox(width: 4),
-                  Text('管理', style: TextStyle(color: _kWhite, fontSize: 13)),
+                  const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 14),
+                  const SizedBox(width: 4),
+                  Text(s.manage, style: const TextStyle(color: _kWhite, fontSize: 13)),
                 ],
               ),
             ),
@@ -1274,10 +1281,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 未初始化时显示占位提示
     return Container(
       color: Colors.black,
-      child: const Center(
+      child: Center(
         child: Text(
-          '相机初始化中...',
-          style: TextStyle(color: Colors.white54, fontSize: 14),
+          s.cameraInitializing,
+          style: const TextStyle(color: Colors.white54, fontSize: 14),
         ),
       ),
     );
@@ -1445,7 +1452,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 rotateController: _rotateAnim,
                 child: _ToolbarBtn(
                   icon: Icons.add_photo_alternate_outlined,
-                  label: '导入图片',
+                  label: s.importPhoto,
                   onTap: () => openImageImportFlow(context),
                 ),
               ),
@@ -1458,17 +1465,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 rotateController: _rotateAnim,
                 child: _ToolbarBtn(
                   icon: Icons.timer_outlined,
-                  label: '倒计时',
+                  label: s.timer,
                   badge: st.timerSeconds > 0 ? '${st.timerSeconds}s' : null,
                   onTap: () {
                     final cur = ref.read(cameraAppProvider).timerSeconds;
                     final options = [0, 3, 10];
                     final next = options[(options.indexOf(cur) + 1) % options.length];
+                    final sl = sOf(ref.read(languageProvider));
                     ref.read(cameraAppProvider.notifier).cycleTimer();
                     if (next == 0) {
-                      _showViewfinderHint('倒计时关闭');
+                      _showViewfinderHint(sl.timerOff);
                     } else {
-                      _showViewfinderHint('倒计时 ${next}s');
+                      _showViewfinderHint(sl.timerSeconds(next));
                     }
                   },
                 ),
@@ -1482,18 +1490,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 rotateController: _rotateAnim,
                 child: _FlashBtn(
                   mode: st.flashMode,
-                  label: '闪光灯',
+                  label: s.flash,
                   onTap: () {
                     final cur = ref.read(cameraAppProvider).flashMode;
                     final modes = ['off', 'on', 'auto'];
                     final next = modes[(modes.indexOf(cur) + 1) % modes.length];
+                    final sl = sOf(ref.read(languageProvider));
                     ref.read(cameraAppProvider.notifier).cycleFlash();
                     if (next == 'off') {
-                      _showViewfinderHint('闪光灯已关闭');
+                      _showViewfinderHint(sl.flashOff);
                     } else if (next == 'on') {
-                      _showViewfinderHint('闪光灯已开启');
+                      _showViewfinderHint(sl.flashOn);
                     } else {
-                      _showViewfinderHint('闪光灯自动');
+                      _showViewfinderHint(sl.flashAuto);
                     }
                   },
                 ),
@@ -1507,7 +1516,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 rotateController: _rotateAnim,
                 child: _ToolbarBtn(
                   icon: Icons.flip_camera_ios_outlined,
-                  label: '后置',
+                  label: s.rear,
                   onTap: () => _showCameraTransition(
                     () => ref.read(cameraAppProvider.notifier).flipCamera(),
                     duration: const Duration(milliseconds: 500),
@@ -1741,7 +1750,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final mq = MediaQuery.of(context);
     // 复刻截图样式：深棕色半透明圆角卡片，覆盖取景框顶部
     final menuTop = mq.padding.top + kTopBarH - 30;
-    final sharpenLabels = ['低', '中', '高'];
+    final sharpenLabels = [s.low, s.medium, s.high];
     // 按鈕实际宽度 = (屏幕宽 - 左右padding) / 4
     final screenW = mq.size.width;
     // 宽屏限制：btnW 最大 160dp，避免平板上按鈕过宽
@@ -1785,7 +1794,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           // 1. 网格线
                           _TopMenuBtn(
                             icon: st.gridEnabled ? Icons.grid_on : Icons.grid_off,
-                            label: st.gridEnabled ? '网格线开启' : '网格线关闭',
+                            label: st.gridEnabled ? s.gridOn : s.gridOff,
                             btnW: btnW,
                             onTap: () => ref.read(cameraAppProvider.notifier).toggleGrid(),
                           ),
@@ -1810,7 +1819,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                 ),
                               ),
                             ),
-                            label: '清晰度',
+                            label: s.sharpness,
                             btnW: btnW,
                             onTap: () => _showCameraTransition(
                               () => ref.read(cameraAppProvider.notifier).cycleSharpen(),
@@ -1822,13 +1831,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             icon: st.minimapEnabled
                                 ? Icons.picture_in_picture
                                 : Icons.picture_in_picture_outlined,
-                            label: st.minimapEnabled ? '小框模式开启' : '小框模式关闭',
+                            label: st.minimapEnabled ? s.minimapOn : s.minimapOff,
                             btnW: btnW,
                             onTap: () {
                               final willEnable = !st.minimapEnabled;
+                              final sl = sOf(ref.read(languageProvider));
                               ref.read(cameraAppProvider.notifier).toggleMinimap();
                               ref.read(cameraAppProvider.notifier).toggleTopMenu();
-                              _showViewfinderHint(willEnable ? '小窗模式已开启' : '小窗模式已关闭');
+                              _showViewfinderHint(willEnable ? sl.minimapHintOn : sl.minimapHintOff);
                             },
                           ),
                           // 4. 双重曝光
@@ -1836,15 +1846,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             icon: st.doubleExpEnabled
                                 ? Icons.exposure
                                 : Icons.exposure_outlined,
-                            label: st.doubleExpEnabled ? '双重曝光开启' : '双重曝光关闭',
+                            label: st.doubleExpEnabled ? s.doubleExpOn : s.doubleExpOff,
                             btnW: btnW,
                             onTap: () {
                               final willEnable = !st.doubleExpEnabled;
+                              final sl = sOf(ref.read(languageProvider));
                               ref.read(cameraAppProvider.notifier).toggleDoubleExp();
                               ref.read(cameraAppProvider.notifier).toggleTopMenu();
                               _showViewfinderHint(willEnable
-                                  ? '双重曝光开启，请拍第 1 张'
-                                  : '双重曝光已关闭');
+                                  ? sl.doubleExpStart
+                                  : sl.doubleExpDisabled);
                             },
                           ),
                         ],
@@ -1858,17 +1869,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           _TopMenuBtn(
                             icon: Icons.burst_mode_outlined,
                             label: st.burstCount == 0
-                                ? '连拍关闭'
-                                : '连拍 ${st.burstCount}张',
+                                ? s.burstOff
+                                : s.burstCount(st.burstCount),
                             btnW: btnW,
                             isActive: st.burstCount > 0,
                             onTap: () {
+                              final sl = sOf(ref.read(languageProvider));
                               ref.read(cameraAppProvider.notifier).cycleBurst();
                               final next = st.burstCount == 0 ? 3 : (st.burstCount == 3 ? 10 : 0);
                               if (next == 0) {
-                                _showViewfinderHint('连拍关闭');
+                                _showViewfinderHint(sl.burstOff);
                               } else {
-                                _showViewfinderHint('连拍 $next 张');
+                                _showViewfinderHint(sl.burstCount(next));
                               }
                             },
                           ),
@@ -1877,46 +1889,46 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             icon: st.locationEnabled
                                 ? Icons.location_on
                                 : Icons.location_off_outlined,
-                            label: st.locationEnabled ? '位置开启' : '位置关闭',
+                            label: st.locationEnabled ? s.locationOn : s.locationOff,
                             btnW: btnW,
                             onTap: () async {
                               final result = await ref.read(cameraAppProvider.notifier).toggleLocation();
                               if (!context.mounted) return;
+                              final sl = sOf(ref.read(languageProvider));
                               switch (result) {
                                 case LocationToggleResult.enabled:
-                                  _showViewfinderHint('位置信息已开启');
+                                  _showViewfinderHint(sl.locationEnabled);
                                   break;
                                 case LocationToggleResult.disabled:
-                                  _showViewfinderHint('位置信息已关闭');
+                                  _showViewfinderHint(sl.locationDisabled);
                                   break;
                                 case LocationToggleResult.permissionDenied:
-                                  _showViewfinderHint('位置权限被拒绝');
+                                  _showViewfinderHint(sl.locationDenied);
                                   break;
                                 case LocationToggleResult.permissionDeniedForever:
-                                  // 引导用户到系统设置
                                   showDialog(
                                     context: context,
                                     builder: (ctx) => AlertDialog(
                                       backgroundColor: const Color(0xFF1C1C1E),
-                                      title: const Text('需要位置权限',
-                                          style: TextStyle(color: Colors.white)),
-                                      content: const Text(
-                                        '请在设置中开启位置权限，以将 GPS 坐标记录到照片',
-                                        style: TextStyle(color: Colors.grey),
+                                      title: Text(sl.locationPermTitle,
+                                          style: const TextStyle(color: Colors.white)),
+                                      content: Text(
+                                        sl.locationPermDesc,
+                                        style: const TextStyle(color: Colors.grey),
                                       ),
                                       actions: [
                                         TextButton(
                                           onPressed: () => Navigator.pop(ctx),
-                                          child: const Text('取消',
-                                              style: TextStyle(color: Colors.grey)),
+                                          child: Text(sl.cancel,
+                                              style: const TextStyle(color: Colors.grey)),
                                         ),
                                         TextButton(
                                           onPressed: () {
                                             Navigator.pop(ctx);
                                             LocationService.instance.openSettings();
                                           },
-                                          child: const Text('去设置',
-                                              style: TextStyle(color: Color(0xFFFF9500))),
+                                          child: Text(sl.goToSettings,
+                                              style: const TextStyle(color: Color(0xFFFF9500))),
                                         ),
                                       ],
                                     ),
@@ -1928,7 +1940,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           // 7. 设置
                           _TopMenuBtn(
                             icon: Icons.settings_outlined,
-                            label: '设置',
+                            label: s.settings,
                             btnW: btnW,
                             onTap: () {
                               ref.read(cameraAppProvider.notifier).toggleTopMenu();
@@ -1940,7 +1952,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             icon: st.showDebugOverlay
                                 ? Icons.bug_report
                                 : Icons.bug_report_outlined,
-                            label: st.showDebugOverlay ? '调试开启' : '调试关闭',
+                            label: st.showDebugOverlay ? s.debugOn : s.debugOff,
                             btnW: btnW,
                             onTap: () {
                               ref.read(cameraAppProvider.notifier).toggleDebugOverlay();
@@ -2015,6 +2027,8 @@ class _OptionsSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final st = ref.watch(cameraAppProvider);
+    final lang = ref.watch(languageProvider);
+    final s = sOf(lang);
     final camera = st.camera;
 
     return Container(
@@ -2092,12 +2106,12 @@ class _OptionsSheet extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Dazz Pro', style: TextStyle(color: _kWhite, fontSize: 17, fontWeight: FontWeight.w700)),
-                  Text('解锁所有相机和配件。', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  const Text('Dazz Pro', style: TextStyle(color: _kWhite, fontSize: 17, fontWeight: FontWeight.w700)),
+                  Text(s.unlockAll, style: const TextStyle(color: Colors.white70, fontSize: 13)),
                 ],
               ),
             ),
@@ -2336,7 +2350,7 @@ class _OptionsSheet extends ConsumerWidget {
                     color: Color(0xFFCC2200),
                   ),
                 ),
-                label: '漏光',
+                label: s.leakLight,
                 onTap: () {},
               ),
               // 颗粒
@@ -2351,7 +2365,7 @@ class _OptionsSheet extends ConsumerWidget {
                     ),
                   ),
                 ),
-                label: '颗粒',
+                label: s.grain,
                 onTap: () {},
               ),
               // 暗角
@@ -2366,7 +2380,7 @@ class _OptionsSheet extends ConsumerWidget {
                     ),
                   ),
                 ),
-                label: '暗角',
+                label: s.vignette,
                 onTap: () {},
               ),
               // 边框（仅在当前比例支持边框时显示）
@@ -2382,7 +2396,7 @@ class _OptionsSheet extends ConsumerWidget {
                   ),
                   child: const Icon(Icons.crop_square, color: _kWhite, size: 22),
                 ),
-                label: '边框',
+                label: s.frame,
                 onTap: () {
                   onClose();
                   // 打开边框面板
@@ -2397,7 +2411,7 @@ class _OptionsSheet extends ConsumerWidget {
                   decoration: const BoxDecoration(shape: BoxShape.circle),
                   child: CustomPaint(painter: _ColorWheelPainter()),
                 ),
-                label: '色彩',
+                label: s.color,
                 onTap: () {
                   onClose();
                   ref.read(cameraAppProvider.notifier).togglePanel('filter');
@@ -2419,7 +2433,7 @@ class _OptionsSheet extends ConsumerWidget {
                     ),
                   ),
                 ),
-                label: '计时',
+                label: s.countdownTimer,
                 onTap: () => ref.read(cameraAppProvider.notifier).cycleTimer(),
               ),
               // 比例
@@ -2438,7 +2452,7 @@ class _OptionsSheet extends ConsumerWidget {
                     ),
                   ),
                 ),
-                label: '比例',
+                label: s.ratio,
                 onTap: () {
                   onClose();
                   ref.read(cameraAppProvider.notifier).togglePanel('ratio');
@@ -2455,7 +2469,7 @@ class _OptionsSheet extends ConsumerWidget {
                   ),
                   child: const Icon(Icons.access_time, color: _kWhite, size: 22),
                 ),
-                label: '水印',
+                label: s.watermark,
                 onTap: () {
                   onClose();
                   ref.read(cameraAppProvider.notifier).togglePanel('watermark');
@@ -2515,12 +2529,12 @@ class _OptionsSheet extends ConsumerWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // 相册弹框（左下角缩略图点击）
 // ─────────────────────────────────────────────────────────────────────────────
-class _GallerySheet extends StatefulWidget {
+class _GallerySheet extends ConsumerStatefulWidget {
   const _GallerySheet();
   @override
-  State<_GallerySheet> createState() => _GallerySheetState();
+  ConsumerState<_GallerySheet> createState() => _GallerySheetState();
 }
-class _GallerySheetState extends State<_GallerySheet> {
+class _GallerySheetState extends ConsumerState<_GallerySheet> {
   List<AssetEntity> _allPhotos = [];
   bool _loading = true;
   @override
@@ -2546,6 +2560,7 @@ class _GallerySheetState extends State<_GallerySheet> {
   }
   @override
   Widget build(BuildContext context) {
+    final s = sOf(ref.watch(languageProvider));
     return Stack(
       children: [
         // 半透明黑色背景
@@ -2602,12 +2617,12 @@ class _GallerySheetState extends State<_GallerySheet> {
                   },
                   child: _GalleryItem(
                     icon: Icons.grid_view,
-                    label: '全部照片',
+                    label: s.allPhotos,
                     count: _loading ? 0 : _allPhotos.length,
                   ),
                 ),
-                _GalleryItem(icon: Icons.favorite_outline, label: '喜好项目', count: 0),
-                _GalleryItem(icon: Icons.video_file_outlined, label: '底片', count: 0),
+                _GalleryItem(icon: Icons.favorite_outline, label: s.favorites, count: 0),
+                _GalleryItem(icon: Icons.video_file_outlined, label: s.film, count: 0),
               ],
             ),
           ),
@@ -2665,24 +2680,25 @@ class _AssetThumbState extends State<_AssetThumb> {
 // ─────────────────────────────────────────────────────────────────────────────
 // Photo Grid Page
 // ─────────────────────────────────────────────────────────────────────────────
-class _PhotoGridPage extends StatelessWidget {
+class _PhotoGridPage extends ConsumerWidget {
   final List<AssetEntity> photos;
   const _PhotoGridPage({required this.photos});
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = sOf(ref.watch(languageProvider));
     return Scaffold(
       backgroundColor: _kBlack,
       appBar: AppBar(
         backgroundColor: _kBlack,
         foregroundColor: _kWhite,
-        title: const Text('全部照片', style: TextStyle(color: _kWhite, fontSize: 17, fontWeight: FontWeight.w600)),
+        title: Text(s.allPhotos, style: const TextStyle(color: _kWhite, fontSize: 17, fontWeight: FontWeight.w600)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: _kWhite),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: photos.isEmpty
-          ? const Center(child: Text('暂无照片', style: TextStyle(color: Colors.white54)))
+          ? Center(child: Text(s.noPhotos, style: const TextStyle(color: Colors.white54)))
           : GridView.builder(
               padding: const EdgeInsets.all(2),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -2933,7 +2949,7 @@ class _FilterRow extends StatelessWidget {
 }
 
 // 边框选择
-class _FrameGrid extends StatelessWidget {
+class _FrameGrid extends ConsumerWidget {
   final List<FrameDefinition> frames;
   final String? activeId;
   final ValueChanged<String> onSelect;
@@ -2941,10 +2957,11 @@ class _FrameGrid extends StatelessWidget {
   const _FrameGrid({required this.frames, this.activeId, required this.onSelect});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = sOf(ref.watch(languageProvider));
     // 加上"无边框"选项
     final allFrames = [
-      const _FrameOption(id: 'none', name: '无', color: Colors.transparent),
+      _FrameOption(id: 'none', name: s.none, color: Colors.transparent),
       ...frames.map((f) {
         Color c = const Color(0xFFF5F2EA);
         try {

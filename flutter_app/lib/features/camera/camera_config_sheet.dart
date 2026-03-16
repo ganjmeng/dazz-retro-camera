@@ -31,6 +31,7 @@ import 'camera_notifier.dart';
 import 'camera_manager_screen.dart';
 import 'camera_sample_screen.dart';
 import '../../models/watermark_styles.dart';
+import '../../core/l10n.dart';
 
 // ─── 颜色常量 ─────────────────────────────────────────────────────────────────
 const _kBg = Color(0xFF1A1A1A);
@@ -131,13 +132,14 @@ class CameraConfigInlinePanel extends ConsumerWidget {
   // ── 功能图标行 ─────────────────────────────────────────────────────────────
   Widget _buildFunctionRow(BuildContext context, WidgetRef ref, CameraAppState st, CameraDefinition cam) {
     final uiCap = cam.uiCapabilities;
+    final s = sOf(ref.read(languageProvider));
     final List<Widget> items = [];
 
     if (uiCap.enableWatermark) {
       final active = st.activeWatermark;
       final hasWatermark = active != null && !active.isNone;
       items.add(_FuncBtn(
-        label: '时间水印',
+        label: s.watermark,
         child: _WatermarkIcon(active: hasWatermark),
         isActive: hasWatermark,
         onTap: () => _openSubPanel(context, ref, _SubPanelType.watermark, cam),
@@ -152,7 +154,7 @@ class CameraConfigInlinePanel extends ConsumerWidget {
         child: IgnorePointer(
           ignoring: !ratioSupportsFrame,
           child: _FuncBtn(
-            label: '边框',
+            label: s.frame,
             child: _FrameIcon(active: hasFrame && ratioSupportsFrame),
             isActive: hasFrame && ratioSupportsFrame,
             onTap: () => _openSubPanel(context, ref, _SubPanelType.frame, cam),
@@ -167,9 +169,9 @@ class CameraConfigInlinePanel extends ConsumerWidget {
           st.activeRatioId == cam.defaultSelection.ratioId;
       final ratioLabel = ratio?.label ?? '3:4';
       items.add(_FuncBtn(
-        label: isDefaultRatio ? '原比例' : ratioLabel,
+        label: isDefaultRatio ? s.originalRatio : ratioLabel,
         child: _RatioIcon(
-          label: isDefaultRatio ? '原比例' : ratioLabel,
+          label: isDefaultRatio ? s.originalRatio : ratioLabel,
           isDefault: isDefaultRatio,
         ),
         isActive: !isDefaultRatio,
@@ -179,7 +181,7 @@ class CameraConfigInlinePanel extends ConsumerWidget {
 
     if (uiCap.enableFilter) {
       items.add(_FuncBtn(
-        label: '滤镜',
+        label: s.filter,
         child: const _FilmFilterIcon(),
         isActive: false,
         onTap: () => _openSubPanel(context, ref, _SubPanelType.filter, cam),
@@ -280,6 +282,7 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
   @override
   Widget build(BuildContext context) {
     final st = ref.watch(cameraAppProvider);
+    final s = sOf(ref.watch(languageProvider));
     final cam = st.camera;
 
     return Container(
@@ -316,17 +319,18 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
 
   // ── Tab 行 ──────────────────────────────────────────────────────────────────
   Widget _buildTabRow() {
+    final s = sOf(ref.read(languageProvider));
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
           // 左侧：照片 / 视频
-          _TabBtn(label: '照片', selected: _tabIndex == 0, onTap: () => setState(() => _tabIndex = 0)),
+          _TabBtn(label: s.photo, selected: _tabIndex == 0, onTap: () => setState(() => _tabIndex = 0)),
           const SizedBox(width: 20),
-          _TabBtn(label: '视频', selected: _tabIndex == 1, onTap: () => setState(() => _tabIndex = 1)),
+          _TabBtn(label: s.video, selected: _tabIndex == 1, onTap: () => setState(() => _tabIndex = 1)),
           const Spacer(),
           // 右侧：样图 | 管理
-          _PillBtn(label: '样图', icon: Icons.landscape_outlined, onTap: () {
+          _PillBtn(label: s.sample, icon: Icons.landscape_outlined, onTap: () {
             final st = ref.read(cameraAppProvider);
             Navigator.of(context).pop();
             Navigator.of(context).push(MaterialPageRoute(
@@ -334,7 +338,7 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
             ));
           }),
           const SizedBox(width: 8),
-          _PillBtn(label: '管理', icon: Icons.camera_alt_outlined, onTap: () {
+          _PillBtn(label: s.manage, icon: Icons.camera_alt_outlined, onTap: () {
             Navigator.of(context).pop();
             Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => const CameraManagerScreen(),
@@ -402,8 +406,9 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
   }// ── 功能图标行 ──────────────────────────────────────────────────────────────
   Widget _buildFunctionRow(CameraAppState st, CameraDefinition cam) {
     final uiCap = cam.uiCapabilities;
+    final s = sOf(ref.read(languageProvider));
 
-    // 构建功能按钮列表
+    // 构建功能按鈕列表
     final List<Widget> items = [];
 
     // 1. 时间水印
@@ -411,14 +416,14 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
       final active = st.activeWatermark;
       final hasWatermark = active != null && !active.isNone;
       items.add(_FuncBtn(
-        label: '时间水印',
+        label: s.watermark,
         child: _WatermarkIcon(active: hasWatermark),
         isActive: hasWatermark,
         onTap: () => _openSubPanel(context, _SubPanelType.watermark),
       ));
     }
 
-    // 2. 边框（当前比例不支持相框时，按钮变灰不可点击）
+    // 2. 边框（当前比例不支持相框时，按鈕变灰不可点击）
     if (uiCap.enableFrame) {
       final hasFrame = st.activeFrameId != null;
       final ratioSupportsFrame = cam.isFrameEnabled(st.activeRatioId);
@@ -427,7 +432,7 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
         child: IgnorePointer(
           ignoring: !ratioSupportsFrame,
           child: _FuncBtn(
-            label: '边框',
+            label: s.frame,
             child: _FrameIcon(active: hasFrame && ratioSupportsFrame),
             isActive: hasFrame && ratioSupportsFrame,
             onTap: () => _openSubPanel(context, _SubPanelType.frame),
@@ -444,12 +449,12 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
           st.activeRatioId == cam.defaultSelection.ratioId;
       final ratioLabel = ratio?.label ?? '3:4';
       items.add(_FuncBtn(
-        label: isDefaultRatio ? '原比例' : ratioLabel,
+        label: isDefaultRatio ? s.originalRatio : ratioLabel,
         child: _RatioIcon(
-          label: isDefaultRatio ? '原比例' : ratioLabel,
+          label: isDefaultRatio ? s.originalRatio : ratioLabel,
           isDefault: isDefaultRatio,
         ),
-        isActive: !isDefaultRatio, // 非默认比例时高亮
+        isActive: !isDefaultRatio,
         onTap: () => _openSubPanel(context, _SubPanelType.ratio),
       ));
     }
@@ -457,7 +462,7 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
     // 4. 滤镜（三色圆图标）
     if (uiCap.enableFilter) {
       items.add(_FuncBtn(
-        label: '滤镜',
+        label: s.filter,
         child: const _FilmFilterIcon(),
         isActive: false,
         onTap: () => _openSubPanel(context, _SubPanelType.filter),
@@ -600,19 +605,20 @@ class _SubPanelState extends ConsumerState<_SubPanel>
     return frame?.supportsBackground ?? false;
   }
 
-  String get _title {
+  String _title(S s) {
     switch (widget.type) {
-      case _SubPanelType.watermark: return '时间水印';
-      case _SubPanelType.frame: return '边框';
-      case _SubPanelType.ratio: return '比例';
-      case _SubPanelType.filter: return '滤镜';
-      case _SubPanelType.lens: return '镜头';
+      case _SubPanelType.watermark: return s.watermark;
+      case _SubPanelType.frame: return s.frame;
+      case _SubPanelType.ratio: return s.ratio;
+      case _SubPanelType.filter: return s.filter;
+      case _SubPanelType.lens: return s.lens;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final st = ref.watch(cameraAppProvider);
+    final s = sOf(ref.watch(languageProvider));
 
     return GestureDetector(
       onTap: () {}, // 防止点击穿透到背景层
@@ -643,7 +649,7 @@ class _SubPanelState extends ConsumerState<_SubPanel>
               child: Row(
                 children: [
                   Text(
-                    _title,
+                    _title(s),
                     style: const TextStyle(
                       color: Colors.black,
                       fontSize: 20,
@@ -673,7 +679,7 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          '无水印',
+                          s.noWatermark,
                           style: TextStyle(
                             color: isNone ? Colors.white : Colors.black,
                             fontSize: 14,
@@ -738,7 +744,8 @@ class _SubPanelState extends ConsumerState<_SubPanel>
 
   // ── 水印 Tab 行 ─────────────────────────────────────────────────────────────
   Widget _buildWatermarkTabs() {
-    const tabs = ['颜色', '样式', '位置', '方向', '大小'];
+    final s = sOf(ref.read(languageProvider));
+    final tabs = [s.wmColor, s.wmStyle, s.wmPosition, s.wmDirection, s.wmSize];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -778,7 +785,8 @@ class _SubPanelState extends ConsumerState<_SubPanel>
   // ── 边框 Tab 行 ────────────────────────────────────────────────────────────────────────────────────
   Widget _buildFrameTabs() {
     // 仅当当前相框支持背景色时才显示“背景”Tab
-    final tabs = _frameSupportsBackground ? ['样式', '背景'] : ['样式'];
+    final s = sOf(ref.read(languageProvider));
+    final tabs = _frameSupportsBackground ? [s.wmStyle, s.frameBackground] : [s.wmStyle];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -984,13 +992,14 @@ class _SubPanelState extends ConsumerState<_SubPanel>
 
     // Tab 2: 位置
     if (_tabIndex == 2) {
-      const positions = [
-        ('top_left',     '左上'),
-        ('top_center',   '上中'),
-        ('top_right',    '右上'),
-        ('bottom_left',  '左下'),
-        ('bottom_center','下中'),
-        ('bottom_right', '右下'),
+      final sl = sOf(ref.read(languageProvider));
+      final positions = [
+        ('top_left',     sl.posTopLeft),
+        ('top_center',   sl.posTopCenter),
+        ('top_right',    sl.posTopRight),
+        ('bottom_left',  sl.posBottomLeft),
+        ('bottom_center',sl.posBottomCenter),
+        ('bottom_right', sl.posBottomRight),
       ];
       final currentPos = st.watermarkPosition ?? st.activeWatermark?.position ?? 'bottom_right';
       return Padding(
@@ -1069,7 +1078,7 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                       children: [
                         Icon(Icons.text_fields, color: currentDir == 'horizontal' ? Colors.black : Colors.white54, size: 24),
                         const SizedBox(height: 4),
-                        Text('水平', style: TextStyle(
+                        Text(sOf(ref.read(languageProvider)).wmHorizontal, style: TextStyle(
                           color: currentDir == 'horizontal' ? Colors.black : Colors.white54,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -1100,7 +1109,7 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                       children: [
                         Icon(Icons.text_rotate_vertical, color: currentDir == 'vertical' ? Colors.black : Colors.white54, size: 24),
                         const SizedBox(height: 4),
-                        Text('垂直', style: TextStyle(
+                        Text(sOf(ref.read(languageProvider)).wmVertical, style: TextStyle(
                           color: currentDir == 'vertical' ? Colors.black : Colors.white54,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -1118,10 +1127,11 @@ class _SubPanelState extends ConsumerState<_SubPanel>
 
     // Tab 4: 大小
     if (_tabIndex == 4) {
-      const sizes = [
-        ('small',  '小'),
-        ('medium', '中'),
-        ('large',  '大'),
+      final sl = sOf(ref.read(languageProvider));
+      final sizes = [
+        ('small',  sl.small),
+        ('medium', sl.medium),
+        ('large',  sl.large),
       ];
       final currentSize = st.watermarkSize ?? 'medium';
       return Padding(
@@ -1366,18 +1376,19 @@ class _SubPanelState extends ConsumerState<_SubPanel>
   // ── 比例内容 ────────────────────────────────────────────────────────────────
   Widget _buildRatioContent(CameraAppState st) {
     final ratios = widget.camera.modules.ratios;
+    final s = sOf(ref.read(languageProvider));
     // 检查是否有任何不支持边框的比例（展示提示文字）
     final hasFrameRestriction = ratios.any((r) => !r.supportsFrame);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 提示文字：仅1:1和4:3支持边框
+        // 提示文字：仁1:1和4:3支持边框
         if (hasFrameRestriction)
           Padding(
             padding: const EdgeInsets.only(left: 20, right: 20, bottom: 4),
             child: Text(
-              '仅1:1和4:3支持显示边框',
+              s.frameRatioHint,
               style: const TextStyle(
                 color: Color(0xFF8E8E93),
                 fontSize: 13,
@@ -1433,6 +1444,7 @@ class _SubPanelState extends ConsumerState<_SubPanel>
   // ── 滤镜内容（复刻截图 13082）──────────────────────────────────────────────
   Widget _buildFilterContent(CameraAppState st) {
     final filters = widget.camera.modules.filters;
+    final s = sOf(ref.read(languageProvider));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1441,11 +1453,11 @@ class _SubPanelState extends ConsumerState<_SubPanel>
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           child: Row(
             children: [
-              _TabBtn(label: '照片', selected: true, onTap: () {}, dark: false),
+              _TabBtn(label: s.photo, selected: true, onTap: () {}, dark: false),
               const SizedBox(width: 20),
-              _TabBtn(label: '视频', selected: false, onTap: () {}, dark: false),
+              _TabBtn(label: s.video, selected: false, onTap: () {}, dark: false),
               const Spacer(),
-              _PillBtn(label: '样图', icon: Icons.landscape_outlined, dark: false, onTap: () {
+              _PillBtn(label: s.sample, icon: Icons.landscape_outlined, dark: false, onTap: () {
                 final st = ref.read(cameraAppProvider);
                 Navigator.of(context).pop();
                 Navigator.of(context).push(MaterialPageRoute(
@@ -1453,7 +1465,7 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                 ));
               }),
               const SizedBox(width: 8),
-              _PillBtn(label: '管理', icon: Icons.camera_alt_outlined, dark: false, onTap: () {
+              _PillBtn(label: s.manage, icon: Icons.camera_alt_outlined, dark: false, onTap: () {
                 Navigator.of(context).pop();
                 Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => const CameraManagerScreen(),
@@ -2213,20 +2225,21 @@ class _DiagonalLinePainter extends CustomPainter {
 /// 无边框开关
 /// enabled = true 表示当前有边框（开关处于"关"状态，即"无边框"=关）
 /// onChanged(true) = 开启边框，onChanged(false) = 关闭边框
-class _FrameToggleSwitch extends StatelessWidget {
+class _FrameToggleSwitch extends ConsumerWidget {
   final bool enabled; // true = 有边框
   final ValueChanged<bool> onChanged; // true = 开启边框，false = 关闭边框
 
   const _FrameToggleSwitch({required this.enabled, required this.onChanged});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = sOf(ref.watch(languageProvider));
     // "无边框" 标签：enabled=true时灰色（边框开启，无边框=关），enabled=false时黑色（无边框=开）
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          '无边框',
+          s.noFrame,
           style: TextStyle(
             color: !enabled ? Colors.black : const Color(0xFF8E8E93),
             fontSize: 14,

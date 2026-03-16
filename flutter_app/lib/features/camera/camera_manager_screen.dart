@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import '../../models/camera_registry.dart';
 import '../../services/camera_manager_service.dart';
+import '../../core/l10n.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 颜色常量
@@ -28,6 +29,7 @@ class CameraManagerScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncState = ref.watch(cameraManagerProvider);
+    final s = sOf(ref.watch(languageProvider));
 
     return Scaffold(
       backgroundColor: _kBg,
@@ -38,9 +40,9 @@ class CameraManagerScreen extends ConsumerWidget {
           icon: const Icon(Icons.arrow_back_ios, color: _kWhite, size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          '相机管理',
-          style: TextStyle(
+        title: Text(
+          s.cameraManage,
+          style: const TextStyle(
             color: _kWhite,
             fontSize: 17,
             fontWeight: FontWeight.w600,
@@ -53,7 +55,7 @@ class CameraManagerScreen extends ConsumerWidget {
           child: CircularProgressIndicator(color: _kWhite),
         ),
         error: (e, _) => Center(
-          child: Text('加载失败: $e', style: const TextStyle(color: _kWhite)),
+          child: Text('${s.loadFailed}: $e', style: const TextStyle(color: _kWhite)),
         ),
         data: (_) => const _CameraManagerBody(),
       ),
@@ -71,6 +73,7 @@ class _CameraManagerBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(cameraManagerProvider).valueOrNull;
     if (state == null) return const SizedBox.shrink();
+    final s = sOf(ref.watch(languageProvider));
 
     final favIds = state.favoriteIds;
     final nonFavIds = state.nonFavoriteIds;
@@ -82,8 +85,7 @@ class _CameraManagerBody extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── 收藏夹区域 ──────────────────────────────────────────────────
-          if (favIds.isNotEmpty) ...[
-            _SectionHeader(title: '收藏夹'),
+          if (favIds.isNotEmpty) ...[            _SectionHeader(title: s.favorites),
             const SizedBox(height: 12),
             _DraggableGrid(
               cameraIds: favIds,
@@ -96,7 +98,7 @@ class _CameraManagerBody extends ConsumerWidget {
           ],
 
           // ── 更多相机区域 ─────────────────────────────────────────────────
-          _SectionHeader(title: '更多相机'),
+          _SectionHeader(title: s.moreCameras),
           const SizedBox(height: 12),
           _DraggableGrid(
             cameraIds: nonFavIds,
@@ -159,9 +161,14 @@ class _DraggableGrid extends ConsumerWidget {
         ),
         padding: const EdgeInsets.all(24),
         child: Center(
-          child: Text(
-            isFavoriteSection ? '暂无收藏相机' : '暂无相机',
-            style: const TextStyle(color: Colors.white38, fontSize: 14),
+          child: Builder(
+            builder: (ctx) {
+              final sl = sOf(ProviderScope.containerOf(ctx).read(languageProvider));
+              return Text(
+                isFavoriteSection ? sl.noFavCameras : sl.noCameras,
+                style: const TextStyle(color: Colors.white38, fontSize: 14),
+              );
+            },
           ),
         ),
       );

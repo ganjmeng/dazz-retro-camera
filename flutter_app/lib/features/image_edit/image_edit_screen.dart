@@ -16,6 +16,7 @@ import '../camera/camera_config_sheet.dart';
 import '../camera/capture_pipeline.dart';
 import '../camera/preview_renderer.dart' as renderer_lib;
 import 'package:image/image.dart' as image_lib;
+import '../../core/l10n.dart';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -101,13 +102,13 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       final st = ref.read(cameraAppProvider);
       final camera = st.camera;
       if (camera == null) {
-        _showSnack('请先选择相机');
+        _showSnack(sOf(ref.read(languageProvider)).selectCameraFirst);
         setState(() => _isSaving = false);
         return;
       }
       final transformedBytes = await _applyTransforms();
       if (transformedBytes == null) {
-        _showSnack('图片处理失败');
+        _showSnack(sOf(ref.read(languageProvider)).imageProcessFailed);
         setState(() => _isSaving = false);
         return;
       }
@@ -137,7 +138,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       await File(tmpPath).writeAsBytes(finalBytes);
       final perm = await PhotoManager.requestPermissionExtend();
       if (!perm.hasAccess) {
-        _showSnack('需要相册权限才能保存');
+        _showSnack(sOf(ref.read(languageProvider)).needGalleryPermission);
         setState(() => _isSaving = false);
         return;
       }
@@ -148,15 +149,15 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       try { await File(tmpPath).delete(); } catch (_) {}
       if (saved != null && mounted) {
         HapticFeedback.mediumImpact();
-        _showSnack('已保存到相册');
+        _showSnack(sOf(ref.read(languageProvider)).savedToGallery);
         await Future.delayed(const Duration(milliseconds: 800));
         if (mounted) Navigator.of(context).pop();
       } else {
-        _showSnack('保存失败，请重试');
+        _showSnack(sOf(ref.read(languageProvider)).saveFailed);
       }
     } catch (e) {
       debugPrint('[ImageEditScreen] save error: $e');
-      _showSnack('保存失败');
+      _showSnack(sOf(ref.read(languageProvider)).saveError);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -271,9 +272,9 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
             ),
           ),
           const Spacer(),
-          const Text(
-            '编辑',
-            style: TextStyle(
+          Text(
+            sOf(ref.watch(languageProvider)).edit,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 17,
               fontWeight: FontWeight.w600,
@@ -293,9 +294,9 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
                       width: 16, height: 16,
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                     )
-                  : const Text(
-                      '保存',
-                      style: TextStyle(
+                  : Text(
+                      sOf(ref.watch(languageProvider)).save,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -508,7 +509,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
             const Icon(Icons.camera_alt_outlined, color: Colors.white54, size: 18),
             const SizedBox(width: 8),
             Text(
-              st.camera?.name ?? '选择相机',
+              st.camera?.name ?? sOf(ref.read(languageProvider)).selectCamera,
               style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
             const SizedBox(width: 4),
@@ -518,7 +519,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
             if (st.activeFilterId != null)
               _TagChip(label: st.activeFilterId!),
             if (st.activeFrameId != null && st.activeFrameId != 'none')
-              _TagChip(label: '边框'),
+              _TagChip(label: sOf(ref.read(languageProvider)).frame),
           ],
         ),
       ),
@@ -543,7 +544,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
               icon: st.activeWatermark != null && !st.activeWatermark!.isNone
                   ? Icons.access_time
                   : Icons.access_time_outlined,
-              label: '水印',
+              label: sOf(ref.read(languageProvider)).watermark,
               isActive: st.activeWatermark != null && !st.activeWatermark!.isNone,
               onTap: () => _togglePanel('watermark'),
             ),
@@ -553,7 +554,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
               icon: st.activeFrameId != null && st.activeFrameId != 'none'
                   ? Icons.crop_square
                   : Icons.crop_square_outlined,
-              label: '边框',
+              label: sOf(ref.read(languageProvider)).frame,
               isActive: st.activeFrameId != null && st.activeFrameId != 'none',
               onTap: () => _togglePanel('frame'),
             ),
@@ -561,21 +562,21 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
           if (uiCap?.enableFilter == true)
             _ToolIconBtn(
               icon: Icons.filter_vintage_outlined,
-              label: '滤镜',
+              label: sOf(ref.read(languageProvider)).filter,
               isActive: _activePanel == 'filter',
               onTap: () => _togglePanel('filter'),
             ),
           // 翻转（始终显示）
           _ToolIconBtn(
             icon: Icons.flip_outlined,
-            label: '翻转',
+            label: sOf(ref.read(languageProvider)).flip,
             isActive: _flipH,
             onTap: _flipHorizontal,
           ),
           // 裁剪（始终显示）
           _ToolIconBtn(
             icon: Icons.crop_outlined,
-            label: '裁剪',
+            label: sOf(ref.read(languageProvider)).crop,
             isActive: _isCropMode,
             onTap: () => setState(() => _isCropMode = !_isCropMode),
           ),
@@ -599,9 +600,9 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
           Row(
             children: [
               Text(
-                _activePanel == 'filter' ? '滤镜'
-                    : _activePanel == 'frame' ? '边框'
-                    : '水印',
+                _activePanel == 'filter' ? sOf(ref.read(languageProvider)).filter
+                    : _activePanel == 'frame' ? sOf(ref.read(languageProvider)).frame
+                    : sOf(ref.read(languageProvider)).watermark,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -905,15 +906,16 @@ class _FilterRow extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // 边框行（横向滚动，复用拍摄页逻辑）
 // ─────────────────────────────────────────────────────────────────────────────
-class _FrameRow extends StatelessWidget {
+class _FrameRow extends ConsumerWidget {
   final List<FrameDefinition> frames;
   final String? activeId;
   final ValueChanged<String> onSelect;
   const _FrameRow({required this.frames, this.activeId, required this.onSelect});
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = sOf(ref.watch(languageProvider));
     final allFrames = [
-      _FrameOpt(id: 'none', name: '无', color: Colors.transparent),
+      _FrameOpt(id: 'none', name: s.none, color: Colors.transparent),
       ...frames.map((f) {
         Color c = const Color(0xFFF5F2EA);
         try {
