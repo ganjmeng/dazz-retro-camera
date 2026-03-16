@@ -997,3 +997,230 @@ final cameraAppProvider =
     StateNotifierProvider<CameraAppNotifier, CameraAppState>((ref) {
   return CameraAppNotifier(ref);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 细粒度 Select Providers — 避免 CameraScreen 全量 rebuild
+// 只有对应字段变化时，依赖该 provider 的 Widget 才会 rebuild
+// 使用方式：将 ref.watch(cameraAppProvider).someField
+//           替换为   ref.watch(somePropProvider)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// 当前激活的相机 ID（相机切换时 rebuild）
+final activeCameraIdProvider = Provider<String>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.activeCameraId)),
+);
+
+/// 相机是否正在加载（切换相机时 rebuild）
+final cameraLoadingProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.isLoading)),
+);
+
+/// 当前 CameraDefinition 对象（切换相机时 rebuild）
+final cameraDefinitionProvider = Provider<CameraDefinition?>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.camera)),
+);
+
+/// 当前激活的比例 ID（切换比例时 rebuild）
+final activeRatioIdProvider = Provider<String?>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.activeRatioId)),
+);
+
+/// 当前激活的相框 ID（切换相框时 rebuild）
+final activeFrameIdProvider = Provider<String?>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.activeFrameId)),
+);
+
+/// 当前激活的水印 ID（切换水印时 rebuild）
+final activeWatermarkIdProvider = Provider<String?>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.activeWatermarkId)),
+);
+
+/// 当前激活的镜头 ID（切换镜头时 rebuild）
+final activeLensIdProvider = Provider<String?>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.activeLensId)),
+);
+
+/// 曝光值（拖动曝光条时 rebuild）
+final exposureValueProvider = Provider<double>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.exposureValue)),
+);
+
+/// 缩放级别（双指缩放时 rebuild）
+final zoomLevelProvider = Provider<double>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.zoomLevel)),
+);
+
+/// 是否显示缩放滑块（点击胶囊时 rebuild）
+final showZoomSliderProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.showZoomSlider)),
+);
+
+/// 闪光灯模式（切换闪光灯时 rebuild）
+final flashModeProvider = Provider<String>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.flashMode)),
+);
+
+/// 定时器秒数（切换定时器时 rebuild）
+final timerSecondsProvider = Provider<int>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.timerSeconds)),
+);
+
+/// 是否正在拍照（按快门时 rebuild）
+final isTakingPhotoProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.isTakingPhoto)),
+);
+
+/// 是否显示拍照闪光（拍照瞬间 rebuild）
+final showCaptureFlashProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.showCaptureFlash)),
+);
+
+/// 当前激活的面板 ID（展开/收起面板时 rebuild）
+final activePanelProvider = Provider<String?>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.activePanel)),
+);
+
+/// 是否前置摄像头（翻转摄像头时 rebuild）
+final isFrontCameraProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.isFrontCamera)),
+);
+
+/// 网格开关（切换网格时 rebuild）
+final gridEnabledProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.gridEnabled)),
+);
+
+/// 小窗模式（切换小窗时 rebuild）
+final smallFrameModeProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.smallFrameMode)),
+);
+
+/// 鱼眼模式（切换鱼眼时 rebuild）
+final fisheyeModeProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.fisheyeMode)),
+);
+
+/// 双重曝光开关（切换双曝时 rebuild）
+final doubleExpEnabledProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.doubleExpEnabled)),
+);
+
+/// 双重曝光第一张路径（拍第一张时 rebuild）
+final doubleExpFirstPathProvider = Provider<String?>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.doubleExpFirstPath)),
+);
+
+/// 连拍进度（连拍时 rebuild）
+final burstProgressProvider = Provider<int>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.burstProgress)),
+);
+
+/// 是否正在连拍（连拍时 rebuild）
+final isBurstingProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.isBursting)),
+);
+
+/// 连拍张数（设置连拍时 rebuild）
+final burstCountProvider = Provider<int>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.burstCount)),
+);
+
+/// 调试浮层开关（切换调试时 rebuild）
+final showDebugOverlayProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.showDebugOverlay)),
+);
+
+/// 顶部菜单显示状态（展开/收起顶部菜单时 rebuild）
+final showTopMenuProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.showTopMenu)),
+);
+
+/// 色温 K 值（调整色温时 rebuild）
+final colorTempKProvider = Provider<int>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.colorTempK)),
+);
+
+/// 白平衡模式（切换白平衡时 rebuild）
+final wbModeProvider = Provider<String>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.wbMode)),
+);
+
+/// 温度偏移（调整温度时 rebuild）
+final temperatureOffsetProvider = Provider<double>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.temperatureOffset)),
+);
+
+/// 锐化级别（切换锐化时 rebuild）
+final sharpenLevelProvider = Provider<int>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.sharpenLevel)),
+);
+
+/// 小地图开关（切换小地图时 rebuild）
+final minimapEnabledProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.minimapEnabled)),
+);
+
+/// 位置信息开关（切换位置时 rebuild）
+final locationEnabledProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.locationEnabled)),
+);
+
+/// 快门声音开关（切换快门声时 rebuild）
+final shutterSoundEnabledProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.shutterSoundEnabled)),
+);
+
+/// 快门振动开关（切换振动时 rebuild）
+final shutterVibrationEnabledProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.shutterVibrationEnabled)),
+);
+
+/// 前置镜像开关（切换镜像时 rebuild）
+final mirrorFrontCameraProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.mirrorFrontCamera)),
+);
+
+/// 相框背景色（切换相框背景时 rebuild）
+final frameBackgroundColorProvider = Provider<String?>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.frameBackgroundColor)),
+);
+
+/// 水印颜色（调整水印颜色时 rebuild）
+final watermarkColorProvider = Provider<String?>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.watermarkColor)),
+);
+
+/// 水印位置（调整水印位置时 rebuild）
+final watermarkPositionProvider = Provider<String?>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.watermarkPosition)),
+);
+
+/// 水印大小（调整水印大小时 rebuild）
+final watermarkSizeProvider = Provider<String?>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.watermarkSize)),
+);
+
+/// 水印方向（调整水印方向时 rebuild）
+final watermarkDirectionProvider = Provider<String?>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.watermarkDirection)),
+);
+
+/// 水印样式（调整水印样式时 rebuild）
+final watermarkStyleProvider = Provider<String?>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.watermarkStyle)),
+);
+
+/// 双重曝光混合比例（调整混合时 rebuild）
+final doubleExpBlendProvider = Provider<double>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.doubleExpBlend)),
+);
+
+/// 最近一次拍照分辨率（调试用，拍照后 rebuild）
+final lastCaptureRawProvider = Provider<String>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.lastCaptureRaw)),
+);
+
+/// 最近一次输出分辨率（调试用，拍照后 rebuild）
+final lastCaptureOutputProvider = Provider<String>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.lastCaptureOutput)),
+);
