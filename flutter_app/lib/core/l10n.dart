@@ -150,6 +150,8 @@ class S {
   String get sharpness           => get('sharpness');
   String get minimapOn           => get('minimapOn');
   String get minimapOff          => get('minimapOff');
+  String get minimapHintOn       => get('minimapHintOn');
+  String get minimapHintOff      => get('minimapHintOff');
   String get doubleExpOn         => get('doubleExpOn');
   String get doubleExpOff        => get('doubleExpOff');
   String get doubleExpStart      => get('doubleExpStart');

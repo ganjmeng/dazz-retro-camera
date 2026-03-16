@@ -61,6 +61,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private var camera: Camera? = null
     private var preview: Preview? = null
     private var imageCapture: ImageCapture? = null
+    /** 当前绑定摄像头的传感器调试信息，由 readActiveCameraInfo() 填充 */
+    private var activeCameraDebugInfo: Map<String, Any> = emptyMap()
     private var videoCapture: VideoCapture<Recorder>? = null
     private var recording: Recording? = null
     private var lensFacing: Int = CameraSelector.LENS_FACING_BACK
@@ -187,7 +189,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                     try {
                         bindCameraUseCases(owner)
                         result.success(mapOf("textureId" to entry.id()))
-                        sendEvent("onCameraReady", emptyMap<String, Any>())
+                        sendEvent("onCameraReady", activeCameraDebugInfo)
                     } catch (e: Exception) {
                         Log.e(TAG, "bindCameraUseCases failed", e)
                         result.error("CAMERA_INIT_FAILED", e.message, null)
@@ -299,6 +301,41 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             imageCapture,
             videoCapture
         )
+        // 绑定成功后读取当前摄像头的传感器信息，供 Debug 面板显示
+        @Suppress("UnsafeOptInUsageError")
+        readActiveCameraInfo()
+    }
+
+    /** 读取当前绑定摄像头的传感器信息，存入 activeCameraDebugInfo */
+    @androidx.camera.camera2.interop.ExperimentalCamera2Interop
+    private fun readActiveCameraInfo() {
+        try {
+            val cam = camera ?: return
+            val info = Camera2CameraInfo.from(cam.cameraInfo)
+            val camId = info.cameraId
+            val sensorSize = info.getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
+            val focalLengths = info.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+            val facing = info.getCameraCharacteristic(CameraCharacteristics.LENS_FACING)
+            val facingStr = when (facing) {
+                CameraCharacteristics.LENS_FACING_BACK -> "back"
+                CameraCharacteristics.LENS_FACING_FRONT -> "front"
+                CameraCharacteristics.LENS_FACING_EXTERNAL -> "external"
+                else -> "unknown"
+            }
+            val sensorW = sensorSize?.width ?: 0
+            val sensorH = sensorSize?.height ?: 0
+            val focalStr = focalLengths?.joinToString("/") { String.format("%.1f", it) } ?: "?"
+            activeCameraDebugInfo = mapOf(
+                "cameraId" to camId,
+                "sensorSize" to "${sensorW}×${sensorH}",
+                "sensorMp" to String.format("%.1f", sensorW * sensorH / 1_000_000.0),
+                "focalLengths" to focalStr,
+                "facing" to facingStr
+            )
+            Log.d(TAG, "Active camera: id=$camId sensor=${sensorW}×${sensorH} focal=$focalStr facing=$facingStr")
+        } catch (e: Exception) {
+            Log.w(TAG, "readActiveCameraInfo failed: ${e.message}")
+        }
     }
 
     // ─────────────────────────────────────────────

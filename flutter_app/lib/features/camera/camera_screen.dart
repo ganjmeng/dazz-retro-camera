@@ -130,6 +130,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   double _prevAngle = 0.0;
   StreamSubscription<AccelerometerEvent>? _accelSub;
 
+  /// 多语言辅助方法：在任何 helper 方法中调用 _s() 获取翻译对象
+  S _s() => sOf(ref.read(languageProvider));
+
   @override
   void initState() {
     super.initState();
@@ -988,8 +991,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                         const SizedBox(width: 10),
                         Text(
                           st.doubleExpFirstPath == null
-                              ? s.doubleExpLabel1
-                              : s.doubleExpLabel2,
+                              ? _s().doubleExpLabel1
+                              : _s().doubleExpLabel2,
                           style: const TextStyle(
                             color: Color(0xFFFFD700),
                             fontSize: 13,
@@ -1074,7 +1077,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           GestureDetector(
             onTap: () {},
             child: Text(
-              s.photo,
+              _s().photo,
               style: const TextStyle(
                 color: _kWhite,
                 fontSize: 17,
@@ -1087,7 +1090,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           GestureDetector(
             onTap: () {},
             child: Text(
-              s.video,
+              _s().video,
               style: const TextStyle(
                 color: Colors.grey,
                 fontSize: 17,
@@ -1124,7 +1127,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     );
                   }),
                   const SizedBox(width: 5),
-                  Text(s.sample, style: const TextStyle(color: _kWhite, fontSize: 13)),
+                  Text(_s().sample, style: const TextStyle(color: _kWhite, fontSize: 13)),
                 ],
               ),
             ),
@@ -1146,7 +1149,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 children: [
                   const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 14),
                   const SizedBox(width: 4),
-                  Text(s.manage, style: const TextStyle(color: _kWhite, fontSize: 13)),
+                  Text(_s().manage, style: const TextStyle(color: _kWhite, fontSize: 13)),
                 ],
               ),
             ),
@@ -1288,7 +1291,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       color: Colors.black,
       child: Center(
         child: Text(
-          s.cameraInitializing,
+          _s().cameraInitializing,
           style: const TextStyle(color: Colors.white54, fontSize: 14),
         ),
       ),
@@ -1457,7 +1460,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 rotateController: _rotateAnim,
                 child: _ToolbarBtn(
                   icon: Icons.add_photo_alternate_outlined,
-                  label: s.importPhoto,
+                  label: _s().importPhoto,
                   onTap: () => openImageImportFlow(context),
                 ),
               ),
@@ -1470,7 +1473,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 rotateController: _rotateAnim,
                 child: _ToolbarBtn(
                   icon: Icons.timer_outlined,
-                  label: s.timer,
+                  label: _s().timer,
                   badge: st.timerSeconds > 0 ? '${st.timerSeconds}s' : null,
                   onTap: () {
                     final cur = ref.read(cameraAppProvider).timerSeconds;
@@ -1495,7 +1498,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 rotateController: _rotateAnim,
                 child: _FlashBtn(
                   mode: st.flashMode,
-                  label: s.flash,
+                  label: _s().flash,
                   onTap: () {
                     final cur = ref.read(cameraAppProvider).flashMode;
                     final modes = ['off', 'on', 'auto'];
@@ -1521,7 +1524,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 rotateController: _rotateAnim,
                 child: _ToolbarBtn(
                   icon: Icons.flip_camera_ios_outlined,
-                  label: s.rear,
+                  label: _s().rear,
                   onTap: () => _showCameraTransition(
                     () => ref.read(cameraAppProvider.notifier).flipCamera(),
                     duration: const Duration(milliseconds: 500),
@@ -1755,7 +1758,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final mq = MediaQuery.of(context);
     // 复刻截图样式：深棕色半透明圆角卡片，覆盖取景框顶部
     final menuTop = mq.padding.top + kTopBarH - 30;
-    final sharpenLabels = [s.low, s.medium, s.high];
+    final sharpenLabels = [_s().low, _s().medium, _s().high];
     // 按鈕实际宽度 = (屏幕宽 - 左右padding) / 4
     final screenW = mq.size.width;
     // 宽屏限制：btnW 最大 160dp，避免平板上按鈕过宽
@@ -1799,7 +1802,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           // 1. 网格线
                           _TopMenuBtn(
                             icon: st.gridEnabled ? Icons.grid_on : Icons.grid_off,
-                            label: st.gridEnabled ? s.gridOn : s.gridOff,
+                            label: st.gridEnabled ? _s().gridOn : _s().gridOff,
                             btnW: btnW,
                             onTap: () => ref.read(cameraAppProvider.notifier).toggleGrid(),
                           ),
@@ -1824,7 +1827,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                 ),
                               ),
                             ),
-                            label: s.sharpness,
+                            label: _s().sharpness,
                             btnW: btnW,
                             onTap: () => _showCameraTransition(
                               () => ref.read(cameraAppProvider.notifier).cycleSharpen(),
@@ -1836,7 +1839,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             icon: st.minimapEnabled
                                 ? Icons.picture_in_picture
                                 : Icons.picture_in_picture_outlined,
-                            label: st.minimapEnabled ? s.minimapOn : s.minimapOff,
+                            label: st.minimapEnabled ? _s().minimapOn : _s().minimapOff,
                             btnW: btnW,
                             onTap: () {
                               final willEnable = !st.minimapEnabled;
@@ -1851,7 +1854,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             icon: st.doubleExpEnabled
                                 ? Icons.exposure
                                 : Icons.exposure_outlined,
-                            label: st.doubleExpEnabled ? s.doubleExpOn : s.doubleExpOff,
+                            label: st.doubleExpEnabled ? _s().doubleExpOn : _s().doubleExpOff,
                             btnW: btnW,
                             onTap: () {
                               final willEnable = !st.doubleExpEnabled;
@@ -1874,8 +1877,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           _TopMenuBtn(
                             icon: Icons.burst_mode_outlined,
                             label: st.burstCount == 0
-                                ? s.burstOff
-                                : s.burstCount(st.burstCount),
+                                ? _s().burstOff
+                                : _s().burstCount(st.burstCount),
                             btnW: btnW,
                             isActive: st.burstCount > 0,
                             onTap: () {
@@ -1894,7 +1897,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             icon: st.locationEnabled
                                 ? Icons.location_on
                                 : Icons.location_off_outlined,
-                            label: st.locationEnabled ? s.locationOn : s.locationOff,
+                            label: st.locationEnabled ? _s().locationOn : _s().locationOff,
                             btnW: btnW,
                             onTap: () async {
                               final result = await ref.read(cameraAppProvider.notifier).toggleLocation();
@@ -1945,7 +1948,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           // 7. 设置
                           _TopMenuBtn(
                             icon: Icons.settings_outlined,
-                            label: s.settings,
+                            label: _s().settings,
                             btnW: btnW,
                             onTap: () {
                               ref.read(cameraAppProvider.notifier).toggleTopMenu();
@@ -1957,7 +1960,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             icon: st.showDebugOverlay
                                 ? Icons.bug_report
                                 : Icons.bug_report_outlined,
-                            label: st.showDebugOverlay ? s.debugOn : s.debugOff,
+                            label: st.showDebugOverlay ? _s().debugOn : _s().debugOff,
                             btnW: btnW,
                             onTap: () {
                               ref.read(cameraAppProvider.notifier).toggleDebugOverlay();
@@ -2043,7 +2046,7 @@ class _OptionsSheet extends ConsumerWidget {
           children: [
             const SizedBox(height: 16),
             // Dazz Pro 横幅
-            _buildProBanner(),
+            _buildProBanner(ref),
             const SizedBox(height: 24),
             // 相机列表（Video + Photo 两行）
             Expanded(
@@ -2083,7 +2086,8 @@ class _OptionsSheet extends ConsumerWidget {
     );
   }
 
-  Widget _buildProBanner() {
+  Widget _buildProBanner(WidgetRef ref) {
+    final s = sOf(ref.read(languageProvider));
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
@@ -2323,6 +2327,7 @@ class _OptionsSheet extends ConsumerWidget {
   }
 
   Widget _buildOptionRow(BuildContext context, WidgetRef ref, CameraAppState st, CameraDefinition? camera) {
+    final s = sOf(ref.read(languageProvider));
     // 当前比例是否支持边框
     final currentRatioSupportsFrame = camera?.ratioById(st.activeRatioId)?.supportsFrame ?? false;
     return Column(
