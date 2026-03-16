@@ -1679,14 +1679,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                         child: GestureDetector(
                           onTap: () => showCameraConfigSheet(context),
                           child: SizedBox(
-                            width: 97,
-                            height: 97,
+                            width: 83,
+                            height: 83,
                             child: Stack(
                               alignment: Alignment.center,
                               children: [
                                 // 虚线圆圈背景（圆圈大小 70，图标不变）
                                 CustomPaint(
-                                  size: const Size(82, 82),
+                                  size: const Size(83, 83),
                                   painter: _DashedCirclePainter(),
                                 ),
                                 // 相机图标 + 名称（跟随设备方向旋转）
