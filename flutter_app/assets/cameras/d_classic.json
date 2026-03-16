@@ -155,23 +155,23 @@
         "cornerRadius": 0,
         "innerShadow": true,
         "inset": {
-          "top": 138,
-          "right": 119,
-          "bottom": 99,
-          "left": 119
+          "top": 151,
+          "right": 137,
+          "bottom": 344,
+          "left": 134
         },
         "ratioInsets": {
           "ratio_1_1": {
-            "top": 420,
-            "right": 360,
-            "bottom": 980,
-            "left": 360
+            "top": 159,
+            "right": 139,
+            "bottom": 340,
+            "left": 137
           },
           "ratio_3_4": {
-            "top": 136,
-            "right": 117,
-            "bottom": 136,
-            "left": 117
+            "top": 151,
+            "right": 137,
+            "bottom": 344,
+            "left": 134
           }
         },
         "supportedRatios": [
