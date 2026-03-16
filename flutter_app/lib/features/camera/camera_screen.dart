@@ -46,7 +46,7 @@ const _kRed = Color(0xFFFF3B30);
 
 // ─── 布局常量（提升为顶层常量，供多个方法共享）─────────────────────────────────────────────────────────────────────────────
 const kToolbarH = 52.0;          // 工具栏高度
-const kShutterH = 88.0;           // 快门行高度
+const kShutterH = 96.0;           // 快门行高度
 const kBottomPanelTopPad = 0.0;   // 工具栏上方间距
 const kToolbarShutterGap = 10.0;  // 工具栏和快门行间距
 const kBottomPanelH = kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
@@ -936,7 +936,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               child: _buildToolbar(st),
             ),
           ),
-          const SizedBox(height: 35),
           const SizedBox(height: kToolbarShutterGap),
           // 快门行
           _buildShutterRow(st),
@@ -1323,7 +1322,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
   // ── 工具栏（5个图标）────────────────────────────────────────────────────────
   Widget _buildToolbar(CameraAppState st) {
-    const double btnW = 64.0;
+    const double btnW = 72.0;
     return SizedBox(
       height: 52,
       child: Center(
@@ -1422,7 +1421,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: 88,
+          height: 96,
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: kMaxBottomContentW),
@@ -1522,11 +1521,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                               borderRadius: BorderRadius.circular(6),
                                               child: Image.asset(
                                                 entry.iconPath!,
-                                                width: 69,
-                                                height: 69,
+                                                width: 46,
+                                                height: 46,
                                                 fit: BoxFit.cover,
                                                 errorBuilder: (_, __, ___) =>
-                                                    const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 68),
+                                                    const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 36),
                                               ),
                                             )
                                           else
@@ -1560,7 +1559,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ),
           ),
         ),
-        const SizedBox(height: 10), // 底部安全区
+        Builder(builder: (ctx) {
+          final bottomInset = MediaQuery.of(ctx).padding.bottom;
+          return SizedBox(height: bottomInset > 0 ? bottomInset : 16);
+        }),
       ],
     );
   }
