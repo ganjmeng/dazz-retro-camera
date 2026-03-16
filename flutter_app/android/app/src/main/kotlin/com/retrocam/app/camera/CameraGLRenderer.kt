@@ -75,6 +75,21 @@ uniform float uTime;
 uniform vec2  uTexelSize;   // 1/width, 1/height
 uniform float uFisheyeMode; // 1.0=圆形鱼眼模式, 0.0=普通模式
 uniform float uAspectRatio; // 宽/高 比例（用于保持圆形）
+// ── 传感器非均匀性（数码相机通用，FXN-R 专项调校）──
+uniform float uCenterGain;          // 中心增亮（FXN-R=0.010）
+uniform float uEdgeFalloff;         // 边缘衰减（FXN-R=0.035）
+uniform float uExposureVariation;   // 曝光波动（FXN-R=0.020）
+uniform float uCornerWarmShift;     // 角落色温偏移（FXN-R=-0.015，负=偏冷青）
+uniform float uDevelopmentSoftness; // 显影柔化（FXN-R=0.020）
+uniform float uChemicalIrregularity;// 化学不规则感（FXN-R=0.010）
+// ── 肤色保护（冷色调相机必须开启，防止肤色发青）──
+uniform float uSkinHueProtect;      // 肤色色相保护（1.0=开启）
+uniform float uSkinSatProtect;      // 肤色饱和度保护（FXN-R=0.96）
+uniform float uSkinLumaSoften;      // 肤色亮度柔化（FXN-R=0.030）
+uniform float uSkinRedLimit;        // 肤色红限（FXN-R=1.04）
+// ── 噪声分离──
+uniform float uLuminanceNoise;      // 亮度噪声（FXN-R=0.02）
+uniform float uChromaNoise;         // 色度噪声（FXN-R=0.01）
 
 // ── 工具函数 ──────────────────────────────────────────────────────
 float random(vec2 st, float seed) {
@@ -125,6 +140,59 @@ vec3 applySharpen(vec2 uv, float amount) {
     return clamp(center + strength * (center - blur), 0.0, 1.0);
 }
 
+// ── 传感器非均匀性工具函数 ──────────────────────────────────────────────
+float ccdCenterEdge(vec2 uv, float centerGain, float edgeFalloff) {
+    vec2 d = uv - 0.5;
+    float dist = length(d);
+    float center = 1.0 + centerGain * (1.0 - dist * 2.0);
+    float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
+    return clamp(center * edge, 0.5, 1.5);
+}
+vec3 ccdCornerWarm(vec2 uv, vec3 color, float shift) {
+    vec2 d = uv - 0.5;
+    float cornerFactor = clamp(dot(d, d) * 4.0, 0.0, 1.0);
+    float s = shift * cornerFactor;
+    color.r = clamp(color.r + s * 0.4, 0.0, 1.0);
+    color.b = clamp(color.b - s * 0.4, 0.0, 1.0);
+    return color;
+}
+vec3 ccdDevelopmentSoften(vec2 uv, vec3 color, float softness) {
+    if (softness <= 0.0) return color;
+    vec3 blurred =
+        texture(uCameraTexture, uv + vec2(-uTexelSize.x, 0.0)).rgb * 0.25 +
+        texture(uCameraTexture, uv + vec2( uTexelSize.x, 0.0)).rgb * 0.25 +
+        texture(uCameraTexture, uv + vec2(0.0, -uTexelSize.y)).rgb * 0.25 +
+        texture(uCameraTexture, uv + vec2(0.0,  uTexelSize.y)).rgb * 0.25;
+    return mix(color, blurred, softness * 0.5);
+}
+vec3 ccdRgbToHsl(vec3 rgb) {
+    float maxC = max(max(rgb.r, rgb.g), rgb.b);
+    float minC = min(min(rgb.r, rgb.g), rgb.b);
+    float delta = maxC - minC;
+    float l = (maxC + minC) * 0.5;
+    float s = (delta < 0.001) ? 0.0 : delta / (1.0 - abs(2.0 * l - 1.0));
+    float h = 0.0;
+    if (delta > 0.001) {
+        if (maxC == rgb.r)      h = mod((rgb.g - rgb.b) / delta, 6.0);
+        else if (maxC == rgb.g) h = (rgb.b - rgb.r) / delta + 2.0;
+        else                    h = (rgb.r - rgb.g) / delta + 4.0;
+        h = h / 6.0;
+        if (h < 0.0) h += 1.0;
+    }
+    return vec3(h, s, l);
+}
+vec3 ccdSkinProtect(vec3 color, float protect, float satProt, float lumaSoften, float redLimit) {
+    if (protect < 0.5) return color;
+    vec3 hsl = ccdRgbToHsl(color);
+    float hue = hsl.x;
+    float skinMask = smoothstep(0.0356, 0.0756, hue) * (1.0 - smoothstep(0.105, 0.145, hue));
+    if (skinMask < 0.001) return color;
+    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    vec3 prot = mix(vec3(luma), color, satProt);
+    prot = clamp(prot + lumaSoften * 0.1, 0.0, 1.0);
+    prot.r = clamp(prot.r, 0.0, redLimit);
+    return mix(color, prot, skinMask);
+}
 // ── 圆形鱼眼投影 ──────────────────────────────────────────────────
 // 等距投影：将屏幕像素映射到球面，圆形以外输出纯黑
 // 原理：以画面中心为原点，将 [-1,1] 的归一化坐标做极坐标变换，
@@ -198,8 +266,41 @@ void main() {
         float dark  = 1.0 - lum;
         color = clamp(color + noise * uNoiseAmount * 0.2 * dark, 0.0, 1.0);
     }
+    // FXN-R: luminanceNoise=0.02, chromaNoise=0.01
+    if (uLuminanceNoise > 0.0) {
+        float ln = random(uv, uTime + 1.7) - 0.5;
+        color = clamp(color + ln * uLuminanceNoise * 0.15, 0.0, 1.0);
+    }
+    if (uChromaNoise > 0.0) {
+        float cr = random(uv, uTime + 3.1) - 0.5;
+        float cg = random(uv, uTime + 5.3) - 0.5;
+        float cb = random(uv, uTime + 7.7) - 0.5;
+        color = clamp(color + vec3(cr, cg, cb) * uChromaNoise * 0.08, 0.0, 1.0);
+    }
 
-    // Pass 5: 暗角（鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗）
+    // Pass 5: 传感器非均匀性 + 肤色保护
+    // FXN-R: centerGain=0.010, edgeFalloff=0.035
+    if (uCenterGain > 0.0 || uEdgeFalloff > 0.0) {
+        float factor = ccdCenterEdge(uv, uCenterGain, uEdgeFalloff);
+        color = clamp(color * factor, 0.0, 1.0);
+    }
+    // FXN-R: exposureVariation=0.020
+    if (uExposureVariation > 0.0) {
+        float evn = random(uv * 0.1, uTime * 0.01) - 0.5;
+        color = clamp(color + evn * uExposureVariation * 0.3, 0.0, 1.0);
+    }
+    // FXN-R: cornerWarmShift=-0.015 (负値=偏冷青)
+    if (uCornerWarmShift != 0.0) {
+        color = ccdCornerWarm(uv, color, uCornerWarmShift);
+    }
+    // FXN-R: developmentSoftness=0.020
+    if (uDevelopmentSoftness > 0.0) {
+        color = ccdDevelopmentSoften(uv, color, uDevelopmentSoftness);
+    }
+    // FXN-R: skinHueProtect=1.0, skinSatProtect=0.96, skinLumaSoften=0.03, skinRedLimit=1.04
+    color = ccdSkinProtect(color, uSkinHueProtect, uSkinSatProtect, uSkinLumaSoften, uSkinRedLimit);
+
+    // Pass 6: 暗角（鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗）
     if (uFisheyeMode < 0.5) {
         float vignette = vignetteEffect(uv, uVignetteAmount);
         color *= vignette;
@@ -312,7 +413,7 @@ void main() {
     @Volatile private var edgeFalloff: Float = 0.0f
     @Volatile private var exposureVariation: Float = 0.0f
     @Volatile private var cornerWarmShift: Float = 0.0f
-    // SQC 专用参数
+    // 拍立得/数码通用参数（Inst C / SQC / FXN-R 共用）
     @Volatile private var centerGain: Float = 0.0f
     @Volatile private var developmentSoftness: Float = 0.0f
     @Volatile private var chemicalIrregularity: Float = 0.0f
@@ -488,7 +589,7 @@ void main() {
         uEdgeFalloff          = GLES30.glGetUniformLocation(programId, "uEdgeFalloff")
         uExposureVariation    = GLES30.glGetUniformLocation(programId, "uExposureVariation")
         uCornerWarmShift      = GLES30.glGetUniformLocation(programId, "uCornerWarmShift")
-        // SQC 专用 uniform
+        // 拍立得/数码通用 uniform（Inst C / SQC / FXN-R 共用，其他 Shader 中 location=-1，传入无效果）
         uCenterGain           = GLES30.glGetUniformLocation(programId, "uCenterGain")
         uDevelopmentSoftness  = GLES30.glGetUniformLocation(programId, "uDevelopmentSoftness")
         uChemicalIrregularity = GLES30.glGetUniformLocation(programId, "uChemicalIrregularity")
@@ -571,7 +672,7 @@ void main() {
         GLES30.glUniform1f(uEdgeFalloff,         edgeFalloff)
         GLES30.glUniform1f(uExposureVariation,   exposureVariation)
         GLES30.glUniform1f(uCornerWarmShift,     cornerWarmShift)
-        // SQC 专用 uniform
+        // 拍立得/数码通用 uniform（Inst C / SQC / FXN-R 共用）
         GLES30.glUniform1f(uCenterGain,          centerGain)
         GLES30.glUniform1f(uDevelopmentSoftness, developmentSoftness)
         GLES30.glUniform1f(uChemicalIrregularity, chemicalIrregularity)
@@ -634,7 +735,7 @@ void main() {
         (params["edgeFalloff"]         as? Number)?.let { edgeFalloff         = it.toFloat() }
         (params["exposureVariation"]   as? Number)?.let { exposureVariation   = it.toFloat() }
         (params["cornerWarmShift"]     as? Number)?.let { cornerWarmShift     = it.toFloat() }
-        // SQC 专用参数
+        // 拍立得/数码通用参数（Inst C / SQC / FXN-R 共用）
         (params["centerGain"]          as? Number)?.let { centerGain          = it.toFloat() }
         (params["developmentSoftness"] as? Number)?.let { developmentSoftness = it.toFloat() }
         (params["chemicalIrregularity"] as? Number)?.let { chemicalIrregularity = it.toFloat() }
@@ -705,7 +806,7 @@ void main() {
             uEdgeFalloff          = GLES30.glGetUniformLocation(programId, "uEdgeFalloff")
             uExposureVariation    = GLES30.glGetUniformLocation(programId, "uExposureVariation")
             uCornerWarmShift      = GLES30.glGetUniformLocation(programId, "uCornerWarmShift")
-            // SQC 专用 uniform
+            // 拍立得/数码通用 uniform（Inst C / SQC / FXN-R 共用）
             uCenterGain           = GLES30.glGetUniformLocation(programId, "uCenterGain")
             uDevelopmentSoftness  = GLES30.glGetUniformLocation(programId, "uDevelopmentSoftness")
             uChemicalIrregularity = GLES30.glGetUniformLocation(programId, "uChemicalIrregularity")

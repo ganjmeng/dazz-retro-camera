@@ -291,14 +291,14 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = params["luminanceNoise"]      as? Float { ccdParams.luminanceNoise      = v }
         if let v = params["chromaNoise"]         as? Float { ccdParams.chromaNoise         = v }
 
-        // ── Inst C / SQC 共用参数 ───────────────────────────────────────────
+        // ── Inst C / SQC 拍立得专属参数（其他相机也可复用）──────────────────────────────────────────────────────
         if let v = params["highlightRolloff"]   as? Float { ccdParams.highlightRolloff   = v }
         if let v = params["paperTexture"]        as? Float { ccdParams.paperTexture        = v }
         if let v = params["edgeFalloff"]         as? Float { ccdParams.edgeFalloff         = v }
         if let v = params["exposureVariation"]   as? Float { ccdParams.exposureVariation   = v }
         if let v = params["cornerWarmShift"]     as? Float { ccdParams.cornerWarmShift     = v }
 
-        // ── SQC 专用参数 ───────────────────────────────────────────────────
+        // ── 拍立得/数码通用参数（Inst C / SQC / FXN-R 共用）──────────────────────────────────────────────────────
         if let v = params["centerGain"]          as? Float { ccdParams.centerGain          = v }
         if let v = params["developmentSoftness"] as? Float { ccdParams.developmentSoftness = v }
         if let v = params["chemicalIrregularity"] as? Float { ccdParams.chemicalIrregularity = v }

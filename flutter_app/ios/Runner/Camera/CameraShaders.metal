@@ -36,9 +36,24 @@ struct CCDParams {
     float sharpen;
     float blurRadius;
     float jpegArtifacts;
-    float time;        // 用于动态噪点的时间种子
-    float fisheyeMode; // 1.0=圆形鱼眼模式, 0.0=普通模式
-    float aspectRatio; // 宽/高 比例（用于保持圆形）
+    float time;              // 用于动态噪点的时间种子
+    float fisheyeMode;       // 1.0=圆形鱼眼模式, 0.0=普通模式
+    float aspectRatio;       // 宽/高 比例（用于保持圆形）
+    // ── 传感器非均匀性（数码相机通用，FXN-R 专项调校）────────────────────
+    float centerGain;        // 中心增亮（FXN-R=0.010，极轻）
+    float edgeFalloff;       // 边缘衰减（FXN-R=0.035，镜头暗角）
+    float exposureVariation; // 曝光波动（FXN-R=0.020，数码更稳定）
+    float cornerWarmShift;   // 角落色温偏移（FXN-R=-0.015，负=偏冷青）
+    float developmentSoftness; // 显影柔化（FXN-R=0.020）
+    float chemicalIrregularity; // 化学不规则感（FXN-R=0.010，极低）
+    // ── 肤色保护（冷色调相机必须开启，防止肤色发青）────────────────────
+    float skinHueProtect;    // 肤色色相保护（1.0=开启，0.0=关闭）
+    float skinSatProtect;    // 肤色饱和度保护（FXN-R=0.96）
+    float skinLumaSoften;    // 肤色亮度柔化（FXN-R=0.030）
+    float skinRedLimit;      // 肤色红限（FXN-R=1.04，防止冷 LUT 削红）
+    // ── 噪声分离（亮度/色度）────────────────────────────────────────────
+    float luminanceNoise;    // 亮度噪声（FXN-R=0.02）
+    float chromaNoise;       // 色度噪声（FXN-R=0.01）
 };
 
 // MARK: - 工具函数
@@ -128,8 +143,76 @@ float2 fisheyeUV(float2 uv, float aspect) {
     return texCoord * 0.5 + 0.5;
 }
 
-// MARK: - CCD 风格片段着色器
+// MARK: - 传感器非均匀性工具函数
 
+/// 中心增亮 + 边缘衰减（模拟镜头光学特性）
+float ccdCenterEdge(float2 uv, float centerGain, float edgeFalloff) {
+    float2 d = uv - 0.5;
+    float dist = length(d);
+    float center = 1.0 + centerGain * (1.0 - dist * 2.0);
+    float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
+    return clamp(center * edge, 0.5, 1.5);
+}
+
+/// 角落色温偏移（负値=偏冷青，FXN-R=-0.015）
+float3 ccdCornerWarm(float2 uv, float3 color, float shift) {
+    float2 d = uv - 0.5;
+    float cornerFactor = clamp(dot(d, d) * 4.0, 0.0, 1.0);
+    float s = shift * cornerFactor;
+    color.r = clamp(color.r + s * 0.4, 0.0, 1.0);
+    color.b = clamp(color.b - s * 0.4, 0.0, 1.0);
+    return color;
+}
+
+/// 显影柔化（轻微高斯模糊，模拟传感器低通滤波）
+float3 ccdDevelopmentSoften(
+    texture2d<float> tex, sampler s, float2 uv, float2 texelSize, float3 color, float softness
+) {
+    if (softness <= 0.0) return color;
+    float3 blurred =
+        tex.sample(s, uv + float2(-texelSize.x, 0.0)).rgb * 0.25 +
+        tex.sample(s, uv + float2( texelSize.x, 0.0)).rgb * 0.25 +
+        tex.sample(s, uv + float2(0.0, -texelSize.y)).rgb * 0.25 +
+        tex.sample(s, uv + float2(0.0,  texelSize.y)).rgb * 0.25;
+    return mix(color, blurred, softness * 0.5);
+}
+
+/// RGB → HSL（用于肤色检测）
+float3 ccdRgbToHsl(float3 rgb) {
+    float maxC = max(max(rgb.r, rgb.g), rgb.b);
+    float minC = min(min(rgb.r, rgb.g), rgb.b);
+    float delta = maxC - minC;
+    float l = (maxC + minC) * 0.5;
+    float s = (delta < 0.001) ? 0.0 : delta / (1.0 - abs(2.0 * l - 1.0));
+    float h = 0.0;
+    if (delta > 0.001) {
+        if (maxC == rgb.r)      h = fmod((rgb.g - rgb.b) / delta, 6.0);
+        else if (maxC == rgb.g) h = (rgb.b - rgb.r) / delta + 2.0;
+        else                    h = (rgb.r - rgb.g) / delta + 4.0;
+        h = h / 6.0;
+        if (h < 0.0) h += 1.0;
+    }
+    return float3(h, s, l);
+}
+
+/// 肤色保护（防止冷 LUT 让肤色发青）
+/// 肤色 hue 范围：20°~45°（归一化 0.0556~0.125）
+float3 ccdSkinProtect(
+    float3 color, float skinHueProtect, float skinSatProtect, float skinLumaSoften, float skinRedLimit
+) {
+    if (skinHueProtect < 0.5) return color;
+    float3 hsl = ccdRgbToHsl(color);
+    float hue = hsl.x;
+    float skinMask = smoothstep(0.0356, 0.0756, hue) * (1.0 - smoothstep(0.105, 0.145, hue));
+    if (skinMask < 0.001) return color;
+    float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float3 prot = mix(float3(luma), color, skinSatProtect);
+    prot = clamp(prot + skinLumaSoften * 0.1, 0.0, 1.0);
+    prot.r = clamp(prot.r, 0.0, skinRedLimit);
+    return mix(color, prot, skinMask);
+}
+
+// MARK: - CCD 风格片段着色器
 fragment float4 ccdFragmentShader(
     VertexOut in [[stage_in]],
     texture2d<float> cameraTexture [[texture(0)]],
@@ -199,12 +282,45 @@ fragment float4 ccdFragmentShader(
     // 模拟 CCD 传感器的暗部噪点，使用时间种子使其动态变化
     if (params.noiseAmount > 0.0) {
         float noise = random(uv, params.time) - 0.5;
-        // 暗部区域噪点更明显
         float darkMask = 1.0 - luminance;
         color = clamp(color + noise * params.noiseAmount * 0.2 * darkMask, 0.0, 1.0);
     }
-    
-    // === Pass 6: 暗角 (Vignette) ===
+    // 亮度噪声（FXN-R=0.02）
+    if (params.luminanceNoise > 0.0) {
+        float ln = random(uv, params.time + 1.7) - 0.5;
+        color = clamp(color + ln * params.luminanceNoise * 0.15, 0.0, 1.0);
+    }
+    // 色度噪声（FXN-R=0.01，极低）
+    if (params.chromaNoise > 0.0) {
+        float cr = random(uv, params.time + 3.1) - 0.5;
+        float cg = random(uv, params.time + 5.3) - 0.5;
+        float cb = random(uv, params.time + 7.7) - 0.5;
+        color = clamp(color + float3(cr, cg, cb) * params.chromaNoise * 0.08, 0.0, 1.0);
+    }
+
+    // === Pass 6: 传感器非均匀性 + 肤色保护 ===
+    // 中心增亮 + 边缘衰减（FXN-R: centerGain=0.010, edgeFalloff=0.035）
+    if (params.centerGain > 0.0 || params.edgeFalloff > 0.0) {
+        float factor = ccdCenterEdge(uv, params.centerGain, params.edgeFalloff);
+        color = clamp(color * factor, 0.0, 1.0);
+    }
+    // 曝光波动（FXN-R=0.020，数码传感器轻微不均匀）
+    if (params.exposureVariation > 0.0) {
+        float evn = random(uv * 0.1, params.time * 0.01) - 0.5;
+        color = clamp(color + evn * params.exposureVariation * 0.3, 0.0, 1.0);
+    }
+    // 角落色温偏移（FXN-R=-0.015，负値=偏冷青）
+    if (params.cornerWarmShift != 0.0) {
+        color = ccdCornerWarm(uv, color, params.cornerWarmShift);
+    }
+    // 显影柔化（FXN-R=0.020，比 instant 更锐）
+    if (params.developmentSoftness > 0.0) {
+        color = ccdDevelopmentSoften(cameraTexture, textureSampler, uv, texelSize, color, params.developmentSoftness);
+    }
+    // 肤色保护（FXN-R: skinHueProtect=1.0, skinSatProtect=0.96, skinLumaSoften=0.03, skinRedLimit=1.04）
+    color = ccdSkinProtect(color, params.skinHueProtect, params.skinSatProtect, params.skinLumaSoften, params.skinRedLimit);
+
+    // === Pass 7: 暗角 (Vignette) ===
     // 鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗
     if (params.fisheyeMode < 0.5) {
         float vignette = vignetteEffect(uv, params.vignetteAmount);
