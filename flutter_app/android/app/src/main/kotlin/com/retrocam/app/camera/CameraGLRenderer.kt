@@ -109,14 +109,14 @@ float fxnrToneCurve(float x) {
     // Input:  0     16    32    64    96    128   160   192   224   255
     // Output: 0     10    24    57    92    124   168   210   238   250
     float[10] inp = float[10](0.0, 0.0627, 0.1255, 0.2510, 0.3765, 0.5020, 0.6275, 0.7529, 0.8784, 1.0);
-    float[10] out = float[10](0.0, 0.0392, 0.0941, 0.2235, 0.3608, 0.4863, 0.6588, 0.8235, 0.9333, 0.9804);
+    float[10] outVals = float[10](0.0, 0.0392, 0.0941, 0.2235, 0.3608, 0.4863, 0.6588, 0.8235, 0.9333, 0.9804);
     for (int i = 0; i < 9; i++) {
         if (x <= inp[i + 1]) {
             float t = (x - inp[i]) / (inp[i + 1] - inp[i]);
-            return mix(out[i], out[i + 1], t);
+            return mix(outVals[i], outVals[i + 1], t);
         }
     }
-    return out[9];
+    return outVals[9];
 }
 float random(vec2 st, float seed) {
     return fract(sin(dot(st + seed, vec2(12.9898, 78.233))) * 43758.5453);
