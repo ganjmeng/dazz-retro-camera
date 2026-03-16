@@ -730,6 +730,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                   deviceQuarter: deviceQuarter,
                   maxDimension: maxDim,
                   jpegQuality: jpegQ,
+                  fisheyeMode: state.fisheyeMode,
                 );
                 if (processed != null) {
                   // 将处理后的第一张写入临时文件
@@ -754,6 +755,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                   deviceQuarter: deviceQuarter,
                   maxDimension: maxDim,
                   jpegQuality: jpegQ,
+                  fisheyeMode: state.fisheyeMode,
                 );
                 if (processed2 != null) {
                   // 合成两张照片
@@ -781,6 +783,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                       deviceQuarter: 0,   // 已经旋转过
                       maxDimension: maxDim,
                       jpegQuality: jpegQ,
+                      fisheyeMode: state.fisheyeMode,
                     );
                     if (finalProcessed != null) {
                       await File(path).writeAsBytes(finalProcessed.bytes);
@@ -821,6 +824,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                 deviceQuarter: deviceQuarter,
                 maxDimension: maxDim,
                 jpegQuality: jpegQ,
+                fisheyeMode: state.fisheyeMode,
               );
               if (processed != null) {
                 await File(path).writeAsBytes(processed.bytes);

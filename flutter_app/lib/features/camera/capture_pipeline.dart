@@ -273,6 +273,19 @@ class CapturePipeline {
         }
       }
 
+      // 鱼眼模式：先 save/clipPath 圆形区域，使图片只在圆内绘制（与 GL shader 一致）
+      if (fisheyeMode) {
+        canvas.save();
+        final fisheyeCenter = Offset(
+          frameOffsetX + leftPx + outW / 2,
+          frameOffsetY + topPx + outH / 2,
+        );
+        final fisheyeRadius = math.min(outW, outH) / 2;
+        final fisheyeClipPath = Path()
+          ..addOval(Rect.fromCircle(center: fisheyeCenter, radius: fisheyeRadius));
+        canvas.clipPath(fisheyeClipPath);
+      }
+
       // 主图（正常绘制）
       if (renderParams != null) {
         final colorMatrix = _buildColorMatrix(renderParams);
@@ -291,6 +304,11 @@ class CapturePipeline {
           destRect,
           Paint()..filterQuality = FilterQuality.high,
         );
+      }
+
+      // 鱼眼模式：恢复 canvas（圆形 clip 结束）
+      if (fisheyeMode) {
+        canvas.restore();
       }
 
       // ── 4c. 暗角 ──────────────────────────────────────────────────────────────
@@ -312,6 +330,37 @@ class CapturePipeline {
       final lightLeakStrength = frameOpt?.lightLeak ?? 0.0;
       if (lightLeakStrength > 0.01) {
         _drawLightLeak(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, lightLeakStrength);
+      }
+
+      // ── 4e. 色差（Chromatic Aberration）──────────────────────────────────────
+      // 与预览层 _ChromaticAberrationLayer 对齐：R 向左偏移，B 向右偏移
+      if (renderParams != null &&
+          renderParams.policy.enableChromaticAberration &&
+          renderParams.effectiveChromaticAberration > 0.001) {
+        _drawChromaticAberration(
+          canvas, srcImage, cropRect, destRect,
+          renderParams.effectiveChromaticAberration,
+          renderParams,
+        );
+      }
+
+      // ── 4e2. Bloom / 柔焦光晕 ────────────────────────────────────────────────
+      // 与预览层 _BloomLayer 对齐：模糊图像叠加暖色调半透明层
+      if (renderParams != null &&
+          renderParams.policy.enableBloom &&
+          (renderParams.effectiveBloom > 0.01 || renderParams.effectiveSoftFocus > 0.01)) {
+        _drawBloom(
+          canvas, srcImage, cropRect, destRect,
+          renderParams.effectiveBloom,
+          renderParams.effectiveSoftFocus,
+          renderParams,
+        );
+      }
+
+      // ── 4e3. 鱼眼四角黑色遮罩 ────────────────────────────────────────────────
+      // 与预览层 _FisheyeCirclePainter 对齐：在圆形以外绘制纯黑遮罩
+      if (fisheyeMode) {
+        _drawFisheyeMask(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
       }
 
       // ── 4f. 相框纹理 PNG 叠加 ──────────────────────────────────────────────────
@@ -759,6 +808,132 @@ class CapturePipeline {
         ).createShader(Rect.fromCircle(center: corner, radius: radius));
       canvas.drawRect(Rect.fromLTWH(ox, oy, w, h), paint);
     }
+  }
+
+  // ── 色差（Chromatic Aberration）──────────────────────────────────────────────────
+  /// 与预览层 _ChromaticAberrationLayer 对齐：
+  /// R 通道向左偏移，B 通道向右偏移，两者都以 alpha 叠加在主图上
+  void _drawChromaticAberration(
+    Canvas canvas,
+    ui.Image srcImage,
+    Rect cropRect,
+    Rect destRect,
+    double strength,
+    PreviewRenderParams renderParams,
+  ) {
+    final offset = strength * 6.0; // 与预览层一致：6px per unit
+    final alpha = (strength / 0.1 * 0.25).clamp(0.0, 0.25); // 与预览层一致
+    final colorMatrix = _buildColorMatrix(renderParams);
+
+    // 红通道向左偏移
+    final redRect = Rect.fromLTWH(
+      destRect.left - offset,
+      destRect.top,
+      destRect.width,
+      destRect.height,
+    );
+    canvas.drawImageRect(
+      srcImage,
+      cropRect,
+      redRect,
+      Paint()
+        ..filterQuality = FilterQuality.medium
+        ..colorFilter = ColorFilter.matrix([
+          colorMatrix[0], colorMatrix[1], colorMatrix[2], colorMatrix[3], colorMatrix[4],
+          0, 0, 0, 0, 0,
+          0, 0, 0, 0, 0,
+          0, 0, 0, alpha, 0,
+        ]),
+    );
+
+    // 蓝通道向右偏移
+    final blueRect = Rect.fromLTWH(
+      destRect.left + offset,
+      destRect.top,
+      destRect.width,
+      destRect.height,
+    );
+    canvas.drawImageRect(
+      srcImage,
+      cropRect,
+      blueRect,
+      Paint()
+        ..filterQuality = FilterQuality.medium
+        ..colorFilter = ColorFilter.matrix([
+          0, 0, 0, 0, 0,
+          0, 0, 0, 0, 0,
+          colorMatrix[10], colorMatrix[11], colorMatrix[12], colorMatrix[13], colorMatrix[14],
+          0, 0, 0, alpha, 0,
+        ]),
+    );
+  }
+
+  // ── Bloom / 柔焦光晕 ───────────────────────────────────────────────────────────────
+  /// 与预览层 _BloomLayer 对齐：模糊图像叠加暖色调半透明层
+  /// 注意：Flutter Canvas 没有内置高斯模糊，用多层偏移叠加模拟柔焦效果
+  void _drawBloom(
+    Canvas canvas,
+    ui.Image srcImage,
+    Rect cropRect,
+    Rect destRect,
+    double bloomStrength,
+    double softFocus,
+    PreviewRenderParams renderParams,
+  ) {
+    final opacity = (bloomStrength * 0.25 + softFocus * 0.15).clamp(0.0, 0.5);
+    if (opacity < 0.01) return;
+
+    // 模拟模糊：用 4 个小偏移叠加模拟柔焦效果
+    final blurRadius = (bloomStrength * 12 + softFocus * 20).clamp(0.0, 30.0);
+    final shifts = [
+      Offset(-blurRadius * 0.5, -blurRadius * 0.5),
+      Offset(blurRadius * 0.5, -blurRadius * 0.5),
+      Offset(-blurRadius * 0.5, blurRadius * 0.5),
+      Offset(blurRadius * 0.5, blurRadius * 0.5),
+    ];
+    final layerAlpha = (opacity / shifts.length).clamp(0.0, 1.0);
+
+    for (final shift in shifts) {
+      final shiftedRect = Rect.fromLTWH(
+        destRect.left + shift.dx,
+        destRect.top + shift.dy,
+        destRect.width,
+        destRect.height,
+      );
+      canvas.drawImageRect(
+        srcImage,
+        cropRect,
+        shiftedRect,
+        Paint()
+          ..filterQuality = FilterQuality.low
+          ..colorFilter = ColorFilter.matrix([
+            1.2, 0, 0, 0, 0,
+            0, 1.1, 0, 0, 0,
+            0, 0, 0.9, 0, 0,
+            0, 0, 0, layerAlpha, 0,
+          ]),
+      );
+    }
+  }
+
+  // ── 鱼眼四角黑色遮罩 ───────────────────────────────────────────────────────────────
+  /// 与预览层 _FisheyeCirclePainter 对齐：
+  /// 在图片区域的圆形以外绘制纯黑遮罩，模拟鱼眼镜头的圆形画面效果
+  void _drawFisheyeMask(
+    Canvas canvas,
+    double ox,
+    double oy,
+    double w,
+    double h,
+  ) {
+    final center = Offset(ox + w / 2, oy + h / 2);
+    final radius = math.min(w, h) / 2;
+    // 用 Path evenOdd 填充规则：矩形 - 圆形 = 四角黑色区域
+    final maskPath = Path()
+      ..addRect(Rect.fromLTWH(ox, oy, w, h))
+      ..addOval(Rect.fromCircle(center: center, radius: radius))
+      ..fillType = PathFillType.evenOdd;
+    canvas.drawPath(maskPath, Paint()..color = Colors.black);
   }
 
   // ── 水印（绘制在图片区域内）──────────────────────────────────────────────────
