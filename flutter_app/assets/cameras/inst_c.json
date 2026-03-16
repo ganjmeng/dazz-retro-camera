@@ -7,8 +7,8 @@
   "supportsVideo": false,
   "focalLengthLabel": "60mm",
   "sensor": {
-    "type": "instant",
-    "dynamicRange": 7,
+    "type": "film",
+    "dynamicRange": 9,
     "baseNoise": 0.12,
     "colorDepth": 8
   },
@@ -17,22 +17,24 @@
     "distortion": 0.0,
     "chromaticAberration": 0.02,
     "flare": 0.0,
-    "temperature": 20,
+    "temperature": 6100,
     "tint": 4.0,
-    "contrast": 1.1,
-    "highlights": 6.0,
+    "contrast": 0.95,
+    "highlights": -15.0,
     "shadows": -8.0,
-    "whites": 16.0,
-    "blacks": -12.0,
-    "clarity": 2.0,
-    "saturation": 1.12,
-    "vibrance": 14.0,
-    "grain": 0.14,
-    "bloom": 0.22,
-    "vignette": 0.16,
-    "colorBiasR": 0.03,
+    "whites": 12.0,
+    "blacks": -8.0,
+    "clarity": 10.0,
+    "saturation": 1.15,
+    "vibrance": 20.0,
+    "grain": 0.12,
+    "bloom": 0.03,
+    "vignette": 0.12,
+    "colorBiasR": 0.022,
     "colorBiasG": 0.01,
-    "colorBiasB": -0.01
+    "colorBiasB": -0.015,
+    "grainSize": 0.42,
+    "sharpness": 1.0
   },
   "modules": {
     "filters": [],
@@ -96,15 +98,11 @@
       {
         "id": "ratio_1_1",
         "label": "1:1",
-        "width": 1,
-        "height": 1,
         "supportsFrame": true
       },
       {
         "id": "ratio_3_4",
         "label": "3:4",
-        "width": 3,
-        "height": 4,
         "supportsFrame": true
       }
     ],
