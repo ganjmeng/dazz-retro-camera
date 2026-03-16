@@ -27,7 +27,7 @@
     "vibrance": 1.08,
     "grain": 0.28,
     "grainSize": 1.8,
-    "bloom": 0.10,
+    "bloom": 0.1,
     "vignette": 0.15,
     "colorBiasR": -0.04,
     "colorBiasG": 0.05,
@@ -66,7 +66,7 @@
         "grain": "light",
         "grainSize": 1.4,
         "vignette": 0.12,
-        "sharpness": 0.90,
+        "sharpness": 0.9,
         "thumbnail": null,
         "filmRollType": "advance",
         "filmRollStyle": "35mm",
@@ -102,7 +102,7 @@
         "nameEn": "Wide",
         "zoomFactor": 0.8,
         "distortion": 0.04,
-        "vignette": 0.10,
+        "vignette": 0.1,
         "chromaticAberration": 0.02,
         "edgeBlur": 0.01,
         "exposure": 0.0,
@@ -167,7 +167,7 @@
         "label": "1:1",
         "width": 1,
         "height": 1,
-        "supportsFrame": false
+        "supportsFrame": true
       },
       {
         "id": "ratio_2_3",
@@ -181,10 +181,53 @@
         "label": "3:4",
         "width": 3,
         "height": 4,
-        "supportsFrame": false
+        "supportsFrame": true
       }
     ],
-    "frames": [],
+    "frames": [
+      {
+        "id": "instant_default",
+        "name": "冷白",
+        "nameEn": "Default",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_default_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_default_3x4.png"
+        },
+        "backgroundColor": "#F5F6FA",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 151,
+          "right": 137,
+          "bottom": 344,
+          "left": 134
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 159,
+            "right": 139,
+            "bottom": 340,
+            "left": 137
+          },
+          "ratio_3_4": {
+            "top": 151,
+            "right": 137,
+            "bottom": 344,
+            "left": 134
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_default.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#F5F6FA",
+        "supportsBackground": true
+      }
+    ],
     "watermarks": {
       "presets": [
         {
@@ -264,8 +307,13 @@
   },
   "videoConfig": {
     "enabled": false,
-    "fpsOptions": [24, 30],
-    "resolutionOptions": ["HD"],
+    "fpsOptions": [
+      24,
+      30
+    ],
+    "resolutionOptions": [
+      "HD"
+    ],
     "defaultFps": 24,
     "defaultResolution": "HD",
     "supportsAudio": false,
