@@ -548,9 +548,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   @override
   void dispose() {
-    // Notifier 销毁时同步保存一次快照（App 退出 / Provider 被释放时触发）
-    // 注意：dispose 不能 await，使用 unawaited fire-and-forget
-    _saveCurrentSnapshot();
+    // Notifier 销毁时尝试保存快照（App 退出 / Provider 被释放时触发）
+    // 注意：dispose 被调用时 ProviderContainer 可能已在销毁过程中，必须用 try-catch 保护
+    try {
+      _saveCurrentSnapshot();
+    } catch (_) {
+      // ProviderContainer 已销毁时 _ref.read 会抛出异常，忽略即可
+    }
     super.dispose();
   }
 

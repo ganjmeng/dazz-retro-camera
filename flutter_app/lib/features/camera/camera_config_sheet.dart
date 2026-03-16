@@ -417,8 +417,9 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
             isFavorite: isFav,
             onTap: () {
               HapticFeedback.selectionClick();
-              // 切换相机后重置滚动标记，下次打开时自动滚到新相机
-              _lastScrolledCameraId = null;
+              // 点击的相机已在屏幕内（用户刚点了它），直接标记为已处理，
+              // 避免 build 重绘时触发不必要的 animateTo（动画会吞掉后续触摸事件）
+              _lastScrolledCameraId = entry.id;
               ref.read(cameraAppProvider.notifier).switchCamera(entry.id);
             },
           );

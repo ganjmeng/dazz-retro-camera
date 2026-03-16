@@ -60,13 +60,13 @@ const List<CameraEntry> kAllCameras = [
   ),
   CameraEntry(
     id: 'sqc',
-    name: 'SQC',
+    name: 'INST SQC',
     assetPath: 'assets/cameras/sqc.json',
     category: 'instant',
     focalLengthLabel: '35mm',
     premium: false,
     sortOrder: 20,
-    iconPath: 'assets/thumbnails/cameras/sqc_icon.png',
+    iconPath: 'assets/thumbnails/cameras/inst_sq_icon.png',
     description: '方形构图拍立得风格，复古边框，即拍即得的温暖感。',
     tags: ['方形', '边框', '复古', '拍立得'],
     samplePhotos: [
