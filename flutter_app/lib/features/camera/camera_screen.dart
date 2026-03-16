@@ -937,6 +937,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ),
           ),
           const SizedBox(height: kToolbarShutterGap),
+          const SizedBox(height: 30), // 工具栏和快门行之间额外间距
           // 快门行
           _buildShutterRow(st),
           // 底部安全区域已移入 _buildShutterRow
@@ -1322,7 +1323,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
   // ── 工具栏（5个图标）────────────────────────────────────────────────────────
   Widget _buildToolbar(CameraAppState st) {
-    const double btnW = 72.0;
+    const double btnW = 64.0;
     return SizedBox(
       height: 52,
       child: Center(
@@ -1428,11 +1429,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     // 左侧: 图库缩略图（单击→相册列表，长按→直接打开最新相片详情）
-                    Expanded(
+                    // 宽度与右侧相机区域保持一致，确保快门按钮视觉居中
+                    SizedBox(
+                      width: 97,
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: GestureDetector(
@@ -1485,7 +1488,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                       ),
                     ),
                     // 右侧: 相机图标（虚线圆圈背景，点击打开相机配置）
-                    Expanded(
+                    // 宽度与左侧保持一致，确保快门按钮视觉居中
+                    SizedBox(
+                      width: 97,
                       child: Align(
                         alignment: Alignment.centerRight,
                         child: GestureDetector(
@@ -1521,8 +1526,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                               borderRadius: BorderRadius.circular(6),
                                               child: Image.asset(
                                                 entry.iconPath!,
-                                                width: 46,
-                                                height: 46,
+                                                width: 56,
+                                                height: 56,
                                                 fit: BoxFit.cover,
                                                 errorBuilder: (_, __, ___) =>
                                                     const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 36),
@@ -1561,7 +1566,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         ),
         Builder(builder: (ctx) {
           final bottomInset = MediaQuery.of(ctx).padding.bottom;
-          return SizedBox(height: bottomInset > 0 ? bottomInset : 16);
+          return SizedBox(height: bottomInset > 0 ? bottomInset : 38);
         }),
       ],
     );
