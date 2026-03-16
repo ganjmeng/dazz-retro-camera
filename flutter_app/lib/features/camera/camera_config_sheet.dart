@@ -320,8 +320,40 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
 
   // ── Tab 行 ──────────────────────────────────────────────────────────────────
   Widget _buildTabRow() {
-    // Tab行已简化：移除照片/视频Tab和样式管理按钮
-    return const SizedBox(height: 4);
+    final s = sOf(ref.read(languageProvider));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          // 左侧：照片（视频 Tab 暂时隐藏）
+          _TabBtn(label: s.photo, selected: true, onTap: () {}),
+          const Spacer(),
+          // 右侧：样片 | 管理
+          _PillBtn(
+            label: s.sample,
+            icon: Icons.landscape_outlined,
+            onTap: () {
+              final st = ref.read(cameraAppProvider);
+              Navigator.of(context).pop();
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => CameraSampleScreen(cameraId: st.activeCameraId),
+              ));
+            },
+          ),
+          const SizedBox(width: 8),
+          _PillBtn(
+            label: s.manage,
+            icon: Icons.camera_alt_outlined,
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const CameraManagerScreen(),
+              ));
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   // ── 相机列表行 ──────────────────────────────────────────────────────────────
