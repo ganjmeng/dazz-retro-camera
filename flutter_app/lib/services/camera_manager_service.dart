@@ -55,6 +55,19 @@ class CameraManagerNotifier extends AsyncNotifier<CameraManagerState> {
   static const _keyFavorites = 'cam_mgr_favorites';
   static const _keyEnabled = 'cam_mgr_enabled';
 
+  /// 根据 kDefaultCameraOrder 构建初始排序：
+  /// 先按 kDefaultCameraOrder 中的顺序排列已知相机，
+  /// 再将 kDefaultCameraOrder 中没有的相机（新增相机）追加到末尾。
+  static List<String> _buildDefaultOrder() {
+    final allIds = kAllCameras.map((e) => e.id).toSet();
+    return [
+      ...kDefaultCameraOrder.where((id) => allIds.contains(id)),
+      ...kAllCameras
+          .map((e) => e.id)
+          .where((id) => !kDefaultCameraOrder.contains(id)),
+    ];
+  }
+
   @override
   Future<CameraManagerState> build() async {
     final prefs = await SharedPreferences.getInstance();
@@ -72,7 +85,8 @@ class CameraManagerNotifier extends AsyncNotifier<CameraManagerState> {
         ...allIds.where((id) => !savedOrder.contains(id)),
       ];
     } else {
-      orderedIds = List.from(allIds);
+      // 首次启动：使用默认排序
+      orderedIds = _buildDefaultOrder();
     }
 
     // 读取收藏
@@ -167,6 +181,20 @@ class CameraManagerNotifier extends AsyncNotifier<CameraManagerState> {
     }
 
     final newState = current.copyWith(orderedIds: newOrderedIds);
+    state = AsyncData(newState);
+    await _persist(newState);
+  }
+
+  // ── 重置为默认排序 ────────────────────────────────────────────────────────
+  /// 恢复初始排序（kDefaultCameraOrder），清除收藏，全部启用。
+  Future<void> resetToDefault() async {
+    final allIds = kAllCameras.map((e) => e.id).toSet();
+    final defaultOrder = _buildDefaultOrder();
+    final newState = CameraManagerState(
+      orderedIds: defaultOrder,
+      favoritedIds: const {},
+      enabledIds: Set<String>.from(allIds),
+    );
     state = AsyncData(newState);
     await _persist(newState);
   }

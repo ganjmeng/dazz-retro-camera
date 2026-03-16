@@ -19,6 +19,7 @@ const _kWhite = Colors.white;
 const _kGold = Color(0xFFFFCC00);
 const _kGreen = Color(0xFF30D158);
 const _kGray = Color(0xFF48484A);
+const _kOrange = Color(0xFFFF9500);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CameraManagerScreen
@@ -49,6 +50,20 @@ class CameraManagerScreen extends ConsumerWidget {
           ),
         ),
         centerTitle: true,
+        actions: [
+          // 重置按钮
+          TextButton(
+            onPressed: () => _showResetDialog(context, ref, s),
+            child: Text(
+              s.reset,
+              style: const TextStyle(
+                color: _kOrange,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ),
       body: asyncState.when(
         loading: () => const Center(
@@ -60,6 +75,57 @@ class CameraManagerScreen extends ConsumerWidget {
         data: (_) => const _CameraManagerBody(),
       ),
     );
+  }
+
+  void _showResetDialog(BuildContext context, WidgetRef ref, S s) {
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2C2C2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Text(
+          s.resetTitle,
+          style: const TextStyle(
+            color: _kWhite,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Text(
+          s.resetConfirm,
+          style: const TextStyle(
+            color: Color(0xFFAAAAAA),
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              s.cancel,
+              style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 16),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              s.reset,
+              style: const TextStyle(
+                color: _kOrange,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ).then((confirmed) {
+      if (confirmed == true) {
+        HapticFeedback.mediumImpact();
+        ref.read(cameraManagerProvider.notifier).resetToDefault();
+      }
+    });
   }
 }
 

@@ -294,6 +294,11 @@ class S {
   String get saveError           => get('saveError');
   String get flip                => get('flip');
   String get crop                => get('crop');
+
+  // 相机管理重置
+  String get reset               => get('reset');
+  String get resetTitle          => get('resetTitle');
+  String get resetConfirm        => get('resetConfirm');
 }
 
 // 全局翻译表
@@ -1221,6 +1226,25 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.zhHans: '裁剪', AppLanguage.zhHant: '裁剪',
     AppLanguage.en: 'Crop', AppLanguage.ms: 'Potong',
     AppLanguage.ja: 'トリミング', AppLanguage.ko: '자르기',
+  },
+  // 相机管理重置
+  'reset': {
+    AppLanguage.zhHans: '重置', AppLanguage.zhHant: '重置',
+    AppLanguage.en: 'Reset', AppLanguage.ms: 'Set Semula',
+    AppLanguage.ja: 'リセット', AppLanguage.ko: '재설정',
+  },
+  'resetTitle': {
+    AppLanguage.zhHans: '重置相机排序', AppLanguage.zhHant: '重置相機排序',
+    AppLanguage.en: 'Reset Camera Order', AppLanguage.ms: 'Set Semula Susunan Kamera',
+    AppLanguage.ja: 'カメラ順序をリセット', AppLanguage.ko: '카메라 순서 재설정',
+  },
+  'resetConfirm': {
+    AppLanguage.zhHans: '将恢复初始排序，收藏和自定义顺序将被清除。确定重置？',
+    AppLanguage.zhHant: '將恢復初始排序，收藏和自定義順序將被清除。確定重置？',
+    AppLanguage.en: 'This will restore the default order and clear favorites. Confirm reset?',
+    AppLanguage.ms: 'Ini akan memulihkan susunan lalai dan mengosongkan kegemaran. Sahkan set semula?',
+    AppLanguage.ja: '初期順序に戻し、お気に入りとカスタム順序がリセットされます。確認しますか？',
+    AppLanguage.ko: '기본 순서로 복원되며 즐겨찾기와 사용자 지정 순서가 삭제됩니다. 재설정하시겠습니까?',
   },
 };
 
