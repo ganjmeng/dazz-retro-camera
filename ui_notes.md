@@ -95,3 +95,36 @@
 - 照片有拍立得边框（白色边框+花纹背景）
 - 照片右下角有橙色日期戳
 - 底部：# FQS（相机型号标签）+ 下载图标 + 删除图标
+
+---
+
+## 相框（底片）默认规则 — 强制执行，新增相机必须遵守
+
+### 规则一：默认相框只有拍立得相机才开启
+
+| 相机 category | defaultSelection.frameId | 说明 |
+|---|---|---|
+| `instant`（inst_c / inst_s / inst_sq 等） | `"instant_default"` | 第一次打开默认带相框，且根据默认比例自动匹配 |
+| 其他（ccd / digital / film / creative 等） | `null` | 第一次打开无相框，由用户自行选择 |
+
+**新增相机时**：
+- 若 `category == "instant"` → `defaultSelection.frameId` 必须设为 `"instant_default"`（或对应的默认相框 ID）
+- 若 `category != "instant"` → `defaultSelection.frameId` 必须设为 `null`
+
+### 规则二：相框选择受比例限制
+
+- `FrameDefinition.supportedRatios` 为空 → 所有比例均可选
+- `FrameDefinition.supportedRatios` 非空 → 只有在列出的比例下才显示该相框
+- `RatioDefinition.supportsFrame == false` → 该比例下相框按钮隐藏，且切换到此比例时自动清除已选相框
+
+### 规则三：保留设定开关（底片）
+
+保留设定 → 底片（`retainFrame`）开关控制的是 `activeFrameId`：
+- 开关**关闭**（默认）：切换相机时，相框恢复为该相机的 `defaultSelection.frameId`
+- 开关**开启**：切换相机后再切回来，恢复上次为该相机选择的相框（从 `CameraSnapshot.frameId` 读取）
+
+快照保存时机：每次切换相机前，`_saveCurrentSnapshot()` 将当前 `activeFrameId` 写入该相机的快照。
+
+### 规则四：相框 UI 过滤
+
+`_FrameGrid` 组件必须传入 `activeRatioId`，只展示 `supportedRatios` 包含当前比例（或为空）的相框。

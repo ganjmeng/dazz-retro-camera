@@ -238,7 +238,7 @@
     "filterId": "35mm_clean",
     "lensId": "vintage",
     "ratioId": "ratio_3_4",
-    "frameId": "instant_default",
+    "frameId": null,
     "watermarkPresetId": "none",
     "extraId": null
   },
