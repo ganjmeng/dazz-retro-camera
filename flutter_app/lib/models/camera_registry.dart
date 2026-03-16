@@ -112,16 +112,16 @@ const List<CameraEntry> kAllCameras = [
 
   // ── 新增相机 ──────────────────────────────────────────────────────────────
   CameraEntry(
-    id: 'ccd_m',
-    name: 'CCD M',
-    assetPath: 'assets/cameras/ccd_m.json',
+    id: 'ccd_r',
+    name: 'CCD R',
+    assetPath: 'assets/cameras/ccd_r.json',
     category: 'ccd',
     focalLengthLabel: '35mm',
     premium: false,
     sortOrder: 50,
-    iconPath: 'assets/thumbnails/cameras/ccd_m_icon.png',
-    description: '千禧年 CCD 数码相机色彩还原，过曝高光，Y2K 美学。',
-    tags: ['Y2K', '过曝', 'CCD', '千禧'],
+    iconPath: 'assets/thumbnails/cameras/ccd_r_icon.png',
+    description: '2003-2006 早期 CCD 卡片机色调，蓝绿偏色，噪点明显，CCD 味重。',
+    tags: ['CCD', '蓝绿', '噪点', '早期数码', '2003'],
     samplePhotos: [
       'assets/samples/ccd_m_sample_1.jpg',
       'assets/samples/ccd_m_sample_2.jpg',

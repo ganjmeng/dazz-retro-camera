@@ -8,31 +8,31 @@
   "focalLengthLabel": "35mm",
   "sensor": {
     "type": "ccd",
-    "dynamicRange": 8,
-    "baseNoise": 0.18,
+    "dynamicRange": 7,
+    "baseNoise": 0.35,
     "colorDepth": 8
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/ccd_r.cube",
     "distortion": 0.0,
-    "chromaticAberration": 0.1,
+    "chromaticAberration": 0.15,
     "flare": 0.0,
-    "temperature": -6,
-    "tint": -4.0,
-    "contrast": 0.94,
-    "highlights": 8.0,
-    "shadows": 4.0,
-    "whites": 12.0,
-    "blacks": -6.0,
-    "clarity": -2.0,
-    "saturation": 1.06,
-    "vibrance": 8.0,
-    "grain": 0.2,
-    "bloom": 0.08,
-    "vignette": 0.06,
-    "colorBiasR": -0.02,
-    "colorBiasG": 0.01,
-    "colorBiasB": 0.06
+    "temperature": -120,
+    "tint": 10.0,
+    "contrast": 1.15,
+    "highlights": 6.0,
+    "shadows": -4.0,
+    "whites": 8.0,
+    "blacks": -10.0,
+    "clarity": 2.0,
+    "saturation": 1.10,
+    "vibrance": 5.0,
+    "grain": 0.35,
+    "bloom": 0.04,
+    "vignette": 0.10,
+    "colorBiasR": -0.05,
+    "colorBiasG": 0.03,
+    "colorBiasB": 0.10
   },
   "modules": {
     "filters": [],
@@ -434,9 +434,12 @@
       "ccd",
       "digital",
       "cool",
+      "blue-green",
       "noise",
       "chromatic-aberration",
-      "2005"
+      "2003",
+      "2006",
+      "early-ccd"
     ]
   }
 }
