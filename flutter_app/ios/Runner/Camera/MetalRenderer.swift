@@ -205,6 +205,9 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         case "ccd_r":
             vertexName   = "ccdrVertexShader"
             fragmentName = "ccdrFragmentShader"
+        case "bw_classic":
+            vertexName   = "bwClassicVertexShader"
+            fragmentName = "bwClassicFragmentShader"
         default:
             vertexName   = "vertexShader"
             fragmentName = "ccdFragmentShader"
