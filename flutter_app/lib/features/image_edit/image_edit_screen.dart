@@ -493,7 +493,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
 
   // ── 常驻底部相机菜单 ─────────────────────────────────────────────────
   Widget _buildInlineCameraMenu(CameraAppState st) {
-    return const CameraConfigInlinePanel();
+    return const CameraConfigInlinePanel(showLens: false);
   }
 
   // ── 相机选择横向列表（备用，已不在主流程中使用）─────────────────────────────

@@ -94,7 +94,8 @@
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_std.png"
       },
       {
         "id": "wide",
@@ -112,7 +113,8 @@
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_wide.png"
       },
       {
         "id": "tele",
@@ -130,7 +132,8 @@
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_tele.png"
       },
       {
         "id": "vintage",
@@ -148,7 +151,8 @@
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_vintage.png"
       },
       {
         "id": "nd",
@@ -166,7 +170,8 @@
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_nd.png"
       }
     ],
     "ratios": [

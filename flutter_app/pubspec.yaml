@@ -75,6 +75,7 @@ flutter:
   
   assets:
     - assets/cameras/
+    - assets/lenses/
     - assets/presets/
     - assets/lut/cameras/
     - assets/frames/

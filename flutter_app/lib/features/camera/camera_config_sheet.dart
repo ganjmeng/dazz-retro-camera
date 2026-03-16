@@ -62,7 +62,9 @@ Future<void> showCameraConfigSheet(BuildContext context) {
 
 /// 图片编辑页底部常驻面板：无 Tab行，只显示相机列表 + 功能图标行
 class CameraConfigInlinePanel extends ConsumerWidget {
-  const CameraConfigInlinePanel();
+  /// 是否显示镜头选择按钮（相机页显示，编辑页隐藏）
+  final bool showLens;
+  const CameraConfigInlinePanel({super.key, this.showLens = true});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -77,7 +79,7 @@ class CameraConfigInlinePanel extends ConsumerWidget {
           const Divider(height: 1, color: _kDivider),
           _buildCameraRow(context, ref, st),
           const Divider(height: 1, color: _kDivider),
-          if (cam != null) _buildFunctionRow(context, ref, st, cam),
+          if (cam != null) _buildFunctionRow(context, ref, st, cam, showLens: showLens),
           SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
         ],
       ),
@@ -130,7 +132,7 @@ class CameraConfigInlinePanel extends ConsumerWidget {
   }
 
   // ── 功能图标行 ─────────────────────────────────────────────────────────────
-  Widget _buildFunctionRow(BuildContext context, WidgetRef ref, CameraAppState st, CameraDefinition cam) {
+  Widget _buildFunctionRow(BuildContext context, WidgetRef ref, CameraAppState st, CameraDefinition cam, {bool showLens = true}) {
     final uiCap = cam.uiCapabilities;
     final s = sOf(ref.read(languageProvider));
     final List<Widget> items = [];
@@ -190,7 +192,7 @@ class CameraConfigInlinePanel extends ConsumerWidget {
 
     items.add(const _DotSeparator());
 
-    if (uiCap.enableLens) {
+    if (uiCap.enableLens && showLens) {
       for (final lens in cam.modules.lenses) {
         final isActive = st.activeLensId == lens.id;
         items.add(_LensBtn(
@@ -246,8 +248,7 @@ class _CameraConfigSheet extends ConsumerStatefulWidget {
 
 class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
     with SingleTickerProviderStateMixin {
-  // 当前选中的 Tab（照片/视频）
-  int _tabIndex = 0; // 0=照片, 1=视频
+  // Tab 已移除
   final ScrollController _cameraScrollCtrl = ScrollController();
   String? _lastScrolledCameraId; // 避免重复滚动
 
@@ -319,34 +320,8 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
 
   // ── Tab 行 ──────────────────────────────────────────────────────────────────
   Widget _buildTabRow() {
-    final s = sOf(ref.read(languageProvider));
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          // 左侧：照片 / 视频
-          _TabBtn(label: s.photo, selected: _tabIndex == 0, onTap: () => setState(() => _tabIndex = 0)),
-          const SizedBox(width: 20),
-          _TabBtn(label: s.video, selected: _tabIndex == 1, onTap: () => setState(() => _tabIndex = 1)),
-          const Spacer(),
-          // 右侧：样图 | 管理
-          _PillBtn(label: s.sample, icon: Icons.landscape_outlined, onTap: () {
-            final st = ref.read(cameraAppProvider);
-            Navigator.of(context).pop();
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => CameraSampleScreen(cameraId: st.activeCameraId),
-            ));
-          }),
-          const SizedBox(width: 8),
-          _PillBtn(label: s.manage, icon: Icons.camera_alt_outlined, onTap: () {
-            Navigator.of(context).pop();
-            Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => const CameraManagerScreen(),
-            ));
-          }),
-        ],
-      ),
-    );
+    // Tab行已简化：移除照片/视频Tab和样式管理按钮
+    return const SizedBox(height: 4);
   }
 
   // ── 相机列表行 ──────────────────────────────────────────────────────────────
@@ -1451,32 +1426,7 @@ class _SubPanelState extends ConsumerState<_SubPanel>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Tab 行：照片 | 视频  +  样图 | 管理
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Row(
-            children: [
-              _TabBtn(label: s.photo, selected: true, onTap: () {}, dark: false),
-              const SizedBox(width: 20),
-              _TabBtn(label: s.video, selected: false, onTap: () {}, dark: false),
-              const Spacer(),
-              _PillBtn(label: s.sample, icon: Icons.landscape_outlined, dark: false, onTap: () {
-                final st = ref.read(cameraAppProvider);
-                Navigator.of(context).pop();
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => CameraSampleScreen(cameraId: st.activeCameraId),
-                ));
-              }),
-              const SizedBox(width: 8),
-              _PillBtn(label: s.manage, icon: Icons.camera_alt_outlined, dark: false, onTap: () {
-                Navigator.of(context).pop();
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => const CameraManagerScreen(),
-                ));
-              }),
-            ],
-          ),
-        ),
+        // Tab行已移除（照片/视频Tab和样式管理按钮）
         // 胶卷图标列表
         SizedBox(
           height: 100,
@@ -1755,18 +1705,26 @@ class _LensBtn extends StatelessWidget {
               height: 44,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isActive ? _kTextPrimary : _kSurface,
+                color: Colors.black,
                 border: isActive
-                    ? Border.all(color: _kTextPrimary, width: 2)
-                    : null,
+                    ? Border.all(color: Colors.white, width: 2.5)
+                    : Border.all(color: Colors.transparent, width: 2.5),
               ),
-              child: Center(
-                child: Icon(
-                  Icons.lens_outlined,
-                  color: isActive ? Colors.black : _kTextSecondary,
-                  size: 22,
-                ),
-              ),
+              clipBehavior: Clip.antiAlias,
+              child: lens.iconPath != null
+                  ? Image.asset(
+                      lens.iconPath!,
+                      width: 44,
+                      height: 44,
+                      fit: BoxFit.cover,
+                    )
+                  : Center(
+                      child: Icon(
+                        Icons.lens_outlined,
+                        color: isActive ? Colors.black : _kTextSecondary,
+                        size: 22,
+                      ),
+                    ),
             ),
             const SizedBox(height: 2),
             if (isActive)
@@ -2276,48 +2234,71 @@ class _FilmRollCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Container(
-          width: 64,
-          height: 80,
-          decoration: BoxDecoration(
-            color: const Color(0xFFE5E5EA),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+    return SizedBox(
+      width: 64,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
             children: [
-              // 胶卷图标（用 Icon 模拟）
               Container(
-                width: 40,
-                height: 50,
+                width: 64,
+                height: 64,
                 decoration: BoxDecoration(
-                  color: _filmColor(filter.id),
-                  borderRadius: BorderRadius.circular(4),
+                  color: const Color(0xFFE5E5EA),
+                  borderRadius: BorderRadius.circular(8),
+                  border: isActive
+                      ? Border.all(color: Colors.black, width: 2)
+                      : null,
                 ),
-                child: const Center(
-                  child: Icon(Icons.filter_vintage, color: Colors.white, size: 20),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // 胶卷图标（用 Icon 模拟）
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: _filmColor(filter.id),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.filter_vintage, color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              if (isActive)
+                Positioned(
+                  bottom: 4,
+                  right: 4,
+                  child: Container(
+                    width: 16,
+                    height: 16,
+                    decoration: const BoxDecoration(
+                      color: Colors.black,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.check, color: Colors.white, size: 10),
+                  ),
+                ),
             ],
           ),
-        ),
-        if (isActive)
-          Positioned(
-            bottom: 4,
-            right: 4,
-            child: Container(
-              width: 18,
-              height: 18,
-              decoration: const BoxDecoration(
-                color: Colors.black,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.check, color: Colors.white, size: 12),
+          const SizedBox(height: 4),
+          Text(
+            filter.nameEn,
+            style: TextStyle(
+              color: isActive ? Colors.black : const Color(0xFF555555),
+              fontSize: 10,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
           ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -2347,16 +2328,26 @@ class _LensCell extends StatelessWidget {
           height: 60,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isActive ? Colors.black : const Color(0xFFE5E5EA),
-            border: isActive ? Border.all(color: Colors.black, width: 2) : null,
+            color: Colors.black,
+            border: isActive
+                ? Border.all(color: Colors.white, width: 2.5)
+                : Border.all(color: const Color(0xFF444444), width: 1.5),
           ),
-          child: Center(
-            child: Icon(
-              Icons.lens_outlined,
-              color: isActive ? Colors.white : Colors.black54,
-              size: 28,
-            ),
-          ),
+          clipBehavior: Clip.antiAlias,
+          child: lens.iconPath != null
+              ? Image.asset(
+                  lens.iconPath!,
+                  width: 60,
+                  height: 60,
+                  fit: BoxFit.cover,
+                )
+              : Center(
+                  child: Icon(
+                    Icons.lens_outlined,
+                    color: isActive ? Colors.white : Colors.black54,
+                    size: 28,
+                  ),
+                ),
         ),
         const SizedBox(height: 4),
         if (isActive)

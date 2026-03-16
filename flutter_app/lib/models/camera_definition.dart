@@ -296,6 +296,8 @@ class LensDefinition {
   final double softFocus;
   final double refraction;
   final String? thumbnail;
+  /// 镜头图标资源路径（assets/lenses/lens_xxx.png）
+  final String? iconPath;
   /// 圆形鱼眼模式：画面映射为圆形+四周黑色（等距投影）
   final bool fisheyeMode;
 
@@ -317,6 +319,7 @@ class LensDefinition {
     this.softFocus = 0.0,
     this.refraction = 0.0,
     this.thumbnail,
+    this.iconPath,
     this.fisheyeMode = false,
   });
 
@@ -338,6 +341,7 @@ class LensDefinition {
     softFocus: (json['softFocus'] as num?)?.toDouble() ?? 0.0,
     refraction: (json['refraction'] as num?)?.toDouble() ?? 0.0,
     thumbnail: json['thumbnail'] as String?,
+    iconPath: json['iconPath'] as String?,
     fisheyeMode: json['fisheyeMode'] as bool? ?? false,
   );
 }

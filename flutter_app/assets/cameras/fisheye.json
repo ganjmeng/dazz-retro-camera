@@ -56,7 +56,8 @@
         "flare": 0.0,
         "softFocus": 0.0,
         "refraction": 0.0,
-        "fisheyeMode": true
+        "fisheyeMode": true,
+        "iconPath": "assets/lenses/lens_fisheye.png"
       },
       {
         "id": "fisheye_wide",
@@ -75,7 +76,8 @@
         "flare": 0.0,
         "softFocus": 0.0,
         "refraction": 0.0,
-        "fisheyeMode": false
+        "fisheyeMode": false,
+        "iconPath": "assets/lenses/lens_wide.png"
       },
       {
         "id": "nd",
@@ -93,7 +95,8 @@
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_nd.png"
       }
     ],
     "ratios": [

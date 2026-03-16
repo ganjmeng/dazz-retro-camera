@@ -86,7 +86,8 @@
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_std.png"
       },
       {
         "id": "wide",
@@ -104,7 +105,8 @@
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_wide.png"
       },
       {
         "id": "vintage",
@@ -122,7 +124,8 @@
         "bloom": 0.0,
         "flare": 0.0,
         "softFocus": 0.0,
-        "refraction": 0.0
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_vintage.png"
       }
     ],
     "ratios": [
