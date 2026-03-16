@@ -1700,41 +1700,61 @@ class _LensBtn extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 选中时用外圈光晒效果，不选中时无边框
             Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.black,
-                border: isActive
-                    ? Border.all(color: Colors.white, width: 2.5)
-                    : Border.all(color: Colors.transparent, width: 2.5),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: lens.iconPath != null
-                  ? Image.asset(
-                      lens.iconPath!,
-                      width: 44,
-                      height: 44,
-                      fit: BoxFit.cover,
+              width: 48,
+              height: 48,
+              decoration: isActive
+                  ? BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _kOrange.withAlpha(200), width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _kOrange.withAlpha(80),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ],
                     )
-                  : Center(
-                      child: Icon(
-                        Icons.lens_outlined,
-                        color: isActive ? Colors.black : _kTextSecondary,
-                        size: 22,
-                      ),
-                    ),
+                  : null,
+              child: Center(
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black,
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: lens.iconPath != null
+                      ? Image.asset(
+                          lens.iconPath!,
+                          width: 44,
+                          height: 44,
+                          fit: BoxFit.cover,
+                        )
+                      : Center(
+                          child: Icon(
+                            Icons.lens_outlined,
+                            color: isActive ? _kOrange : _kTextSecondary,
+                            size: 22,
+                          ),
+                        ),
+                ),
+              ),
             ),
             const SizedBox(height: 2),
-            if (isActive)
-              Text(
-                lens.nameEn,
-                style: const TextStyle(color: _kTextPrimary, fontSize: 10),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
+            Text(
+              lens.nameEn,
+              style: TextStyle(
+                color: isActive ? _kOrange : _kTextSecondary,
+                fontSize: 10,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),
@@ -1742,24 +1762,36 @@ class _LensBtn extends StatelessWidget {
   }
 }
 
-/// 分隔点
+/// 分隔点（垂直对齐到图标圆圈中心）
 class _DotSeparator extends StatelessWidget {
   const _DotSeparator();
 
   @override
   Widget build(BuildContext context) {
+    // 外层 Column：图标圆圈 44px + 2px间距 + 10px文字 = 56px
+    // 小圆点需要对齐到图标圆圈的中心（即 Column 顶部 22px 处）
     return SizedBox(
       width: 16,
-      child: Align(
-        alignment: Alignment.center,
-        child: Container(
-          width: 5,
-          height: 5,
-          decoration: const BoxDecoration(
-            color: _kTextSecondary,
-            shape: BoxShape.circle,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 占位 22px（图标圆圈半径）使小圆点垂直居中于图标
+          SizedBox(
+            height: 44,
+            child: Center(
+              child: Container(
+                width: 5,
+                height: 5,
+                decoration: const BoxDecoration(
+                  color: _kTextSecondary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
           ),
-        ),
+          // 占位 12px（间距 + 文字高度）保持与 _FuncBtn 一致的总高度
+          const SizedBox(height: 12),
+        ],
       ),
     );
   }
@@ -2323,38 +2355,61 @@ class _LensCell extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // 选中时用橙色外圈光晒，不选中时无边框
         Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.black,
-            border: isActive
-                ? Border.all(color: Colors.white, width: 2.5)
-                : Border.all(color: const Color(0xFF444444), width: 1.5),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: lens.iconPath != null
-              ? Image.asset(
-                  lens.iconPath!,
-                  width: 60,
-                  height: 60,
-                  fit: BoxFit.cover,
+          width: 64,
+          height: 64,
+          decoration: isActive
+              ? BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _kOrange.withAlpha(200), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _kOrange.withAlpha(80),
+                      blurRadius: 8,
+                      spreadRadius: 1,
+                    ),
+                  ],
                 )
-              : Center(
-                  child: Icon(
-                    Icons.lens_outlined,
-                    color: isActive ? Colors.white : Colors.black54,
-                    size: 28,
-                  ),
-                ),
+              : null,
+          child: Center(
+            child: Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black,
+                border: isActive
+                    ? null
+                    : Border.all(color: const Color(0xFF444444), width: 1.5),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: lens.iconPath != null
+                  ? Image.asset(
+                      lens.iconPath!,
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                    )
+                  : Center(
+                      child: Icon(
+                        Icons.lens_outlined,
+                        color: isActive ? _kOrange : Colors.black54,
+                        size: 28,
+                      ),
+                    ),
+            ),
+          ),
         ),
         const SizedBox(height: 4),
-        if (isActive)
-          Text(
-            lens.nameEn,
-            style: const TextStyle(color: Colors.black, fontSize: 11),
+        Text(
+          lens.nameEn,
+          style: TextStyle(
+            color: isActive ? _kOrange : Colors.black54,
+            fontSize: 11,
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
           ),
+        ),
       ],
     );
   }
