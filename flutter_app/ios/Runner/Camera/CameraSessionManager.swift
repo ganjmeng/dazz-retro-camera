@@ -143,12 +143,25 @@ class CameraSessionManager: NSObject {
 
     // MARK: - White Balance
 
+    /// 手动夹紧白平衡增益值到设备支持的范围 [1.0, maxWhiteBalanceGain]
+    /// 替代 Objective-C 的 clampedWhiteBalanceGains()，兼容 Xcode 16 / iOS 18 SDK
+    private func clampGains(_ gains: AVCaptureDevice.WhiteBalanceGains,
+                            for device: AVCaptureDevice) -> AVCaptureDevice.WhiteBalanceGains {
+        var g = gains
+        let maxGain = device.maxWhiteBalanceGain
+        g.redGain   = max(1.0, min(maxGain, g.redGain))
+        g.greenGain = max(1.0, min(maxGain, g.greenGain))
+        g.blueGain  = max(1.0, min(maxGain, g.blueGain))
+        return g
+    }
+
     /// 设置白平衡模式（与 Android CameraX AWB 对等）
     /// mode: "auto" | "daylight" | "incandescent" | "fluorescent" | "cloudy" | "manual"
     /// tempK: 手动模式下的色温开尔文度（1800..8000）
     func setWhiteBalance(mode: String, tempK: Int) {
         guard let device = currentVideoInput?.device else { return }
-        sessionQueue.async {
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
             do {
                 try device.lockForConfiguration()
                 switch mode {
@@ -163,7 +176,7 @@ class CameraSessionManager: NSObject {
                         let gains = device.deviceWhiteBalanceGains(for:
                             AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
                                 temperature: targetK, tint: 0))
-                        let clamped = device.clampedWhiteBalanceGains(gains)
+                        let clamped = self.clampGains(gains, for: device)
                         device.setWhiteBalanceModeLocked(with: clamped, completionHandler: nil)
                     }
                 case "incandescent":
@@ -172,7 +185,7 @@ class CameraSessionManager: NSObject {
                         let gains = device.deviceWhiteBalanceGains(for:
                             AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
                                 temperature: 2700, tint: 0))
-                        let clamped = device.clampedWhiteBalanceGains(gains)
+                        let clamped = self.clampGains(gains, for: device)
                         device.setWhiteBalanceModeLocked(with: clamped, completionHandler: nil)
                     }
                 case "fluorescent":
@@ -181,7 +194,7 @@ class CameraSessionManager: NSObject {
                         let gains = device.deviceWhiteBalanceGains(for:
                             AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
                                 temperature: 4000, tint: 0))
-                        let clamped = device.clampedWhiteBalanceGains(gains)
+                        let clamped = self.clampGains(gains, for: device)
                         device.setWhiteBalanceModeLocked(with: clamped, completionHandler: nil)
                     }
                 case "manual":
@@ -191,7 +204,7 @@ class CameraSessionManager: NSObject {
                         let gains = device.deviceWhiteBalanceGains(for:
                             AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
                                 temperature: clampedK, tint: 0))
-                        let clamped = device.clampedWhiteBalanceGains(gains)
+                        let clamped = self.clampGains(gains, for: device)
                         device.setWhiteBalanceModeLocked(with: clamped, completionHandler: nil)
                     }
                 default:
