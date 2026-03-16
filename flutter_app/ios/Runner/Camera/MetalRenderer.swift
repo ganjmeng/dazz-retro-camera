@@ -7,8 +7,10 @@ import AVFoundation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CCDParams — 与 Metal shader 中 struct CCDParams 对应（字段顺序必须一致）
+// 注意：新增字段只能追加到末尾，不能插入中间，否则 Metal 内存对齐会错位
 // ─────────────────────────────────────────────────────────────────────────────
 struct CCDParams {
+    // ── 通用参数（所有相机共用）──────────────────────────────────────────────
     var contrast: Float = 1.0
     var saturation: Float = 1.0
     var temperatureShift: Float = 0.0
@@ -25,6 +27,21 @@ struct CCDParams {
     var time: Float = 0.0
     var fisheyeMode: Float = 0.0  // 1.0=圆形鱼眼模式, 0.0=普通模式
     var aspectRatio: Float = 0.75 // 宽/高 比例（默认 3:4 竖屏）
+    // ── FQS / CPM35 专用扩展字段（通用 Shader 忽略这些字段）──────────────────
+    var colorBiasR: Float = 0.0       // RGB Channel Shift R（FQS=-0.04, CPM35=+0.04）
+    var colorBiasG: Float = 0.0       // RGB Channel Shift G（FQS=+0.05, CPM35=+0.02）
+    var colorBiasB: Float = 0.0       // RGB Channel Shift B（FQS=+0.02, CPM35=-0.04）
+    var grainSize: Float = 1.0        // 颗粒大小（FQS=1.8, CPM35=1.6）
+    var sharpness: Float = 1.0        // 锐度倍数（FQS=0.85, CPM35=1.04）
+    var highlightWarmAmount: Float = 0.0 // CPM35 暖高光推送（CPM35=0.06）
+    var luminanceNoise: Float = 0.0   // 亮度噪声（FQS=0.08, CPM35=0.05）
+    var chromaNoise: Float = 0.0      // 色度噪声（FQS=0.05, CPM35=0.03）
+    // ── Inst C 专用扩展字段（其他相机的 Shader 忽略这些字段）──────────────────
+    var highlightRolloff: Float = 0.0   // 高光柔和滴落（Inst C=0.20）
+    var paperTexture: Float = 0.0       // 相纸纹理强度（Inst C=0.06）
+    var edgeFalloff: Float = 0.0        // 边缘曝光衰减（Inst C=0.05）
+    var exposureVariation: Float = 0.0  // 曝光不均匀幅度（Inst C=0.04）
+    var cornerWarmShift: Float = 0.0    // 边角偏暖强度（Inst C=0.02）
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -57,6 +74,32 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
 
     private var ccdParams = CCDParams()
     private let paramsLock = NSLock()
+
+    // MARK: - Camera ID（用于动态切换 Fragment Shader）
+
+    /// 当前相机 ID，切换时自动重建 Pipeline
+    private var _currentCameraId: String = ""
+    private let pipelineLock = NSLock()
+
+    var currentCameraId: String {
+        get {
+            pipelineLock.lock()
+            defer { pipelineLock.unlock() }
+            return _currentCameraId
+        }
+        set {
+            pipelineLock.lock()
+            let changed = _currentCameraId != newValue
+            _currentCameraId = newValue
+            pipelineLock.unlock()
+            if changed {
+                // Pipeline 重建必须在主线程或专用队列，不能在 AVFoundation 采集线程
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    self?.rebuildPipeline()
+                }
+            }
+        }
+    }
 
     // MARK: - External Textures
 
@@ -104,16 +147,67 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
                                          options: .storageModeShared)
     }
 
+    /// 初始化时使用默认 CCD Shader
     private func setupRenderPipeline() {
+        buildPipeline(cameraId: "")
+    }
+
+    /// 相机切换时重建 Pipeline（在 background queue 调用）
+    private func rebuildPipeline() {
+        pipelineLock.lock()
+        let camId = _currentCameraId
+        pipelineLock.unlock()
+        buildPipeline(cameraId: camId)
+    }
+
+    /// 根据相机 ID 选择对应的 Fragment Shader 并构建 MTLRenderPipelineState
+    ///
+    /// 映射规则：
+    ///   fqs   → fqsVertexShader   / fqsFragmentShader   (FQSShader.metal)
+    ///   cpm35 → cpm35VertexShader / cpm35FragmentShader  (CPM35Shader.metal)
+    ///   其他  → vertexShader      / ccdFragmentShader    (CameraShaders.metal)
+    private func buildPipeline(cameraId: String) {
         guard let library = device.makeDefaultLibrary() else {
             print("[MetalRenderer] Failed to load default Metal library")
             return
         }
 
-        guard let vertexFn = library.makeFunction(name: "vertexShader"),
-              let fragmentFn = library.makeFunction(name: "ccdFragmentShader") else {
-            print("[MetalRenderer] Failed to find shader functions")
-            return
+        let vertexName: String
+        let fragmentName: String
+
+        switch cameraId {
+        case "fqs":
+            vertexName   = "fqsVertexShader"
+            fragmentName = "fqsFragmentShader"
+        case "cpm35":
+            vertexName   = "cpm35VertexShader"
+            fragmentName = "cpm35FragmentShader"
+        case "inst_c":
+            vertexName   = "instcVertexShader"
+            fragmentName = "instcFragmentShader"
+        default:
+            vertexName   = "vertexShader"
+            fragmentName = "ccdFragmentShader"
+        }
+
+        // 尝试加载目标 Shader，失败时降级到通用 CCD Shader
+        let vertexFn: MTLFunction
+        let fragmentFn: MTLFunction
+
+        if let vFn = library.makeFunction(name: vertexName),
+           let fFn = library.makeFunction(name: fragmentName) {
+            vertexFn   = vFn
+            fragmentFn = fFn
+            print("[MetalRenderer] Using shader: \(fragmentName)")
+        } else {
+            print("[MetalRenderer] Shader '\(fragmentName)' not found, falling back to ccdFragmentShader")
+            guard let fallbackV = library.makeFunction(name: "vertexShader"),
+                  let fallbackF = library.makeFunction(name: "ccdFragmentShader") else {
+                print("[MetalRenderer] Fallback shader also missing!")
+                return
+            }
+            vertexFn   = fallbackV
+            fragmentFn = fallbackF
         }
 
         // Vertex descriptor matching VertexIn in shader
@@ -129,13 +223,18 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         vertexDescriptor.layouts[0].stride = MemoryLayout<Float>.size * 6
 
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
-        pipelineDescriptor.vertexFunction = vertexFn
+        pipelineDescriptor.vertexFunction   = vertexFn
         pipelineDescriptor.fragmentFunction = fragmentFn
         pipelineDescriptor.vertexDescriptor = vertexDescriptor
         pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
 
         do {
-            renderPipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+            let newState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+            // 原子替换，renderFrame 下一帧立即生效
+            pipelineLock.lock()
+            renderPipelineState = newState
+            pipelineLock.unlock()
+            print("[MetalRenderer] Pipeline ready: \(fragmentName)")
         } catch {
             print("[MetalRenderer] Pipeline creation failed: \(error)")
         }
@@ -150,29 +249,50 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
     // MARK: - Params Update
 
     func updateParams(_ params: [String: Any]) {
+        // 相机 ID 切换不需要持锁，单独处理
+        if let camId = params["cameraId"] as? String, !camId.isEmpty {
+            currentCameraId = camId   // 触发 didSet → rebuildPipeline()
+        }
+
         paramsLock.lock()
         defer { paramsLock.unlock() }
 
-        if let v = params["contrast"] as? Float { ccdParams.contrast = v }
-        if let v = params["saturation"] as? Float { ccdParams.saturation = v }
-        if let v = params["temperatureShift"] as? Float { ccdParams.temperatureShift = v }
-        if let v = params["tintShift"] as? Float { ccdParams.tintShift = v }
-        if let v = params["grainAmount"] as? Float { ccdParams.grainAmount = v }
-        if let v = params["noise"] as? Float { ccdParams.noiseAmount = v }
-        if let v = params["vignette"] as? Float { ccdParams.vignetteAmount = v }
+        // ── 通用参数 ─────────────────────────────────────────────────────────
+        if let v = params["contrast"]            as? Float { ccdParams.contrast            = v }
+        if let v = params["saturation"]          as? Float { ccdParams.saturation          = v }
+        if let v = params["temperatureShift"]    as? Float { ccdParams.temperatureShift    = v }
+        if let v = params["tintShift"]           as? Float { ccdParams.tintShift           = v }
+        if let v = params["grainAmount"]         as? Float { ccdParams.grainAmount         = v }
+        if let v = params["noise"]               as? Float { ccdParams.noiseAmount         = v }
+        if let v = params["vignette"]            as? Float { ccdParams.vignetteAmount      = v }
         if let v = params["chromaticAberration"] as? Float { ccdParams.chromaticAberration = v }
-        if let v = params["bloom"] as? Float { ccdParams.bloomAmount = v }
-        if let v = params["halation"] as? Float { ccdParams.halationAmount = v }
-        if let v = params["sharpen"] as? Float { ccdParams.sharpen = v }
+        if let v = params["bloom"]               as? Float { ccdParams.bloomAmount         = v }
+        if let v = params["halation"]            as? Float { ccdParams.halationAmount      = v }
+        if let v = params["sharpen"]             as? Float { ccdParams.sharpen             = v }
 
-        // 加载 LUT 纹理
+        // ── FQS / CPM35 专用参数 ─────────────────────────────────────────────
+        if let v = params["colorBiasR"]          as? Float { ccdParams.colorBiasR          = v }
+        if let v = params["colorBiasG"]          as? Float { ccdParams.colorBiasG          = v }
+        if let v = params["colorBiasB"]          as? Float { ccdParams.colorBiasB          = v }
+        if let v = params["grainSize"]           as? Float { ccdParams.grainSize           = v }
+        if let v = params["sharpness"]           as? Float { ccdParams.sharpness           = v }
+        if let v = params["highlightWarmAmount"] as? Float { ccdParams.highlightWarmAmount = v }
+        if let v = params["luminanceNoise"]      as? Float { ccdParams.luminanceNoise      = v }
+        if let v = params["chromaNoise"]         as? Float { ccdParams.chromaNoise         = v }
+
+        // ── Inst C 专用参数 ───────────────────────────────────────────────
+        if let v = params["highlightRolloff"]   as? Float { ccdParams.highlightRolloff   = v }
+        if let v = params["paperTexture"]        as? Float { ccdParams.paperTexture        = v }
+        if let v = params["edgeFalloff"]         as? Float { ccdParams.edgeFalloff         = v }
+        if let v = params["exposureVariation"]   as? Float { ccdParams.exposureVariation   = v }
+        if let v = params["cornerWarmShift"]     as? Float { ccdParams.cornerWarmShift     = v }
+
+        // ── 纹理加载 ─────────────────────────────────────────────────────────
         if let lutAsset = params["lut"] as? String, !lutAsset.isEmpty {
             loadAssetTexture(assetPath: lutAsset) { [weak self] texture in
                 self?.lutTexture = texture
             }
         }
-
-        // 加载 Grain 纹理
         if let grainAsset = params["grain"] as? String, !grainAsset.isEmpty {
             loadAssetTexture(assetPath: grainAsset) { [weak self] texture in
                 self?.grainTexture = texture
@@ -251,8 +371,15 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
     // MARK: - Render
 
     private func renderFrame(from pixelBuffer: CVPixelBuffer) {
+        // 原子读取当前 Pipeline（可能在 rebuildPipeline 后被替换）
+        pipelineLock.lock()
+        guard let pipelineState = renderPipelineState else {
+            pipelineLock.unlock()
+            return
+        }
+        pipelineLock.unlock()
+
         guard let cache = textureCache,
-              let pipelineState = renderPipelineState,
               let vBuffer = vertexBuffer else { return }
 
         let width = CVPixelBufferGetWidth(pixelBuffer)
@@ -297,7 +424,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         encoder.setRenderPipelineState(pipelineState)
         encoder.setVertexBuffer(vBuffer, offset: 0, index: 0)
         encoder.setFragmentTexture(textureIn, index: 0)
-        if let lut = lutTexture   { encoder.setFragmentTexture(lut,   index: 1) }
+        if let lut = lutTexture     { encoder.setFragmentTexture(lut,   index: 1) }
         if let grain = grainTexture { encoder.setFragmentTexture(grain, index: 2) }
 
         paramsLock.lock()

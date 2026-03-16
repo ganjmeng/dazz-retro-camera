@@ -409,6 +409,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 (look["luminanceNoise"]      as? Number)?.let { params["luminanceNoise"]      = it }
                 (look["chromaNoise"]         as? Number)?.let { params["chromaNoise"]         = it }
                 (look["highlightWarmAmount"] as? Number)?.let { params["highlightWarmAmount"] = it }
+                // Inst C 专用字段（直接映射）
+                (look["highlightRolloff"]    as? Number)?.let { params["highlightRolloff"]    = it }
+                (look["paperTexture"]        as? Number)?.let { params["paperTexture"]        = it }
+                (look["edgeFalloff"]         as? Number)?.let { params["edgeFalloff"]         = it }
+                (look["exposureVariation"]   as? Number)?.let { params["exposureVariation"]   = it }
+                (look["cornerWarmShift"]     as? Number)?.let { params["cornerWarmShift"]     = it }
             }
 
             if (params.isNotEmpty()) {

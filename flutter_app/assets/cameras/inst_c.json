@@ -13,28 +13,34 @@
     "colorDepth": 8
   },
   "defaultLook": {
-    "baseLut": "assets/lut/cameras/inst_c.cube",
+    "baseLut": "assets/lut/cameras/inst_c_polaroid_warm.cube",
+    "temperature": 6400,
+    "tint": 6.0,
+    "contrast": 0.92,
+    "highlights": -20.0,
+    "shadows": -6.0,
+    "whites": 8.0,
+    "blacks": -6.0,
+    "clarity": 0.0,
+    "vibrance": 8.0,
+    "saturation": 1.08,
+    "vignette": 0.06,
     "distortion": 0.0,
-    "chromaticAberration": 0.02,
+    "chromaticAberration": 0.05,
+    "bloom": 0.06,
+    "halation": 0.02,
+    "highlightRolloff": 0.2,
     "flare": 0.0,
-    "temperature": 6100,
-    "tint": 4.0,
-    "contrast": 0.95,
-    "highlights": -15.0,
-    "shadows": -8.0,
-    "whites": 12.0,
-    "blacks": -8.0,
-    "clarity": 10.0,
-    "saturation": 1.15,
-    "vibrance": 20.0,
-    "grain": 0.12,
-    "bloom": 0.03,
-    "vignette": 0.12,
+    "grain": 0.08,
+    "grainSize": 1.8,
+    "paperTexture": 0.06,
     "colorBiasR": 0.022,
     "colorBiasG": 0.01,
     "colorBiasB": -0.015,
-    "grainSize": 0.42,
-    "sharpness": 1.0
+    "sharpness": 0.98,
+    "edgeFalloff": 0.05,
+    "exposureVariation": 0.04,
+    "cornerWarmShift": 0.02
   },
   "modules": {
     "filters": [],
@@ -435,7 +441,10 @@
     "enableBloom": true,
     "enableChromaticAberration": false,
     "enableFrameComposite": false,
-    "enableWatermarkComposite": true
+    "enableWatermarkComposite": true,
+    "enableInstantEffect": true,
+    "enablePaperTexture": true,
+    "enableUnevenExposure": true
   },
   "exportPolicy": {
     "jpegQuality": 0.92,
@@ -463,16 +472,18 @@
     "icon": "assets/thumbnails/cameras/inst_c_icon.png"
   },
   "meta": {
-    "version": "final",
+    "version": "2.0",
     "premium": false,
     "sortOrder": 6,
     "tags": [
       "instant",
+      "instax",
+      "polaroid",
+      "warm",
+      "soft",
+      "paper",
       "flash",
-      "party",
-      "high-contrast",
-      "fujifilm",
-      "instax"
+      "party"
     ]
   }
 }

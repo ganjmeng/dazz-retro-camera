@@ -164,6 +164,12 @@ class DefaultLook {
   final double halation;      // 0.0 ~ 1.0 highlight halation（胶片高光发光）
   final double grainSize;     // 0.5 ~ 3.0 grain particle size（颗粒大小）
   final double sharpness;     // 0.0 ~ 2.0 sharpness multiplier（锐度）
+  // ── Inst C 专用字段（Instax/Polaroid 即时成像风格）────────────────────────
+  final double highlightRolloff;  // 0.0 ~ 1.0 高光柔和滴落（Inst C=0.20）
+  final double paperTexture;      // 0.0 ~ 1.0 相纸纹理强度（Inst C=0.06）
+  final double edgeFalloff;       // 0.0 ~ 1.0 边缘曝光衰减（不均匀曝光，Inst C=0.05）
+  final double exposureVariation; // 0.0 ~ 1.0 全局曝光不均匀幅度（Inst C=0.04）
+  final double cornerWarmShift;   // 0.0 ~ 1.0 边角偏暖强度（Inst C=0.02）
 
   const DefaultLook({
     this.baseLut,
@@ -189,6 +195,12 @@ class DefaultLook {
     this.halation = 0,
     this.grainSize = 1.0,
     this.sharpness = 1.0,
+    // Inst C 专用字段（默认为 0，不影响其他相机）
+    this.highlightRolloff = 0,
+    this.paperTexture = 0,
+    this.edgeFalloff = 0,
+    this.exposureVariation = 0,
+    this.cornerWarmShift = 0,
   });
 
   /// 占位默认値（相机 JSON 未加载时使用）
@@ -230,6 +242,12 @@ class DefaultLook {
     halation: (json['halation'] as num? ?? 0).toDouble(),
     grainSize: (json['grainSize'] as num? ?? 1.0).toDouble(),
     sharpness: (json['sharpness'] as num? ?? 1.0).toDouble(),
+    // Inst C 专用字段
+    highlightRolloff: (json['highlightRolloff'] as num? ?? 0).toDouble(),
+    paperTexture: (json['paperTexture'] as num? ?? 0).toDouble(),
+    edgeFalloff: (json['edgeFalloff'] as num? ?? 0).toDouble(),
+    exposureVariation: (json['exposureVariation'] as num? ?? 0).toDouble(),
+    cornerWarmShift: (json['cornerWarmShift'] as num? ?? 0).toDouble(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -256,6 +274,12 @@ class DefaultLook {
     'halation': halation,
     'grainSize': grainSize,
     'sharpness': sharpness,
+    // Inst C 专用字段（默认为 0 时不影响其他相机）
+    if (highlightRolloff != 0) 'highlightRolloff': highlightRolloff,
+    if (paperTexture != 0) 'paperTexture': paperTexture,
+    if (edgeFalloff != 0) 'edgeFalloff': edgeFalloff,
+    if (exposureVariation != 0) 'exposureVariation': exposureVariation,
+    if (cornerWarmShift != 0) 'cornerWarmShift': cornerWarmShift,
   };
 }
 
