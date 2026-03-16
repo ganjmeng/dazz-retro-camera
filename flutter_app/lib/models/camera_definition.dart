@@ -161,6 +161,9 @@ class DefaultLook {
   final double colorBiasR;    // -1.0 ~ +1.0 red channel bias
   final double colorBiasG;    // -1.0 ~ +1.0 green channel bias
   final double colorBiasB;    // -1.0 ~ +1.0 blue channel bias
+  final double halation;      // 0.0 ~ 1.0 highlight halation（胶片高光发光）
+  final double grainSize;     // 0.5 ~ 3.0 grain particle size（颗粒大小）
+  final double sharpness;     // 0.0 ~ 2.0 sharpness multiplier（锐度）
 
   const DefaultLook({
     this.baseLut,
@@ -183,6 +186,9 @@ class DefaultLook {
     this.colorBiasR = 0,
     this.colorBiasG = 0,
     this.colorBiasB = 0,
+    this.halation = 0,
+    this.grainSize = 1.0,
+    this.sharpness = 1.0,
   });
 
   /// 占位默认値（相机 JSON 未加载时使用）
@@ -195,6 +201,9 @@ class DefaultLook {
     chromaticAberration: 0,
     bloom: 0,
     flare: 0,
+    halation: 0,
+    grainSize: 1.0,
+    sharpness: 1.0,
   );
 
   factory DefaultLook.fromJson(Map<String, dynamic> json) => DefaultLook(
@@ -218,6 +227,9 @@ class DefaultLook {
     colorBiasR: (json['colorBiasR'] as num? ?? 0).toDouble(),
     colorBiasG: (json['colorBiasG'] as num? ?? 0).toDouble(),
     colorBiasB: (json['colorBiasB'] as num? ?? 0).toDouble(),
+    halation: (json['halation'] as num? ?? 0).toDouble(),
+    grainSize: (json['grainSize'] as num? ?? 1.0).toDouble(),
+    sharpness: (json['sharpness'] as num? ?? 1.0).toDouble(),
   );
 }
 
@@ -256,10 +268,27 @@ class FilterDefinition {
   final String? lut;
   final double contrast;
   final double saturation;
-  final String grain;
+  final String grain;         // 'none' | 'light' | 'medium' | 'heavy'
+  final double grainSize;     // 0.5 ~ 3.0 颗粒大小
+  final double vignette;      // 0.0 ~ 1.0 暗角强度
+  final double sharpness;     // 0.0 ~ 2.0 锐度
+  final double halation;      // 0.0 ~ 1.0 高光发光（FQS 专用）
   final String? thumbnail;
 
-  const FilterDefinition({required this.id, required this.name, required this.nameEn, this.lut, required this.contrast, required this.saturation, required this.grain, this.thumbnail});
+  const FilterDefinition({
+    required this.id,
+    required this.name,
+    required this.nameEn,
+    this.lut,
+    required this.contrast,
+    required this.saturation,
+    required this.grain,
+    this.grainSize = 1.0,
+    this.vignette = 0.0,
+    this.sharpness = 1.0,
+    this.halation = 0.0,
+    this.thumbnail,
+  });
 
   factory FilterDefinition.fromJson(Map<String, dynamic> json) => FilterDefinition(
     id: json['id'] as String,
@@ -269,6 +298,10 @@ class FilterDefinition {
     contrast: (json['contrast'] as num?)?.toDouble() ?? 1.0,
     saturation: (json['saturation'] as num?)?.toDouble() ?? 1.0,
     grain: json['grain'] as String? ?? 'none',
+    grainSize: (json['grainSize'] as num?)?.toDouble() ?? 1.0,
+    vignette: (json['vignette'] as num?)?.toDouble() ?? 0.0,
+    sharpness: (json['sharpness'] as num?)?.toDouble() ?? 1.0,
+    halation: (json['halation'] as num?)?.toDouble() ?? 0.0,
     thumbnail: json['thumbnail'] as String?,
   );
 }
