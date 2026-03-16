@@ -90,8 +90,34 @@ uniform float uSkinRedLimit;        // 肤色红限（FXN-R=1.04）
 // ── 噪声分离──
 uniform float uLuminanceNoise;      // 亮度噪声（FXN-R=0.02）
 uniform float uChromaNoise;         // 色度噪声（FXN-R=0.01）
+// ── LUT + Tone Curve + Highlight Rolloff ──
+uniform float uHighlightRolloff2;   // 高光柔和滚落（FXN-R=0.16）
+uniform float uToneCurveStrength;   // Tone Curve 强度（FXN-R=1.0）
 
-// ── 工具函数 ──────────────────────────────────────────────────────
+// ── 工具函数 ──────────────────────────────────────────────────────────────────
+// 高光柔和滚落
+vec3 ccdHighlightRolloff(vec3 color, float rolloff) {
+    if (rolloff <= 0.0) return color;
+    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    float threshold = 1.0 - rolloff;
+    float highlight = clamp((luma - threshold) / rolloff, 0.0, 1.0);
+    float compress = 1.0 - highlight * highlight * 0.3;
+    return clamp(color * compress, 0.0, 1.0);
+}
+// FXN-R Tone Curve（分段线性插値）
+float fxnrToneCurve(float x) {
+    // Input:  0     16    32    64    96    128   160   192   224   255
+    // Output: 0     10    24    57    92    124   168   210   238   250
+    float[10] inp = float[10](0.0, 0.0627, 0.1255, 0.2510, 0.3765, 0.5020, 0.6275, 0.7529, 0.8784, 1.0);
+    float[10] out = float[10](0.0, 0.0392, 0.0941, 0.2235, 0.3608, 0.4863, 0.6588, 0.8235, 0.9333, 0.9804);
+    for (int i = 0; i < 9; i++) {
+        if (x <= inp[i + 1]) {
+            float t = (x - inp[i]) / (inp[i + 1] - inp[i]);
+            return mix(out[i], out[i + 1], t);
+        }
+    }
+    return out[9];
+}
 float random(vec2 st, float seed) {
     return fract(sin(dot(st + seed, vec2(12.9898, 78.233))) * 43758.5453);
 }
@@ -300,7 +326,22 @@ void main() {
     // FXN-R: skinHueProtect=1.0, skinSatProtect=0.96, skinLumaSoften=0.03, skinRedLimit=1.04
     color = ccdSkinProtect(color, uSkinHueProtect, uSkinSatProtect, uSkinLumaSoften, uSkinRedLimit);
 
-    // Pass 6: 暗角（鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗）
+    // Pass 6: 高光柔和滚落（Highlight Rolloff）
+    // FXN-R=0.16：高光层次保留，防止过曝失真
+    if (uHighlightRolloff2 > 0.0) {
+        color = ccdHighlightRolloff(color, uHighlightRolloff2);
+    }
+    // Pass 7: Tone Curve
+    // FXN-R Tone Curve：阴影压、中间调通透、高光滚落
+    if (uToneCurveStrength > 0.0) {
+        vec3 curved = vec3(
+            fxnrToneCurve(color.r),
+            fxnrToneCurve(color.g),
+            fxnrToneCurve(color.b)
+        );
+        color = mix(color, curved, uToneCurveStrength);
+    }
+    // Pass 8: 暗角（鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗）
     if (uFisheyeMode < 0.5) {
         float vignette = vignetteEffect(uv, uVignetteAmount);
         color *= vignette;
@@ -361,7 +402,7 @@ void main() {
     private var uEdgeFalloff: Int = -1
     private var uExposureVariation: Int = -1
     private var uCornerWarmShift: Int = -1
-    // SQC 专有 uniform 位置
+    // 拍立得/数码通用 uniform 位置（Inst C / SQC / FXN-R 共用）
     private var uCenterGain: Int = -1
     private var uDevelopmentSoftness: Int = -1
     private var uChemicalIrregularity: Int = -1
@@ -369,6 +410,9 @@ void main() {
     private var uSkinSatProtect: Int = -1
     private var uSkinLumaSoften: Int = -1
     private var uSkinRedLimit: Int = -1
+    // LUT + Tone Curve + Highlight Rolloff uniform 位置
+    private var uHighlightRolloff2: Int = -1
+    private var uToneCurveStrength: Int = -1
 
     // Attrib 位置（初始化时缓存，避免每帧 glGetAttribLocation 调用 — 关键热路径优化）
     // glGetAttribLocation 是同步 GPU driver 查询，每帧调用在高端机上约 0.1ms，低端机约 0.5ms
@@ -421,6 +465,9 @@ void main() {
     @Volatile private var skinSatProtect: Float = 1.0f
     @Volatile private var skinLumaSoften: Float = 0.0f
     @Volatile private var skinRedLimit: Float = 1.0f
+    // LUT + Tone Curve + Highlight Rolloff 参数
+    @Volatile private var highlightRolloff2: Float = 0.0f
+    @Volatile private var toneCurveStrength: Float = 0.0f
     @Volatile private var previewWidth: Int = 1280
     @Volatile private var previewHeight: Int = 720
 
@@ -597,6 +644,9 @@ void main() {
         uSkinSatProtect       = GLES30.glGetUniformLocation(programId, "uSkinSatProtect")
         uSkinLumaSoften       = GLES30.glGetUniformLocation(programId, "uSkinLumaSoften")
         uSkinRedLimit         = GLES30.glGetUniformLocation(programId, "uSkinRedLimit")
+        // LUT + Tone Curve + Highlight Rolloff
+        uHighlightRolloff2    = GLES30.glGetUniformLocation(programId, "uHighlightRolloff2")
+        uToneCurveStrength    = GLES30.glGetUniformLocation(programId, "uToneCurveStrength")
 
         // ── 11. 顶点缓冲 ─────────────────────────────────────────────────────
         vertexBuffer = ByteBuffer.allocateDirect(QUAD_VERTICES.size * 4)
@@ -680,6 +730,9 @@ void main() {
         GLES30.glUniform1f(uSkinSatProtect,      skinSatProtect)
         GLES30.glUniform1f(uSkinLumaSoften,      skinLumaSoften)
         GLES30.glUniform1f(uSkinRedLimit,        skinRedLimit)
+        // LUT + Tone Curve + Highlight Rolloff
+        GLES30.glUniform1f(uHighlightRolloff2,   highlightRolloff2)
+        GLES30.glUniform1f(uToneCurveStrength,   toneCurveStrength)
         // 传入 SurfaceTexture 变换矩阵（修正 OES 纹理方向）
         GLES30.glUniformMatrix4fv(uSTMatrix, 1, false, stMatrix, 0)
         time += 0.016f
@@ -743,6 +796,9 @@ void main() {
         (params["skinSatProtect"]      as? Number)?.let { skinSatProtect      = it.toFloat() }
         (params["skinLumaSoften"]      as? Number)?.let { skinLumaSoften      = it.toFloat() }
         (params["skinRedLimit"]        as? Number)?.let { skinRedLimit        = it.toFloat() }
+        // LUT + Tone Curve + Highlight Rolloff
+        (params["highlightRolloff"]     as? Number)?.let { highlightRolloff2    = it.toFloat() }
+        (params["toneCurveStrength"]    as? Number)?.let { toneCurveStrength    = it.toFloat() }
     }
 
     /**
@@ -814,6 +870,8 @@ void main() {
             uSkinSatProtect       = GLES30.glGetUniformLocation(programId, "uSkinSatProtect")
             uSkinLumaSoften       = GLES30.glGetUniformLocation(programId, "uSkinLumaSoften")
             uSkinRedLimit         = GLES30.glGetUniformLocation(programId, "uSkinRedLimit")
+            uHighlightRolloff2    = GLES30.glGetUniformLocation(programId, "uHighlightRolloff2")
+            uToneCurveStrength    = GLES30.glGetUniformLocation(programId, "uToneCurveStrength")
             Log.d(TAG, "setCameraId: shader recompiled for cameraId=$cameraId")
         }
     }

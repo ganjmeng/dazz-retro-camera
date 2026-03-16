@@ -54,6 +54,12 @@ struct CCDParams {
     // ── 噪声分离（亮度/色度）────────────────────────────────────────────
     float luminanceNoise;    // 亮度噪声（FXN-R=0.02）
     float chromaNoise;       // 色度噪声（FXN-R=0.01）
+    // ── LUT + Tone Curve + Highlight Rolloff────────────────────────────────────────────
+    float lutEnabled;        // 1.0=开启 LUT 采样，0.0=跳过
+    float lutStrength;       // LUT 混合强度（FXN-R=1.0，全量应用）
+    float lutSize;           // LUT 边长（默认 33）
+    float highlightRolloff;  // 高光柔和滚落（FXN-R=0.16）
+    float toneCurveStrength; // Tone Curve 强度（FXN-R=1.0）
 };
 
 // MARK: - 工具函数
@@ -212,6 +218,71 @@ float3 ccdSkinProtect(
     return mix(color, prot, skinMask);
 }
 
+// MARK: - LUT / Tone Curve / Highlight Rolloff 工具函数
+
+/// 3D LUT 采样（支持任意边长，常用 33x33x33）
+/// LUT 纹理布局：将 3D 坐标折叠为 2D 行列（每行 = B 层，每列 = G*N+R）
+float3 sampleLUT(
+    texture2d<float> lut,
+    sampler s,
+    float3 color,
+    float lutN  // LUT 边长，常用 33.0
+) {
+    float scale = (lutN - 1.0) / lutN;
+    float offset = 0.5 / lutN;
+    float3 lutCoord = color * scale + offset;
+
+    // 将 3D 坐标映射到 2D 纹理：宽 = N*N，高 = N
+    float bSlice  = lutCoord.b * (lutN - 1.0);
+    float bLow    = floor(bSlice);
+    float bHigh   = min(bLow + 1.0, lutN - 1.0);
+    float bFrac   = bSlice - bLow;
+
+    float texW = lutN * lutN;
+    float texH = lutN;
+
+    float2 uvLow  = float2((bLow  * lutN + lutCoord.r * (lutN - 1.0) + 0.5) / texW,
+                           (lutCoord.g * (lutN - 1.0) + 0.5) / texH);
+    float2 uvHigh = float2((bHigh * lutN + lutCoord.r * (lutN - 1.0) + 0.5) / texW,
+                           (lutCoord.g * (lutN - 1.0) + 0.5) / texH);
+
+    float3 colLow  = lut.sample(s, uvLow).rgb;
+    float3 colHigh = lut.sample(s, uvHigh).rgb;
+    return mix(colLow, colHigh, bFrac);
+}
+
+/// FXN-R Tone Curve
+/// 映射表（来自提交参数）：阴影压、中间调通透、高光 rolloff
+/// 使用 9 个控制点的分段线性插値
+float applyFxnrToneCurve(float x) {
+    // FXN-R Tone Curve 控制点（输入 0-1 对应输出 0-1）
+    // Input:  0     16    32    64    96    128   160   192   224   255
+    // Output: 0     10    24    57    92    124   168   210   238   250
+    const float inputs[10]  = {0.0, 0.0627, 0.1255, 0.2510, 0.3765, 0.5020, 0.6275, 0.7529, 0.8784, 1.0};
+    const float outputs[10] = {0.0, 0.0392, 0.0941, 0.2235, 0.3608, 0.4863, 0.6588, 0.8235, 0.9333, 0.9804};
+    // 分段线性插値
+    for (int i = 0; i < 9; i++) {
+        if (x <= inputs[i + 1]) {
+            float t = (x - inputs[i]) / (inputs[i + 1] - inputs[i]);
+            return mix(outputs[i], outputs[i + 1], t);
+        }
+    }
+    return outputs[9];
+}
+
+/// 高光柔和滚落（Highlight Rolloff）
+/// 对高亮区域施加柔和压制，防止过曝层次失真
+float3 applyHighlightRolloff(float3 color, float rolloff) {
+    if (rolloff <= 0.0) return color;
+    float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
+    // 高光区域：亮度 > (1 - rolloff)
+    float threshold = 1.0 - rolloff;
+    float highlight = clamp((luma - threshold) / rolloff, 0.0, 1.0);
+    // 在高光区域施加 S 形压制，保留色彩层次
+    float compress = 1.0 - highlight * highlight * 0.3;
+    return clamp(color * compress, 0.0, 1.0);
+}
+
 // MARK: - CCD 风格片段着色器
 fragment float4 ccdFragmentShader(
     VertexOut in [[stage_in]],
@@ -263,8 +334,14 @@ fragment float4 ccdFragmentShader(
     color = applyContrast(color, params.contrast);
     color = applySaturation(color, params.saturation);
     
+    // === Pass 2.5: 高光柔和滚落 (Highlight Rolloff) ===
+    // FXN-R=0.16：高光层次保留，防止过曝失真
+    if (params.highlightRolloff > 0.0) {
+        color = applyHighlightRolloff(color, params.highlightRolloff);
+    }
+
     // === Pass 3: 高光溢出 (Bloom / Halation) ===
-    // 简化版：对亮度超过阈值的区域增加光晕
+    // 简化版：对亮度超过阈値的区域增加光晕
     float luminance = dot(color, float3(0.2126, 0.7152, 0.0722));
     if (luminance > 0.8 && params.bloomAmount > 0.0) {
         float bloom = (luminance - 0.8) * params.bloomAmount * 2.0;
@@ -320,7 +397,27 @@ fragment float4 ccdFragmentShader(
     // 肤色保护（FXN-R: skinHueProtect=1.0, skinSatProtect=0.96, skinLumaSoften=0.03, skinRedLimit=1.04）
     color = ccdSkinProtect(color, params.skinHueProtect, params.skinSatProtect, params.skinLumaSoften, params.skinRedLimit);
 
-    // === Pass 7: 暗角 (Vignette) ===
+    // === Pass 7: 3D LUT 采样 ===
+    // FXN-R 的冷青色调核心，通过 LUT 实现 Fuji Film Simulation
+    // lutEnabled=1.0 时启用，lutStrength 控制混合比例
+    if (params.lutEnabled > 0.5) {
+        float n = params.lutSize > 0.0 ? params.lutSize : 33.0;
+        float3 lutColor = sampleLUT(lutTexture, textureSampler, color, n);
+        color = mix(color, lutColor, clamp(params.lutStrength, 0.0, 1.0));
+    }
+
+    // === Pass 8: Tone Curve ===
+    // FXN-R Tone Curve：阴影压、中间调通透、高光滚落
+    // toneCurveStrength=1.0 全量应用，0.0 跳过
+    if (params.toneCurveStrength > 0.0) {
+        float3 curved;
+        curved.r = applyFxnrToneCurve(color.r);
+        curved.g = applyFxnrToneCurve(color.g);
+        curved.b = applyFxnrToneCurve(color.b);
+        color = mix(color, curved, params.toneCurveStrength);
+    }
+
+    // === Pass 9: 暗角 (Vignette) ===
     // 鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗
     if (params.fisheyeMode < 0.5) {
         float vignette = vignetteEffect(uv, params.vignetteAmount);
