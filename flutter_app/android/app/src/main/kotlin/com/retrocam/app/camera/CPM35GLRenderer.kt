@@ -279,7 +279,7 @@ void main() {
         // 基础参数（与 CameraGLRenderer 兼容的 key）
         "contrast"              to 1.02f,
         "saturation"            to 1.08f,
-        "temperatureShift"      to 120.0f,   // 正值 = 暖（与 FQS 的 -40 相反）
+        "temperatureShift"      to 80.0f,    // 正值 = 偏暖，老式胶片机暖调（降低强度，120 过强）
         "chromaticAberration"   to 0.0015f,  // 0.15 映射到 0.0015
         "vignette"              to 0.10f,
         "grain"                 to 0.16f,    // 比 FQS 的 0.28 轻

@@ -119,12 +119,13 @@ vec3 fqsSaturation(vec3 c, float sat) {
 }
 
 // 色温 + Tint（简化 RGB 空间实现，与 iOS Metal 版本保持一致）
+// 正值 = 偏暖（加R减B），负值 = 偏冷（减R加B）
 vec3 fqsTemperatureTint(vec3 c, float tempShift, float tintShift) {
     float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
     float strength = lum * 0.8 + 0.2;
     float ts = tempShift / 1000.0;
-    c.r = clamp(c.r + ts * -0.018 * strength, 0.0, 1.0);
-    c.b = clamp(c.b + ts *  0.022 * strength, 0.0, 1.0);
+    c.r = clamp(c.r + ts *  0.018 * strength, 0.0, 1.0);
+    c.b = clamp(c.b - ts *  0.022 * strength, 0.0, 1.0);
     // Tint：负值偏绿，中间调最明显
     float tint = tintShift / 1000.0;
     float midtoneMask = clamp(1.0 - abs(lum - 0.5) * 1.5, 0.0, 1.0);

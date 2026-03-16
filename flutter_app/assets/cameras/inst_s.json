@@ -17,7 +17,7 @@
     "distortion": 0.0,
     "chromaticAberration": 0.01,
     "flare": 0.0,
-    "temperature": 6300,
+    "temperature": -25,
     "tint": 5.0,
     "contrast": 0.85,
     "highlights": -25.0,

@@ -55,11 +55,12 @@ float random(float2 st, float seed) {
 }
 
 /// 色温偏移（简化版，将色温变化映射到 RGB 偏移）
+/// 正值 = 偏暖（加R减B），负值 = 偏冷（减R加B）
+/// shift 范围 -200~+200，/1000 后约 ±0.2
 float3 applyTemperatureShift(float3 color, float shift) {
-    // 负值（冷色）：增强蓝色通道，减弱红色通道
     float normalizedShift = shift / 1000.0;
-    color.r = clamp(color.r - normalizedShift * 0.3, 0.0, 1.0);
-    color.b = clamp(color.b + normalizedShift * 0.3, 0.0, 1.0);
+    color.r = clamp(color.r + normalizedShift * 0.3, 0.0, 1.0);
+    color.b = clamp(color.b - normalizedShift * 0.3, 0.0, 1.0);
     return color;
 }
 

@@ -367,14 +367,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         Log.d(TAG, "setPreset: cameraId=$cameraId")
 
         if (preset != null) {
-            // 1. 切换相机 ID → 触发 GL 线程重新编译对应专用 Shader（FQS/CPM35/通用）
-            if (cameraId.isNotEmpty()) {
-                glRenderer?.setCameraId(cameraId)
-            }
-
             val params = mutableMapOf<String, Any>()
 
-            // 2. 从 preset 顶层读取通用参数（旧路径兼容）
+            // 1. 从 preset 顶层读取通用参数（旧路径兼容）
             (preset["contrast"]            as? Number)?.let { params["contrast"]            = it }
             (preset["saturation"]          as? Number)?.let { params["saturation"]          = it }
             (preset["temperatureShift"]    as? Number)?.let { params["temperatureShift"]    = it }
@@ -419,6 +414,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
             if (params.isNotEmpty()) {
                 glRenderer?.updateParams(params)
+            }
+            // 2. 先 updateParams 设置参数，再 setCameraId 切换 Shader
+            // 顺序很重要：setCameraId 在 GL 线程异步执行，如果先调用它会导致竞态条件（参数被重置）
+            if (cameraId.isNotEmpty()) {
+                glRenderer?.setCameraId(cameraId)
             }
         }
         result.success(null)

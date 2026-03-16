@@ -14,7 +14,7 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/fxnr_33.cube",
-    "temperature": -80.0,
+    "temperature": -80,
     "tint": -10.0,
     "contrast": 1.06,
     "highlights": -12.0,

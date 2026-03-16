@@ -91,9 +91,11 @@ vec3 applySaturation(vec3 c, float sat) {
 }
 
 vec3 applyTemperature(vec3 c, float shift) {
+    // 正值 = 偏暖（加R减B），负值 = 偏冷（减R加B）
+    // shift 范围 -200~+200，/1000 后约 ±0.2
     float s = shift / 1000.0;
-    c.r = clamp(c.r - s * 0.3, 0.0, 1.0);
-    c.b = clamp(c.b + s * 0.3, 0.0, 1.0);
+    c.r = clamp(c.r + s * 0.3, 0.0, 1.0);
+    c.b = clamp(c.b - s * 0.3, 0.0, 1.0);
     return c;
 }
 
@@ -168,8 +170,10 @@ void main() {
     vec3 color = applySharpen(uv, uSharpen);
 
     // Pass 1: 色差 (Chromatic Aberration)
+    // ca 字段范围 0~1.0，乘以 uTexelSize.x * 20.0 转换为像素级偏移
+    // 例：ca=0.18 在 1080p 下≈ 0.18*20*(1/1080) ≈ 0.003 UV 单位 ≈ 3px，视觉上轻微色差
     if (uChromaticAberration > 0.0) {
-        float ca = uChromaticAberration;
+        float ca = uChromaticAberration * uTexelSize.x * 20.0;
         float r = texture(uCameraTexture, uv + vec2(ca, 0.0)).r;
         float g = texture(uCameraTexture, uv).g;
         float b = texture(uCameraTexture, uv - vec2(ca, 0.0)).b;

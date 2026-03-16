@@ -14,7 +14,7 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/inst_c_polaroid_warm.cube",
-    "temperature": 6400,
+    "temperature": -20,
     "tint": 6.0,
     "contrast": 0.92,
     "highlights": -20.0,

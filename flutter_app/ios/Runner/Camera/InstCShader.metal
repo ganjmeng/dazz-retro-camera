@@ -151,17 +151,18 @@ float3 instcContrast(float3 color, float contrast) {
     return clamp((color - 0.5) * contrast + 0.5, 0.0, 1.0);
 }
 
-/// 色温 + Tint 调整（Instax 暖调）
-/// temperature: 正值偏暖（+6400K 对应约 +0.08 偏移）
-/// tint: 正值偏洋红（+6 对应约 +0.02 偏移）
+/// 色温 + Tint 调整（Instax 偏冷白）
+/// temperature: 正值偏暖，负值偏冷（范围 -200~+200）
+/// Instax 实际偏冷白，所以 temperature = -20
+/// tint: 正值偏洋红（R+, G-）
 float3 instcTemperatureTint(float3 color, float temperature, float tint) {
-    // 色温：R+暖 / B-暖（Instax 轻暖调）
-    float tempFactor = temperature * 0.0008;  // 6400 → +0.051
-    color.r = clamp(color.r + tempFactor * 0.6, 0.0, 1.0);
-    color.g = clamp(color.g + tempFactor * 0.1, 0.0, 1.0);
-    color.b = clamp(color.b - tempFactor * 0.5, 0.0, 1.0);
+    // 色温：正值 = 偏暖（加R减B），负值 = 偏冷（减R加B）
+    float tempFactor = temperature / 1000.0;  // -20 → -0.02
+    color.r = clamp(color.r + tempFactor * 0.30, 0.0, 1.0);
+    color.g = clamp(color.g + tempFactor * 0.05, 0.0, 1.0);
+    color.b = clamp(color.b - tempFactor * 0.25, 0.0, 1.0);
     // Tint：正值偏洋红（R+, G-）
-    float tintFactor = tint * 0.002;          // +6 → +0.012
+    float tintFactor = tint / 1000.0;  // +6 → +0.006
     color.r = clamp(color.r + tintFactor * 0.5, 0.0, 1.0);
     color.g = clamp(color.g - tintFactor * 0.3, 0.0, 1.0);
     color.b = clamp(color.b + tintFactor * 0.1, 0.0, 1.0);

@@ -127,13 +127,13 @@ float3 fqsSaturation(float3 c, float saturation) {
 }
 
 /// 色温 + Tint 偏移（RGB 空间近似）
-/// tempShift < 0 → 偏冷（R减，B增）；tintShift < 0 → 偏绿（G增）
+/// 正值 = 偏暖（加R减B），负值 = 偏冷（减R加B）；tintShift < 0 → 偏绿（G增）
 float3 fqsTemperatureTint(float3 c, float tempShift, float tintShift) {
     float ts = tempShift / 1000.0;
     float lum = dot(c, float3(0.2126, 0.7152, 0.0722));
     float strength = lum * 0.8 + 0.2;  // 阴影区域减弱偏移
-    c.r = clamp(c.r + ts * -0.018 * strength, 0.0, 1.0);
-    c.b = clamp(c.b + ts *  0.022 * strength, 0.0, 1.0);
+    c.r = clamp(c.r + ts *  0.018 * strength, 0.0, 1.0);
+    c.b = clamp(c.b - ts *  0.022 * strength, 0.0, 1.0);
 
     float tint = tintShift / 1000.0;
     float midtoneMask = 1.0 - abs(lum - 0.5) * 1.5;

@@ -137,13 +137,15 @@ vec3 instcContrast(vec3 color, float contrast) {
     return clamp((color - 0.5) * contrast + 0.5, 0.0, 1.0);
 }
 
-/// 色温 + Tint 调整（Instax 暖调）
+/// 色温 + Tint 调整（Instax 冷白调）
+/// 正值 = 偏暖（加R减B），负值 = 偏冷（减R加B）
+/// Instax 实际偏冷白，所以 temperature = -20
 vec3 instcTemperatureTint(vec3 color, float temperature, float tint) {
-    // 色温：R+暖 / B-暖（Instax 轻暖调）
-    float tempFactor = temperature * 0.0008;  // 6400 → +0.051
-    color.r = clamp(color.r + tempFactor * 0.6, 0.0, 1.0);
-    color.g = clamp(color.g + tempFactor * 0.1, 0.0, 1.0);
-    color.b = clamp(color.b - tempFactor * 0.5, 0.0, 1.0);
+    // 色温：与通用 Shader 保持一致，/1000 缩放
+    float tempFactor = temperature / 1000.0;  // -20 → -0.02
+    color.r = clamp(color.r + tempFactor * 0.30, 0.0, 1.0);
+    color.g = clamp(color.g + tempFactor * 0.05, 0.0, 1.0);
+    color.b = clamp(color.b - tempFactor * 0.25, 0.0, 1.0);
     // Tint：正值偏洋红（R+, G-）
     float tintFactor = tint * 0.002;          // +6 → +0.012
     color.r = clamp(color.r + tintFactor * 0.5, 0.0, 1.0);
@@ -317,7 +319,7 @@ void main() {
     val DEFAULT_PARAMS = mapOf(
         "contrast"            to 0.92f,
         "saturation"          to 1.08f,
-        "temperatureShift"    to 6400.0f,
+        "temperatureShift"    to -20.0f,   // Instax 偏冷白，负值偏冷
         "tintShift"           to 6.0f,
         "chromaticAberration" to 0.05f,
         "vignette"            to 0.06f,
