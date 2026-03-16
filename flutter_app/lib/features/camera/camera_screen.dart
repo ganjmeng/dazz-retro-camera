@@ -486,14 +486,40 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _doTakePhoto() async {
     final st = ref.read(cameraAppProvider);
-    // 播放快门声音（如果已开启）
-    if (st.shutterSoundEnabled) {
-      ShutterSoundService.instance.play(st.activeCameraId);
-    }
     // 小窗模式开启时，计算小窗在取景框内的归一化坐标
     Rect? minimapRect;
     if (st.minimapEnabled) {
       minimapRect = _MinimapOverlay.calcNormalizedRect(st.zoomLevel);
+    }
+
+    // 连拍模式：调用连拍入口
+    if (st.burstCount > 0) {
+      // 播放快门声音（连拍只播放一次）
+      if (st.shutterSoundEnabled) {
+        ShutterSoundService.instance.play(st.activeCameraId);
+      }
+      _showViewfinderHint('连拍 ${st.burstCount} 张开始…');
+      final results = await ref.read(cameraAppProvider.notifier).takeBurstPhotos(
+        minimapNormalizedRect: minimapRect,
+        deviceQuarter: _deviceQuarter,
+      );
+      if (mounted && results.isNotEmpty) {
+        // 显示最后一张的缩略图
+        final last = results.last;
+        if (last.galleryAssetId != null) {
+          _loadThumbFromGalleryId(last.galleryAssetId!);
+        } else {
+          _loadLatestThumb();
+        }
+        _showViewfinderHint('连拍完成，共 ${results.length} 张');
+      }
+      return;
+    }
+
+    // 普通单张模式
+    // 播放快门声音（如果已开启）
+    if (st.shutterSoundEnabled) {
+      ShutterSoundService.instance.play(st.activeCameraId);
     }
 
     // 双重曝光模式下，在快门按下时显示中间状态提示
@@ -1545,28 +1571,86 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                       ),
                     ),
                     // 中间: 快门按钮（外圈白色线圈，内圆白色实心）
-                    GestureDetector(
-                      onTap: st.isTakingPhoto ? null : _handleShutter,
-                      child: Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.transparent,
-                          border: Border.all(color: _kWhite, width: 3.5),
-                        ),
-                        child: Center(
-                          child: Container(
-                            width: 66,
-                            height: 66,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _kWhite,
+                    // 连拍模式：内圆显示进度数字（如 2/3），连拍中禁用点击
+                    Builder(builder: (ctx) {
+                      final isBurstMode = st.burstCount > 0;
+                      final isBursting = st.isBursting;
+                      final progress = st.burstProgress;
+                      final total = st.burstCount;
+                      // 连拍进行中禁用；单张拍照中也禁用
+                      final isDisabled = st.isTakingPhoto || isBursting;
+                      return GestureDetector(
+                        onTap: isDisabled ? null : _handleShutter,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.transparent,
+                            border: Border.all(
+                              color: isBurstMode
+                                  ? const Color(0xFFFF9500) // 连拍模式下外圈变橙色
+                                  : _kWhite,
+                              width: 3.5,
                             ),
                           ),
+                          child: Center(
+                            child: isBursting
+                                // 连拍进行中：显示进度数字
+                                ? Container(
+                                    width: 66,
+                                    height: 66,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Color(0xFFFF9500),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        '$progress/$total',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                          height: 1.0,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : isBurstMode
+                                    // 连拍模式待机：内圆显示张数
+                                    ? Container(
+                                        width: 66,
+                                        height: 66,
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Color(0xFFFF9500),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            '$total',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w700,
+                                              height: 1.0,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    // 普通模式：白色实心圆
+                                    : Container(
+                                        width: 66,
+                                        height: 66,
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: _kWhite,
+                                        ),
+                                      ),
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    }),
                     // 右侧: 相机图标（虚线圆圈背景，点击打开相机配置）
                     // 宽度与左侧保持一致，确保快门按钮视觉居中
                     SizedBox(
@@ -1773,9 +1857,20 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           // 5. 连拍
                           _TopMenuBtn(
                             icon: Icons.burst_mode_outlined,
-                            label: '连拍关闭',
+                            label: st.burstCount == 0
+                                ? '连拍关闭'
+                                : '连拍 ${st.burstCount}张',
                             btnW: btnW,
-                            onTap: () {},
+                            isActive: st.burstCount > 0,
+                            onTap: () {
+                              ref.read(cameraAppProvider.notifier).cycleBurst();
+                              final next = st.burstCount == 0 ? 3 : (st.burstCount == 3 ? 10 : 0);
+                              if (next == 0) {
+                                _showViewfinderHint('连拍关闭');
+                              } else {
+                                _showViewfinderHint('连拍 $next 张');
+                              }
+                            },
                           ),
                           // 6. 位置信息
                           _TopMenuBtn(
@@ -3129,6 +3224,7 @@ class _TopMenuBtn extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final double btnW;
+  final bool isActive; // 高亮状态（开启时图标变橙色）
 
   const _TopMenuBtn({
     this.icon,
@@ -3136,10 +3232,12 @@ class _TopMenuBtn extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.btnW = 72,
+    this.isActive = false,
   }) : assert(icon != null || customIcon != null);
 
   @override
   Widget build(BuildContext context) {
+    final iconColor = isActive ? const Color(0xFFFF9500) : _kWhite;
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
@@ -3155,7 +3253,7 @@ class _TopMenuBtn extends StatelessWidget {
               width: 32,
               height: 32,
               child: Center(
-                child: customIcon ?? Icon(icon!, color: _kWhite, size: 30),
+                child: customIcon ?? Icon(icon!, color: iconColor, size: 30),
               ),
             ),
             const SizedBox(height: 8),
@@ -3166,10 +3264,10 @@ class _TopMenuBtn extends StatelessWidget {
                 alignment: Alignment.topCenter,
                 child: Text(
                   label,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: isActive ? const Color(0xFFFF9500) : Colors.white,
                     fontSize: 11,
-                    fontWeight: FontWeight.w400,
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                     height: 1.3,
                   ),
                   textAlign: TextAlign.center,

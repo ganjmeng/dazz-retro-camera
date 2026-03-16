@@ -75,6 +75,10 @@ class CameraAppState {
   final bool doubleExpEnabled;       // 双重曝光开关
   final String? doubleExpFirstPath;  // 第一张照片本地路径（待合成）
   final double doubleExpBlend;       // 混合比例 0.3~0.7，默认 0.5
+  // ── 连拍 ──────────────────────────────────────────────────────────────────
+  final int burstCount;       // 连拍张数：0=关闭, 3=3张, 10=10张
+  final int burstProgress;    // 当前连拍进度（0=未开始，1~N=第N张完成）
+  final bool isBursting;      // 是否正在连拍中
   // Debug: 最近一次拍照的分辨率信息
   final String lastCaptureRaw;    // e.g. "4032×3024" 原始分辨率
   final String lastCaptureOutput; // e.g. "3024×3024" 输出分辨率
@@ -122,6 +126,9 @@ class CameraAppState {
     this.doubleExpEnabled = false,
     this.doubleExpFirstPath,
     this.doubleExpBlend = 0.5,
+    this.burstCount = 0,
+    this.burstProgress = 0,
+    this.isBursting = false,
     this.lastCaptureRaw = '',
     this.lastCaptureOutput = '',
   });
@@ -170,6 +177,9 @@ class CameraAppState {
     String? doubleExpFirstPath,
     bool clearDoubleExpFirst = false,
     double? doubleExpBlend,
+    int? burstCount,
+    int? burstProgress,
+    bool? isBursting,
     String? lastCaptureRaw,
     String? lastCaptureOutput,
     bool clearPanel = false,
@@ -219,6 +229,9 @@ class CameraAppState {
       doubleExpEnabled: doubleExpEnabled ?? this.doubleExpEnabled,
       doubleExpFirstPath: clearDoubleExpFirst ? null : (doubleExpFirstPath ?? this.doubleExpFirstPath),
       doubleExpBlend: doubleExpBlend ?? this.doubleExpBlend,
+      burstCount: burstCount ?? this.burstCount,
+      burstProgress: burstProgress ?? this.burstProgress,
+      isBursting: isBursting ?? this.isBursting,
       lastCaptureRaw: lastCaptureRaw ?? this.lastCaptureRaw,
       lastCaptureOutput: lastCaptureOutput ?? this.lastCaptureOutput,
     );
@@ -867,6 +880,56 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     } finally {
       state = state.copyWith(isTakingPhoto: false);
     }
+  }
+
+  // ── 连拍 ──────────────────────────────────────────────────────────────────
+
+  /// 循环切换连拍张数：0→3→3→10→0
+  void cycleBurst() {
+    final options = [0, 3, 10];
+    final idx = options.indexOf(state.burstCount);
+    final next = options[(idx + 1) % options.length];
+    state = state.copyWith(burstCount: next);
+  }
+
+  /// 连拍模式下拍照入口。
+  /// 不修改单张流程：内部依次调用 takePhoto，每张间隔 150ms。
+  /// 返回所有成功张照的 [TakePhotoResult] 列表。
+  Future<List<TakePhotoResult>> takeBurstPhotos({
+    Rect? minimapNormalizedRect,
+    int deviceQuarter = 0,
+  }) async {
+    final count = state.burstCount;
+    if (count <= 0 || state.isBursting) return [];
+
+    state = state.copyWith(isBursting: true, burstProgress: 0);
+    final results = <TakePhotoResult>[];
+
+    try {
+      for (int i = 1; i <= count; i++) {
+        // 如果用户在连拍过程中关闭了 App，安全退出
+        if (!state.isBursting) break;
+
+        final result = await takePhoto(
+          minimapNormalizedRect: minimapNormalizedRect,
+          deviceQuarter: deviceQuarter,
+        );
+        if (result != null) {
+          results.add(result);
+        }
+        // 更新进度
+        state = state.copyWith(burstProgress: i);
+
+        // 每张间隔 150ms（防止硬件过热，同时给原生层准备时间）
+        if (i < count) {
+          await Future.delayed(const Duration(milliseconds: 150));
+        }
+      }
+    } finally {
+      state = state.copyWith(isBursting: false, burstProgress: 0);
+    }
+
+    return results;
   }
 
   /// 将 GPS 坐标写入图片文件的 EXIF
