@@ -20,7 +20,7 @@ const _kCameraToSound = <String, ShutterSoundType>{
   'grd_r':     ShutterSoundType.mechanical,
   'bw_classic': ShutterSoundType.mechanical,
   'fxn_r':     ShutterSoundType.mechanical,
-  'inst_sq':   ShutterSoundType.instax,
+  'sqc':       ShutterSoundType.instax,
   'inst_s':    ShutterSoundType.instax,
   'inst_c':    ShutterSoundType.instax,
   'ccd_m':     ShutterSoundType.ccd,
