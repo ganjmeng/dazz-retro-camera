@@ -164,20 +164,21 @@ class DefaultLook {
   final double halation;      // 0.0 ~ 1.0 highlight halation（胶片高光发光）
   final double grainSize;     // 0.5 ~ 3.0 grain particle size（颗粒大小）
   final double sharpness;     // 0.0 ~ 2.0 sharpness multiplier（锐度）
-  // ── Inst C / SQC 专用字段（Instax/Polaroid 即时成像风格）─────────────────────
-  final double highlightRolloff;  // 0.0 ~ 1.0 高光柔和滴落（Inst C=0.20，SQC=0.28）
-  final double paperTexture;      // 0.0 ~ 1.0 相纸纹理强度（Inst C=0.06，SQC=0.05）
-  final double edgeFalloff;       // 0.0 ~ 1.0 边缘曝光衰减（不均匀曝光）
-  final double exposureVariation; // 0.0 ~ 1.0 全局曝光不均匀幅度
-  final double cornerWarmShift;   // 0.0 ~ 1.0 边角偏暖强度
-  // ── SQC 专用字段（Instax Square 升级版）──────────────────────────────────────
-  final double centerGain;           // 0.0 ~ 0.2 中心增亮（主体感，SQC=0.03）
-  final double developmentSoftness;  // 0.0 ~ 0.2 显影柔化（SQC=0.04）
-  final double chemicalIrregularity; // 0.0 ~ 0.1 化学不规则感（SQC=0.02）
-  final bool skinHueProtect;         // 肤色色相保护开关（SQC=true）
-  final double skinSatProtect;       // 0.0 ~ 1.0 肤色饱和度保护（SQC=0.95）
-  final double skinLumaSoften;       // 0.0 ~ 0.2 肤色亮度柔化（SQC=0.04）
-  final double skinRedLimit;         // 0.9 ~ 1.2 肤色红限（SQC=1.03）
+  // ── 拍立得即时成像专属参数（Instax / Polaroid 通用——所有拍立得机型均可复用）───────────────
+  // 化学显影特性组
+  final double highlightRolloff;     // 0.0 ~ 1.0 高光柔和滴落（Inst C=0.20，SQC=0.28）
+  final double paperTexture;         // 0.0 ~ 1.0 相纸纹理强度（Inst C=0.06，SQC=0.05）
+  final double edgeFalloff;          // 0.0 ~ 1.0 边缘曝光衰减（不均匀曝光）
+  final double exposureVariation;    // 0.0 ~ 1.0 全局曝光不均匀幅度
+  final double cornerWarmShift;      // 0.0 ~ 1.0 边角偏暖（化学显影边缘特征）
+  final double centerGain;           // 0.0 ~ 0.2 中心增亮（内置闪光灯中心亮度，Inst C=0.02，SQC=0.03）
+  final double developmentSoftness;  // 0.0 ~ 0.2 显影柔化（化学扩散软化，Inst C=0.03，SQC=0.04）
+  final double chemicalIrregularity; // 0.0 ~ 0.1 化学不规则感（胶片面积越小越低，Inst C=0.015，SQC=0.02）
+  // 肤色保护组（拍立得以人像为主，防止肤色过橙/过红）
+  final bool skinHueProtect;         // 肤色色相保护开关（Inst C=true，SQC=true）
+  final double skinSatProtect;       // 0.0 ~ 1.0 肤色饱和度保护（Inst C=0.92，SQC=0.95）
+  final double skinLumaSoften;       // 0.0 ~ 0.2 肤色亮度柔化（Inst C=0.05，SQC=0.04）
+  final double skinRedLimit;         // 0.9 ~ 1.2 肤色红限（Inst C=1.02，SQC=1.03）
 
   const DefaultLook({
     this.baseLut,
@@ -203,13 +204,12 @@ class DefaultLook {
     this.halation = 0,
     this.grainSize = 1.0,
     this.sharpness = 1.0,
-    // Inst C / SQC 专用字段（默认为 0，不影响其他相机）
+    // 拍立得即时成像专属字段（默认为 0，不影响其他相机）
     this.highlightRolloff = 0,
     this.paperTexture = 0,
     this.edgeFalloff = 0,
     this.exposureVariation = 0,
     this.cornerWarmShift = 0,
-    // SQC 专用字段
     this.centerGain = 0,
     this.developmentSoftness = 0,
     this.chemicalIrregularity = 0,
@@ -258,13 +258,12 @@ class DefaultLook {
     halation: (json['halation'] as num? ?? 0).toDouble(),
     grainSize: (json['grainSize'] as num? ?? 1.0).toDouble(),
     sharpness: (json['sharpness'] as num? ?? 1.0).toDouble(),
-    // Inst C / SQC 专用字段
+    // 拍立得即时成像专属字段
     highlightRolloff: (json['highlightRolloff'] as num? ?? 0).toDouble(),
     paperTexture: (json['paperTexture'] as num? ?? 0).toDouble(),
     edgeFalloff: (json['edgeFalloff'] as num? ?? 0).toDouble(),
     exposureVariation: (json['exposureVariation'] as num? ?? 0).toDouble(),
     cornerWarmShift: (json['cornerWarmShift'] as num? ?? 0).toDouble(),
-    // SQC 专用字段
     centerGain: (json['centerGain'] as num? ?? 0).toDouble(),
     developmentSoftness: (json['developmentSoftness'] as num? ?? 0).toDouble(),
     chemicalIrregularity: (json['chemicalIrregularity'] as num? ?? 0).toDouble(),
@@ -298,13 +297,12 @@ class DefaultLook {
     'halation': halation,
     'grainSize': grainSize,
     'sharpness': sharpness,
-    // Inst C / SQC 专用字段（默认为 0 时不影响其他相机）
+    // 拍立得即时成像专属字段（默认为 0 时不影响其他相机）
     if (highlightRolloff != 0) 'highlightRolloff': highlightRolloff,
     if (paperTexture != 0) 'paperTexture': paperTexture,
     if (edgeFalloff != 0) 'edgeFalloff': edgeFalloff,
     if (exposureVariation != 0) 'exposureVariation': exposureVariation,
     if (cornerWarmShift != 0) 'cornerWarmShift': cornerWarmShift,
-    // SQC 专用字段
     if (centerGain != 0) 'centerGain': centerGain,
     if (developmentSoftness != 0) 'developmentSoftness': developmentSoftness,
     if (chemicalIrregularity != 0) 'chemicalIrregularity': chemicalIrregularity,

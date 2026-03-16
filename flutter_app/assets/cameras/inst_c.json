@@ -40,7 +40,14 @@
     "sharpness": 0.98,
     "edgeFalloff": 0.05,
     "exposureVariation": 0.04,
-    "cornerWarmShift": 0.02
+    "cornerWarmShift": 0.02,
+    "centerGain": 0.02,
+    "developmentSoftness": 0.03,
+    "chemicalIrregularity": 0.015,
+    "skinHueProtect": true,
+    "skinSatProtect": 0.92,
+    "skinLumaSoften": 0.05,
+    "skinRedLimit": 1.02
   },
   "modules": {
     "filters": [],

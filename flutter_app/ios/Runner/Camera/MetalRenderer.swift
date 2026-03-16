@@ -42,14 +42,14 @@ struct CCDParams {
     var edgeFalloff: Float = 0.0        // 边缘曝光衰减（Inst C=0.05，SQC=0.06）
     var exposureVariation: Float = 0.0  // 曝光不均匀幅度（Inst C=0.04，SQC=0.05）
     var cornerWarmShift: Float = 0.0    // 边角偏暖强度（Inst C=0.02，SQC=0.03）
-    // ── SQC 专用扩展字段（Instax Square 升级版）───────────────────────────────
-    var centerGain: Float = 0.0            // 中心增亮（主体感，SQC=0.03）
-    var developmentSoftness: Float = 0.0   // 显影柔化（SQC=0.04）
-    var chemicalIrregularity: Float = 0.0  // 化学不规则感（SQC=0.02）
+    // ── 拍立得通用扩展字段（Inst C / SQC 共用）───────────────────────────────────────────────────
+    var centerGain: Float = 0.0            // 中心增亮（Inst C=0.02，SQC=0.03）
+    var developmentSoftness: Float = 0.0   // 显影柔化（Inst C=0.03，SQC=0.04）
+    var chemicalIrregularity: Float = 0.0  // 化学不规则感（Inst C=0.015，SQC=0.02）
     var skinHueProtect: Float = 0.0        // 肤色色相保护（1.0=开启，0.0=关闭）
-    var skinSatProtect: Float = 1.0        // 肤色饱和度保护（SQC=0.95）
-    var skinLumaSoften: Float = 0.0        // 肤色亮度柔化（SQC=0.04）
-    var skinRedLimit: Float = 1.0          // 肤色红限（SQC=1.03）
+    var skinSatProtect: Float = 1.0        // 肤色饱和度保护（Inst C=0.92，SQC=0.95）
+    var skinLumaSoften: Float = 0.0        // 肤色亮度柔化（Inst C=0.05，SQC=0.04）
+    var skinRedLimit: Float = 1.0          // 肤色红限（Inst C=1.02，SQC=1.03）
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

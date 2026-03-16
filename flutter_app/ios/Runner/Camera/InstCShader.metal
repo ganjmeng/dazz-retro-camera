@@ -1,22 +1,27 @@
 // InstCShader.metal
-// DAZZ Camera — Inst C (Instax / Polaroid 风格即时成像机)
+// DAZZ Camera — Inst C (Fujifilm Instax Mini 风格即时成像机)
 //
 // ═══════════════════════════════════════════════════════════════════════════
 // 风格定位：
-//   Fujifilm Instax Mini / Instax Square / Polaroid 混合型 instant preset
-//   社区定义：digital Polaroid / instant nostalgia / Polaroid-style output
+//   Fujifilm Instax Mini 即时成像胶片模拟
+//   社区定义：digital Polaroid / instant nostalgia / Instax Mini output
 //
-// 核心特征：
+// 核心特征（基于 Instax Mini 真实相机特性）：
 //   1. 低到中对比（contrast=0.92）
-//   2. 轻暖白平衡（temperature=+6400K）
+//   2. 轻冷白平衡（temperature=-20，Instax 偏冷白）
 //   3. 轻微洋红（tint=+6）
 //   4. 高光柔和 rolloff（highlightRolloff=0.20）
 //   5. 轻微不均匀曝光（edgeFalloff=0.05, exposureVariation=0.04）
 //   6. 轻纸感纹理（paperTexture=0.06）
 //   7. 轻颗粒（grain=0.08，非胶片重颗粒）
+//   8. 内置闪光灯中心增亮（centerGain=0.02，比 SQC 更自然）
+//   9. 化学显影柔化（developmentSoftness=0.03，Mini 显影更稳定）
+//  10. 化学不规则感（chemicalIrregularity=0.015，Mini 胶片面积小更均匀）
+//  11. 肤色保护系统（skinHueProtect=true，Mini 肤色偏粉嫩非橙）
 //
-// GPU Pipeline 顺序：
+// GPU Pipeline 顺序（18 pass）：
 //   Camera Frame
+//   → Chromatic Aberration（极轻色差）
 //   → White Balance（色温 + Tint）
 //   → Tone Curve（Instax 胶片曲线）
 //   → RGB Channel Shift（暖调色偏）
@@ -24,9 +29,14 @@
 //   → Highlight Rolloff（高光柔和滴落）
 //   → Soft Bloom（轻柔光）
 //   → Halation（极轻高光发光）
-//   → Fine Grain（轻颗粒，grain_color=false）
+//   → Center Gain（中心增亮，内置闪光灯特征）
+//   → Fine Grain（轻颗粒）
 //   → Paper Texture（相纸纹理）
 //   → Edge Falloff / Uneven Exposure（不均匀曝光）
+//   → Corner Warm Shift（边角偏暖）
+//   → Development Softness（显影柔化）
+//   → Chemical Irregularity（化学不规则感）
+//   → Skin Protection（肤色保护）
 //   → Vignette（极轻暗角）
 //   → Output
 //
@@ -86,12 +96,19 @@ struct InstCParams {
     float highlightWarmAmount; // CPM35 暖高光推送（Inst C 不使用）
     float luminanceNoise;      // 亮度噪声（Inst C 不使用）
     float chromaNoise;         // 色度噪声（Inst C 不使用）
-    // ── Inst C 专用扩展字段（追加在 CCDParams 末尾）────────────────────────────
-    float highlightRolloff;    // 高光柔和滴落强度（Inst C=0.20）
-    float paperTexture;        // 相纸纹理强度（Inst C=0.06）
-    float edgeFalloff;         // 边缘曝光衰减（不均匀曝光，Inst C=0.05）
-    float exposureVariation;   // 全局曝光不均匀幅度（Inst C=0.04）
-    float cornerWarmShift;     // 边角偏暖强度（Inst C=0.02）
+    // ── 拍立得即时成像专属字段（追加在 CCDParams 末尾，Inst C / SQC 通用）────
+    float highlightRolloff;     // 高光柔和滴落强度（Inst C=0.20）
+    float paperTexture;         // 相纸纹理强度（Inst C=0.06）
+    float edgeFalloff;          // 边缘曝光衰减（不均匀曝光，Inst C=0.05）
+    float exposureVariation;    // 全局曝光不均匀幅度（Inst C=0.04）
+    float cornerWarmShift;      // 边角偏暖强度（Inst C=0.02）
+    float centerGain;           // 中心增亮（内置闪光灯，Inst C=0.02）
+    float developmentSoftness;  // 显影柔化（化学扩散，Inst C=0.03）
+    float chemicalIrregularity; // 化学不规则感（Inst C=0.015）
+    float skinHueProtect;       // 肤色色相保护（1.0=开启，Inst C=1.0）
+    float skinSatProtect;       // 肤色饱和度保护（Inst C=0.92）
+    float skinLumaSoften;       // 肤色亮度柔化（Inst C=0.05）
+    float skinRedLimit;         // 肤色红限（Inst C=1.02）
 };
 
 // MARK: - 工具函数
@@ -227,15 +244,106 @@ float3 instcCornerWarm(float3 color, float2 uv, float amount) {
 /// Paper Texture（相纸纹理，模拟 Instax 相纸表面微纹理）
 float3 instcPaperTexture(float3 color, float2 uv, float amount, float time) {
     if (amount < 0.001) return color;
-    // 相纸纹理：低频 + 高频叠加，模拟纸张纤维
-    float2 paperUV1 = uv * 8.0;   // 低频纤维
-    float2 paperUV2 = uv * 32.0;  // 高频细纹
+    float2 paperUV1 = uv * 8.0;
+    float2 paperUV2 = uv * 32.0;
     float paper1 = instcRandom(paperUV1, 0.0) * 2.0 - 1.0;
     float paper2 = instcRandom(paperUV2, 1.0) * 2.0 - 1.0;
     float paper = paper1 * 0.7 + paper2 * 0.3;
-    // 纸纹叠加：亮度通道（不影响色彩）
     float3 paperColor = color + float3(paper * amount * 0.04);
     return clamp(paperColor, 0.0, 1.0);
+}
+
+/// Center Gain（中心增亮，模拟 Instax 内置闪光灯中心亮度略高）
+/// Inst C=0.02（比 SQC=0.03 更自然，Mini 闪光灯功率较小）
+float3 instcCenterGain(float3 color, float2 uv, float amount) {
+    if (amount < 0.001) return color;
+    float2 center = uv - 0.5;
+    float dist = length(center * float2(1.0, 1.1));  // 轻微椭圆（横向略宽）
+    float centerMask = 1.0 - smoothstep(0.0, 0.45, dist);
+    centerMask = centerMask * centerMask;
+    // 中心增亮：偏暖白（模拟闪光灯色温约 5500K）
+    float3 gainColor = float3(
+        color.r * (1.0 + centerMask * amount * 1.2),
+        color.g * (1.0 + centerMask * amount * 1.0),
+        color.b * (1.0 + centerMask * amount * 0.7)
+    );
+    return clamp(gainColor, 0.0, 1.0);
+}
+
+/// Development Softness（显影柔化，模拟 Instax 化学显影扩散）
+/// Inst C=0.03（比 SQC=0.04 更克制，Mini 显影过程更稳定）
+float3 instcDevelopmentSoftness(float3 color, float2 uv, float amount,
+                                 texture2d<float> tex, sampler s) {
+    if (amount < 0.001) return color;
+    float offset = amount * 0.004;  // 比 SQC 的 0.005 更小
+    float3 c = tex.sample(s, uv).rgb;
+    float3 up    = tex.sample(s, uv + float2(0.0,  offset)).rgb;
+    float3 down  = tex.sample(s, uv + float2(0.0, -offset)).rgb;
+    float3 left  = tex.sample(s, uv + float2(-offset, 0.0)).rgb;
+    float3 right = tex.sample(s, uv + float2( offset, 0.0)).rgb;
+    float3 blurred = c * 0.5 + up * 0.125 + down * 0.125 + left * 0.125 + right * 0.125;
+    float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float softMask = 1.0 - abs(lum - 0.5) * 1.5;
+    softMask = clamp(softMask, 0.0, 1.0) * amount * 3.0;
+    return clamp(mix(color, blurred, softMask), 0.0, 1.0);
+}
+
+/// Chemical Irregularity（化学不规则感，模拟 Instax 胶片化学分布不均）
+/// Inst C=0.015（比 SQC=0.02 更低，Mini 胶片面积小化学分布更均匀）
+float3 instcChemicalIrregularity(float3 color, float2 uv, float amount, float time) {
+    if (amount < 0.001) return color;
+    float2 irregUV = uv * 2.5;
+    float irreg1 = instcRandom(irregUV, floor(time * 0.1) * 0.1) * 2.0 - 1.0;
+    float irreg2 = instcRandom(irregUV * 1.7 + 0.3, floor(time * 0.1) * 0.2) * 2.0 - 1.0;
+    float irregularity = irreg1 * 0.6 + irreg2 * 0.4;
+    float brightVar = irregularity * amount * 0.03;
+    float3 colorShift = float3(
+        irregularity * amount * 0.008,
+        irregularity * amount * 0.004,
+        -irregularity * amount * 0.006
+    );
+    return clamp(color + float3(brightVar) + colorShift, 0.0, 1.0);
+}
+
+/// Skin Protection（肤色保护系统）
+/// Inst C：skinSatProtect=0.92，skinLumaSoften=0.05，skinRedLimit=1.02
+/// Mini 肤色偏粉嫩而非橙，比 SQC 更严格防止过红
+float3 instcSkinProtect(float3 color, float skinHueProtect,
+                         float skinSatProtect, float skinLumaSoften, float skinRedLimit) {
+    if (skinHueProtect < 0.5) return color;
+    float maxC = max(max(color.r, color.g), color.b);
+    float minC = min(min(color.r, color.g), color.b);
+    float delta = maxC - minC;
+    float lum = (maxC + minC) * 0.5;
+    float sat = (delta < 0.001) ? 0.0 : delta / (1.0 - abs(2.0 * lum - 1.0));
+    float hue = 0.0;
+    if (delta > 0.001) {
+        if (maxC == color.r)      hue = fmod((color.g - color.b) / delta, 6.0);
+        else if (maxC == color.g) hue = (color.b - color.r) / delta + 2.0;
+        else                      hue = (color.r - color.g) / delta + 4.0;
+        hue = hue / 6.0;
+        if (hue < 0.0) hue += 1.0;
+    }
+    // 肤色检测：Hue 0~50°（0.0~0.139），Sat 0.15~0.85，Lum 0.2~0.85
+    bool isSkin = (hue >= 0.0 && hue <= 0.139) &&
+                  (sat >= 0.15 && sat <= 0.85) &&
+                  (lum >= 0.20 && lum <= 0.85);
+    if (!isSkin) return color;
+    float hueMask  = 1.0 - smoothstep(0.10, 0.139, hue);
+    float satMask  = smoothstep(0.15, 0.25, sat) * (1.0 - smoothstep(0.75, 0.85, sat));
+    float lumMask  = smoothstep(0.20, 0.35, lum) * (1.0 - smoothstep(0.75, 0.85, lum));
+    float skinMask = hueMask * satMask * lumMask;
+    float3 result = color;
+    // 1. 饱和度保护：防止肤色过饱和变橙
+    float lumVal = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float3 desat = mix(float3(lumVal), color, skinSatProtect);
+    result = mix(result, desat, skinMask * 0.6);
+    // 2. 亮度柔化：Instax Mini 肤色有轻微发光感
+    float lumBoost = lum * skinLumaSoften * 0.8;
+    result = clamp(result + float3(lumBoost), 0.0, 1.0);
+    // 3. 红限：防止肤色过红（Inst C=1.02，比 SQC=1.03 更严格）
+    result.r = clamp(result.r, 0.0, skinRedLimit);
+    return clamp(mix(color, result, skinMask), 0.0, 1.0);
 }
 
 // MARK: - Inst C 片段着色器
@@ -335,7 +443,22 @@ fragment float4 instcFragmentShader(
     // ── Pass 13: Corner Warm Shift（边角偏暖，Instax 化学显影边缘特征）──────
     color = instcCornerWarm(color, uv, params.cornerWarmShift);
 
-    // ── Pass 14: Vignette（极轻暗角，Inst C=0.06）───────────────────────────
+    // ── Pass 14: Development Softness（显影柔化，Inst C=0.03）───────────────
+    color = instcDevelopmentSoftness(color, uv, params.developmentSoftness,
+                                      cameraTexture, s);
+
+    // ── Pass 15: Chemical Irregularity（化学不规则感，Inst C=0.015）─────────
+    color = instcChemicalIrregularity(color, uv, params.chemicalIrregularity, params.time);
+
+    // ── Pass 16: Skin Protection（肤色保护，Inst C 偏粉嫩）──────────────────
+    color = instcSkinProtect(color, params.skinHueProtect,
+                              params.skinSatProtect, params.skinLumaSoften,
+                              params.skinRedLimit);
+
+    // ── Pass 17: Center Gain（中心增亮，内置闪光灯特征，Inst C=0.02）────────
+    color = instcCenterGain(color, uv, params.centerGain);
+
+    // ── Pass 18: Vignette（极轻暗角，Inst C=0.06）───────────────────────────
     if (params.vignetteAmount > 0.001) {
         color *= instcVignette(uv, params.vignetteAmount);
     }

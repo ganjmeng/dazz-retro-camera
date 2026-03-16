@@ -49,6 +49,15 @@ class PresetParams {
   final double jpegArtifacts;
   final double scanlineAmount;
   final DateStampConfig dateStamp;
+  // ── FQS / CPM35 专用字段 ──────────────────────────────────────────────────
+  final double colorBiasR;          // RGB Channel Shift R（FQS=-0.04, CPM35=+0.04）
+  final double colorBiasG;          // RGB Channel Shift G（FQS=+0.05, CPM35=+0.02）
+  final double colorBiasB;          // RGB Channel Shift B（FQS=+0.02, CPM35=-0.04）
+  final double grainSize;           // 颗粒大小（FQS=1.8, CPM35=1.6）
+  final double sharpness;           // 锐度倍数（FQS=0.85, CPM35=1.04）
+  final double highlightWarmAmount; // CPM35 暖高光推送（CPM35=0.06）
+  final double luminanceNoise;      // 亮度噪声（FQS=0.08, CPM35=0.05）
+  final double chromaNoise;         // 色度噪声（FQS=0.05, CPM35=0.03）
 
   const PresetParams({
     this.exposureBias = 0.0,
@@ -67,6 +76,14 @@ class PresetParams {
     this.jpegArtifacts = 0.0,
     this.scanlineAmount = 0.0,
     required this.dateStamp,
+    this.colorBiasR = 0.0,
+    this.colorBiasG = 0.0,
+    this.colorBiasB = 0.0,
+    this.grainSize = 1.0,
+    this.sharpness = 1.0,
+    this.highlightWarmAmount = 0.0,
+    this.luminanceNoise = 0.0,
+    this.chromaNoise = 0.0,
   });
 
   factory PresetParams.fromJson(Map<String, dynamic> json) => PresetParams(
@@ -87,6 +104,14 @@ class PresetParams {
         scanlineAmount: (json['scanlineAmount'] as num?)?.toDouble() ?? 0.0,
         dateStamp: DateStampConfig.fromJson(
             json['dateStamp'] as Map<String, dynamic>? ?? {}),
+        colorBiasR: (json['colorBiasR'] as num?)?.toDouble() ?? 0.0,
+        colorBiasG: (json['colorBiasG'] as num?)?.toDouble() ?? 0.0,
+        colorBiasB: (json['colorBiasB'] as num?)?.toDouble() ?? 0.0,
+        grainSize: (json['grainSize'] as num?)?.toDouble() ?? 1.0,
+        sharpness: (json['sharpness'] as num?)?.toDouble() ?? 1.0,
+        highlightWarmAmount: (json['highlightWarmAmount'] as num?)?.toDouble() ?? 0.0,
+        luminanceNoise: (json['luminanceNoise'] as num?)?.toDouble() ?? 0.0,
+        chromaNoise: (json['chromaNoise'] as num?)?.toDouble() ?? 0.0,
       );
 
   Map<String, dynamic> toJson() => {
@@ -106,6 +131,14 @@ class PresetParams {
         'jpegArtifacts': jpegArtifacts,
         'scanlineAmount': scanlineAmount,
         'dateStamp': dateStamp.toJson(),
+        'colorBiasR': colorBiasR,
+        'colorBiasG': colorBiasG,
+        'colorBiasB': colorBiasB,
+        'grainSize': grainSize,
+        'sharpness': sharpness,
+        'highlightWarmAmount': highlightWarmAmount,
+        'luminanceNoise': luminanceNoise,
+        'chromaNoise': chromaNoise,
       };
 }
 
