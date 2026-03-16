@@ -1017,6 +1017,36 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
+          // ── 相框预览 overlay（activeFrameId 不为空时显示，仅当前比例支持相框）──
+          if (st.activeFrameId != null &&
+              st.activeFrameId!.isNotEmpty &&
+              st.activeFrameId != 'none' &&
+              st.activeFrameId != 'frame_none' &&
+              st.camera != null)
+            Builder(builder: (ctx) {
+              final frameOpt = st.camera!.modules.frames
+                  .where((f) => f.id == st.activeFrameId)
+                  .firstOrNull;
+              if (frameOpt == null) return const SizedBox.shrink();
+              // 当前比例不支持相框时不显示
+              final ratioId = st.activeRatioId ?? '';
+              if (frameOpt.supportedRatios.isNotEmpty &&
+                  !frameOpt.supportedRatios.contains(ratioId)) {
+                return const SizedBox.shrink();
+              }
+              final assetPath = frameOpt.assetForRatio(ratioId);
+              if (assetPath == null || assetPath.isEmpty) return const SizedBox.shrink();
+              return Positioned.fill(
+                child: IgnorePointer(
+                  child: Image.asset(
+                    assetPath,
+                    fit: BoxFit.fill,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
+              );
+            }),
           // ── 鱼眼圆圈默色边角鑉罩 overlay（fisheyeMode 开启时显示）──
           if (st.fisheyeMode)
             IgnorePointer(
@@ -2523,6 +2553,7 @@ class _OptionsSheet extends ConsumerWidget {
         'frame' => _FrameGrid(
             frames: camera.modules.frames,
             activeId: st.activeFrameId,
+            activeRatioId: st.activeRatioId,
             onSelect: (id) => ref.read(cameraAppProvider.notifier).selectFrame(id),
           ),
         'watermark' => _WatermarkRow(
@@ -2562,7 +2593,31 @@ class _GallerySheetState extends ConsumerState<_GallerySheet> {
       ),
     );
     if (albums.isNotEmpty) {
-      final assets = await albums.first.getAssetListRange(start: 0, end: 200);
+      // 优先查找 DAZZ 相册，回退到全部相册并按文件名过滤
+      AssetPathEntity? dazzPath;
+      for (final p in albums) {
+        final upper = p.name.toUpperCase();
+        if (upper == 'DAZZ' || upper.endsWith('/DAZZ') || upper.contains('DAZZ')) {
+          dazzPath = p;
+          break;
+        }
+      }
+      List<AssetEntity> assets;
+      if (dazzPath != null) {
+        // Android: 清除文件缓存，确保新照片立即可见
+        await PhotoManager.clearFileCache();
+        final count = await dazzPath.assetCountAsync;
+        assets = await dazzPath.getAssetListRange(start: 0, end: count.clamp(0, 200));
+      } else {
+        // 未找到 DAZZ 相册时，从根相册过滤 dazz_ 前缀文件
+        final rootPath = albums.firstWhere((p) => p.isAll, orElse: () => albums.first);
+        final rootCount = await rootPath.assetCountAsync;
+        final rootAssets = await rootPath.getAssetListRange(start: 0, end: rootCount.clamp(0, 1000));
+        assets = rootAssets.where((a) {
+          final title = (a.title ?? '').toLowerCase();
+          return title.startsWith('dazz_') || title.contains('dazz');
+        }).toList();
+      }
       if (mounted) setState(() { _allPhotos = assets; _loading = false; });
     } else {
       if (mounted) setState(() => _loading = false);
@@ -2962,17 +3017,24 @@ class _FilterRow extends StatelessWidget {
 class _FrameGrid extends ConsumerWidget {
   final List<FrameDefinition> frames;
   final String? activeId;
+  final String? activeRatioId;
   final ValueChanged<String> onSelect;
 
-  const _FrameGrid({required this.frames, this.activeId, required this.onSelect});
+  const _FrameGrid({required this.frames, this.activeId, this.activeRatioId, required this.onSelect});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = sOf(ref.watch(languageProvider));
+    // 按当前比例过滤：只显示支持当前比例的相框
+    final filteredFrames = activeRatioId != null
+        ? frames.where((f) =>
+            f.supportedRatios.isEmpty || f.supportedRatios.contains(activeRatioId))
+            .toList()
+        : frames;
     // 加上"无边框"选项
     final allFrames = [
       _FrameOption(id: 'none', name: s.none, color: Colors.transparent),
-      ...frames.map((f) {
+      ...filteredFrames.map((f) {
         Color c = const Color(0xFFF5F2EA);
         try {
           final hex = f.backgroundColor.replaceAll('#', '');

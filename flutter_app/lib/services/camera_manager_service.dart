@@ -81,9 +81,13 @@ class CameraManagerNotifier extends AsyncNotifier<CameraManagerState> {
         savedFavorites != null ? Set<String>.from(savedFavorites) : <String>{};
 
     // 读取启用状态（默认全部启用）
+    // 关键修复：新增相机自动加入 enabledIds，避免旧用户升级后新相机不显示
     final savedEnabled = prefs.getStringList(_keyEnabled);
     final enabledIds = savedEnabled != null
-        ? Set<String>.from(savedEnabled)
+        ? Set<String>.from([
+            ...savedEnabled.where((id) => allIds.contains(id)), // 保留旧数据中仍存在的相机
+            ...allIds.where((id) => !savedEnabled.contains(id)), // 新增相机自动启用
+          ])
         : Set<String>.from(allIds);
 
     return CameraManagerState(

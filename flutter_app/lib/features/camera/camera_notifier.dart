@@ -446,6 +446,25 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   void selectRatio(String id) {
+    // 如果切换到不支持相框的比例，自动清除当前相框选择
+    final camera = state.camera;
+    if (camera != null && state.activeFrameId != null) {
+      final ratio = camera.modules.ratios.where((r) => r.id == id).firstOrNull;
+      if (ratio != null && !ratio.supportsFrame) {
+        state = state.copyWith(activeRatioId: id, clearFrameId: true);
+        return;
+      }
+      // 当前相框不支持新比例时也自动清除
+      final frameOpt = camera.modules.frames
+          .where((f) => f.id == state.activeFrameId)
+          .firstOrNull;
+      if (frameOpt != null &&
+          frameOpt.supportedRatios.isNotEmpty &&
+          !frameOpt.supportedRatios.contains(id)) {
+        state = state.copyWith(activeRatioId: id, clearFrameId: true);
+        return;
+      }
+    }
     state = state.copyWith(activeRatioId: id);
   }
 

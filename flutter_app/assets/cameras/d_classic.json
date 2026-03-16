@@ -226,7 +226,7 @@
     "filterId": null,
     "lensId": "std",
     "ratioId": "ratio_3_4",
-    "frameId": null,
+    "frameId": "instant_default",
     "watermarkPresetId": "none",
     "extraId": null
   },
