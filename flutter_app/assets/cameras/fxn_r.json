@@ -1,7 +1,7 @@
 {
   "id": "fxn_r",
   "name": "FXN R",
-  "category": "film",
+  "category": "digital",
   "mode": "photo",
   "supportsPhoto": true,
   "supportsVideo": false,
@@ -127,85 +127,286 @@
     ],
     "ratios": [
       {
+        "id": "ratio_1_1",
+        "label": "1:1",
+        "width": 1,
+        "height": 1,
+        "supportsFrame": true
+      },
+      {
         "id": "ratio_2_3",
         "label": "2:3",
         "width": 2,
         "height": 3,
         "supportsFrame": true
+      },
+      {
+        "id": "ratio_3_4",
+        "label": "3:4",
+        "width": 3,
+        "height": 4,
+        "supportsFrame": true
+      },
+      {
+        "id": "ratio_9_16",
+        "label": "9:16",
+        "width": 9,
+        "height": 16,
+        "supportsFrame": true
       }
     ],
     "frames": [
       {
-        "id": "film_classic_black",
-        "name": "经典黑框",
-        "nameEn": "Classic Black",
-        "asset": "assets/frames/film_classic_black.png",
-        "backgroundColor": "#000000",
-        "cornerRadius": 0,
-        "innerShadow": false,
-        "inset": {
-          "top": 80,
-          "bottom": 80,
-          "left": 90,
-          "right": 90
+        "id": "instant_default",
+        "name": "冷白",
+        "nameEn": "Default",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_default_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_default_3x4.png"
         },
-        "thumbnail": "assets/thumbnails/frames/film_classic_black.jpg",
+        "backgroundColor": "#F5F6FA",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 138,
+          "right": 119,
+          "bottom": 99,
+          "left": 119
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 420,
+            "right": 360,
+            "bottom": 980,
+            "left": 360
+          },
+          "ratio_3_4": {
+            "top": 136,
+            "right": 117,
+            "bottom": 136,
+            "left": 117
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_default.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#000000"
+        "outerBackgroundColor": "#F5F6FA",
+        "supportsBackground": true
       },
       {
-        "id": "film_warm_amber",
-        "name": "暖棕胶片",
-        "nameEn": "Warm Amber",
-        "asset": "assets/frames/film_warm_amber.png",
-        "backgroundColor": "#2A1C0C",
-        "cornerRadius": 0,
-        "innerShadow": false,
-        "inset": {
-          "top": 90,
-          "bottom": 90,
-          "left": 80,
-          "right": 80
+        "id": "instant_lavender",
+        "name": "薰衣草",
+        "nameEn": "Lavender",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_lavender_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_lavender_3x4.png"
         },
-        "thumbnail": "assets/thumbnails/frames/film_warm_amber.jpg",
+        "backgroundColor": "#EBE6F8",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 138,
+          "right": 119,
+          "bottom": 99,
+          "left": 119
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 420,
+            "right": 360,
+            "bottom": 980,
+            "left": 360
+          },
+          "ratio_3_4": {
+            "top": 136,
+            "right": 117,
+            "bottom": 136,
+            "left": 117
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_lavender.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#2A1C0C"
+        "outerBackgroundColor": "#EBE6F8",
+        "supportsBackground": true
       },
       {
-        "id": "film_white_matte",
-        "name": "白色哑光",
-        "nameEn": "White Matte",
-        "asset": "assets/frames/film_white_matte.png",
-        "backgroundColor": "#F5F2EB",
-        "cornerRadius": 0,
-        "innerShadow": false,
-        "inset": {
-          "top": 70,
-          "bottom": 70,
-          "left": 60,
-          "right": 60
+        "id": "instant_peach",
+        "name": "蜜桃橙",
+        "nameEn": "Peach",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_peach_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_peach_3x4.png"
         },
-        "thumbnail": "assets/thumbnails/frames/film_white_matte.jpg",
+        "backgroundColor": "#FCEEE1",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 138,
+          "right": 119,
+          "bottom": 99,
+          "left": 119
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 420,
+            "right": 360,
+            "bottom": 980,
+            "left": 360
+          },
+          "ratio_3_4": {
+            "top": 136,
+            "right": 117,
+            "bottom": 136,
+            "left": 117
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_peach.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#F5F2EB"
+        "outerBackgroundColor": "#FCEEE1",
+        "supportsBackground": true
       },
       {
-        "id": "film_dark_grain",
-        "name": "深色颗粒",
-        "nameEn": "Dark Grain",
-        "asset": "assets/frames/film_dark_grain.png",
-        "backgroundColor": "#12100E",
-        "cornerRadius": 0,
-        "innerShadow": false,
-        "inset": {
-          "top": 75,
-          "bottom": 75,
-          "left": 100,
-          "right": 100
+        "id": "instant_mint",
+        "name": "薄荷绿",
+        "nameEn": "Mint",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_mint_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_mint_3x4.png"
         },
-        "thumbnail": "assets/thumbnails/frames/film_dark_grain.jpg",
+        "backgroundColor": "#E1F8EE",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 138,
+          "right": 119,
+          "bottom": 99,
+          "left": 119
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 420,
+            "right": 360,
+            "bottom": 980,
+            "left": 360
+          },
+          "ratio_3_4": {
+            "top": 136,
+            "right": 117,
+            "bottom": 136,
+            "left": 117
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_mint.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
         "outerPadding": 0,
-        "outerBackgroundColor": "#12100E"
+        "outerBackgroundColor": "#E1F8EE",
+        "supportsBackground": true
+      },
+      {
+        "id": "instant_sky",
+        "name": "天空蓝",
+        "nameEn": "Sky",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_sky_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_sky_3x4.png"
+        },
+        "backgroundColor": "#E1EEFC",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 138,
+          "right": 119,
+          "bottom": 99,
+          "left": 119
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 420,
+            "right": 360,
+            "bottom": 980,
+            "left": 360
+          },
+          "ratio_3_4": {
+            "top": 136,
+            "right": 117,
+            "bottom": 136,
+            "left": 117
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_sky.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#E1EEFC",
+        "supportsBackground": true
+      },
+      {
+        "id": "instant_rose",
+        "name": "玫瑰粉",
+        "nameEn": "Rose",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_rose_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_rose_3x4.png"
+        },
+        "backgroundColor": "#FCE6F0",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": {
+          "top": 138,
+          "right": 119,
+          "bottom": 99,
+          "left": 119
+        },
+        "ratioInsets": {
+          "ratio_1_1": {
+            "top": 420,
+            "right": 360,
+            "bottom": 980,
+            "left": 360
+          },
+          "ratio_3_4": {
+            "top": 136,
+            "right": 117,
+            "bottom": 136,
+            "left": 117
+          }
+        },
+        "supportedRatios": [
+          "ratio_1_1",
+          "ratio_3_4"
+        ],
+        "thumbnail": "assets/thumbnails/frames/instant_rose.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#FCE6F0",
+        "supportsBackground": true
       }
     ],
     "watermarks": {
@@ -243,8 +444,8 @@
   "defaultSelection": {
     "filterId": "35mm_clean",
     "lensId": "vintage",
-    "ratioId": "ratio_2_3",
-    "frameId": "film_classic_black",
+    "ratioId": "ratio_3_4",
+    "frameId": "instant_default",
     "watermarkPresetId": "none",
     "extraId": null
   },
@@ -255,7 +456,7 @@
     "enableFrame": true,
     "enableWatermark": true,
     "enableExtra": false,
-    "enableFilmRoll": true
+    "enableFilmRoll": false
   },
   "previewCapabilities": {
     "allowSmallViewport": true,
@@ -316,9 +517,5 @@
       "toy",
       "warm"
     ]
-  },
-  "filmRollBehavior": {
-    "type": "advance",
-    "style": "35mm_negative"
   }
 }
