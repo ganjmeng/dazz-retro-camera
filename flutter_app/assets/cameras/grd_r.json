@@ -7,32 +7,33 @@
   "supportsVideo": false,
   "focalLengthLabel": "28mm",
   "sensor": {
-    "type": "ccd",
-    "dynamicRange": 10,
-    "baseNoise": 0.06,
-    "colorDepth": 8
+    "type": "cmos",
+    "dynamicRange": 11,
+    "baseNoise": 0.15,
+    "colorDepth": 12
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/grd_r.cube",
     "distortion": 0.0,
     "chromaticAberration": 0.0,
     "flare": 0.0,
-    "temperature": -14,
-    "tint": 0.0,
-    "contrast": 1.22,
-    "highlights": -8.0,
-    "shadows": -4.0,
-    "whites": 10.0,
-    "blacks": -18.0,
-    "clarity": 18.0,
-    "saturation": 0.94,
-    "vibrance": 4.0,
-    "grain": 0.16,
+    "temperature": 2,
+    "tint": 2.0,
+    "contrast": 1.18,
+    "highlights": -10.0,
+    "shadows": -18.0,
+    "whites": 12.0,
+    "blacks": -22.0,
+    "clarity": 25.0,
+    "saturation": 0.95,
+    "vibrance": 0.9,
+    "grain": 0.12,
     "bloom": 0.0,
-    "vignette": 0.06,
+    "vignette": 0.08,
     "colorBiasR": 0.0,
     "colorBiasG": 0.0,
-    "colorBiasB": 0.0
+    "colorBiasB": 0.0,
+    "sharpness": 1.35
   },
   "modules": {
     "filters": [],
@@ -123,7 +124,7 @@
         "label": "2:3",
         "width": 2,
         "height": 3,
-        "supportsFrame": false
+        "supportsFrame": true
       },
       {
         "id": "ratio_3_4",
@@ -140,7 +141,80 @@
         "supportsFrame": false
       }
     ],
-    "frames": [],
+    "frames": [
+      {
+        "id": "film_classic_black",
+        "name": "经典黑框",
+        "nameEn": "Classic Black",
+        "asset": "assets/frames/film_classic_black.png",
+        "backgroundColor": "#000000",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 80,
+          "bottom": 80,
+          "left": 90,
+          "right": 90
+        },
+        "thumbnail": "assets/thumbnails/frames/film_classic_black.jpg",
+        "outerPadding": 0,
+        "outerBackgroundColor": "#000000"
+      },
+      {
+        "id": "film_warm_amber",
+        "name": "暖棕胶片",
+        "nameEn": "Warm Amber",
+        "asset": "assets/frames/film_warm_amber.png",
+        "backgroundColor": "#2A1C0C",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 90,
+          "bottom": 90,
+          "left": 80,
+          "right": 80
+        },
+        "thumbnail": "assets/thumbnails/frames/film_warm_amber.jpg",
+        "outerPadding": 0,
+        "outerBackgroundColor": "#2A1C0C"
+      },
+      {
+        "id": "film_white_matte",
+        "name": "白色哑光",
+        "nameEn": "White Matte",
+        "asset": "assets/frames/film_white_matte.png",
+        "backgroundColor": "#F5F2EB",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 70,
+          "bottom": 70,
+          "left": 60,
+          "right": 60
+        },
+        "thumbnail": "assets/thumbnails/frames/film_white_matte.jpg",
+        "outerPadding": 0,
+        "outerBackgroundColor": "#F5F2EB"
+      },
+      {
+        "id": "film_dark_grain",
+        "name": "深色颗粒",
+        "nameEn": "Dark Grain",
+        "asset": "assets/frames/film_dark_grain.png",
+        "backgroundColor": "#12100E",
+        "cornerRadius": 0,
+        "innerShadow": false,
+        "inset": {
+          "top": 75,
+          "bottom": 75,
+          "left": 100,
+          "right": 100
+        },
+        "thumbnail": "assets/thumbnails/frames/film_dark_grain.jpg",
+        "outerPadding": 0,
+        "outerBackgroundColor": "#12100E"
+      }
+    ],
     "watermarks": {
       "presets": [
         {
@@ -177,7 +251,7 @@
     "filterId": null,
     "lensId": "wide",
     "ratioId": "ratio_2_3",
-    "frameId": null,
+    "frameId": "film_classic_black",
     "watermarkPresetId": "none",
     "extraId": null
   },
