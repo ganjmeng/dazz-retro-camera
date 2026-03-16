@@ -68,17 +68,29 @@ uniform float uColorBiasB;       // RGB Channel Shift B（推荐 +0.02）
 uniform float uTintShift;        // Tint 偏移（推荐 -18，偏绿）
 uniform float uHalationAmount;   // 高光发光（推荐 0.15）
 uniform float uBloomAmount;      // 柔光（推荐 0.10）
-uniform float uGrainSize;        // 颗粒大小（推荐 1.8）
+uniform float uGrainSize;        // 颜粒大小（推荐 1.8）
 uniform float uLuminanceNoise;   // 亮度噪声（推荐 0.08）
 uniform float uChromaNoise;      // 色度噪声（推荐 0.05）
+// ── 胶片/数码通用参数（FQS / CPM35 / U300 共用）──────────────────
+uniform float uHighlightRolloff;    // 胶片高光柔和滴落（FQS=0.12）
+uniform float uEdgeFalloff;         // 边缘衰减（FQS=0.040）
+uniform float uExposureVariation;   // 曝光波动（FQS=0.022）
+uniform float uCornerWarmShift;     // 角落色温偏移（FQS=-0.008，负值偏冷）
+uniform float uCenterGain;          // 中心增亮（FQS=0.018）
+uniform float uDevelopmentSoftness; // 显影柔化（FQS=0.032）
+uniform float uChemicalIrregularity;// 化学不规则感（FQS=0.022）
+uniform float uSkinHueProtect;      // 肤色保护开关（FQS=1.0）
+uniform float uSkinSatProtect;      // 肤色饱和度保护（FQS=0.93）
+uniform float uSkinLumaSoften;      // 肤色亮度柔化（FQS=0.035）
+uniform float uSkinRedLimit;        // 肤色红限（FQS=1.01）
 
-// ── 工具函数 ────────────────────────────────────────────────────────
+// ── 工具函数 ────────────────────────────────────────────────────────────────────
 
 float fqsRandom(vec2 uv, float seed) {
     return fract(sin(dot(uv + seed, vec2(127.1, 311.7))) * 43758.5453123);
 }
 
-// FQS 胶片 Tone Curve（分段三次平滑插值）
+// FQS 胶片 Tone Curve（分段三次平滑插値）
 // 控制点（归一化）：
 //   (0.000, 0.000) (0.125, 0.110) (0.251, 0.227)
 //   (0.502, 0.471) (0.753, 0.804) (1.000, 1.000)
@@ -149,6 +161,51 @@ float fqsVignette(vec2 uv, float amount) {
     return clamp(1.0 - dot(d, d) * amount * 2.5, 0.0, 1.0);
 }
 
+// Highlight Rolloff（胶片高光柔和滴落）
+vec3 fqsHighlightRolloff(vec3 c, float rolloff) {
+    if (rolloff < 0.001) return c;
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    float threshold = 1.0 - rolloff;
+    float mask = clamp((lum - threshold) / rolloff, 0.0, 1.0);
+    mask = mask * mask * (3.0 - 2.0 * mask);
+    vec3 compressed = c * (threshold / max(lum, 0.001));
+    return mix(c, compressed, mask * 0.65);
+}
+
+// 传感器非均匀性（中心增亮 + 边缘衰减 + 角落色温偏移）
+vec3 fqsSensorVariation(vec3 c, vec2 uv,
+                        float centerGain, float edgeFalloff,
+                        float exposureVariation, float cornerWarmShift) {
+    vec2 d = uv - 0.5;
+    float r2 = dot(d, d);
+    float center = 1.0 + centerGain * (1.0 - r2 * 4.0);
+    float edge = 1.0 - edgeFalloff * r2 * 3.5;
+    float variation = 1.0 + exposureVariation * (fract(sin(dot(uv, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.3;
+    c *= clamp(center * edge * variation, 0.6, 1.4);
+    float cornerMask = clamp(r2 * 4.0 - 0.5, 0.0, 1.0);
+    c.r = clamp(c.r + cornerWarmShift * cornerMask * 0.8, 0.0, 1.0);
+    c.b = clamp(c.b - cornerWarmShift * cornerMask * 1.0, 0.0, 1.0);
+    return c;
+}
+
+// 肤色保护（防止冷绿 LUT 让肤色发青）
+vec3 fqsSkinProtect(vec3 c, float hueProtect, float satProtect,
+                    float lumaSoften, float redLimit) {
+    if (hueProtect < 0.5) return c;
+    float skinMask = 0.0;
+    if (c.r > c.g && c.g > c.b && (c.r - c.b) > 0.08) {
+        skinMask = clamp((c.r - c.b - 0.08) / 0.25, 0.0, 1.0);
+        skinMask *= clamp(c.r * 1.5, 0.0, 1.0);
+    }
+    if (skinMask < 0.001) return c;
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    vec3 desatColor = vec3(lum);
+    c = mix(c, mix(c, desatColor, 1.0 - satProtect), skinMask);
+    c = clamp(c + skinMask * lumaSoften * 0.08, 0.0, 1.0);
+    c.r = clamp(c.r, 0.0, lum * redLimit);
+    return c;
+}
+
 // ── 主函数 ──────────────────────────────────────────────────────────
 
 void main() {
@@ -183,13 +240,17 @@ void main() {
     // ── Pass 5: 对比度（0.92）────────────────────────────────────────
     color = fqsContrast(color, uContrast);
 
-    // ── Pass 6: 色温 + Tint ───────────────────────────────────────────
+    // ── Pass 6: 色温 + Tint ─────────────────────────────────────────────────────
     color = fqsTemperatureTint(color, uTemperatureShift, uTintShift);
 
-    // ── Pass 7: Kodak Portra 肤色保护 ────────────────────────────────
-    color = fqsSkinToneGuard(color);
+    // ── Pass 6.5: Highlight Rolloff（胶片高光柔和滴落）──────────────────
+    color = fqsHighlightRolloff(color, uHighlightRolloff);
 
-    // ── Pass 8: Highlight Halation（高光发光）────────────────────────
+    // ── Pass 7: 肤色保护（防止冷绿 LUT 让肤色发青）────────────────
+    color = fqsSkinProtect(color, uSkinHueProtect, uSkinSatProtect,
+                                  uSkinLumaSoften, uSkinRedLimit);
+
+    // ── Pass 8: Highlight Halation（高光发光）────────────────
     float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
     if (uHalationAmount > 0.0 && lum > 0.75) {
         float halationMask = clamp((lum - 0.75) / 0.25, 0.0, 1.0);
@@ -251,7 +312,12 @@ void main() {
         color = clamp(color + chromaNoise * uChromaNoise * 0.10 * darkMask, 0.0, 1.0);
     }
 
-    // ── Pass 12: 暗角（Vignette）─────────────────────────────────────
+    // ── Pass 11.5: 传感器非均匀性（中心增亮 + 边缘衰减 + 角落色温）───────────
+    color = fqsSensorVariation(color, uv,
+                               uCenterGain, uEdgeFalloff,
+                               uExposureVariation, uCornerWarmShift);
+
+    // ── Pass 12: 暗角（Vignette）───────────────────────────────────────────────────
     if (uVignetteAmount > 0.0) {
         float vignette = fqsVignette(uv, uVignetteAmount);
         color *= vignette;
@@ -281,6 +347,18 @@ void main() {
         "bloomAmount"        to  0.10f,
         "grainSize"          to  1.8f,
         "luminanceNoise"     to  0.08f,
-        "chromaNoise"        to  0.05f
+        "chromaNoise"        to  0.05f,
+        // 胶片/数码通用参数
+        "highlightRolloff"   to  0.12f,
+        "edgeFalloff"        to  0.040f,
+        "exposureVariation"  to  0.022f,
+        "cornerWarmShift"    to -0.008f,
+        "centerGain"         to  0.018f,
+        "developmentSoftness" to 0.032f,
+        "chemicalIrregularity" to 0.022f,
+        "skinHueProtect"     to  1.0f,
+        "skinSatProtect"     to  0.93f,
+        "skinLumaSoften"     to  0.035f,
+        "skinRedLimit"       to  1.01f
     )
 }

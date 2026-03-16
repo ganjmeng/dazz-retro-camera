@@ -66,6 +66,18 @@ struct FQSParams {
     float highlightWarmAmount; // 暖高光（FQS=0.0，CPM35=0.06）
     float luminanceNoise;      // 亮度噪声（FQS=0.08）
     float chromaNoise;         // 色度噪声（FQS=0.05）
+    // ── 胶片/数码通用参数（Inst C / SQC / FXN-R / FQS / CPM35 共用）──────────
+    float highlightRolloff;    // 胶片高光柔和滴落（FQS=0.12）
+    float edgeFalloff;         // 边缘衰减（FQS=0.040）
+    float exposureVariation;   // 曝光波动（FQS=0.022）
+    float cornerWarmShift;     // 角落偏移（FQS=-0.008，负值偏冷）
+    float centerGain;          // 中心增亮（FQS=0.018）
+    float developmentSoftness; // 显影柔化（FQS=0.032）
+    float chemicalIrregularity;// 化学不规则感（FQS=0.022）
+    float skinHueProtect;      // 肤色保护开关（FQS=1.0）
+    float skinSatProtect;      // 肤色饱和度保护（FQS=0.93）
+    float skinLumaSoften;      // 肤色亮度柔化（FQS=0.035）
+    float skinRedLimit;        // 肤色红限（FQS=1.01）
 };
 
 // MARK: - 工具函数
@@ -160,6 +172,74 @@ float fqsVignette(float2 uv, float amount) {
     return clamp(1.0 - dot(d, d) * amount * 2.5, 0.0, 1.0);
 }
 
+/// Highlight Rolloff（胶片高光柔和滚落，防止硬过曝）
+float3 fqsHighlightRolloff(float3 c, float rolloff) {
+    if (rolloff < 0.001) return c;
+    float lum = dot(c, float3(0.2126, 0.7152, 0.0722));
+    float threshold = 1.0 - rolloff;
+    float mask = clamp((lum - threshold) / rolloff, 0.0, 1.0);
+    mask = mask * mask * (3.0 - 2.0 * mask); // smoothstep
+    float3 compressed = c * (threshold / max(lum, 0.001));
+    return mix(c, compressed, mask * 0.65);
+}
+
+/// 传感器非均匀性（中心增亮 + 边缘衰减 + 角落色温偏移）
+float3 fqsSensorVariation(float3 c, float2 uv,
+                           float centerGain, float edgeFalloff,
+                           float exposureVariation, float cornerWarmShift,
+                           float time) {
+    float2 d = uv - 0.5;
+    float r2 = dot(d, d);
+    // 中心增亮
+    float center = 1.0 + centerGain * (1.0 - r2 * 4.0);
+    // 边缘衰减
+    float edge = 1.0 - edgeFalloff * r2 * 3.5;
+    // 曝光波动（低频噪声模拟）
+    float variation = 1.0 + exposureVariation * (fract(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.3;
+    c *= clamp(center * edge * variation, 0.6, 1.4);
+    // 角落色温偏移（负值=偏冷青，正值=偏暖橙）
+    float cornerMask = clamp(r2 * 4.0 - 0.5, 0.0, 1.0);
+    c.r = clamp(c.r + cornerWarmShift * cornerMask * 0.8, 0.0, 1.0);
+    c.b = clamp(c.b - cornerWarmShift * cornerMask * 1.0, 0.0, 1.0);
+    return c;
+}
+
+/// 显影柔化（胶片冲洗扩散感）
+float3 fqsDevelopmentSoften(float3 c, float2 uv, float softness,
+                             texture2d<float> tex, sampler s) {
+    if (softness < 0.001) return c;
+    float offset = softness * 0.004;
+    float3 blur = float3(0.0);
+    blur += tex.sample(s, uv + float2( offset,  0.0)).rgb;
+    blur += tex.sample(s, uv + float2(-offset,  0.0)).rgb;
+    blur += tex.sample(s, uv + float2( 0.0,  offset)).rgb;
+    blur += tex.sample(s, uv + float2( 0.0, -offset)).rgb;
+    blur /= 4.0;
+    return mix(c, blur, softness * 0.35);
+}
+
+/// 肤色保护（防止冷绿 LUT 让肤色发青）
+float3 fqsSkinProtect(float3 c, float hueProtect, float satProtect,
+                       float lumaSoften, float redLimit) {
+    if (hueProtect < 0.5) return c;
+    // 肤色检测：R > G > B，且 R-B > 0.08
+    float skinMask = 0.0;
+    if (c.r > c.g && c.g > c.b && (c.r - c.b) > 0.08) {
+        skinMask = clamp((c.r - c.b - 0.08) / 0.25, 0.0, 1.0);
+        skinMask *= clamp(c.r * 1.5, 0.0, 1.0); // 亮部更强
+    }
+    if (skinMask < 0.001) return c;
+    // 饱和度保护（防止过饱和）
+    float lum = dot(c, float3(0.2126, 0.7152, 0.0722));
+    float3 desatColor = float3(lum);
+    c = mix(c, mix(c, desatColor, 1.0 - satProtect), skinMask);
+    // 亮度柔化（肤色发光感）
+    c = clamp(c + skinMask * lumaSoften * 0.08, 0.0, 1.0);
+    // 红限（防止肤色过红变橙）
+    c.r = clamp(c.r, 0.0, lum * redLimit);
+    return c;
+}
+
 // MARK: - FQS 片段着色器
 
 fragment float4 fqsFragmentShader(
@@ -185,7 +265,10 @@ fragment float4 fqsFragmentShader(
         color = cameraTexture.sample(s, uv).rgb;
     }
 
-    // ── Pass 2: Tone Curve（胶片曲线，分通道应用保留色偏）──────────────────
+        // ── Pass 1.5: 显影柔化（胶片冲洗扩散，在曲线前应用）──────────────
+    color = fqsDevelopmentSoften(color, uv, params.developmentSoftness, cameraTexture, s);
+
+    // ── Pass 2: Tone Curve（胶片曲线，分通道应用保留色偏）──────────────
     color.r = fqsToneCurve(color.r);
     color.g = fqsToneCurve(color.g);
     color.b = fqsToneCurve(color.b);
@@ -202,11 +285,15 @@ fragment float4 fqsFragmentShader(
     // ── Pass 5: 对比度（0.92，低对比胶片感）─────────────────────────────────
     color = fqsContrast(color, params.contrast);
 
-    // ── Pass 6: 色温 + Tint（-40K, -18 tint）────────────────────────────────
+      // ── Pass 6: 色温 + Tint（-40K, -18 tint）────────────────────
     color = fqsTemperatureTint(color, params.temperatureShift, params.tintShift);
 
-    // ── Pass 7: Kodak Portra 肤色保护 ────────────────────────────────────────
-    color = fqsSkinToneGuard(color);
+    // ── Pass 6.5: Highlight Rolloff（胶片高光柔和滴落）────────────────
+    color = fqsHighlightRolloff(color, params.highlightRolloff);
+
+    // ── Pass 7: 肤色保护（防止冷绿 LUT 让肤色发青）────────────────
+    color = fqsSkinProtect(color, params.skinHueProtect, params.skinSatProtect,
+                           params.skinLumaSoften, params.skinRedLimit);
 
     // ── Pass 8: Highlight Halation（高光发光，模拟胶片高光溢出）──────────────
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
@@ -275,7 +362,13 @@ fragment float4 fqsFragmentShader(
         color = clamp(color + cn * params.chromaNoise * 0.10 * darkMask, 0.0, 1.0);
     }
 
-    // ── Pass 12: 暗角（Vignette）─────────────────────────────────────────────
+      // ── Pass 11.5: 传感器非均匀性（中心增亮 + 边缘衰减 + 角落色温）────────────
+    color = fqsSensorVariation(color, uv,
+                               params.centerGain, params.edgeFalloff,
+                               params.exposureVariation, params.cornerWarmShift,
+                               params.time);
+
+    // ── Pass 12: 暗角（Vignette）───────────────────────────────────────────
     if (params.vignetteAmount > 0.001) {
         color *= fqsVignette(uv, params.vignetteAmount);
     }

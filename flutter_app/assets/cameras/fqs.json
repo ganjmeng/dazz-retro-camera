@@ -11,7 +11,7 @@
     "colorDepth": 8
   },
   "defaultLook": {
-    "baseLut": "assets/lut/cameras/fqs_fuji_portra.cube",
+    "baseLut": "assets/lut/cameras/fqs_superia400_flash.cube",
     "distortion": 0.0,
     "chromaticAberration": 0.4,
     "flare": 0.0,
@@ -33,7 +33,42 @@
     "colorBiasG": 0.05,
     "colorBiasB": 0.02,
     "sharpness": 0.85,
-    "halation": 0.15
+    "halation": 0.15,
+    "filterLuts": [
+      {
+        "id": "fqs_flash",
+        "name": "Flash",
+        "path": "assets/lut/cameras/fqs_superia400_flash.cube",
+        "description": "闪光灯场景，冷白绿调"
+      },
+      {
+        "id": "fqs_natural",
+        "name": "Natural",
+        "path": "assets/lut/cameras/fqs_superia400_natural.cube",
+        "description": "自然光室外，青绿阴影"
+      },
+      {
+        "id": "fqs_indoor",
+        "name": "Indoor",
+        "path": "assets/lut/cameras/fqs_superia400_indoor.cube",
+        "description": "室内暖光，绿调保留"
+      }
+    ],
+    "dehaze": 0.0,
+    "highlightRolloff": 0.12,
+    "edgeFalloff": 0.04,
+    "exposureVariation": 0.022,
+    "cornerWarmShift": -0.008,
+    "centerGain": 0.018,
+    "developmentSoftness": 0.032,
+    "chemicalIrregularity": 0.022,
+    "skinHueProtect": true,
+    "skinSatProtect": 0.93,
+    "skinLumaSoften": 0.035,
+    "skinRedLimit": 1.01,
+    "luminanceNoise": 0.08,
+    "chromaNoise": 0.05,
+    "toneCurveStrength": 1.0
   },
   "modules": {
     "filters": [
@@ -540,14 +575,16 @@
     "tags": [
       "film",
       "35mm",
-      "slr",
+      "disposable",
+      "quicksnap",
       "fuji",
-      "kodak",
-      "portra",
       "superia",
+      "superia400",
       "green-tone",
-      "soft",
-      "grain"
+      "cold",
+      "flash",
+      "grain",
+      "soft"
     ]
   }
 }
