@@ -69,21 +69,73 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
 
+  // ── GPU 预览 ─────────────────────────────────────────────────────────────
+  static const MethodChannel _gpuChannel = MethodChannel('com.retrocam.app/camera_control');
+  String? _gpuPreviewPath;       // GPU 处理后的预览图临时文件路径
+  bool _gpuProcessing = false;   // 是否正在 GPU 处理中
+  int _gpuRequestId = 0;         // 用于取消过期的 GPU 请求
+
   double get _totalRotation => _coarseRotation.toDouble() + _fineRotation;
 
   @override
   void initState() {
     super.initState();
-    _preloadImage();
+    _initPreview();
   }
 
-  Future<void> _preloadImage() async {
+  Future<void> _initPreview() async {
     try {
       await File(widget.imagePath).readAsBytes();
       if (mounted) setState(() => _isLoading = false);
+      // 初始 GPU 预览
+      _refreshGpuPreview();
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// 调用 Native GPU Shader 生成带滤镜效果的预览图
+  Future<void> _refreshGpuPreview() async {
+    final st = ref.read(cameraAppProvider);
+    final renderParams = st.renderParams;
+    if (renderParams == null) return;
+
+    final requestId = ++_gpuRequestId;
+    if (_gpuProcessing) return; // 已有请求在处理中，等下一次
+    _gpuProcessing = true;
+
+    try {
+      final result = await _gpuChannel.invokeMethod<Map>('processWithGpu', {
+        'filePath': widget.imagePath,
+        'params': renderParams.toJson(),
+      });
+      // 检查请求是否过期（用户可能已经切换了相机/滤镜）
+      if (!mounted || requestId != _gpuRequestId) return;
+      if (result != null && result['filePath'] != null) {
+        // 删除旧的预览临时文件
+        if (_gpuPreviewPath != null) {
+          try { File(_gpuPreviewPath!).deleteSync(); } catch (_) {}
+        }
+        setState(() => _gpuPreviewPath = result['filePath'] as String);
+      }
+    } catch (e) {
+      debugPrint('[ImageEditScreen] GPU preview failed: $e');
+    } finally {
+      _gpuProcessing = false;
+      // 如果有新的请求排队（requestId 已递增），立即处理
+      if (mounted && requestId != _gpuRequestId) {
+        _refreshGpuPreview();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    // 清理 GPU 预览临时文件
+    if (_gpuPreviewPath != null) {
+      try { File(_gpuPreviewPath!).deleteSync(); } catch (_) {}
+    }
+    super.dispose();
   }
 
   void _rotate90() => setState(() => _coarseRotation = (_coarseRotation + 90) % 360);
@@ -112,15 +164,19 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         setState(() => _isSaving = false);
         return;
       }
-      // 临时文件使用 .jpg 扩展名，与 pipeline 输出格式一致
+      // 临时文件使用 .jpg 扩展名
       final tmpPath = '${Directory.systemTemp.path}/dazz_edit_${DateTime.now().millisecondsSinceEpoch}.jpg';
       await File(tmpPath).writeAsBytes(transformedBytes);
       final pipeline = CapturePipeline(camera: camera);
-      // 导入图片编辑页固定使用高画质输出（对齐竞品 4096px / q90）
       const maxDim = CapturePipeline.kMaxDimHigh;
       const jpegQ = CapturePipeline.kJpegQualityHigh;
+      // _applyTransforms 已使用 GPU 预览图（带滤镜效果），
+      // pipeline.process 中跳过色彩处理（useGpu=false + renderParams=null），
+      // 仅做相框/水印合成
       final result = await pipeline.process(
         imagePath: tmpPath,
+        useGpu: false,        // 跳过 GPU 色彩处理
+        renderParams: null,   // 跳过 Dart 降级色彩处理（色彩已由 GPU 预览完成）
         selectedRatioId: st.activeRatioId ?? '',
         selectedFrameId: st.activeFrameId ?? '',
         selectedWatermarkId: st.activeWatermarkId ?? '',
@@ -130,7 +186,6 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         watermarkSizeOverride: st.watermarkSize,
         watermarkDirectionOverride: st.watermarkDirection,
         watermarkStyleOverride: st.watermarkStyle,
-        renderParams: st.renderParams,
         maxDimension: maxDim,
         jpegQuality: jpegQ,
       );
@@ -163,9 +218,12 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     }
   }
 
+  /// 应用裁剪/旋转/翻转变换，输入源为 GPU 预览图（已带滤镜效果）或原图
   Future<Uint8List?> _applyTransforms() async {
     try {
-      final bytes = await File(widget.imagePath).readAsBytes();
+      // 优先使用 GPU 预览图（已带滤镜效果），降级时使用原图
+      final sourcePath = _gpuPreviewPath ?? widget.imagePath;
+      final bytes = await File(sourcePath).readAsBytes();
       final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
       final src = frame.image;
@@ -180,6 +238,11 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       final absSin = math.sin(totalRad).abs();
       final outW = (cropW * absCos + cropH * absSin).toInt();
       final outH = (cropW * absSin + cropH * absCos).toInt();
+      // 安全检查：避免 0 尺寸导致崩溃
+      if (outW <= 0 || outH <= 0) {
+        debugPrint('[ImageEditScreen] Invalid output dimensions: ${outW}x$outH');
+        return null;
+      }
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
       canvas.translate(outW / 2.0, outH / 2.0);
@@ -193,11 +256,8 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       );
       final picture = recorder.endRecording();
       final outputImage = await picture.toImage(outW, outH);
-      // 输出 rawRgba 供 pipeline 处理，避免 PNG 中间格式（PNG 编码慢且无必要）
-      // pipeline 内部会将 rawRgba 解码后再做色彩/相框/水印处理
       final byteData = await outputImage.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (byteData == null) return null;
-      // 将 rawRgba 编码为 JPEG 作为临时文件（供 pipeline 读取）
       final img = image_lib.Image.fromBytes(
         width: outW,
         height: outH,
@@ -227,6 +287,14 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     final st = ref.watch(cameraAppProvider);
     final camera = st.camera;
     final uiCap = camera?.uiCapabilities;
+
+    // 监听相机/滤镜/参数变化，实时刷新 GPU 预览
+    ref.listen<CameraAppState>(cameraAppProvider, (prev, next) {
+      // renderParams 变化时重新生成 GPU 预览（切换相机、滤镜、曝光等）
+      if (prev?.renderParams?.toJson().toString() != next.renderParams?.toJson().toString()) {
+        _refreshGpuPreview();
+      }
+    });
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -389,18 +457,22 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   }
 
   Widget _buildTransformedImage(CameraAppState st, BoxConstraints constraints) {
-    // Phase 2 重构：色彩处理已统一由 Native GPU Shader 完成
-    // image_edit_screen 显示的是 GPU 处理后的成片，不再叠加 Flutter ColorFilter
+    // 显示 GPU Shader 处理后的预览图（带滤镜效果），降级时显示原图
+    final previewFile = _gpuPreviewPath != null
+        ? File(_gpuPreviewPath!)
+        : File(widget.imagePath);
     return Transform(
       alignment: Alignment.center,
       transform: Matrix4.identity()
         ..rotateZ(_totalRotation * math.pi / 180.0)
         ..scale(_flipH ? -1.0 : 1.0, 1.0),
       child: Image.file(
-        File(widget.imagePath),
+        previewFile,
         fit: BoxFit.cover,
         width: constraints.maxWidth,
         height: constraints.maxHeight,
+        // 当 GPU 预览更新时强制刷新（避免 Flutter 缓存旧图片）
+        key: ValueKey(_gpuPreviewPath ?? widget.imagePath),
       ),
     );
   }
