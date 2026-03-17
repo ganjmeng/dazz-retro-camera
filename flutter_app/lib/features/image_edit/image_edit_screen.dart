@@ -47,7 +47,12 @@ Future<void> openImageImportFlow(BuildContext context) async {
     return;
   }
 
-  // 跳转到编辑页（页面内有自己的通用加载动画）
+  // 跳转到编辑页前移除遮罩（页面内有自己的通用加载动画）
+  // 注意：必须在 push 之前移除，否则 Overlay 会一直覆盖在编辑页上方
+  loadingOverlay.remove();
+  loadingOverlay = null;
+
+  if (!context.mounted) return;
   await Navigator.of(context).push(
     MaterialPageRoute(
       builder: (ctx) => ProviderScope(
@@ -56,9 +61,7 @@ Future<void> openImageImportFlow(BuildContext context) async {
       ),
       fullscreenDialog: true,
     ),
-  ).then((_) => loadingOverlay?.remove()).catchError((_) => loadingOverlay?.remove());
-  // 如果 push 前尚未移除，在返回后移除
-  loadingOverlay.remove();
+  );
 }
 
 /// 导入图片时的转圈加载遮罩（独立于现有通用加载动画）
