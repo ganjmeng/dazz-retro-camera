@@ -245,6 +245,7 @@ class CaptureProcessor {
         p.skinLumaSoften     = getFloat(params, "skinLumaSoften", 0)
         p.skinRedLimit       = getFloat(params, "skinRedLimit", 1.0)
         p.exposureOffset     = getFloat(params, "exposureOffset", 0)
+        p.fisheyeMode        = getFloat(params, "fisheyeMode", 0)
 
         return p
     }

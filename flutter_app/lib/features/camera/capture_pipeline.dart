@@ -330,7 +330,8 @@ class CapturePipeline {
       }
 
       // 鱼眼模式：先 save/clipPath 圆形区域，使图片只在圆内绘制（与 GL shader 一致）
-      if (fisheyeMode) {
+      // GPU 已处理时，原生 shader 已在圆外输出纯黑，无需 Flutter Canvas 再做圆形裁切
+      if (fisheyeMode && !gpuProcessed) {
         canvas.save();
         final fisheyeCenter = Offset(
           frameOffsetX + leftPx + outW / 2,
@@ -366,8 +367,8 @@ class CapturePipeline {
         );
       }
 
-      // 鱼眼模式：恢复 canvas（圆形 clip 结束）
-      if (fisheyeMode) {
+      // 鱼眼模式：恢复 canvas（圆形 clip 结束，仅 Dart 降级时执行）
+      if (fisheyeMode && !gpuProcessed) {
         canvas.restore();
       }
 
@@ -421,9 +422,10 @@ class CapturePipeline {
         );
       }
 
-      // ── 4e3. 鱼眼四角黑色遮罩 ────────────────────────────────────────────────
-      // 与预览层 _FisheyeCirclePainter 对齐：在圆形以外绘制纯黑遮罩
-      if (fisheyeMode) {
+       // ── 4e3. 鱼眼四角黑色遮罩 ────────────────────────────────────────────
+      // GPU 已处理时，原生 shader 已在圆外输出纯黑，无需 Flutter Canvas 再绘制遮罩
+      // Dart 降级时仍由 _drawFisheyeMask 补充（与预览层 _FisheyeCirclePainter 对齐）
+      if (fisheyeMode && !gpuProcessed) {
         _drawFisheyeMask(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
       }
 

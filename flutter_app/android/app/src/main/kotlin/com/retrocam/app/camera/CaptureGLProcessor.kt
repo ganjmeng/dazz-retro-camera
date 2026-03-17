@@ -125,9 +125,9 @@ uniform float uSplitToneBalance;
 uniform float uLightLeakAmount;
 uniform float uLightLeakSeed;
 uniform float uExposureOffset;        // 用户曝光补偿（-2.0~+2.0）
-
-// ── 工具函数 ──────────────────────────────────────────────────────────
-
+uniform float uFisheyeMode;           // 1.0=圆形鱼眼模式, 0.0=普通模式
+uniform float uAspectRatio;           // 宽/高，用于鱼眼圆形不变形
+// ── 工具函数 ──────────────────────────────────────────────────────────────
 float luminance(vec3 c) {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
@@ -151,8 +151,20 @@ vec3 hsv2rgb(vec3 c) {
 float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
-
-// ── Pass 1: 色差 ──────────────────────────────────────────────────────
+// ── 圆形鱼眼 UV 重映射（等距投影，与 CameraGLRenderer 完全一致）
+// 返回 vec2(-1) 表示圆形以外区域
+vec2 fisheyeUV(vec2 uv, float aspect) {
+    vec2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+    float r = length(p);
+    if (r > 1.0) return vec2(-1.0);
+    float theta = r * 1.5707963; // pi/2
+    float phi = atan(p.y, p.x);
+    float sinTheta = sin(theta);
+    vec2 texCoord = vec2(sinTheta * cos(phi), sinTheta * sin(phi));
+    return texCoord * 0.5 + 0.5;
+}
+// ── Pass 1: 色差 ──────────────────────────────────────────────────────────────
 vec3 applyChromaticAberration(sampler2D tex, vec2 uv, float amount) {
     if (amount < 0.001) return texture(tex, uv).rgb;
     vec2 offset = (uv - 0.5) * amount * 0.02;
@@ -436,6 +448,17 @@ vec3 applyVignette(vec3 c, vec2 uv, float amount) {
 void main() {
     vec2 uv = vTexCoord;
 
+    // Pass 0: 鱼眼模式 — UV 重映射 + 圆形遮罩（与预览 Shader 完全一致）
+    bool isFisheye = uFisheyeMode > 0.5;
+    if (isFisheye) {
+        vec2 fUV = fisheyeUV(uv, uAspectRatio);
+        if (fUV.x < 0.0) {
+            fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+        }
+        uv = fUV;
+    }
+
     // Pass 1: 色差
     vec3 color = applyChromaticAberration(uInputTexture, uv, uChromaticAberration);
 
@@ -558,8 +581,11 @@ void main() {
     }
 
     // Pass 23: Vignette
-    float vigTotal = min(uVignetteAmount + uLensVignette, 1.0);
-    color = applyVignette(color, uv, vigTotal);
+    // 鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗（与预览 Shader 一致）
+    if (!isFisheye) {
+        float vigTotal = min(uVignetteAmount + uLensVignette, 1.0);
+        color = applyVignette(color, uv, vigTotal);
+    }
 
     fragColor = vec4(color, 1.0);
 }"""
@@ -636,6 +662,8 @@ void main() {
     private var uLightLeakAmount = -1
     private var uLightLeakSeed = -1
     private var uExposureOffset = -1
+    private var uFisheyeMode = -1
+    private var uAspectRatio = -1
 
     private var currentWidth = 0
     private var currentHeight = 0
@@ -898,6 +926,8 @@ void main() {
         uLightLeakAmount = loc("uLightLeakAmount")
         uLightLeakSeed = loc("uLightLeakSeed")
         uExposureOffset = loc("uExposureOffset")
+        uFisheyeMode = loc("uFisheyeMode")
+        uAspectRatio = loc("uAspectRatio")
     }
 
     private fun setUniforms(params: Map<String, Any>) {
@@ -953,6 +983,12 @@ void main() {
         GLES30.glUniform1f(uLightLeakAmount, f("lightLeakAmount"))
         GLES30.glUniform1f(uLightLeakSeed, f("lightLeakSeed", System.currentTimeMillis().toFloat() / 1000.0f))
         GLES30.glUniform1f(uExposureOffset, f("exposureOffset"))
+        GLES30.glUniform1f(uFisheyeMode, f("fisheyeMode"))
+        // aspectRatio = width / height，由调用方在 params 中传入，如果没有则用 currentWidth/currentHeight 计算
+        val ar = if (f("aspectRatio") > 0.001f) f("aspectRatio")
+                 else if (currentHeight > 0) currentWidth.toFloat() / currentHeight.toFloat()
+                 else 1.0f
+        GLES30.glUniform1f(uAspectRatio, ar)
     }
 
     private fun uploadBitmapToTexture(bitmap: Bitmap): Int {

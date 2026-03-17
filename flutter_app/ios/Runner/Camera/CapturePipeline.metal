@@ -94,6 +94,20 @@ struct CaptureParams {
 
 // ── 工具函数 ─────────────────────────────────────────────────────────────
 
+/// 圆形鱼眼 UV 重映射（等距投影，与 CameraShaders.metal 完全一致）
+/// 返回 float2(-1) 表示圆形以外区域
+static float2 cp_fisheyeUV(float2 uv, float aspect) {
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+    float r = length(p);
+    if (r > 1.0) return float2(-1.0);
+    float theta = r * 1.5707963; // π/2
+    float phi = atan2(p.y, p.x);
+    float sinTheta = sin(theta);
+    float2 texCoord = float2(sinTheta * cos(phi), sinTheta * sin(phi));
+    return texCoord * 0.5 + 0.5;
+}
+
 /// 伪随机数生成（与所有预览 Shader 完全一致）
 static float cp_random(float2 uv, float seed) {
     return fract(sin(dot(uv + seed, float2(127.1, 311.7))) * 43758.5453123);
@@ -357,7 +371,20 @@ kernel void capturePipeline(
     constexpr sampler s(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
 
     float2 uv = float2(gid) / float2(outTexture.get_width(), outTexture.get_height());
-    float3 color = inTexture.read(gid).rgb;
+
+    // ── Pass 0: 鱼眼模式 — UV 重映射 + 圆形遮罩（与预览 Shader 完全一致）─────────
+    bool isFisheye = params.fisheyeMode > 0.5;
+    if (isFisheye) {
+        float2 fUV = cp_fisheyeUV(uv, params.aspectRatio);
+        if (fUV.x < 0.0) {
+            // 圆形以外：输出纯黑
+            outTexture.write(float4(0.0, 0.0, 0.0, 1.0), gid);
+            return;
+        }
+        uv = fUV;
+    }
+
+    float3 color = inTexture.read(uint2(uv * float2(inTexture.get_width(), inTexture.get_height()))).rgb;
 
     // ── Pass 1: 色差（Chromatic Aberration）────────────────────────────────
     // Compute Shader 不支持任意纹理采样，色差效果在 CaptureProcessor.swift 中预处理
@@ -441,6 +468,11 @@ kernel void capturePipeline(
     color = cp_grain(color, uv, params.grainAmount, params.grainSize, params.time);
 
     // ── Pass 17: Vignette（暗角）──────────────────────────────────────────────────
-    if (params.vignetteAmount > 0.001) {
+    // 鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗（与预览 Shader 一致）
+    if (params.vignetteAmount > 0.001 && !isFisheye) {
         color *= cp_vignette(uv, params.vignetteAmount);
     }
+
+    // ── 写入输出纹理 ──────────────────────────────────────────────────────────────
+    outTexture.write(float4(color, 1.0), gid);
+}
