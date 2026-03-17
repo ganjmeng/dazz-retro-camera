@@ -202,8 +202,30 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 mainExecutor.execute {
                     try {
                         bindCameraUseCases(owner)
-                        result.success(mapOf("textureId" to entry.id()))
-                        sendEvent("onCameraReady", activeCameraDebugInfo)
+                        // ── FIX: 等待新 renderer 就绪后再返回 ──────────────
+                        // bindCameraUseCases 中 SurfaceProvider 回调在 cameraExecutor 上异步执行，
+                        // 如果立即返回 result.success，Dart 层并行执行的 setCamera()
+                        // 可能在 renderer 创建前执行（glRenderer 为 null），参数丢失。
+                        // 等待 latch 确保 renderer 就绪 + reapplyPresetToRenderer 完成。
+                        val latch = rendererReadyLatch
+                        val textureId = entry.id()
+                        bgExecutor.execute {
+                            try {
+                                val ready = latch?.await(5, java.util.concurrent.TimeUnit.SECONDS) ?: true
+                                if (!ready) {
+                                    Log.w(TAG, "initCamera: renderer ready timeout (5s)")
+                                }
+                                mainExecutor.execute {
+                                    result.success(mapOf("textureId" to textureId))
+                                    sendEvent("onCameraReady", activeCameraDebugInfo)
+                                }
+                            } catch (e: Exception) {
+                                mainExecutor.execute {
+                                    result.error("CAMERA_INIT_FAILED", e.message, null)
+                                    sendEvent("onError", mapOf("message" to (e.message ?: "Unknown error")))
+                                }
+                            }
+                        }
                     } catch (e: Exception) {
                         Log.e(TAG, "bindCameraUseCases failed", e)
                         result.error("CAMERA_INIT_FAILED", e.message, null)

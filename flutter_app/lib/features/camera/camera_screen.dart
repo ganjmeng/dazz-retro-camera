@@ -162,10 +162,25 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       // 一次性请求所有权限（相机 + 相册），再初始化
       await _requestPermissions();
       if (mounted) {
-        // 加载相机 JSON 配置
-        ref.read(cameraAppProvider.notifier).initialize();
+        // 加载相机 JSON 配置（必须 await，确保 _loadCamera → setCamera 在 initCamera 之前完成，
+        // 这样 currentPresetJson 已赋值，reapplyPresetToRenderer 能正确恢复参数）
+        await ref.read(cameraAppProvider.notifier).initialize();
         // 初始化原生相机硬件（获取 textureId，开始预览）
         await ref.read(cameraServiceProvider.notifier).initCamera();
+        // ── FIX: initCamera 返回后 renderer 已就绪，重新发送相机参数确保生效 ──
+        final cameraAfterInit = ref.read(cameraAppProvider).camera;
+        if (cameraAfterInit != null) {
+          await ref.read(cameraServiceProvider.notifier).setCamera(cameraAfterInit);
+          // 同步镜头参数
+          final lensId = ref.read(cameraAppProvider).activeLensId;
+          final lens = cameraAfterInit.lensById(lensId);
+          ref.read(cameraServiceProvider.notifier).updateLensParams(
+            distortion: lens?.distortion ?? 0.0,
+            vignette: lens?.vignette ?? 0.0,
+            zoomFactor: lens?.zoomFactor ?? 1.0,
+            fisheyeMode: lens?.fisheyeMode ?? false,
+          );
+        }
         // 同步清晰度档位对应的原生分辨率（initCamera 默认 1080p，需根据当前档位切换）
         // IMPORTANT: must await — native camera must finish reconfiguring before
         // the loading overlay is dismissed and takePhoto is allowed.
