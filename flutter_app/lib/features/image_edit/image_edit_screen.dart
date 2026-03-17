@@ -1,4 +1,4 @@
-
+// image_edit_screen.dart
 // ─────────────────────────────────────────────────────────────────────────────
 // 设计哲学：Darkroom Aesthetics — 纯黑背景，白色控件，复用相机页所有效果逻辑
 // 底部工具按钮显示/隐藏由当前相机 uiCap 决定，完全复用拍摄页逻辑
@@ -16,7 +16,6 @@ import '../../models/camera_definition.dart';
 import '../camera/camera_notifier.dart';
 import '../camera/camera_config_sheet.dart';
 import '../camera/capture_pipeline.dart';
-import '../camera/preview_renderer.dart' as renderer_lib;
 import 'package:image/image.dart' as image_lib;
 import '../../core/l10n.dart';
 
@@ -131,6 +130,8 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   String? _gpuPreviewPath;       // GPU 处理后的预览图临时文件路径
   bool _gpuProcessing = false;   // 是否正在 GPU 处理中
   int _gpuRequestId = 0;         // 用于取消过期的 GPU 请求
+  // FIX: 记录上一次成功触发 GPU 的 renderParams 签名，避免重复处理
+  String? _lastGpuParamsSignature;
 
   // ── 高清图片缩小后的预览源路径（避免 OOM）──────────────────────────────────
   String? _resizedPreviewPath;   // 缩小到 ≤4096px 的预览源
@@ -220,13 +221,29 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   String get _previewSourcePath => _resizedPreviewPath ?? widget.imagePath;
 
   /// 调用 Native GPU Shader 生成带滤镜效果的预览图
+  /// FIX: 重写并发控制逻辑——
+  ///   - 不再用 _gpuProcessing 标志直接丢弃新请求，改为记录"待处理"标志
+  ///   - 处理完成后若有新请求排队，立即处理最新的请求（保证切换相机后效果刷新）
   Future<void> _refreshGpuPreview() async {
     final st = ref.read(cameraAppProvider);
     final renderParams = st.renderParams;
     if (renderParams == null) return;
 
+    // FIX: 用参数签名做去重，避免相同参数重复触发 GPU（但不阻塞不同参数的请求）
+    final paramsSignature = renderParams.toJson().toString();
+
+    // 如果正在处理中，只递增 requestId（作为"有新请求"信号），让 finally 补偿处理
     final requestId = ++_gpuRequestId;
-    if (_gpuProcessing) return; // 已有请求在处理中，等下一次
+    if (_gpuProcessing) {
+      // 有新请求已排队（requestId 已递增），finally 块会处理
+      return;
+    }
+
+    // FIX: 去重——相同参数且已有预览图时跳过（但 _gpuPreviewPath 为 null 时必须处理）
+    if (_gpuPreviewPath != null && paramsSignature == _lastGpuParamsSignature) {
+      return;
+    }
+
     _gpuProcessing = true;
 
     try {
@@ -235,20 +252,29 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         'params': renderParams.toJson(),
       });
       // 检查请求是否过期（用户可能已经切换了相机/滤镜）
-      if (!mounted || requestId != _gpuRequestId) return;
+      if (!mounted) return;
       if (result != null && result['filePath'] != null) {
         // 删除旧的预览临时文件
         if (_gpuPreviewPath != null) {
           try { File(_gpuPreviewPath!).deleteSync(); } catch (_) {}
         }
-        setState(() => _gpuPreviewPath = result['filePath'] as String);
+        if (mounted) {
+          setState(() {
+            _gpuPreviewPath = result['filePath'] as String;
+            _lastGpuParamsSignature = paramsSignature;
+          });
+        }
       }
     } catch (e) {
       debugPrint('[ImageEditScreen] GPU preview failed: $e');
+      // FIX: GPU 失败时清空签名，下次可以重试
+      _lastGpuParamsSignature = null;
     } finally {
       _gpuProcessing = false;
-      // 如果有新的请求排队（requestId 已递增），立即处理
+      // FIX: 如果有新的请求排队（requestId 已递增），立即处理最新请求
+      // 注意：此处 _gpuProcessing 已经是 false，不会被拦截
       if (mounted && requestId != _gpuRequestId) {
+        // 有更新的请求，递归处理（使用最新的 renderParams）
         _refreshGpuPreview();
       }
     }
@@ -326,13 +352,14 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       const maxDim = CapturePipeline.kMaxDimHigh;
       const jpegQ = CapturePipeline.kJpegQualityHigh;
       // pipeline.process 中跳过色彩处理（useGpu=false + renderParams=null），
-      // 仅做水印合成（相框已取消）
+      // 仅做相框合成 + 水印合成（色彩已由前置 GPU 完成）
+      // FIX: 传入 activeFrameId，修复保存成片时相框失效的问题
       final result = await pipeline.process(
         imagePath: tmpPath,
         useGpu: false,        // 跳过 GPU 色彩处理
         renderParams: null,   // 跳过 Dart 降级色彩处理（色彩已由 GPU 完成）
         selectedRatioId: st.activeRatioId ?? '',
-        selectedFrameId: '',  // 编辑页不使用相框
+        selectedFrameId: st.activeFrameId ?? '',  // FIX: 使用用户选择的相框（原来错误地传 ''）
         selectedWatermarkId: st.activeWatermarkId ?? '',
         frameBackgroundColor: st.frameBackgroundColor,
         watermarkColorOverride: st.watermarkColor,
@@ -443,10 +470,20 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     final st = ref.watch(cameraAppProvider);
     final camera = st.camera;
 
-    // 监听相机/滤镜/参数变化，实时刷新 GPU 预览
+    // FIX: 监听相机/滤镜/参数变化，实时刷新 GPU 预览
+    // 修复：切换相机时 _loadCamera 会先设置 isLoading=true，等 isLoading 变回 false
+    // 且 renderParams 非 null 时才触发 GPU 刷新，避免在相机加载中途触发导致崩溃
     ref.listen<CameraAppState>(cameraAppProvider, (prev, next) {
-      // renderParams 变化时重新生成 GPU 预览（切换相机、滤镜、镜头、曝光、白平衡等）
-      if (prev?.renderParams?.toJson().toString() != next.renderParams?.toJson().toString()) {
+      // 仅在相机加载完成后（isLoading=false）且 renderParams 有变化时刷新
+      if (next.isLoading) return;
+      if (next.renderParams == null) return;
+      final prevSig = prev?.renderParams?.toJson().toString();
+      final nextSig = next.renderParams?.toJson().toString();
+      if (prevSig != nextSig) {
+        // FIX: 切换相机时重置签名缓存，强制重新生成预览（即使参数碰巧相同也要刷新）
+        if (prev?.camera?.id != next.camera?.id) {
+          _lastGpuParamsSignature = null;
+        }
         _refreshGpuPreview();
       }
     });
@@ -569,6 +606,10 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         ),
       );
     }
+
+    // FIX: 相机切换时（isLoading=true）显示加载指示器，避免预览区空白或闪烁
+    final isCameraLoading = st.isLoading;
+
     return Stack(
       children: [
         // 图片预览（可缩放/拖动）
@@ -611,7 +652,15 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
                         ClipRect(
                           child: _buildTransformedImage(st, constraints),
                         ),
-                        // 相框预览已取消（用户要求）
+                        // 相框预览
+                        if (st.activeFrame != null)
+                          IgnorePointer(
+                            child: _FramePreviewOverlay(
+                              frame: st.activeFrame!,
+                              ratioId: st.activeRatioId ?? '',
+                              backgroundColorOverride: st.frameBackgroundColor,
+                            ),
+                          ),
                         if (st.activeWatermark != null && !st.activeWatermark!.isNone)
                           IgnorePointer(
                             child: _WatermarkPreviewOverlay(
@@ -636,6 +685,23 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
             ),
           ),
         ),
+        // FIX: 相机切换加载时显示半透明转圈，告知用户正在处理
+        if (isCameraLoading)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withAlpha(100),
+              child: const Center(
+                child: SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
         // ── 白平衡+曝光胶囊控件（预览区底部，同取景框位置）──
         Positioned(
           left: 0,
@@ -1682,6 +1748,85 @@ class _CropPainter extends CustomPainter {
 enum _CropHandle { topLeft, topRight, bottomLeft, bottomRight, move }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 相框预览 Overlay（在编辑页预览区叠加相框效果）
+// FIX: 新增此 Widget，修复编辑页预览区相框不显示的问题
+// ─────────────────────────────────────────────────────────────────────────────
+class _FramePreviewOverlay extends StatelessWidget {
+  final FrameDefinition frame;
+  final String ratioId;
+  final String? backgroundColorOverride;
+
+  const _FramePreviewOverlay({
+    required this.frame,
+    required this.ratioId,
+    this.backgroundColorOverride,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 解析背景色
+    Color bgColor = const Color(0xFFF5F2EA);
+    final bgHexSrc = (backgroundColorOverride != null && backgroundColorOverride!.isNotEmpty)
+        ? backgroundColorOverride!
+        : frame.backgroundColor;
+    try {
+      if (bgHexSrc.toLowerCase() == 'transparent') {
+        bgColor = Colors.transparent;
+      } else {
+        final hex = bgHexSrc.replaceAll('#', '');
+        bgColor = Color(int.parse('FF$hex', radix: 16));
+      }
+    } catch (_) {}
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final h = constraints.maxHeight;
+        final refSize = math.min(w, h);
+        final scale = refSize / 1080.0;
+
+        // 获取当前比例对应的 inset
+        final activeInset = frame.insetForRatio(ratioId);
+        final topFrac   = (activeInset.top   * scale) / h;
+        final bottomFrac = (activeInset.bottom * scale) / h;
+        final leftFrac  = (activeInset.left  * scale) / w;
+        final rightFrac = (activeInset.right * scale) / w;
+
+        // 用四个矩形条模拟相框边距（上/下/左/右）
+        return Stack(
+          children: [
+            if (topFrac > 0)
+              Positioned(
+                top: 0, left: 0, right: 0,
+                height: topFrac * h,
+                child: ColoredBox(color: bgColor),
+              ),
+            if (bottomFrac > 0)
+              Positioned(
+                bottom: 0, left: 0, right: 0,
+                height: bottomFrac * h,
+                child: ColoredBox(color: bgColor),
+              ),
+            if (leftFrac > 0)
+              Positioned(
+                top: topFrac * h, bottom: bottomFrac * h, left: 0,
+                width: leftFrac * w,
+                child: ColoredBox(color: bgColor),
+              ),
+            if (rightFrac > 0)
+              Positioned(
+                top: topFrac * h, bottom: bottomFrac * h, right: 0,
+                width: rightFrac * w,
+                child: ColoredBox(color: bgColor),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 水印预览 Overlay（复用拍摄页）
 // ─────────────────────────────────────────────────────────────────────────────
 class _WatermarkPreviewOverlay extends StatelessWidget {
@@ -1719,7 +1864,6 @@ class _WatermarkPreviewOverlay extends StatelessWidget {
       case 'top_left': align = Alignment.topLeft; break;
       default: align = Alignment.bottomRight;
     }
-    final fontSize = 12.0;
     return Align(
       alignment: align,
       child: Padding(
@@ -1728,7 +1872,7 @@ class _WatermarkPreviewOverlay extends StatelessWidget {
           watermark.name,
           style: TextStyle(
             color: textColor,
-            fontSize: fontSize,
+            fontSize: 12.0,
             fontWeight: FontWeight.w500,
           ),
         ),
