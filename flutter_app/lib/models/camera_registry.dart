@@ -64,7 +64,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '35mm',
     premium: false,
     sortOrder: 10,
-    iconPath: 'assets/thumbnails/cameras/fxn_r_icon.png',
+    iconPath: 'assets/thumbnails/cameras/fxn_r_icon.jpg',
     description: '模拟 Fujifilm 胶片机质感，暖调色彩，颗粒感丰富。',
     tags: ['胶片', '暖调', '颗粒', 'Fujifilm'],
     samplePhotos: [
@@ -81,7 +81,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '35mm',
     premium: false,
     sortOrder: 20,
-    iconPath: 'assets/thumbnails/cameras/cpm35_icon.png',
+    iconPath: 'assets/thumbnails/cameras/cpm35_icon.jpg',
     description: 'Kodak Gold 200 / ColorPlus 200 风格，暖色复古，轻颗粒，干净出片。90s 傻瓜机日常胶片质感，旅行、街拍、人像通吃。',
     tags: ['胶片', '暖色', '复古', 'Kodak', '35mm', '傻瓜机', '日常'],
     samplePhotos: [
@@ -115,7 +115,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '32mm',
     premium: false,
     sortOrder: 40,
-    iconPath: 'assets/thumbnails/cameras/u300_icon.png',
+    iconPath: 'assets/thumbnails/cameras/u300_icon.jpg',
     description: '一次性相机质感，轻微漏光，边角暗角，胶片颗粒感强烈。',
     tags: ['一次性', '漏光', '颗粒', '胶片'],
     samplePhotos: [
@@ -132,7 +132,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '35mm',
     premium: false,
     sortOrder: 50,
-    iconPath: 'assets/thumbnails/cameras/ccd_r_icon.png',
+    iconPath: 'assets/thumbnails/cameras/ccd_r_icon.jpg',
     description: '2003-2006 早期 CCD 卡片机色调，蓝绿偏色，噪点明显，CCD 味重。',
     tags: ['CCD', '蓝绿', '噪点', '早期数码', '2003'],
     samplePhotos: [
@@ -149,7 +149,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '38mm',
     premium: false,
     sortOrder: 60,
-    iconPath: 'assets/thumbnails/cameras/d_classic_icon.png',
+    iconPath: 'assets/thumbnails/cameras/d_classic_icon.jpg',
     description: '经典数码相机色彩风格，自然还原，日常随拍利器。',
     tags: ['自然', '日常', '清晰', '数码'],
     samplePhotos: [
@@ -166,7 +166,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '28mm',
     premium: false,
     sortOrder: 70,
-    iconPath: 'assets/thumbnails/cameras/grd_r_icon.png',
+    iconPath: 'assets/thumbnails/cameras/grd_r_icon.jpg',
     description: '经典 GR 数码相机风格，锐利通透，街头纪实首选。',
     tags: ['街头', '纪实', '锐利', 'CCD'],
     samplePhotos: [
@@ -183,7 +183,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '50mm',
     premium: false,
     sortOrder: 80,
-    iconPath: 'assets/thumbnails/cameras/fqs_icon.png',
+    iconPath: 'assets/thumbnails/cameras/fqs_icon.jpg',
     description: 'Fuji Superia 400 + Kodak Portra 400 双胶卷融合，柔和绿调，肤色自然，颗粒感明显。2000年代 35mm SLR 经典质感。',
     tags: ['胶片', '绿调', '柔和', 'Fuji', 'Kodak', '35mm', 'SLR'],
     samplePhotos: [
@@ -200,7 +200,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '35mm',
     premium: false,
     sortOrder: 90,
-    iconPath: 'assets/thumbnails/cameras/bw_classic_icon.png',
+    iconPath: 'assets/thumbnails/cameras/bw_classic_icon.jpg',
     description: '黑白胶片经典模拟，高对比度，光影层次极致表达。',
     tags: ['黑白', '高对比', '经典', '胶片'],
     samplePhotos: [
@@ -217,7 +217,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '35mm',
     premium: false,
     sortOrder: 100,
-    iconPath: 'assets/thumbnails/cameras/inst_sq_icon.png',
+    iconPath: 'assets/thumbnails/cameras/inst_sq_icon.jpg',
     description: '方形构图拍立得风格，复古边框，即拍即得的温暖感。',
     tags: ['方形', '边框', '复古', '拍立得'],
     samplePhotos: [
@@ -234,7 +234,7 @@ const List<CameraEntry> kAllCameras = [
     focalLengthLabel: '10mm',
     premium: false,
     sortOrder: 110,
-    iconPath: 'assets/thumbnails/cameras/fisheye_icon.png',
+    iconPath: 'assets/thumbnails/cameras/fisheye_icon.jpg',
     description: '鱼眼镜头极致畸变，超广角视野，街头滑板文化美学。',
     tags: ['鱼眼', '畸变', '创意', '超广角'],
     samplePhotos: [

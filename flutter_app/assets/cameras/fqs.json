@@ -328,8 +328,8 @@
     "videoBitrate": 8000000
   },
   "assets": {
-    "thumbnail": "assets/thumbnails/cameras/fqs_icon.png",
-    "icon": "assets/thumbnails/cameras/fqs_icon.png"
+    "thumbnail": "assets/thumbnails/cameras/fqs_icon.jpg",
+    "icon": "assets/thumbnails/cameras/fqs_icon.jpg"
   },
   "meta": {
     "version": "1.0",

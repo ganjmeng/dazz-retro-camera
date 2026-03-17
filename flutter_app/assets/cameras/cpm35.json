@@ -299,8 +299,8 @@
     "videoBitrate": 8000000
   },
   "assets": {
-    "thumbnail": "assets/thumbnails/cameras/cpm35_icon.png",
-    "icon": "assets/thumbnails/cameras/cpm35_icon.png"
+    "thumbnail": "assets/thumbnails/cameras/cpm35_icon.jpg",
+    "icon": "assets/thumbnails/cameras/cpm35_icon.jpg"
   },
   "meta": {
     "version": "1.0",

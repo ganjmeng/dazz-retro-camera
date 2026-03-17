@@ -525,7 +525,7 @@
   },
   "assets": {
     "thumbnail": "assets/thumbnails/cameras/d_classic.jpg",
-    "icon": "assets/thumbnails/cameras/d_classic_icon.png"
+    "icon": "assets/thumbnails/cameras/d_classic_icon.jpg"
   },
   "meta": {
     "version": "final",

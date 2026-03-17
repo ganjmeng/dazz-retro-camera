@@ -234,7 +234,7 @@
   },
   "assets": {
     "thumbnail": "assets/thumbnails/cameras/fisheye.jpg",
-    "icon": "assets/thumbnails/cameras/fisheye_icon.png"
+    "icon": "assets/thumbnails/cameras/fisheye_icon.jpg"
   },
   "meta": {
     "version": "final",

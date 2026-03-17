@@ -563,7 +563,7 @@
   },
   "assets": {
     "thumbnail": "assets/thumbnails/cameras/u300.jpg",
-    "icon": "assets/thumbnails/cameras/u300_icon.png"
+    "icon": "assets/thumbnails/cameras/u300_icon.jpg"
   },
   "meta": {
     "version": "final",
