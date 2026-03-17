@@ -1,0 +1,28 @@
+== 成片倒置 180° 根因分析 ==
+
+问题链：
+1. CameraX 拍摄 JPEG → 写入 EXIF Orientation=6（需旋转90°）
+2. CaptureGLProcessor.processImage:
+   - BitmapFactory.decodeFile → 得到未旋转的原始像素
+   - applyExifRotation → 根据 EXIF 旋转 90° → 现在像素方向正确
+   - GPU 渲染 → 输出 JPEG（无 EXIF 标签，像素已正确）
+3. Dart 层 capture_pipeline.dart:
+   - 读取 GPU 输出的 JPEG（像素已正确，无 EXIF）
+   - 但 deviceQuarter != 0，又做了一次旋转！
+
+问题：GPU 管线已经通过 EXIF 修正了方向，但 Dart 层不知道这一点，
+又根据 deviceQuarter 做了一次旋转 → 双重旋转 → 成片倒置。
+
+修复方案：
+方案 A：GPU 管线不做 EXIF 旋转，让 Dart 层统一处理
+方案 B：GPU 管线做了 EXIF 旋转后，告知 Dart 层跳过 deviceQuarter 旋转
+
+方案 A 更安全：移除 applyExifRotation，保持原有行为。
+因为 Dart 层的 deviceQuarter 旋转是根据设备传感器方向计算的，
+与 EXIF Orientation 是同一个信息的不同来源。
+
+== 预览效果消失根因 ==
+需要检查 reapplyPresetToRenderer 是否正确工作。
+
+== 横条纹根因 ==
+glFinish() 可能不够，需要检查 FBO 纹理尺寸是否与预览尺寸匹配。
