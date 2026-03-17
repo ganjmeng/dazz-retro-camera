@@ -1,0 +1,19 @@
+斜纹 V2 分析（上下运动的轻微斜条纹）
+========================================
+
+已修复：左右运动的彩色斜纹 → 两步渲染（OES→FBO→效果）有效
+残留：轻微上下运动的斜条纹
+
+根因分析：
+- Pass 1 (OES→FBO) 和 Pass 2 (FBO→屏幕) 之间没有 glFinish/glFlush 同步
+- 在 tile-based GPU 上，Pass 1 的 FBO 写入可能尚未完成，Pass 2 就开始从 FBO 纹理读取
+- 导致 Pass 2 读到部分更新的 FBO 数据（上半帧是新数据，下半帧是旧数据）
+- 表现为上下运动的水平/斜条纹
+
+修复方案：
+- 在 Pass 1 完成后、Pass 2 开始前，插入 glFinish() 确保 FBO 写入完成
+- 或者使用 glFenceSync + glClientWaitSync（更高效但更复杂）
+- 最简单有效：glFinish()
+
+Pass 2 的 vertex shader 使用了单位矩阵（IDENTITY_MATRIX），不需要 ST 变换
+这是正确的，因为 FBO 纹理已经是正确方向的 2D 纹理
