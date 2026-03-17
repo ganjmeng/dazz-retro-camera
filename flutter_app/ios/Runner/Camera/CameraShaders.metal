@@ -84,7 +84,8 @@ struct CCDParams {
 /// 计算暗角强度
 float vignetteEffect(float2 uv, float amount) {
     float2 d = uv - 0.5;
-    return 1.0 - dot(d, d) * amount * 2.5;
+    float dist = length(d) * 2.0;
+    return 1.0 - smoothstep(1.0 - amount, 1.5, dist) * amount;
 }
 
 /// 简单的伪随机噪点生成

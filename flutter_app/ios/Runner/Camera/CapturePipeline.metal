@@ -327,19 +327,20 @@ static float3 cp_developmentSoften(float3 color, float2 uv, float softness,
     return mix(color, blurred, softness * 0.5);
 }
 
-/// Film Grain（胶片颗粒，与预览一致：fract(sin) 高频白噪声）
+/// Film Grain（成片专用：hash 低频颗粒，更接近真实胶片质感）
 static float3 cp_grain(float3 color, float2 uv, float amount, float grainSize, float time) {
     if (amount < 0.001) return color;
-    // 与预览 Shader 一致：使用 fract(sin) 高频白噪声，帧率锁定到 24fps
-    float t24 = floor(time * 24.0) / 24.0;
-    float grain = fract(sin(dot(uv + t24, float2(12.9898, 78.233))) * 43758.5453) - 0.5;
-    return clamp(color + float3(grain * amount * 0.25), 0.0, 1.0);
+    float grain  = cp_random(uv * 500.0, time * 0.1) - 0.5;
+    float grain2 = cp_random(uv * 250.0, time * 0.07 + time * 0.13) - 0.5;
+    float g = mix(grain, grain2, 0.3);
+    return clamp(color + float3(g * amount * 0.25), 0.0, 1.0);
 }
 
-/// Vignette（暗角，与预览一致：点积二次衰减）
+/// Vignette（smoothstep 暗角，与预览统一）
 static float cp_vignette(float2 uv, float amount) {
     float2 d = uv - 0.5;
-    return 1.0 - dot(d, d) * amount * 2.5;
+    float dist = length(d) * 2.0;
+    return 1.0 - smoothstep(1.0 - amount, 1.5, dist) * amount;
 }
 
 // ── 主内核函数 ────────────────────────────────────────────────────────────

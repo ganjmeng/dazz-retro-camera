@@ -176,7 +176,8 @@ vec3 applyTemperature(vec3 c, float shift) {
 
 float vignetteEffect(vec2 uv, float amount) {
     vec2 d = uv - 0.5;
-    return 1.0 - dot(d, d) * amount * 2.5;
+    float dist = length(d) * 2.0;
+    return 1.0 - smoothstep(1.0 - amount, 1.5, dist) * amount;
 }
 
 // Unsharp Mask: 3x3 高斯模糊 + 差值增强

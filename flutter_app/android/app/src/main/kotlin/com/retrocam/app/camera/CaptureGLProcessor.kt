@@ -365,28 +365,30 @@ vec3 applyPaperTexture(vec3 c, vec2 uv, float amount, float time) {
     return clamp(c * paper * (1.0 + amount * 0.1) - vec3(amount * 0.02), 0.0, 1.0);
 }
 
-// ── Pass 17: Film Grain（与预览一致：使用 random 函数）───────────────────────────
+// ── Pass 17: Film Grain（成片专用：hash 低频颗粒，更接近真实胶片质感）────────────
 vec3 applyGrain(vec3 c, vec2 uv, float amount, float time) {
     if (amount < 0.001) return c;
-    // 与预览 Shader 一致：使用 fract(sin) 高频白噪声，帧率锁定到 24fps
-    float grain = fract(sin(dot(uv + floor(time * 24.0) / 24.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
-    return clamp(c + grain * amount * 0.25, 0.0, 1.0);
+    float grain = hash(uv * 500.0 + vec2(time * 0.1)) - 0.5;
+    float grain2 = hash(uv * 250.0 + vec2(time * 0.07, time * 0.13)) - 0.5;
+    float g = mix(grain, grain2, 0.3);
+    return clamp(c + g * amount * 0.25, 0.0, 1.0);
 }
 
-// ── Pass 18: Digital Noise（与预览一致：明度+色度独立计算）────────────────────
+// ── Pass 18: Digital Noise（成片专用：hash 暗部增强噪点）────────────────────
 vec3 applyNoise(vec3 c, vec2 uv, float amount, float time) {
     if (amount < 0.001) return c;
     float lum   = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    float noise = fract(sin(dot(uv + time, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+    float noise = hash(uv * 800.0 + vec2(time)) - 0.5;
     float dark  = 1.0 - lum;
     return clamp(c + noise * amount * 0.2 * dark, 0.0, 1.0);
 }
 
-// ── Pass 19: Vignette（与预览一致：点积二次衰减）─────────────────────────────
+// ── Pass 19: Vignette（smoothstep 暗角，与预览统一）─────────────────────────
 vec3 applyVignette(vec3 c, vec2 uv, float amount) {
     if (amount < 0.001) return c;
     vec2 d = uv - 0.5;
-    float vignette = 1.0 - dot(d, d) * amount * 2.5;
+    float dist = length(d) * 2.0;
+    float vignette = 1.0 - smoothstep(1.0 - amount, 1.5, dist) * amount;
     return clamp(c * vignette, 0.0, 1.0);
 }
 

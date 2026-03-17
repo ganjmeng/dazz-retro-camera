@@ -1,0 +1,37 @@
+竞品调研关键发现
+=================
+
+1. Grain Camera (Android, 4.4★, 10K+ downloads)
+   - 明确宣传 "Designed for consistency across preview and capture"
+   - 使用同一套 OpenGL ES 2.0 管线处理预览和成片
+   - "Real-time film looks: Live OpenGL preview that matches the captured result"
+   - 即预览和成片使用完全相同的 Shader 代码
+
+2. Adobe Project Indigo (iOS, Adobe Research)
+   - 强调 "true WYSIWYG (What You See Is What You Get)"
+   - 预览和成片使用相同的 tone mapping / color profile
+   - 但成片做了额外的多帧合成、超分辨率等增强
+   - 核心色彩管线保持一致
+
+3. Darkroom (iOS)
+   - 重建了图片加载和生成基础设施
+   - 编辑和导出共享相同的 image provider
+   - 导出时暂停其他图像处理，确保一致性
+   - 核心渲染管线一致，导出只是分辨率更高
+
+4. 胶片颗粒最佳实践 (vmoldo.com 深度分析)
+   - 真实胶片颗粒是有机形状，大小不均匀，分布不均匀
+   - 数字噪声是方形的、均匀的 — 这是 grain 和 noise 的本质区别
+   - 不应该用简单的噪声叠加来模拟颗粒
+   - 最佳方案：使用扫描的真实胶片颗粒叠加层
+   - 颗粒在高光和深阴影中应该更少，中间调更多
+   - 颗粒应该是图像中最小的细节
+
+结论
+====
+行业最佳实践是：
+- 预览和成片使用同一套核心 Shader（WYSIWYG）
+- 成片可以在预览基础上做额外增强（更高分辨率、更精细的降噪）
+- 但核心色彩/对比度/暗角等效果必须一致
+- 颗粒算法：成片用更高质量的算法（hash/扫描叠加层），预览用简化版（sin 噪声）是合理的
+- 暗角算法：两者应该一致，否则用户会觉得"拍出来不一样"
