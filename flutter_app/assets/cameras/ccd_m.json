@@ -42,7 +42,7 @@
     "developmentSoftness": 0.0,
     "chemicalIrregularity": 0.0,
     "paperTexture": 0.0,
-    "skinHueProtect": 0.0,
+    "skinHueProtect": false,
     "skinSatProtect": 0.95,
     "skinLumaSoften": 0.0,
     "skinRedLimit": 1.0,

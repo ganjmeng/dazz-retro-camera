@@ -52,7 +52,7 @@
     "colorBiasG": 0.0,
     "colorBiasB": 0.0,
     "toneCurveStrength": 1.0,
-    "skinHueProtect": 0.0,
+    "skinHueProtect": false,
     "skinSatProtect": 1.0,
     "skinLumaSoften": 0.0,
     "skinRedLimit": 1.0,

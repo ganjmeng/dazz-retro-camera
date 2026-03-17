@@ -5,9 +5,18 @@
 import 'dart:convert';
 import 'package:flutter/services.dart';
 
+/// 兼容 bool 和 num 类型的 JSON bool 字段解析器
+/// 防止 JSON 中 1.0/0.0 等数值类型导致 Dart `as bool?` 强转失败
+bool _parseBoolField(dynamic val) {
+  if (val == null) return false;
+  if (val is bool) return val;
+  if (val is num) return val != 0;
+  return false;
+}
+
 // ─────────────────────────────────────────────
 // Top-level model
-// ─────────────────────────────────────────────
+// ──────────────────────────────────────────────
 
 class CameraDefinition {
   final String id;
@@ -297,7 +306,7 @@ class DefaultLook {
     irregFreq2: (json["irregFreq2"] as num? ?? 1.7).toDouble(),
     irregWeight1: (json["irregWeight1"] as num? ?? 0.6).toDouble(),
     irregWeight2: (json["irregWeight2"] as num? ?? 0.4).toDouble(),
-    skinHueProtect: json['skinHueProtect'] as bool? ?? false,
+    skinHueProtect: _parseBoolField(json['skinHueProtect']),
     skinSatProtect: (json['skinSatProtect'] as num? ?? 1.0).toDouble(),
     skinLumaSoften: (json['skinLumaSoften'] as num? ?? 0).toDouble(),
     skinRedLimit: (json['skinRedLimit'] as num? ?? 1.0).toDouble(),

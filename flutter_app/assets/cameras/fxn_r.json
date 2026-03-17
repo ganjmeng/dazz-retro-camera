@@ -42,7 +42,7 @@
     "cornerWarmShift": -0.015,
     "developmentSoftness": 0.02,
     "chemicalIrregularity": 0.01,
-    "skinHueProtect": 1.0,
+    "skinHueProtect": true,
     "skinSatProtect": 0.96,
     "skinLumaSoften": 0.03,
     "skinRedLimit": 1.04,

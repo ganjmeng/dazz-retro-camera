@@ -50,7 +50,7 @@
     "leftRightBias": 0.0,
     "developmentSoftness": 0.0,
     "chemicalIrregularity": 0.008,
-    "skinHueProtect": 1.0,
+    "skinHueProtect": true,
     "skinSatProtect": 0.94,
     "skinLumaSoften": 0.03,
     "skinRedLimit": 1.02,

@@ -50,7 +50,7 @@
     "topBottomBias": 0.0,
     "leftRightBias": 0.0,
     "highlightWarmAmount": 0.07,
-    "skinHueProtect": 1.0,
+    "skinHueProtect": true,
     "skinSatProtect": 0.9,
     "skinLumaSoften": 0.04,
     "skinRedLimit": 1.05,
