@@ -3,6 +3,14 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'capture_pipeline_ext.dart';
+import 'pipelines/instc_pipeline.dart';
+import 'pipelines/sqc_pipeline.dart';
+import 'pipelines/fqs_pipeline.dart';
+import 'pipelines/cpm35_pipeline.dart';
+import 'pipelines/grdr_pipeline.dart';
+import 'pipelines/bwclassic_pipeline.dart';
+import 'pipelines/u300_pipeline.dart';
+import 'pipelines/ccdr_pipeline.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -88,37 +96,62 @@ class CapturePipeline {
       final frame = await codec.getNextFrame();
       var srcImage = frame.image;
 
-      // ── 2c. 应用 GL Shader 中缺失的效果（在 Canvas 绘制前，仅作用于照片本身） ─────
+      // ── 2c. 应用各相机专属的成片管线（在 Canvas 绘制前，仅作用于照片本身） ─────
       if (renderParams != null) {
-        debugPrint("[CapturePipeline] Applying missing shader effects to srcImage...");
-        // 注意：这些效果是串联应用的，顺序很重要，应尽量与 Shader 的 Pass 顺序保持一致
-        // 1. Tone Curve
+        debugPrint('[CapturePipeline] Applying camera-specific pipeline for: ${camera.id}');
+        // 1. 首先应用所有相机共用的基础 Tone Curve
         srcImage = await drawToneCurve(srcImage);
-        // 2. Highlight Rolloff
-        if (renderParams.highlightRolloff > 0.001) {
-          srcImage = await drawHighlightRolloff(srcImage, renderParams.highlightRolloff);
+        // 2. 按相机 ID 分发到专属管线（包含该相机特有的 Highlight Rolloff、传感器非均匀性、肤色保护等）
+        switch (camera.id) {
+          case 'inst_c':
+          case 'inst_s':
+            srcImage = await processInstC(srcImage, renderParams);
+            break;
+          case 'sqc':
+          case 'inst_sq':
+            srcImage = await processSQC(srcImage, renderParams);
+            break;
+          case 'fqs':
+            srcImage = await processFQS(srcImage, renderParams);
+            break;
+          case 'cpm35':
+            srcImage = await processCPM35(srcImage, renderParams);
+            break;
+          case 'grd_r':
+            srcImage = await processGRDR(srcImage, renderParams);
+            break;
+          case 'bw_classic':
+            srcImage = await processBWClassic(srcImage, renderParams);
+            break;
+          case 'u300':
+            srcImage = await processU300(srcImage, renderParams);
+            break;
+          case 'ccd_r':
+          case 'ccd_m':
+            srcImage = await processCCDR(srcImage, renderParams);
+            break;
+          default:
+            // 通用相机（fxn_r、d_classic、fisheye 等）：使用 renderParams 中的通用参数
+            if (renderParams.highlightRolloff > 0.001) {
+              srcImage = await drawHighlightRolloff(srcImage, renderParams.highlightRolloff);
+            }
+            if (renderParams.centerGain > 0.001 || renderParams.edgeFalloff > 0.001) {
+              srcImage = await drawSensorNonUniformity(srcImage, renderParams.centerGain, renderParams.edgeFalloff);
+            }
+            if (renderParams.skinHueProtect > 0.5) {
+              srcImage = await drawSkinHueProtect(srcImage, renderParams.skinHueProtect);
+            }
+            if (renderParams.chemicalIrregularity > 0.001) {
+              srcImage = await drawChemicalIrregularity(srcImage, renderParams.chemicalIrregularity);
+            }
+            if (renderParams.paperTexture > 0.001) {
+              srcImage = await drawPaperTexture(srcImage, renderParams.paperTexture);
+            }
+            if (renderParams.developmentSoftness > 0.001) {
+              srcImage = await drawDevelopmentSoftness(srcImage, renderParams.developmentSoftness);
+            }
         }
-        // 3. Sensor Non-uniformity (Center Gain & Edge Falloff)
-        if (renderParams.centerGain > 0.001 || renderParams.edgeFalloff > 0.001) {
-          srcImage = await drawSensorNonUniformity(srcImage, renderParams.centerGain, renderParams.edgeFalloff);
-        }
-        // 4. Skin Hue Protection
-        if (renderParams.skinHueProtect > 0.5) {
-          srcImage = await drawSkinHueProtect(srcImage, renderParams.skinHueProtect);
-        }
-        // 5. Chemical Irregularity
-        if (renderParams.chemicalIrregularity > 0.001) {
-          srcImage = await drawChemicalIrregularity(srcImage, renderParams.chemicalIrregularity);
-        }
-        // 6. Paper Texture
-        if (renderParams.paperTexture > 0.001) {
-          srcImage = await drawPaperTexture(srcImage, renderParams.paperTexture);
-        }
-        // 7. Development Softness
-        if (renderParams.developmentSoftness > 0.001) {
-          srcImage = await drawDevelopmentSoftness(srcImage, renderParams.developmentSoftness);
-        }
-        debugPrint("[CapturePipeline] Missing effects applied to srcImage.");
+        debugPrint('[CapturePipeline] Camera-specific pipeline applied.');
       }
 
       final srcW = srcImage.width.toDouble();
