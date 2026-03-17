@@ -63,7 +63,7 @@ void main() {
         // 仅做一次采样，将 OES 纹理内容拷贝到 FBO 上的普通 2D 纹理
         private const val COPY_FRAGMENT_SHADER = """#version 300 es
 #extension GL_OES_EGL_image_external_essl3 : require
-precision mediump float;
+precision highp float;
 in  vec2 vTexCoord;
 out vec4 fragColor;
 uniform samplerExternalOES uCameraTexture;
@@ -75,7 +75,7 @@ void main() {
         // 关键变化：uInputTexture 是 sampler2D 而非 samplerExternalOES
         // 这保证了所有采样都来自同一帧的稳定数据
         private const val FRAGMENT_SHADER = """#version 300 es
-precision mediump float;
+precision highp float;
 
 in  vec2 vTexCoord;
 out vec4 fragColor;
