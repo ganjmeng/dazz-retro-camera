@@ -29,7 +29,7 @@ import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
-import com.retrocam.app.camera.CaptureProcessor
+import com.retrocam.app.camera.CaptureGLProcessor
 import io.flutter.view.TextureRegistry
 import java.io.File
 import java.text.SimpleDateFormat
@@ -38,7 +38,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware {
-    private var captureProcessor: CaptureProcessor? = null
+    private var captureProcessor: CaptureGLProcessor? = null
 
     companion object {
         private const val TAG = "CameraPlugin"
@@ -157,7 +157,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "dispose"            -> handleDispose(result)
             "processWithGpu"   -> {
                 if (captureProcessor == null) {
-                    captureProcessor = CaptureProcessor(flutterPluginBinding.applicationContext)
+                    captureProcessor = CaptureGLProcessor(flutterPluginBinding.applicationContext)
                 }
                 handleProcessWithGpu(call, result)
             }
@@ -908,10 +908,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     // ─────────────────────────────────────────────
     // dispose
     // ─────────────────────────────────────────────
+    // ── OpenGL ES Compute Pipeline ───────────────────────────────────────
 
-    // ── RenderScript Compute Pipeline ───────────────────────────────────
-
-        private fun handleProcessWithGpu(call: MethodCall, result: MethodChannel.Result) {
+    private fun handleProcessWithGpu(call: MethodCall, result: MethodChannel.Result) {
         bgExecutor.execute {
             val filePath = call.argument<String>("filePath")
             val params = call.argument<Map<String, Any>>("params")
@@ -926,7 +925,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 if (newPath != null) {
                     result.success(mapOf("filePath" to newPath))
                 } else {
-                    result.error("PROCESS_FAILED", "RenderScript processing failed", null)
+                    result.error("PROCESS_FAILED", "OpenGL ES processing failed", null)
                 }
             }
         }
