@@ -569,6 +569,3 @@ extension RetroCamPlugin: FlutterStreamHandler {
 
 
 // ── Metal Compute Pipeline ───────────────────────────────────────────
-
-
-}

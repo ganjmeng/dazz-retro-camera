@@ -312,8 +312,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     setState(() => _showTransition = true);
     // 等待淡入动画完成再执行操作
     await Future.delayed(const Duration(milliseconds: 200));
-    // await action，确保相机加载完成后再淡出黑屏
-    await action();
+    // await action，最多等待 2 秒，防止原生层无响应时永久卡黑屏
+    await Future.value(action()).timeout(
+      const Duration(seconds: 2),
+      onTimeout: () {},
+    );
     // 持续黑屏一段时间，然后淡出
     _transitionTimer = Timer(duration, () {
       if (mounted) setState(() => _showTransition = false);

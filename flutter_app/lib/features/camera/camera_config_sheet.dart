@@ -256,34 +256,11 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
     with SingleTickerProviderStateMixin {
   // Tab 已移除
   final ScrollController _cameraScrollCtrl = ScrollController();
-  String? _lastScrolledCameraId; // 避免重复滚动
 
   @override
   void dispose() {
     _cameraScrollCtrl.dispose();
     super.dispose();
-  }
-
-  /// 滚动相机列表使当前相机可见
-  void _scrollToActiveCamera(List<CameraEntry> orderedCameras, String activeCameraId) {
-    if (_lastScrolledCameraId == activeCameraId) return;
-    final idx = orderedCameras.indexWhere((c) => c.id == activeCameraId);
-    if (idx < 0) return;
-    _lastScrolledCameraId = activeCameraId;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_cameraScrollCtrl.hasClients) return;
-      // 每个 cell 约 80px + 12px 间距 = 92px，左 padding 16px
-      const cellW = 80.0;
-      const sepW  = 12.0;
-      const padL  = 16.0;
-      final targetOffset = padL + idx * (cellW + sepW) - 16.0;
-      final maxOffset = _cameraScrollCtrl.position.maxScrollExtent;
-      _cameraScrollCtrl.animateTo(
-        targetOffset.clamp(0.0, maxOffset),
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeOut,
-      );
-    });
   }
 
   @override
@@ -385,9 +362,6 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
       orderedCameras = List.from(kAllCameras);
     }
 
-    // 每次建立列表时自动滚动到当前相机
-    _scrollToActiveCamera(orderedCameras, st.activeCameraId);
-
     return SizedBox(
       height: 110,
       child: ListView.separated(
@@ -408,9 +382,6 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
             isFavorite: isFav,
             onTap: () {
               HapticFeedback.selectionClick();
-              // 点击的相机必然在屏幕内，标记为已处理，避免触发不必要的滚动动画
-              // 滚动动画期间会消耗触摸事件，导致下次点击被吞掉
-              _lastScrolledCameraId = entry.id;
               final onSwitch = widget.onCameraSwitch;
               if (onSwitch != null) {
                 // 有 loading callback 时：先触发动画，再执行切换
@@ -2597,3 +2568,5 @@ class _HueSliderPainter extends CustomPainter {
   @override
   bool shouldRepaint(_HueSliderPainter old) => old.hue != hue;
 }
+
+// ── End of _SubPanelState ──
