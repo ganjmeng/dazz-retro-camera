@@ -39,8 +39,7 @@ class CameraEntry {
 }
 
 /// 默认相机排序（用户未自定义时使用，重置时恢复此顺序）
-/// 顺序：FXN-R, CPM35, Inst C, U300, CCD-R, D Classic, GRD-R, FQS, BW Classic, Inst SQC
-/// 其余相机（fisheye, inst_s 等）追加到末尾
+/// 顺序：FXN-R, CPM35, Inst C, U300, CCD-R, D Classic, GRD-R, FQS, BW Classic, Inst SQC, FISHEYE
 const List<String> kDefaultCameraOrder = [
   'fxn_r',
   'cpm35',
@@ -52,9 +51,7 @@ const List<String> kDefaultCameraOrder = [
   'fqs',
   'bw_classic',
   'sqc',
-  // 其余相机
   'fisheye',
-  'inst_s',
 ];
 
 /// All registered cameras. Add new cameras here.
@@ -244,23 +241,6 @@ const List<CameraEntry> kAllCameras = [
       'assets/samples/fisheye_sample_1.jpg',
       'assets/samples/fisheye_sample_2.jpg',
       'assets/samples/fisheye_sample_3.jpg',
-    ],
-  ),
-  CameraEntry(
-    id: 'inst_s',
-    name: 'INST S',
-    assetPath: 'assets/cameras/inst_s.json',
-    category: 'instant',
-    focalLengthLabel: '60mm',
-    premium: false,
-    sortOrder: 120,
-    iconPath: 'assets/thumbnails/cameras/inst_s_icon.png',
-    description: 'Instax 系列宽幅拍立得，横版构图，柔和粉调色彩。',
-    tags: ['宽幅', '粉调', '柔和', '拍立得'],
-    samplePhotos: [
-      'assets/samples/inst_s_sample_1.jpg',
-      'assets/samples/inst_s_sample_2.jpg',
-      'assets/samples/inst_s_sample_3.jpg',
     ],
   ),
 ];

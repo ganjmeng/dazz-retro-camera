@@ -426,9 +426,10 @@ void main() {
     // ── 相机输入 SurfaceTexture ──────────────────────────────────────────────
     private var inputSurfaceTexture: SurfaceTexture? = null
     private var inputSurface: Surface? = null
-
-    // ── 当前相机 ID（用于切换专用 Shader）────────────────────────────────────
+    // ── 当前相机 ID（用于切换专用 Shader）────────────────────────────────────────────
     @Volatile private var currentCameraId: String = ""
+    // 待处理的相机 ID（快速连续切换时只保留最新的，避免积压多个重编译任务）
+    @Volatile private var pendingCameraId: String = ""
 
     // ── 渲染参数 ─────────────────────────────────────────────────────────────
     @Volatile private var contrast: Float = 1.0f
@@ -660,9 +661,10 @@ void main() {
 
     // ── 渲染 ─────────────────────────────────────────────────────────────────
 
-    private fun renderFrame() {
+     private fun renderFrame() {
         if (!initialized.get()) return
-
+        // shader 重编译期间 programId 暂时为 0，跳过本帧避免黑屏（保留上一帧画面）
+        if (programId == 0) return
         // 每帧都重新激活 EGL context（确保在 GL 线程上）
         if (!EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) {
             Log.w(TAG, "renderFrame: eglMakeCurrent failed: 0x${Integer.toHexString(EGL14.eglGetError())}")
@@ -809,8 +811,15 @@ void main() {
     fun setCameraId(cameraId: String) {
         if (currentCameraId == cameraId) return // 同一相机无需重编译
         currentCameraId = cameraId
+        pendingCameraId = cameraId   // 记录最新目标 ID，快速切换时只执行最新的
         if (!initialized.get()) return // 未初始化时只记录 ID，initialize() 会用正确的 Shader
         glExecutor.execute {
+            // 如果队列里还有更新的任务，跳过本次重编译（避免无效的中间状态）
+            val targetId = pendingCameraId
+            if (targetId != cameraId) {
+                Log.d(TAG, "setCameraId: skipping stale recompile for $cameraId, pending=$targetId")
+                return@execute
+            }
             if (!EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) return@execute
             // 删除旧 program
             if (programId != 0) {

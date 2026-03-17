@@ -3447,7 +3447,6 @@ const _kPhotoCameras = [
   _CameraItem(id: 'ccd_m', name: 'CCD M', emoji: '📸'),
   _CameraItem(id: 'd_classic', name: 'D Classic', emoji: '📷'),
   _CameraItem(id: 'inst_c', name: 'INST C', emoji: '🎞'),
-  _CameraItem(id: 'inst_s', name: 'INST S', emoji: '🎞'),
   _CameraItem(id: 'u300', name: 'U300', emoji: '📷'),
   _CameraItem(id: 'fisheye', name: 'FISHEYE', emoji: '🔵'),
 ];
