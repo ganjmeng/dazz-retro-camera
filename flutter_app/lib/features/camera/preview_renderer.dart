@@ -118,6 +118,39 @@ class PreviewRenderParams {
 
   double get paperTexture => defaultLook.paperTexture.clamp(0.0, 1.0);
   double get developmentSoftness => defaultLook.developmentSoftness.clamp(0.0, 1.0);
+
+  Map<String, dynamic> toJson() => {
+        'cameraId': defaultLook.id,
+        'contrast': effectiveContrast,
+        'saturation': effectiveSaturation,
+        'temperatureShift': effectiveTemperature,
+        'tintShift': effectiveTint,
+        'highlights': effectiveHighlights,
+        'shadows': effectiveShadows,
+        'whites': effectiveWhites,
+        'blacks': effectiveBlacks,
+        'clarity': effectiveClarity,
+        'vibrance': effectiveVibrance,
+        'colorBiasR': effectiveColorBiasR,
+        'colorBiasG': effectiveColorBiasG,
+        'colorBiasB': effectiveColorBiasB,
+        'grainAmount': effectiveGrain,
+        'noiseAmount': noiseAmount,
+        'vignetteAmount': effectiveVignette,
+        'chromaticAberration': effectiveChromaticAberration,
+        'bloomAmount': effectiveBloom,
+        'highlightRolloff': highlightRolloff,
+        'paperTexture': paperTexture,
+        'edgeFalloff': edgeFalloff,
+        'cornerWarmShift': defaultLook.cornerWarmShift, // 直接从 defaultLook 读取
+        'centerGain': centerGain,
+        'developmentSoftness': developmentSoftness,
+        'chemicalIrregularity': chemicalIrregularity,
+        'skinHueProtect': skinHueProtect,
+        'skinSatProtect': defaultLook.skinSatProtect,
+        'skinLumaSoften': defaultLook.skinLumaSoften,
+        'skinRedLimit': defaultLook.skinRedLimit,
+      };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

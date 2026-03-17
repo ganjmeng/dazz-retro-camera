@@ -902,26 +902,24 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     // ── RenderScript Compute Pipeline ───────────────────────────────────
 
         private fun handleProcessWithGpu(call: MethodCall, result: MethodChannel.Result) {
-        val filePath = call.argument<String>("filePath")!!
-        val params = call.argument<Map<String, Any>>("params")!!
+        bgExecutor.execute {
+            val filePath = call.argument<String>("filePath")
+            val params = call.argument<Map<String, Any>>("params")
 
-        val newPath = captureProcessor?.processImage(filePath, params)
-        if (newPath != null) {
-            result.success(mapOf("filePath" to newPath))
-        } else {
-            result.error("PROCESS_FAILED", "RenderScript processing failed", null)
-        }
-    }
-        val filePath = call.argument<String>("filePath")
-        val params = call.argument<Map<String, Any>>("params")
-        if (filePath == null || params == null) {
-            result.error("INVALID_ARG", "filePath and params required", null)
-            return
-        }
+            if (filePath == null || params == null) {
+                result.error("INVALID_ARG", "filePath and params required", null)
+                return@execute
+            }
 
-        try {
-            val context = flutterPluginBinding.applicationContext
-            val rs = RenderScript.create(context)
+            val newPath = captureProcessor?.processImage(filePath, params)
+            activityBinding?.activity?.runOnUiThread {
+                if (newPath != null) {
+                    result.success(mapOf("filePath" to newPath))
+                } else {
+                    result.error("PROCESS_FAILED", "RenderScript processing failed", null)
+                }
+            }
+        }
 
             // 1. 加载图像
             val inBitmap = BitmapFactory.decodeFile(filePath)
