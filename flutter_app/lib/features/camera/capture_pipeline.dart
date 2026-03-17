@@ -86,7 +86,40 @@ class CapturePipeline {
         targetHeight: decodeTargetH,
       );
       final frame = await codec.getNextFrame();
-      final srcImage = frame.image;
+      var srcImage = frame.image;
+
+      // ── 2c. 应用 GL Shader 中缺失的效果（在 Canvas 绘制前，仅作用于照片本身） ─────
+      if (renderParams != null) {
+        debugPrint("[CapturePipeline] Applying missing shader effects to srcImage...");
+        // 注意：这些效果是串联应用的，顺序很重要，应尽量与 Shader 的 Pass 顺序保持一致
+        // 1. Tone Curve
+        srcImage = await drawToneCurve(srcImage);
+        // 2. Highlight Rolloff
+        if (renderParams.highlightRolloff > 0.001) {
+          srcImage = await drawHighlightRolloff(srcImage, renderParams.highlightRolloff);
+        }
+        // 3. Sensor Non-uniformity (Center Gain & Edge Falloff)
+        if (renderParams.centerGain > 0.001 || renderParams.edgeFalloff > 0.001) {
+          srcImage = await drawSensorNonUniformity(srcImage, renderParams.centerGain, renderParams.edgeFalloff);
+        }
+        // 4. Skin Hue Protection
+        if (renderParams.skinHueProtect > 0.5) {
+          srcImage = await drawSkinHueProtect(srcImage, renderParams.skinHueProtect);
+        }
+        // 5. Chemical Irregularity
+        if (renderParams.chemicalIrregularity > 0.001) {
+          srcImage = await drawChemicalIrregularity(srcImage, renderParams.chemicalIrregularity);
+        }
+        // 6. Paper Texture
+        if (renderParams.paperTexture > 0.001) {
+          srcImage = await drawPaperTexture(srcImage, renderParams.paperTexture);
+        }
+        // 7. Development Softness
+        if (renderParams.developmentSoftness > 0.001) {
+          srcImage = await drawDevelopmentSoftness(srcImage, renderParams.developmentSoftness);
+        }
+        debugPrint("[CapturePipeline] Missing effects applied to srcImage.");
+      }
 
       final srcW = srcImage.width.toDouble();
       final srcH = srcImage.height.toDouble();
@@ -317,9 +350,9 @@ class CapturePipeline {
         _drawVignette(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, renderParams.effectiveVignette);
       }
 
-      // ── 4c3. 胶片颗粒感（grain）──────────────────────────────────────────────
-      if (renderParams != null && renderParams.effectiveGrain > 0.01) {
-        _drawFilmGrain(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, renderParams.effectiveGrain);
+      // ── 4c3. 胶片颗粒感（grain）+ 数字噪点（noise）──────────────────────────
+      if (renderParams != null && (renderParams.effectiveGrain > 0.01 || renderParams.noiseAmount > 0.001)) {
+        _drawFilmGrain(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, renderParams.effectiveGrain, noiseAmount: renderParams.noiseAmount);
       }
 
       // ── 4c2. 内嵌阴影（拟物相纸厚度感）──────────────────────────────────────
@@ -427,42 +460,7 @@ class CapturePipeline {
         debugPrint('[CapturePipeline] rotated: quarter=$deviceQuarter, ${rotW.toInt()}x${rotH.toInt()}');
       }
 
-      // ── 5b-2. 应用 GL Shader 中缺失的效果 ───────────────────────────────────
-      if (renderParams != null) {
-        debugPrint("[CapturePipeline] Applying missing shader effects...");
-        // 注意：这些效果是串联应用的，顺序很重要，应尽量与 Shader 的 Pass 顺序保持一致
-        // 1. Tone Curve
-        finalImage = await drawToneCurve(finalImage);
-        // 2. Highlight Rolloff
-        if (renderParams.highlightRolloff > 0.001) {
-          finalImage = await drawHighlightRolloff(finalImage, renderParams.highlightRolloff);
-        }
-        // 3. Sensor Non-uniformity (Center Gain & Edge Falloff)
-        if (renderParams.centerGain > 0.001 || renderParams.edgeFalloff > 0.001) {
-          finalImage = await drawSensorNonUniformity(finalImage, renderParams.centerGain, renderParams.edgeFalloff);
-        }
-        // 4. Skin Hue Protection
-        if (renderParams.skinHueProtect > 0.5) {
-          finalImage = await drawSkinHueProtect(finalImage, renderParams.skinHueProtect);
-        }
-        // 5. Chemical Irregularity
-        if (renderParams.chemicalIrregularity > 0.001) {
-          finalImage = await drawChemicalIrregularity(finalImage, renderParams.chemicalIrregularity);
-        }
-        // 6. Noise
-        if (renderParams.noiseAmount > 0.001) {
-          finalImage = await drawNoise(finalImage, renderParams.noiseAmount);
-        }
-        // 7. Paper Texture
-        if (renderParams.paperTexture > 0.001) {
-          finalImage = await drawPaperTexture(finalImage, renderParams.paperTexture);
-        }
-        // 8. Development Softness
-        if (renderParams.developmentSoftness > 0.001) {
-          finalImage = await drawDevelopmentSoftness(finalImage, renderParams.developmentSoftness);
-        }
-        debugPrint("[CapturePipeline] Missing effects applied.");
-      }
+      // ── 5b-2. 应用 GL Shader 中缺失的效果 (已移动到 Canvas 绘制前) ──────────────
 
       final byteData = await finalImage.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (byteData == null) return null;
@@ -761,7 +759,7 @@ class CapturePipeline {
   // ── 胶片颗粒感（Film Grain）────────────────────────────────────────────────
   /// 优化版：使用两个 Path（亮颗粒 / 暗颗粒）批量绘制，减少 draw call 从 O(N) 降到 O(2)
   void _drawFilmGrain(
-      Canvas canvas, double ox, double oy, double w, double h, double strength) {
+      Canvas canvas, double ox, double oy, double w, double h, double strength, {double noiseAmount = 0.0}) {
     final rng = math.Random(12345);
     // 颗粒数量限制在 2000 以内（原来最多 8000），视觉效果几乎无差异
     final count = (w * h * strength * 0.004).clamp(100, 2000).toInt();
@@ -785,6 +783,7 @@ class CapturePipeline {
     }
 
     final brightness = (strength * 60).clamp(20, 80).toInt();
+    final noiseAlpha = (noiseAmount * 80).clamp(0, 100).toInt();
     canvas.drawPath(
       brightPath,
       Paint()
@@ -797,6 +796,15 @@ class CapturePipeline {
         ..color = Color.fromARGB(alpha, 0, 0, 0)
         ..blendMode = BlendMode.overlay,
     );
+
+    if (noiseAmount > 0.001) {
+      canvas.drawPath(
+        darkPath,
+        Paint()
+          ..color = Color.fromARGB(noiseAlpha, 0, 0, 0)
+          ..blendMode = BlendMode.overlay,
+      );
+    }
   }
 
   void _drawVignette(
