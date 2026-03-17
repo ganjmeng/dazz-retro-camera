@@ -11,6 +11,8 @@ import 'pipelines/grdr_pipeline.dart';
 import 'pipelines/bwclassic_pipeline.dart';
 import 'pipelines/u300_pipeline.dart';
 import 'pipelines/ccdr_pipeline.dart';
+import 'pipelines/fxnr_pipeline.dart';
+import 'pipelines/dclassic_pipeline.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -130,8 +132,14 @@ class CapturePipeline {
           case 'ccd_m':
             srcImage = await processCCDR(srcImage, renderParams);
             break;
+          case 'fxn_r':
+            srcImage = await processFXNR(srcImage, renderParams);
+            break;
+          case 'd_classic':
+            srcImage = await processDClassic(srcImage, renderParams);
+            break;
           default:
-            // 通用相机（fxn_r、d_classic、fisheye 等）：使用 renderParams 中的通用参数
+            // fisheye 等其他相机：使用 renderParams 中的通用参数兜底
             if (renderParams.highlightRolloff > 0.001) {
               srcImage = await drawHighlightRolloff(srcImage, renderParams.highlightRolloff);
             }

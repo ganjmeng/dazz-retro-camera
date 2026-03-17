@@ -127,8 +127,9 @@ Future<ui.Image> drawHighlightRolloff(ui.Image srcImage, double rolloff) async {
 Future<ui.Image> drawSensorNonUniformity(
   ui.Image srcImage,
   double centerGain,
-  double edgeFalloff,
-) async {
+  double edgeFalloff, {
+  double cornerWarmShift = 0.0,
+}) async {
   if (centerGain < 0.001 && edgeFalloff < 0.001) return srcImage;
 
   final ByteData? byteData = await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
@@ -160,9 +161,18 @@ Future<ui.Image> drawSensorNonUniformity(
       final double gainG = 1.0 + centerMask * centerGain * 1.0;
       final double gainB = 1.0 + centerMask * centerGain * 0.7;
 
-      pixels[idx]     = (pixels[idx]     / 255.0 * falloff * gainR * 255).round().clamp(0, 255);
+      // Corner Warm Shift：角落色温偏移（负=偏冷青，正=偏暖橙）
+      // 仅在角落区域（dist2 > 0.15）应用，平滑过渡
+      double shiftR = 0.0, shiftB = 0.0;
+      if (cornerWarmShift != 0.0) {
+        final double cornerMask = _smoothstep(0.15, 0.45, dist2);
+        shiftR = cornerWarmShift * cornerMask;
+        shiftB = -cornerWarmShift * cornerMask;
+      }
+
+      pixels[idx]     = ((pixels[idx]     / 255.0 * falloff * gainR + shiftR) * 255).round().clamp(0, 255);
       pixels[idx + 1] = (pixels[idx + 1] / 255.0 * falloff * gainG * 255).round().clamp(0, 255);
-      pixels[idx + 2] = (pixels[idx + 2] / 255.0 * falloff * gainB * 255).round().clamp(0, 255);
+      pixels[idx + 2] = ((pixels[idx + 2] / 255.0 * falloff * gainB + shiftB) * 255).round().clamp(0, 255);
     }
   }
 
@@ -183,8 +193,11 @@ Future<ui.Image> drawSensorNonUniformity(
 Future<ui.Image> drawSkinHueProtect(
   ui.Image srcImage,
   double skinHueProtect, {
-  double skinSatProtect = 0.92,
+  double satProtect = 0.92,
+  double lumaSoften = 0.0,
+  double redLimit   = 1.0,
 }) async {
+  final double skinSatProtect = satProtect;
   if (skinHueProtect < 0.5) return srcImage;
 
   final ByteData? byteData = await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
