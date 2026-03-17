@@ -755,11 +755,13 @@ class PreviewPolicy {
   final bool enableLightLensEffect;
   final bool enableGrain;
   final bool enableBloom;
+  final bool enableHalation;
+  final bool enablePaperTexture;
   final bool enableChromaticAberration;
   final bool enableFrameComposite;
   final bool enableWatermarkComposite;
 
-  const PreviewPolicy({required this.enableLut, required this.enableTemperature, required this.enableContrast, required this.enableSaturation, required this.enableVignette, required this.enableLightLensEffect, required this.enableGrain, required this.enableBloom, required this.enableChromaticAberration, required this.enableFrameComposite, required this.enableWatermarkComposite});
+  const PreviewPolicy({required this.enableLut, required this.enableTemperature, required this.enableContrast, required this.enableSaturation, required this.enableVignette, required this.enableLightLensEffect, required this.enableGrain, required this.enableBloom, required this.enableHalation, required this.enablePaperTexture, required this.enableChromaticAberration, required this.enableFrameComposite, required this.enableWatermarkComposite});
 
   /// 占位默认値（相机 JSON 未加载时使用）
   factory PreviewPolicy.empty() => const PreviewPolicy(
@@ -771,6 +773,8 @@ class PreviewPolicy {
     enableLightLensEffect: false,
     enableGrain: false,
     enableBloom: false,
+    enableHalation: false,
+    enablePaperTexture: false,
     enableChromaticAberration: false,
     enableFrameComposite: false,
     enableWatermarkComposite: false,
@@ -785,6 +789,8 @@ class PreviewPolicy {
     enableLightLensEffect: json['enableLightLensEffect'] as bool? ?? true,
     enableGrain: json['enableGrain'] as bool? ?? false,
     enableBloom: json['enableBloom'] as bool? ?? false,
+    enableHalation: json['enableHalation'] as bool? ?? false,
+    enablePaperTexture: json['enablePaperTexture'] as bool? ?? false,
     enableChromaticAberration: json['enableChromaticAberration'] as bool? ?? false,
     enableFrameComposite: json['enableFrameComposite'] as bool? ?? false,
     enableWatermarkComposite: json['enableWatermarkComposite'] as bool? ?? true,

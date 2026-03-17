@@ -463,7 +463,8 @@
     "enableWatermarkComposite": true,
     "enableInstantEffect": true,
     "enablePaperTexture": true,
-    "enableUnevenExposure": true
+    "enableUnevenExposure": true,
+    "enableHalation": true
   },
   "exportPolicy": {
     "jpegQuality": 0.92,

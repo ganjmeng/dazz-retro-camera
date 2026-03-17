@@ -60,6 +60,8 @@ class PreviewRenderParams {
     return (base + lens).clamp(0.0, 1.0);
   }
 
+  double get effectiveHalation => defaultLook.halation.clamp(0.0, 1.0);
+
   double get effectiveSoftFocus {
     return (activeLens?.softFocus ?? 0).clamp(0.0, 1.0);
   }
@@ -247,11 +249,22 @@ class PreviewFilterWidget extends StatelessWidget {
                     softFocus: params.effectiveSoftFocus,
                   ),
 
-                // Layer 4: Vignette overlay
+                // Layer 4: Halation（高光辉光）
+                if (params.policy.enableHalation && params.effectiveHalation > 0.01)
+                  _HalationLayer(
+                    textureId: textureId,
+                    strength: params.effectiveHalation,
+                  ),
+
+                // Layer 5: Paper Texture（相纸纹理）
+                if (params.policy.enablePaperTexture && params.paperTexture > 0.01)
+                  _PaperTextureLayer(strength: params.paperTexture),
+
+                // Layer 6: Vignette overlay
                 if (params.policy.enableVignette && params.effectiveVignette > 0.01)
                   _VignetteLayer(strength: params.effectiveVignette),
 
-                // Layer 5: Lens distortion — handled by native GPU shader (Android OpenGL ES / iOS Metal)
+                // Layer 7: Lens distortion — handled by native GPU shader (Android OpenGL ES / iOS Metal)
                 // updateLensParams(distortion) is called via MethodChannel when lens changes
               ],
             ),
@@ -639,7 +652,113 @@ class _BloomLayer extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Layer 4: Vignette (radial dark gradient)
+// Layer 4: Halation — warm highlight glow (film halation effect)
+// Approximates GLSL applyHalation: luminance > 0.6 → warm red-shift overlay
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _HalationLayer extends StatelessWidget {
+  final int textureId;
+  final double strength; // 0..1
+
+  const _HalationLayer({
+    required this.textureId,
+    required this.strength,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Halation: blur the bright areas and tint them warm red-orange
+    // Matches GLSL: mask = smoothstep(0.6, 1.0, lum); r += mask*0.3; g += mask*0.05; b -= mask*0.05
+    // Approximation: large blur + warm ColorFilter + Opacity blend
+    final blurRadius = (strength * 18.0).clamp(4.0, 18.0);
+    // Opacity scales with strength: max ~0.35 at strength=1.0
+    final opacity = (strength * 0.35).clamp(0.0, 0.35);
+
+    return Opacity(
+      opacity: opacity,
+      child: ImageFiltered(
+        imageFilter: ui.ImageFilter.blur(
+          sigmaX: blurRadius,
+          sigmaY: blurRadius,
+          tileMode: TileMode.clamp,
+        ),
+        // Warm red-orange tint: boost R, slight G, reduce B
+        // Matches GLSL: r+0.3*mask, g+0.05*mask, b-0.05*mask
+        child: ColorFiltered(
+          colorFilter: const ColorFilter.matrix([
+            1.5, 0,   0,   0, 0,
+            0,   1.1, 0,   0, 0,
+            0,   0,   0.7, 0, 0,
+            0,   0,   0,   1, 0,
+          ]),
+          child: Texture(textureId: textureId),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer 5: Paper Texture — subtle film paper grain overlay
+// Approximates GLSL applyPaperTexture: hash(floor(uv*200)) ±5% luma noise
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PaperTextureLayer extends StatelessWidget {
+  final double strength; // 0..1
+
+  const _PaperTextureLayer({required this.strength});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: CustomPaint(
+        painter: _PaperTexturePainter(strength: strength),
+      ),
+    );
+  }
+}
+
+class _PaperTexturePainter extends CustomPainter {
+  final double strength;
+
+  const _PaperTexturePainter({required this.strength});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Approximate GLSL: hash(floor(uv * 200.0) / 200.0) → paper = mix(0.95, 1.05, n)
+    // c * paper * (1 + amount*0.1) - amount*0.02
+    // Flutter approximation: draw a grid of slightly varying brightness cells
+    final rng = math.Random(42); // Fixed seed for stable texture
+    const cellSize = 3.0; // ~200 cells across a 600px wide view
+    final cols = (size.width / cellSize).ceil() + 1;
+    final rows = (size.height / cellSize).ceil() + 1;
+
+    for (int row = 0; row < rows; row++) {
+      for (int col = 0; col < cols; col++) {
+        final n = rng.nextDouble(); // 0..1, matches hash() output
+        // paper = mix(0.95, 1.05, n) → 0.95..1.05
+        final paper = 0.95 + n * 0.10;
+        // Brightness deviation: (paper - 1.0) * (1 + amount*0.1)
+        final deviation = (paper - 1.0) * (1.0 + strength * 0.1);
+        // Map to alpha: positive deviation = lighten, negative = darken
+        final alpha = (deviation.abs() * strength * 255).round().clamp(0, 30);
+        final color = deviation > 0
+            ? Colors.white.withAlpha(alpha)
+            : Colors.black.withAlpha(alpha);
+        canvas.drawRect(
+          Rect.fromLTWH(col * cellSize, row * cellSize, cellSize, cellSize),
+          Paint()..color = color,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PaperTexturePainter old) => old.strength != strength;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layer 6: Vignette (radial dark gradient)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _VignetteLayer extends StatelessWidget {

@@ -515,7 +515,8 @@
     "enableBloom": true,
     "enableChromaticAberration": true,
     "enableFrameComposite": false,
-    "enableWatermarkComposite": true
+    "enableWatermarkComposite": true,
+    "enableHalation": true
   },
   "exportPolicy": {
     "jpegQuality": 0.92,
