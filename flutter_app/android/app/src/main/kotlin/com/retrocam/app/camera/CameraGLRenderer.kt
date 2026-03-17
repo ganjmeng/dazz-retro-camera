@@ -139,6 +139,7 @@ uniform float uSplitToneBalance;     // 分离色调平衡（0.0=偏阴影，1.0
 // ── Light Leak（GPU 漏光）──
 uniform float uLightLeakAmount;      // 漏光强度（0.0~1.0）
 uniform float uLightLeakSeed;        // 漏光随机种子（每次拍照随机变化）
+uniform float uExposureOffset;        // 用户曝光补偿（-2.0~+2.0）
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────────
 // 高光柔和滚落
@@ -471,6 +472,12 @@ void main() {
         color = vec3(r, g, b);
     }
 
+    // Pass 1.5: 曝光补偿（在色温之前应用，模拟相机 EV 补偿）
+    if (uExposureOffset != 0.0) {
+        color *= pow(2.0, uExposureOffset);
+        color = clamp(color, 0.0, 1.0);
+    }
+
     // Pass 2: 色温 + Tint
     color = applyTemperature(color, uTemperatureShift);
     color = applyTint(color, uTintShift);
@@ -674,6 +681,7 @@ void main() {
     private var uSplitToneBalance: Int = -1
     private var uLightLeakAmount: Int = -1
     private var uLightLeakSeed: Int = -1
+    private var uExposureOffset: Int = -1
 
     // Pass 2 Attrib 位置
     private var aPositionLoc: Int = -1
@@ -724,6 +732,7 @@ void main() {
     @Volatile private var highlightRolloff: Float = 0.0f
     @Volatile private var paperTexture: Float = 0.0f
     @Volatile private var edgeFalloff: Float = 0.0f
+    @Volatile private var exposureOffset: Float = 0.0f
     @Volatile private var exposureVariation: Float = 0.0f
     @Volatile private var cornerWarmShift: Float = 0.0f
     @Volatile private var centerGain: Float = 0.0f
@@ -967,6 +976,7 @@ void main() {
         uSplitToneBalance     = GLES30.glGetUniformLocation(programId, "uSplitToneBalance")
         uLightLeakAmount      = GLES30.glGetUniformLocation(programId, "uLightLeakAmount")
         uLightLeakSeed        = GLES30.glGetUniformLocation(programId, "uLightLeakSeed")
+        uExposureOffset       = GLES30.glGetUniformLocation(programId, "uExposureOffset")
     }
 
     // ── 渲染（两步架构）─────────────────────────────────────────────────────
@@ -1095,6 +1105,7 @@ void main() {
         GLES30.glUniform1f(uSplitToneBalance,     splitToneBalance)
         GLES30.glUniform1f(uLightLeakAmount,      lightLeakAmount)
         GLES30.glUniform1f(uLightLeakSeed,        lightLeakSeed)
+        GLES30.glUniform1f(uExposureOffset,       exposureOffset)
         time += 0.016f
 
         // 绘制全屏四边形
@@ -1161,7 +1172,7 @@ void main() {
         (params["highlightRolloff"]     as? Number)?.let { highlightRolloff2    = it.toFloat() }
         (params["toneCurveStrength"]    as? Number)?.let { toneCurveStrength    = it.toFloat() }
         (params["lensVignette"]         as? Number)?.let { vignetteAmount      = it.toFloat() }
-        (params["exposureOffset"]       as? Number)?.let { /* TODO: 添加 exposureOffset uniform */ }
+        (params["exposureOffset"]       as? Number)?.let { exposureOffset       = it.toFloat() }
         (params["softFocus"]            as? Number)?.let { /* TODO: 添加 softFocus uniform */ }
         (params["distortion"]           as? Number)?.let { fisheyeMode         = it.toFloat() }
         // ── 新增：Fade / Split Toning / Light Leak ──

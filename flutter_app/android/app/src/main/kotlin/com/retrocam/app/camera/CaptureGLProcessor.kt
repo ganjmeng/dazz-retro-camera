@@ -124,6 +124,7 @@ uniform vec3  uHighlightTint;
 uniform float uSplitToneBalance;
 uniform float uLightLeakAmount;
 uniform float uLightLeakSeed;
+uniform float uExposureOffset;        // 用户曝光补偿（-2.0~+2.0）
 
 // ── 工具函数 ──────────────────────────────────────────────────────────
 
@@ -438,6 +439,12 @@ void main() {
     // Pass 1: 色差
     vec3 color = applyChromaticAberration(uInputTexture, uv, uChromaticAberration);
 
+    // Pass 1.5: 曝光补偿（在色温之前应用，模拟相机 EV 补偿）
+    if (uExposureOffset != 0.0) {
+        color *= pow(2.0, uExposureOffset);
+        color = clamp(color, 0.0, 1.0);
+    }
+
     // Pass 2: 色温 + Tint
     color = applyTemperature(color, uTemperatureShift);
     color = applyTint(color, uTintShift);
@@ -628,6 +635,7 @@ void main() {
     private var uSplitToneBalance = -1
     private var uLightLeakAmount = -1
     private var uLightLeakSeed = -1
+    private var uExposureOffset = -1
 
     private var currentWidth = 0
     private var currentHeight = 0
@@ -889,6 +897,7 @@ void main() {
         uSplitToneBalance = loc("uSplitToneBalance")
         uLightLeakAmount = loc("uLightLeakAmount")
         uLightLeakSeed = loc("uLightLeakSeed")
+        uExposureOffset = loc("uExposureOffset")
     }
 
     private fun setUniforms(params: Map<String, Any>) {
@@ -943,6 +952,7 @@ void main() {
         GLES30.glUniform1f(uSplitToneBalance, f("splitToneBalance", 0.5f))
         GLES30.glUniform1f(uLightLeakAmount, f("lightLeakAmount"))
         GLES30.glUniform1f(uLightLeakSeed, f("lightLeakSeed", System.currentTimeMillis().toFloat() / 1000.0f))
+        GLES30.glUniform1f(uExposureOffset, f("exposureOffset"))
     }
 
     private fun uploadBitmapToTexture(bitmap: Bitmap): Int {

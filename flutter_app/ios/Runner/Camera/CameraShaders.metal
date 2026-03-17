@@ -77,6 +77,7 @@ struct CCDParams {
     float lutSize;           // LUT 尺寸（通常 33 或 64）
     float lutStrength;       // LUT 混合强度（0.0~1.0）
     float toneCurveStrength; // Tone Curve 强度（0.0~1.0）
+    float exposureOffset;    // 用户曝光补偿（-2.0~+2.0）
 };
 
 // MARK: - 工具函数
@@ -418,6 +419,12 @@ fragment float4 ccdFragmentShader(
         float g = cameraTexture.sample(textureSampler, uv).g;
         float b = cameraTexture.sample(textureSampler, uv - float2(ca, 0.0)).b;
         color = float3(r, g, b);
+    }
+
+    // === Pass 1.5: 曝光补偿（在色温之前应用，模拟相机 EV 补偿） ===
+    if (params.exposureOffset != 0.0) {
+        color *= pow(2.0, params.exposureOffset);
+        color = clamp(color, 0.0, 1.0);
     }
 
     // === Pass 2: 基础色彩调整 ===

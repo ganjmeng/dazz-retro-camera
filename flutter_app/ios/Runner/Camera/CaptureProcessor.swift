@@ -61,6 +61,7 @@ struct MetalCaptureParams {
     var skinSatProtect: Float = 1.0
     var skinLumaSoften: Float = 0
     var skinRedLimit: Float = 1.0
+    var exposureOffset: Float = 0     // 用户曝光补偿（-2.0~+2.0）
 }
 
 /**
@@ -243,6 +244,7 @@ class CaptureProcessor {
         p.skinSatProtect     = getFloat(params, "skinSatProtect", 1.0)
         p.skinLumaSoften     = getFloat(params, "skinLumaSoften", 0)
         p.skinRedLimit       = getFloat(params, "skinRedLimit", 1.0)
+        p.exposureOffset     = getFloat(params, "exposureOffset", 0)
 
         return p
     }

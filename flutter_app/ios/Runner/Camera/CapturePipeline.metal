@@ -89,6 +89,7 @@ struct CaptureParams {
     float skinSatProtect;
     float skinLumaSoften;
     float skinRedLimit;
+    float exposureOffset;    // 用户曝光补偿（-2.0~+2.0）
 };
 
 // ── 工具函数 ─────────────────────────────────────────────────────────────
@@ -362,7 +363,13 @@ kernel void capturePipeline(
     // Compute Shader 不支持任意纹理采样，色差效果在 CaptureProcessor.swift 中预处理
     // 这里直接使用已处理的像素
 
-    // ── Pass 2: 色温 + Tint ────────────────────────────────────────────────
+        // ── Pass 1.5: 曝光补偿（在色温之前应用，模拟相机 EV 补偿）────────────────
+    if (params.exposureOffset != 0.0) {
+        color *= pow(2.0, params.exposureOffset);
+        color = clamp(color, 0.0, 1.0);
+    }
+
+    // ── Pass 2: 色温 + Tint ────────────────────────────────────────
     color = cp_temperatureShift(color, params.temperatureShift);
     color = cp_tint(color, params.tintShift);
 
