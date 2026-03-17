@@ -160,14 +160,38 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // 一次性请求所有权限（相机 + 相册），再初始化
-      await _requestPermissions();
+      // 记录请求前相机权限是否已授予（用于判断是否首次授权）
+      final wasGrantedBefore = await Permission.camera.isGranted;
+      final cameraGranted = await _requestPermissions();
       if (mounted) {
         // 加载相机 JSON 配置（必须 await，确保 _loadCamera → setCamera 在 initCamera 之前完成，
         // 这样 currentPresetJson 已赋值，reapplyPresetToRenderer 能正确恢复参数）
         await ref.read(cameraAppProvider.notifier).initialize();
+
+        if (!cameraGranted) {
+          // 权限被拒绝，不初始化相机
+          return;
+        }
+
         // 初始化原生相机硬件（获取 textureId，开始预览）
         await ref.read(cameraServiceProvider.notifier).initCamera();
-        // ── FIX: initCamera 返回后 renderer 已就绪，重新发送相机参数确保生效 ──
+
+        // ── FIX: 首次授权 bug 修复 ──
+        // 场景：首次启动 → 权限弹窗 → 用户同意。此时 iOS/Android 系统层才真正将相机权限授予进程。
+        // 问题：.request() 返回 granted 后，相机设备层可能尚未完全就绪，导致 initCamera 的
+        //         MethodChannel 调用在系统层还没就绪时就到达，原生相机无预览输出。
+        // 修复：检测到「本次是首次授权」时，延迟 800ms 等待系统层相机就绪，再重新执行一次完整的
+        //         initCamera 流程（与「跳转设置再返回」所触发的 _pushWithCameraPause 恢复流程完全一致）。
+        final isFirstTimeGrant = !wasGrantedBefore && cameraGranted;
+        if (isFirstTimeGrant) {
+          // 延迟等待系统层相机就绪（iOS 授权后内核需要时间初始化相机设备）
+          await Future.delayed(const Duration(milliseconds: 800));
+          if (!mounted) return;
+          // 重新初始化相机（相当于跳转设置再返回的效果）
+          await ref.read(cameraServiceProvider.notifier).initCamera();
+        }
+
+        // ── initCamera 返回后 renderer 已就绪，重新发送相机参数确保生效 ──
         final cameraAfterInit = ref.read(cameraAppProvider).camera;
         if (cameraAfterInit != null) {
           await ref.read(cameraServiceProvider.notifier).setCamera(cameraAfterInit);
@@ -451,7 +475,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   /// 一次性请求所有权限（相机 + 相册，不含麦克风）
-  Future<void> _requestPermissions() async {
+  /// 返回 true 表示相机权限已授予，false 表示被拒绝
+  Future<bool> _requestPermissions() async {
     // 一次性弹出所有权限请求
     final statuses = await [
       Permission.camera,
@@ -487,6 +512,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         ),
       );
     }
+    return cameraGranted;
   }
 
   /// App 启动时加载最新缩略图（不用于拍照后刷新）
