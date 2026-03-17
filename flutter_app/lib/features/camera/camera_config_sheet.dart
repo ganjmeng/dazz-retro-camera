@@ -56,7 +56,14 @@ Future<void> showCameraConfigSheet(
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: Colors.transparent,
-    builder: (_) => _CameraConfigSheet(onCameraSwitch: onCameraSwitch),
+    // useRootNavigator=false 确保 modal 在 ProviderScope 内部，
+    // 否则 _CameraConfigSheet 的 ref.watch 无法响应状态变化（如 camera 从 null 变为非 null）
+    useRootNavigator: false,
+    builder: (ctx) => ProviderScope(
+      // 共享父级 ProviderContainer，确保主面板能正确 watch/read 全局状态
+      parent: ProviderScope.containerOf(context),
+      child: _CameraConfigSheet(onCameraSwitch: onCameraSwitch),
+    ),
   );
 }
 
