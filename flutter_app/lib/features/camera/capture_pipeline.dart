@@ -368,25 +368,18 @@ class CapturePipeline {
       }
 
       // 主图（正常绘制）
-      if (useGpu && (Platform.isIOS || Platform.isAndroid)) {
-        try {
-          debugPrint("[CapturePipeline] Attempting to use native GPU pipeline...");
-          final result = await _channel.invokeMethod("processWithGpu", {
-            "filePath": imagePath,
-            "params": renderParams?.toJson(), // 假设 PreviewRenderParams 有 toJson()
-          });
-          final newPath = result["filePath"];
-          final file = File(newPath);
-          final bytes = await file.readAsBytes();
-          final codec = await ui.instantiateImageCodec(bytes);
-          final frame = await codec.getNextFrame();
-          srcImage = frame.image;
-          debugPrint("[CapturePipeline] Native GPU pipeline successful.");
-          // GPU 处理已包含所有效果，gpuProcessed=true，Canvas 阶段直接绘制即可
-        } catch (e) {
-          debugPrint("[CapturePipeline] Native GPU pipeline failed, falling back to Dart: $e");
-        }
-      } else if (renderParams != null) {
+      // 注意：GPU 管线已在步骤 2c 完成（gpuProcessed=true），srcImage 已是处理后图像。
+      // 此处直接绘制 srcImage，不再重复调用 processWithGpu（之前的重复调用导致成片无画面）。
+      if (gpuProcessed || renderParams == null) {
+        // GPU 已处理（或无渲染参数）：直接绘制，不叠加 colorMatrix
+        canvas.drawImageRect(
+          srcImage,
+          cropRect,
+          destRect,
+          Paint()..filterQuality = FilterQuality.high,
+        );
+      } else {
+        // Dart 降级管线：通过 colorMatrix 叠加基础色彩效果
         final colorMatrix = _buildColorMatrix(renderParams);
         canvas.drawImageRect(
           srcImage,
@@ -395,13 +388,6 @@ class CapturePipeline {
           Paint()
             ..filterQuality = FilterQuality.high
             ..colorFilter = ColorFilter.matrix(colorMatrix),
-        );
-      } else {
-        canvas.drawImageRect(
-          srcImage,
-          cropRect,
-          destRect,
-          Paint()..filterQuality = FilterQuality.high,
         );
       }
 
