@@ -619,6 +619,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   void setExposure(double value) {
     state = state.copyWith(exposureValue: value);
+    // FIX: 通知原生 GPU shader 更新曝光（预览由原生渲染，必须同步）
+    _applyCurrentRenderParamsToNative();
   }
 
   // 设置白平衡预设模式
@@ -630,9 +632,14 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       case 'incandescent':  tempK = 1800; break;
       default:              tempK = 6300; break; // auto
     }
-    state = state.copyWith(wbMode: mode, colorTempK: tempK);
-    // 通知原生层设置白平衡
+    // FIX: 同步更新 temperatureOffset，使成片后处理的颜色矩阵也能读取到白平衡变化
+    // temperatureOffset 范围 -100..100，映射规则与 setColorTempK 一致
+    final offset = mode == 'auto' ? 0.0 : ((tempK - 4800) / 32.0).clamp(-100.0, 100.0);
+    state = state.copyWith(wbMode: mode, colorTempK: tempK, temperatureOffset: offset);
+    // 通知原生层设置白平衡（影响预览）
     _ref.read(cameraServiceProvider.notifier).setWhiteBalance(mode);
+    // FIX: 同步更新原生 GPU shader 参数（确保成片与预览一致）
+    _applyCurrentRenderParamsToNative();
   }
 
   // 手动设置色温（滑动条拖动时调用）

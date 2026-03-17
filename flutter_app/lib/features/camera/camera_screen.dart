@@ -336,6 +336,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         ref.read(cameraServiceProvider.notifier).updateRenderParams(renderParams.toJson());
       }
     }
+    // FIX: 恢复缩放倍率（initCamera 重建后原生层缩放被重置为 x1）
+    final zoomBack = ref.read(cameraAppProvider).zoomLevel;
+    if (zoomBack != 1.0) {
+      await ref.read(cameraServiceProvider.notifier).setZoom(zoomBack);
+    }
     // 同步清晰度档位对应的原生分辨率
     // IMPORTANT: must await so the transition overlay stays visible until the
     // native camera is fully reconfigured at the correct resolution.
