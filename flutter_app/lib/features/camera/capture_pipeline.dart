@@ -127,9 +127,7 @@ class CapturePipeline {
       }
       if (!gpuProcessed && renderParams != null) {
         debugPrint('[CapturePipeline] Applying camera-specific pipeline for: ${camera.id}');
-        // Dart 降级管线
-        // ... (此处省略 LUT 和 Isolate 的完整实现，仅作示意)
-
+        // Dart 降级管线（LUT 预计算 + 专属管线）
       switch (camera.id) {
           case 'inst_c':
           case 'inst_s':
@@ -366,33 +364,9 @@ class CapturePipeline {
           final frame = await codec.getNextFrame();
           srcImage = frame.image;
           debugPrint("[CapturePipeline] Native GPU pipeline successful.");
-          // GPU 处理已包含所有效果，直接跳到 Canvas 绘制阶段
-          // ...
+          // GPU 处理已包含所有效果，gpuProcessed=true，Canvas 阶段直接绘制即可
         } catch (e) {
           debugPrint("[CapturePipeline] Native GPU pipeline failed, falling back to Dart: $e");
-          if (renderParams != null) { // Fallback to Dart
-            // ... (existing Dart pipeline logic)
-          }
-        }
-      } else if (renderParams != null) {
-          final colorMatrix = _buildColorMatrix(renderParams);
-          canvas.drawImageRect(srcImage, cropRect, shakeRect1,
-            Paint()
-              ..filterQuality = FilterQuality.medium
-              ..colorFilter = ColorFilter.matrix(colorMatrix)
-              ..color = Colors.white.withAlpha(ghostAlpha1),
-          );
-          canvas.drawImageRect(srcImage, cropRect, shakeRect2,
-            Paint()
-              ..filterQuality = FilterQuality.medium
-              ..colorFilter = ColorFilter.matrix(colorMatrix)
-              ..color = Colors.white.withAlpha(ghostAlpha2),
-          );
-        } else {
-          canvas.drawImageRect(srcImage, cropRect, shakeRect1,
-            Paint()..filterQuality = FilterQuality.medium..color = Colors.white.withAlpha(ghostAlpha1));
-          canvas.drawImageRect(srcImage, cropRect, shakeRect2,
-            Paint()..filterQuality = FilterQuality.medium..color = Colors.white.withAlpha(ghostAlpha2));
         }
       }
 
@@ -424,13 +398,9 @@ class CapturePipeline {
           final frame = await codec.getNextFrame();
           srcImage = frame.image;
           debugPrint("[CapturePipeline] Native GPU pipeline successful.");
-          // GPU 处理已包含所有效果，直接跳到 Canvas 绘制阶段
-          // ...
+          // GPU 处理已包含所有效果，gpuProcessed=true，Canvas 阶段直接绘制即可
         } catch (e) {
           debugPrint("[CapturePipeline] Native GPU pipeline failed, falling back to Dart: $e");
-          if (renderParams != null) { // Fallback to Dart
-            // ... (existing Dart pipeline logic)
-          }
         }
       } else if (renderParams != null) {
         final colorMatrix = _buildColorMatrix(renderParams);
