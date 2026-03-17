@@ -67,22 +67,32 @@ class RetroCamPlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHandl
             return
         }
         
-        // Parse preset JSON to extract shader parameters
+        // 优先读取 defaultLook 平铺参数（updateRenderParams 通道传入的完整 shader params）
         val shaderParams = mutableMapOf<String, Any>()
-        
-        val baseModel = presetJson["baseModel"] as? Map<*, *>
-        if (baseModel != null) {
-            val color = baseModel["color"] as? Map<*, *>
-            if (color != null) {
-                color["contrast"]?.let { shaderParams["contrast"] = it }
-                color["saturation"]?.let { shaderParams["saturation"] = it }
+
+        @Suppress("UNCHECKED_CAST")
+        val defaultLook = presetJson["defaultLook"] as? Map<String, Any>
+        if (defaultLook != null) {
+            // 直接将 defaultLook 中所有字段写入 shaderParams（包含 exposureOffset、temperatureShift 等）
+            for ((key, value) in defaultLook) {
+                shaderParams[key] = value
             }
-            val sensor = baseModel["sensor"] as? Map<*, *>
-            if (sensor != null) {
-                sensor["noise"]?.let { shaderParams["noise"] = it }
+        } else {
+            // 当传入的是原始 preset JSON 结构时，解析 baseModel
+            val baseModel = presetJson["baseModel"] as? Map<*, *>
+            if (baseModel != null) {
+                val color = baseModel["color"] as? Map<*, *>
+                if (color != null) {
+                    color["contrast"]?.let { shaderParams["contrast"] = it }
+                    color["saturation"]?.let { shaderParams["saturation"] = it }
+                }
+                val sensor = baseModel["sensor"] as? Map<*, *>
+                if (sensor != null) {
+                    sensor["noise"]?.let { shaderParams["noise"] = it }
+                }
             }
         }
-        
+
         glRenderer?.updateParams(shaderParams)
         
         result.success(mapOf("success" to true))

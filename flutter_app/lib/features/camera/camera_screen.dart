@@ -3842,9 +3842,9 @@ class _WbControlPanel extends StatelessWidget {
                         borderRadius: BorderRadius.circular(18),
                         gradient: const LinearGradient(
                           colors: [
-                            Color(0xFF6B8FE8), // 冷蓝（低K）
+                            Color(0xFFE8A05A), // 暖橙（左=1800K最暖）
                             Color(0xFFB08AE0), // 中紫
-                            Color(0xFFE8A05A), // 暖橙（高K）
+                            Color(0xFF6B8FE8), // 冷蓝（右=8000K最冷）
                           ],
                         ),
                       ),
@@ -3990,7 +3990,7 @@ class _WbTrackDotsPainter extends CustomPainter {
 }
 
 // ─── 色温滤色叠加层（取景框内，根据 colorTempK 叠加半透明色调）──────────────
-// 1800K（暖橙）→ 6300K（中性）→ 8000K（冷蓝）
+// 项目定义：1800K=最暖(橙)→6300K(中性)→8000K=最冷(蓝)
 class _WbColorOverlay extends StatelessWidget {
   final int colorTempK;
 
@@ -3998,21 +3998,21 @@ class _WbColorOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 中性点 5500K，低于此偏暖（橙），高于此偏冷（蓝）
-    const neutralK = 5500;
+    // 中性点 4800K，低于此偏暖（橙），高于此偏冷（蓝）
+    const neutralK = 4800;
     const maxWarm = 1800;
     const maxCool = 8000;
 
     Color overlayColor;
     double opacity;
 
-    if (colorTempK < neutralK) {
-      // 偏暖：橙色叠加
+    if (colorTempK <= neutralK) {
+      // 偏暖：橙色叠加（1800K最深）
       final t = (neutralK - colorTempK) / (neutralK - maxWarm);
       opacity = (t * 0.22).clamp(0.0, 0.22);
       overlayColor = Color(0xFFE8A05A).withValues(alpha: opacity);
     } else {
-      // 偏冷：蓝色叠加
+      // 偏冷：蓝色叠加（8000K最深）
       final t = (colorTempK - neutralK) / (maxCool - neutralK);
       opacity = (t * 0.18).clamp(0.0, 0.18);
       overlayColor = Color(0xFF6B8FE8).withValues(alpha: opacity);

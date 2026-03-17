@@ -66,21 +66,30 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             return
         }
         
-        // Parse preset JSON to extract shader parameters
+        // 优先读取 defaultLook 平铺参数（updateRenderParams 通道传入的完整 shader params）
         var shaderParams: [String: Any] = [:]
-        
-        if let baseModel = presetJson["baseModel"] as? [String: Any] {
-            if let color = baseModel["color"] as? [String: Any] {
-                if let contrast = color["contrast"] as? NSNumber { shaderParams["contrast"] = contrast.floatValue }
-                if let saturation = color["saturation"] as? NSNumber { shaderParams["saturation"] = saturation.floatValue }
+
+        if let defaultLook = presetJson["defaultLook"] as? [String: Any] {
+            // 直接将 defaultLook 中所有 NSNumber 字段转为 Float 并写入 shaderParams
+            for (key, value) in defaultLook {
+                if let num = value as? NSNumber {
+                    shaderParams[key] = num.floatValue
+                } else if let dict = value as? [String: Any] {
+                    shaderParams[key] = dict  // 保留 colorBias 等嵌套字典
+                }
             }
-            if let sensor = baseModel["sensor"] as? [String: Any] {
-                if let noise = sensor["noise"] as? NSNumber { shaderParams["noise"] = noise.floatValue }
+        } else {
+            // 当传入的是原始 preset JSON 结构时，解析 baseModel
+            if let baseModel = presetJson["baseModel"] as? [String: Any] {
+                if let color = baseModel["color"] as? [String: Any] {
+                    if let contrast   = color["contrast"]   as? NSNumber { shaderParams["contrast"]   = contrast.floatValue }
+                    if let saturation = color["saturation"] as? NSNumber { shaderParams["saturation"] = saturation.floatValue }
+                }
+                if let sensor = baseModel["sensor"] as? [String: Any] {
+                    if let noise = sensor["noise"] as? NSNumber { shaderParams["noise"] = noise.floatValue }
+                }
             }
         }
-        
-        // Also parse active options from optionGroups if they exist in the snapshot
-        // (In a real implementation, we would flatten the active options' rendering params)
         
         renderer?.updateParams(shaderParams)
         

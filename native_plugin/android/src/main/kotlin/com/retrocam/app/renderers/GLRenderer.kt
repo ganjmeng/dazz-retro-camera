@@ -45,6 +45,7 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
     private var uDistortionLoc = -1
     private var uZoomFactorLoc = -1
     private var uLensVignetteLoc = -1
+    private var uExposureOffsetLoc = -1
 
     // ── Shader Parameters ───────────────────────────────────────────────────
     private var contrast = 1.0f
@@ -69,6 +70,7 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
     private var distortion = 0.0f
     private var zoomFactor = 1.0f
     private var lensVignette = 0.0f
+    private var exposureOffset = 0.0f
 
     init {
         // This would run on a dedicated GL thread
@@ -124,6 +126,7 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
         uDistortionLoc = GLES20.glGetUniformLocation(programId, "uDistortion")
         uZoomFactorLoc = GLES20.glGetUniformLocation(programId, "uZoomFactor")
         uLensVignetteLoc = GLES20.glGetUniformLocation(programId, "uLensVignette")
+        uExposureOffsetLoc = GLES20.glGetUniformLocation(programId, "uExposureOffset")
     }
 
     private fun setupGeometry() {
@@ -159,6 +162,7 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
         (params["distortion"] as? Number)?.let { distortion = it.toFloat() }
         (params["zoomFactor"] as? Number)?.let { zoomFactor = it.toFloat() }
         (params["lensVignette"] as? Number)?.let { lensVignette = it.toFloat() }
+        (params["exposureOffset"] as? Number)?.let { exposureOffset = it.toFloat() }
     }
 
     fun getInputSurface(): Surface = inputSurface!!
@@ -208,6 +212,7 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
         GLES20.glUniform1f(uDistortionLoc, distortion)
         GLES20.glUniform1f(uZoomFactorLoc, zoomFactor)
         GLES20.glUniform1f(uLensVignetteLoc, lensVignette)
+        GLES20.glUniform1f(uExposureOffsetLoc, exposureOffset)
     }
 
     fun release() {

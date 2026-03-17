@@ -28,6 +28,7 @@ struct CCDParams {
     float saturation;          // 饱和度乘数，1.0 = 原始；0.0 = 黑白
     float temperatureShift;    // 色温偏移（负数偏冷/蓝，正数偏暖/橙）
     float tintShift;           // 绿/洋红偏色（负数偏绿，正数偏洋红）
+    float exposureOffset;      // 曝光偏移（EV，-2.0~+2.0，正数提亮）
 
     // ── Lightroom 风格曲线（-100 ~ +100）─────────────────────
     float highlights;          // 高光压缩/提亮
@@ -91,11 +92,19 @@ float random(float2 st, float seed) {
 }
 
 /// 色温偏移：负值偏冷（蓝），正值偏暖（橙）
+/// 项目定义：1800K=最暖(橙)，8000K=最冷(蓝)；offset = (K-4800)/32，1800K→负值，8000K→正值
+/// 因此 shift>0 = 冷（减R加B），shift<0 = 暖（加R减B）
 float3 applyTemperatureShift(float3 color, float shift) {
     float s = shift / 1000.0;
     color.r = clamp(color.r - s * 0.3, 0.0, 1.0);
     color.b = clamp(color.b + s * 0.3, 0.0, 1.0);
     return color;
+}
+
+/// 曝光偏移：EV 单位，正数提亮，负数压暗
+float3 applyExposure(float3 color, float ev) {
+    float gain = pow(2.0, ev);
+    return clamp(color * gain, 0.0, 1.0);
 }
 
 /// Tint 偏色：负值偏绿，正值偏洋红
@@ -211,6 +220,11 @@ fragment float4 ccdFragmentShader(
     float b  = cameraTexture.sample(textureSampler, uv - float2(ca, 0.0)).b;
     float3 color = float3(r, g, b);
     
+    // === Pass 1.5: 曝光偏移（在色彩处理之前应用，模拟胶片曝光量）===
+    if (abs(params.exposureOffset) > 0.001) {
+        color = applyExposure(color, params.exposureOffset);
+    }
+
     // === Pass 2: 色温 + Tint ===
     color = applyTemperatureShift(color, params.temperatureShift);
     color = applyTint(color, params.tintShift);

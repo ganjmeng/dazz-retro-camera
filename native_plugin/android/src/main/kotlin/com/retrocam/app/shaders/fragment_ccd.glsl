@@ -13,6 +13,7 @@ uniform float uContrast;           // 对比度乘数，1.0 = 原始
 uniform float uSaturation;         // 饱和度乘数，1.0 = 原始；0.0 = 黑白
 uniform float uTemperatureShift;   // 色温偏移（负数偏冷/蓝，正数偏暖/橙）
 uniform float uTintShift;          // 绿/洋红偏色（负数偏绿，正数偏洋红）
+uniform float uExposureOffset;     // 曝光偏移（EV，-2.0~+2.0，正数提亮）
 
 // ── Lightroom 风格曲线参数（-100 ~ +100）─────────────────────
 uniform float uHighlights;         // 高光压缩/提亮
@@ -57,11 +58,19 @@ float random(vec2 st, float seed) {
 }
 
 // 色温偏移：负值偏冷（蓝），正值偏暖（橙）
+// 项目定义：1800K=最暖(橙)，8000K=最冷(蓝)；offset=(K-4800)/32，1800K→负值，8000K→正值
+// 因此 shift>0=冷(减R加B)，shift<0=暖(加R减B)
 vec3 applyTemperatureShift(vec3 color, float shift) {
     float s = shift / 1000.0;
     color.r = clamp(color.r - s * 0.3, 0.0, 1.0);
     color.b = clamp(color.b + s * 0.3, 0.0, 1.0);
     return color;
+}
+
+// 曝光偏移：EV 单位，正数提亮，负数压暗
+vec3 applyExposure(vec3 color, float ev) {
+    float gain = pow(2.0, ev);
+    return clamp(color * gain, vec3(0.0), vec3(1.0));
 }
 
 // Tint 偏色：负值偏绿，正值偏洋红
@@ -194,6 +203,11 @@ void main() {
     float g = texture2D(uCameraTexture, uv).g;
     float b = texture2D(uCameraTexture, uv - vec2(ca, 0.0)).b;
     vec3 color = vec3(r, g, b);
+
+    // === Pass 1.5: 曝光偏移（在色彩处理之前应用，模拟胶片曝光量）===
+    if (abs(uExposureOffset) > 0.001) {
+        color = applyExposure(color, uExposureOffset);
+    }
 
     // === Pass 2: 色温 + Tint ===
     color = applyTemperatureShift(color, uTemperatureShift);

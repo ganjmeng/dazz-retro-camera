@@ -942,12 +942,12 @@ class _WbControlPanel extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(18),
                     gradient: const LinearGradient(
-                      colors: [
-                        Color(0xFF6B8FE8), // 冷蓝
-                        Color(0xFFB08AE0), // 中紫
-                        Color(0xFFE8A05A), // 暖橙
-                      ],
-                    ),
+                          colors: [
+                            Color(0xFFE8A05A), // 暖橙（左=1800K最暖）
+                            Color(0xFFB08AE0), // 中紫
+                            Color(0xFF6B8FE8), // 冷蓝（右=8000K最冷）
+                          ],
+                        ),
                   ),
                 ),
                 Positioned.fill(

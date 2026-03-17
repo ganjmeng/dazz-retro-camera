@@ -65,6 +65,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         ccdParams.saturation        = 1.0
         ccdParams.temperatureShift  = 0.0
         ccdParams.tintShift         = 0.0
+        ccdParams.exposureOffset    = 0.0
         // ── Lightroom 风格曲线
         ccdParams.highlights        = 0.0
         ccdParams.shadows           = 0.0
@@ -95,6 +96,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let contrast    = params["contrast"]         as? Float { ccdParams.contrast         = contrast }
         if let saturation  = params["saturation"]       as? Float { ccdParams.saturation       = saturation }
         if let temperature = params["temperatureShift"] as? Float { ccdParams.temperatureShift = temperature }
+        if let exposure   = params["exposureOffset"]   as? Float { ccdParams.exposureOffset   = exposure }
         if let tint        = params["tintShift"]        as? Float { ccdParams.tintShift        = tint }
         // ── Lightroom 风格曲线 ──────────────────────────────────────
         if let highlights  = params["highlights"]       as? Float { ccdParams.highlights       = highlights }
