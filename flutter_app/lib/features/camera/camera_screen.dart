@@ -1681,7 +1681,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                       child: Align(
                         alignment: Alignment.centerRight,
                         child: GestureDetector(
-                          onTap: () => showCameraConfigSheet(context),
+                          onTap: () => showCameraConfigSheet(
+                            context,
+                            onCameraSwitch: (action) => _showCameraTransition(action),
+                          ),
                           child: SizedBox(
                             width: 83,
                             height: 83,

@@ -3,12 +3,14 @@
 // Replaces grd_camera_notifier.dart with full multi-camera support.
 // Loads any camera from the registry and manages all UI state.
 
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:native_exif/native_exif.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/camera_definition.dart';
 import '../../models/camera_registry.dart';
 import '../../services/camera_service.dart';
@@ -549,13 +551,34 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   @override
   void dispose() {
     // Notifier 销毁时尝试保存快照（App 退出 / Provider 被释放时触发）
-    // 注意：dispose 被调用时 ProviderContainer 可能已在销毁过程中，必须用 try-catch 保护
-    try {
-      _saveCurrentSnapshot();
-    } catch (_) {
-      // ProviderContainer 已销毁时 _ref.read 会抛出异常，忽略即可
-    }
+    // 注意：dispose 被调用时 ProviderContainer 可能已在销毁过程中，
+    // _ref.read 会抛出 "Bad state: Tried to read a provider from a ProviderContainer that was already disposed"
+    // 因此不能调用 _saveCurrentSnapshot()（内部使用 _ref.read），
+    // 改为直接用 SharedPreferences 保存，完全绕过 _ref
+    _saveSnapshotDirect().catchError((_) {
+      // 忽略任何保存失败（如 SharedPreferences 未初始化）
+    });
     super.dispose();
+  }
+
+  /// 直接通过 SharedPreferences 保存当前相机快照，不依赖 _ref（供 dispose 调用）
+  Future<void> _saveSnapshotDirect() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'camera_snapshot_${state.activeCameraId}',
+        jsonEncode(CameraSnapshot(
+          temperatureOffset: state.temperatureOffset,
+          colorTempK:        state.colorTempK,
+          wbMode:            state.wbMode,
+          exposureValue:     state.exposureValue,
+          zoomLevel:         state.zoomLevel,
+          frameId:           state.activeFrameId,
+        ).toJson()),
+      );
+    } catch (_) {
+      // 忽略保存失败
+    }
   }
 
   // ── Camera controls ──

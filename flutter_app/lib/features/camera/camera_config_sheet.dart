@@ -46,13 +46,17 @@ const _kOrange = Color(0xFFFF9500);
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// 从底部弹出相机配置菜单
-Future<void> showCameraConfigSheet(BuildContext context) {
+/// [onCameraSwitch]：相机切换时的 loading 动画 callback（由 camera_screen 传入）
+Future<void> showCameraConfigSheet(
+  BuildContext context, {
+  Future<void> Function(Future<void> Function() action)? onCameraSwitch,
+}) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: Colors.transparent,
-    builder: (_) => const _CameraConfigSheet(),
+    builder: (_) => _CameraConfigSheet(onCameraSwitch: onCameraSwitch),
   );
 }
 
@@ -240,7 +244,9 @@ class CameraConfigInlinePanel extends ConsumerWidget {
 // 弹框版（保持不变，供相机页使用）
 // ─────────────────────────────────────────────────────────────────────────────
 class _CameraConfigSheet extends ConsumerStatefulWidget {
-  const _CameraConfigSheet();
+  /// 相机切换时的 loading 动画 callback（由 camera_screen 传入）
+  final Future<void> Function(Future<void> Function() action)? onCameraSwitch;
+  const _CameraConfigSheet({this.onCameraSwitch});
 
   @override
   ConsumerState<_CameraConfigSheet> createState() => _CameraConfigSheetState();
@@ -405,7 +411,13 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
               // 点击的相机必然在屏幕内，标记为已处理，避免触发不必要的滚动动画
               // 滚动动画期间会消耗触摸事件，导致下次点击被吞掉
               _lastScrolledCameraId = entry.id;
-              ref.read(cameraAppProvider.notifier).switchCamera(entry.id);
+              final onSwitch = widget.onCameraSwitch;
+              if (onSwitch != null) {
+                // 有 loading callback 时：先触发动画，再执行切换
+                onSwitch(() => ref.read(cameraAppProvider.notifier).switchCamera(entry.id));
+              } else {
+                ref.read(cameraAppProvider.notifier).switchCamera(entry.id);
+              }
             },
           );
         },
