@@ -50,6 +50,14 @@ struct CCDParams {
     var skinSatProtect: Float = 1.0        // 肤色饱和度保护（Inst C=0.92，SQC=0.95）
     var skinLumaSoften: Float = 0.0        // 肤色亮度柔化（Inst C=0.05，SQC=0.04）
     var skinRedLimit: Float = 1.0          // 肤色红限（Inst C=1.02，SQC=1.03）
+    // ── FIX: Lightroom 风格曲线参数（新增字段必须追加到末尾，保持 Metal 内存对齐）───────────────────────
+    var highlights: Float = 0.0             // 高光压缩/提亮（-100 ~ +100）
+    var shadows: Float = 0.0               // 阴影压缩/提亮（-100 ~ +100）
+    var whites: Float = 0.0                // 白场偏移（-100 ~ +100）
+    var blacks: Float = 0.0                // 黑场偏移（-100 ~ +100）
+    var clarity: Float = 0.0               // 中间调微对比度（-100 ~ +100）
+    var vibrance: Float = 0.0              // 智能饱和度（-100 ~ +100）
+    var noiseAmount: Float = 0.0           // FIX: 数字噪点强度（0.0 ~ 1.0）
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -319,7 +327,18 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = params["skinLumaSoften"]      as? Float { ccdParams.skinLumaSoften      = v }
         if let v = params["skinRedLimit"]        as? Float { ccdParams.skinRedLimit        = v }
 
-        // ── 纹理加载 ─────────────────────────────────────────────────────────
+        // ── FIX: Lightroom 风格曲线参数 ─────────────────────────────────────────────────────────────────
+        if let v = params["highlights"]  as? Float { ccdParams.highlights  = v }
+        if let v = params["shadows"]     as? Float { ccdParams.shadows     = v }
+        if let v = params["whites"]      as? Float { ccdParams.whites      = v }
+        if let v = params["blacks"]      as? Float { ccdParams.blacks      = v }
+        if let v = params["clarity"]     as? Float { ccdParams.clarity     = v }
+        if let v = params["vibrance"]    as? Float { ccdParams.vibrance    = v }
+        // FIX: noiseAmount（兼容 noise 和 noiseAmount 两种键名）
+        if let v = params["noise"]       as? Float { ccdParams.noiseAmount = v }
+        if let v = params["noiseAmount"] as? Float { ccdParams.noiseAmount = v }
+
+        // ── 纹理加载 ─────────────────────────────────────────────────────────────────
         if let lutAsset = params["lut"] as? String, !lutAsset.isEmpty {
             loadAssetTexture(assetPath: lutAsset) { [weak self] texture in
                 self?.lutTexture = texture

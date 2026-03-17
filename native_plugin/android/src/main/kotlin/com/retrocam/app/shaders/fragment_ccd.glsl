@@ -27,15 +27,16 @@ uniform float uColorBiasR;
 uniform float uColorBiasG;
 uniform float uColorBiasB;
 
-// ── 胶片效果参数 ──────────────────────────────────────────────
+// ── 胶片效果参数 ─────────────────────────────────────────────────────────────────────────────────
 uniform float uGrainAmount;        // 颗粒强度 0~1
 uniform float uNoiseAmount;        // 数字噪点强度 0~1
 uniform float uVignetteAmount;     // 暗角强度 0~1（preset 层）
 uniform float uChromaticAberration;// 色差强度
 uniform float uBloomAmount;        // 高光光晕强度
+uniform float uHalationAmount;     // FIX: 高光辉光（Halation）强度 0~1，模拟胶片高光渗色效果
 uniform float uTime;               // 动态噪点时间种子
-uniform float uDistortion;         // 镜头畸变：负值=桶形(鱼眼), 正值=枕形, 0=无畸变
-uniform float uZoomFactor;         // 镜头缩放：1.0=标准, 0.5=鱼眼视野扩展（圆形遮罩）
+uniform float uDistortion;         // 镜头畸变：负値=桶形(鱼眼), 正値=枥形, 0=无畸变
+uniform float uZoomFactor;         // 镜头缩放：1.0=标准, 0.5=鱼眼视野扩展（圆形遣罩）
 uniform float uLensVignette;       // 镜头层暗角，叠加在 preset 暗角之上
 
 varying vec2 vTexCoord;
@@ -232,6 +233,16 @@ void main() {
     // === Pass 11: 动态数字噪点 (Noise) - 移动到 CapturePipeline ===
     // 预览中移除，以降低 GPU 负载
     float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
+
+    // === Pass 11b: FIX: Halation（高光辉光）===
+    // 模拟胶片高光区域向周围渗色的红色辉光效果
+    // 高亮度区域（luminance > 0.7）叠加暖色渗色
+    if (uHalationAmount > 0.001) {
+        float halationMask = smoothstep(0.6, 1.0, luminance);
+        vec3 halationColor = vec3(0.9, 0.3, 0.1); // 暖色辉光（橙红色）
+        color = mix(color, color + halationColor * halationMask * uHalationAmount * 0.15, 1.0);
+        color = clamp(color, 0.0, 1.0);
+    }
 
     // === Pass 12: 暗角 (Vignette) ===
     // preset 暗角 + 镜头层暗角叠加，上限 1.0

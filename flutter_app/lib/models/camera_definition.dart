@@ -158,6 +158,7 @@ class DefaultLook {
   final double bloom;         // 0.0 ~ 1.0
   final double flare;
   final double grain;         // 0.0 ~ 1.0 grain strength
+  final double noiseAmount;   // FIX: 0.0 ~ 1.0 digital noise strength（数字噪点强度）
   final double colorBiasR;    // -1.0 ~ +1.0 red channel bias
   final double colorBiasG;    // -1.0 ~ +1.0 green channel bias
   final double colorBiasB;    // -1.0 ~ +1.0 blue channel bias
@@ -207,6 +208,7 @@ class DefaultLook {
     required this.bloom,
     required this.flare,
     this.grain = 0,
+    this.noiseAmount = 0,  // FIX: 数字噪点强度
     this.colorBiasR = 0,
     this.colorBiasG = 0,
     this.colorBiasB = 0,
@@ -270,6 +272,7 @@ class DefaultLook {
     bloom: (json['bloom'] as num? ?? 0).toDouble(),
     flare: (json['flare'] as num? ?? 0).toDouble(),
     grain: (json['grain'] as num? ?? 0).toDouble(),
+    noiseAmount: (json['noiseAmount'] as num? ?? 0).toDouble(),  // FIX: 数字噪点强度
     colorBiasR: (json['colorBiasR'] as num? ?? 0).toDouble(),
     colorBiasG: (json['colorBiasG'] as num? ?? 0).toDouble(),
     colorBiasB: (json['colorBiasB'] as num? ?? 0).toDouble(),
@@ -318,6 +321,7 @@ class DefaultLook {
     'bloom': bloom,
     'flare': flare,
     'grain': grain,
+    'noiseAmount': noiseAmount,  // FIX: 数字噪点强度
     'colorBiasR': colorBiasR,
     'colorBiasG': colorBiasG,
     'colorBiasB': colorBiasB,

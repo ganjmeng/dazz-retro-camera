@@ -386,6 +386,13 @@ void main() {
     private var uFisheyeMode: Int = -1
     private var uAspectRatio: Int = -1
     private var uCameraTexture: Int = -1  // 性能优化：缓存 sampler uniform 位置
+    // FIX: Lightroom 风格曲线参数 uniform 位置
+    private var uHighlights: Int = -1
+    private var uShadows: Int = -1
+    private var uWhites: Int = -1
+    private var uBlacks: Int = -1
+    private var uClarity: Int = -1
+    private var uVibrance: Int = -1
     // FQS/CPM35 专有 uniform 位置（通用 Shader 中不存在，glGetUniformLocation 返回 -1，glUniform1f(-1,...) 是 no-op）
     private var uColorBiasR: Int = -1
     private var uColorBiasG: Int = -1
@@ -431,7 +438,7 @@ void main() {
     // 待处理的相机 ID（快速连续切换时只保留最新的，避免积压多个重编译任务）
     @Volatile private var pendingCameraId: String = ""
 
-    // ── 渲染参数 ─────────────────────────────────────────────────────────────
+    // ── 渲染参数 ─────────────────────────────────────────────────────────────────
     @Volatile private var contrast: Float = 1.0f
     @Volatile private var saturation: Float = 1.0f
     @Volatile private var temperatureShift: Float = 0.0f
@@ -442,6 +449,13 @@ void main() {
     @Volatile private var sharpen: Float = 0.0f
     @Volatile private var time: Float = 0.0f
     @Volatile private var fisheyeMode: Float = 0.0f // 0=normal, 1=circular fisheye
+    // FIX: Lightroom 风格曲线参数
+    @Volatile private var highlights: Float = 0.0f
+    @Volatile private var shadows: Float = 0.0f
+    @Volatile private var whites: Float = 0.0f
+    @Volatile private var blacks: Float = 0.0f
+    @Volatile private var clarity: Float = 0.0f
+    @Volatile private var vibrance: Float = 0.0f
     // FQS/CPM35 专有参数
     @Volatile private var colorBiasR: Float = 0.0f
     @Volatile private var colorBiasG: Float = 0.0f
@@ -626,6 +640,13 @@ void main() {
         uCameraTexture        = GLES30.glGetUniformLocation(programId, "uCameraTexture")
         aPositionLoc          = GLES30.glGetAttribLocation(programId, "aPosition")
         aTexCoordLoc          = GLES30.glGetAttribLocation(programId, "aTexCoord")
+        // FIX: Lightroom 风格曲线参数 uniform（通用 Shader 中返回 -1 时为 no-op，安全）
+        uHighlights           = GLES30.glGetUniformLocation(programId, "uHighlights")
+        uShadows              = GLES30.glGetUniformLocation(programId, "uShadows")
+        uWhites               = GLES30.glGetUniformLocation(programId, "uWhites")
+        uBlacks               = GLES30.glGetUniformLocation(programId, "uBlacks")
+        uClarity              = GLES30.glGetUniformLocation(programId, "uClarity")
+        uVibrance             = GLES30.glGetUniformLocation(programId, "uVibrance")
         // FQS/CPM35 专有 uniform（通用 Shader 中返回 -1，glUniform1f(-1,...) 是 no-op，安全）
         uColorBiasR           = GLES30.glGetUniformLocation(programId, "uColorBiasR")
         uColorBiasG           = GLES30.glGetUniformLocation(programId, "uColorBiasG")
@@ -719,6 +740,13 @@ void main() {
             1f / previewHeight.toFloat())
         GLES30.glUniform1f(uFisheyeMode,         fisheyeMode)
         GLES30.glUniform1f(uAspectRatio,         previewWidth.toFloat() / previewHeight.toFloat())
+        // FIX: Lightroom 风格曲线参数 uniform（通用 Shader 中 location=-1 时为 no-op，安全）
+        GLES30.glUniform1f(uHighlights,          highlights)
+        GLES30.glUniform1f(uShadows,             shadows)
+        GLES30.glUniform1f(uWhites,              whites)
+        GLES30.glUniform1f(uBlacks,              blacks)
+        GLES30.glUniform1f(uClarity,             clarity)
+        GLES30.glUniform1f(uVibrance,            vibrance)
         // FQS/CPM35 专有 uniform（通用 Shader 中 location=-1，glUniform1f 是 no-op）
         GLES30.glUniform1f(uColorBiasR,          colorBiasR)
         GLES30.glUniform1f(uColorBiasG,          colorBiasG)
@@ -781,10 +809,19 @@ void main() {
         (params["saturation"]          as? Number)?.let { saturation          = it.toFloat() }
         (params["temperatureShift"]    as? Number)?.let { temperatureShift    = it.toFloat() }
         (params["chromaticAberration"] as? Number)?.let { chromaticAberration = it.toFloat() }
+        // FIX: 兼容 noise 和 noiseAmount 两种键名
         (params["noise"]               as? Number)?.let { noiseAmount         = it.toFloat() }
+        (params["noiseAmount"]         as? Number)?.let { noiseAmount         = it.toFloat() }
         (params["vignette"]            as? Number)?.let { vignetteAmount      = it.toFloat() }
         (params["grain"]               as? Number)?.let { grainAmount         = it.toFloat() }
         (params["sharpen"]             as? Number)?.let { sharpen             = it.toFloat() }
+        // FIX: Lightroom 风格曲线参数
+        (params["highlights"]          as? Number)?.let { highlights          = it.toFloat() }
+        (params["shadows"]             as? Number)?.let { shadows             = it.toFloat() }
+        (params["whites"]              as? Number)?.let { whites              = it.toFloat() }
+        (params["blacks"]              as? Number)?.let { blacks              = it.toFloat() }
+        (params["clarity"]             as? Number)?.let { clarity             = it.toFloat() }
+        (params["vibrance"]            as? Number)?.let { vibrance            = it.toFloat() }
         // FQS/CPM35 专有参数
         (params["colorBiasR"]          as? Number)?.let { colorBiasR          = it.toFloat() }
         (params["colorBiasG"]          as? Number)?.let { colorBiasG          = it.toFloat() }

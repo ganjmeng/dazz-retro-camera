@@ -409,6 +409,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 (look["halation"]            as? Number)?.let { params["halationAmount"]      = it }  // halation → halationAmount
                 (look["bloom"]               as? Number)?.let { params["bloomAmount"]         = it }  // bloom → bloomAmount
                 (look["sharpness"]           as? Number)?.let { params["sharpen"]             = it }  // sharpness → sharpen
+                // ── FIX: Lightroom 风格曲线参数（原来缺失，导致链路断裂）──────────────────────
+                (look["highlights"]          as? Number)?.let { params["highlights"]          = it }  // 高光压缩/提亮
+                (look["shadows"]             as? Number)?.let { params["shadows"]             = it }  // 阴影压缩/提亮
+                (look["whites"]              as? Number)?.let { params["whites"]              = it }  // 白场偏移
+                (look["blacks"]              as? Number)?.let { params["blacks"]              = it }  // 黑场偏移
+                (look["clarity"]             as? Number)?.let { params["clarity"]             = it }  // 中间调微对比度
+                (look["vibrance"]            as? Number)?.let { params["vibrance"]            = it }  // 智能饱和度
+                // ── FIX: noiseAmount（JSON 键名 noise → Shader uniform noiseAmount）──────────
+                (look["noise"]               as? Number)?.let { params["noiseAmount"]         = it }  // noise → noiseAmount
+                (look["noiseAmount"]         as? Number)?.let { params["noiseAmount"]         = it }  // noiseAmount 直接映射（兼容两种键名）
                 // FQS/CPM35 专有参数（直接映射）
                 (look["colorBiasR"]          as? Number)?.let { params["colorBiasR"]          = it }
                 (look["colorBiasG"]          as? Number)?.let { params["colorBiasG"]          = it }

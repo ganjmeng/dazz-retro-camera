@@ -191,6 +191,16 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             if let v = dl["chromaticAberration"] as? NSNumber { shaderParams["chromaticAberration"] = v.floatValue }
             if let v = dl["bloom"]               as? NSNumber { shaderParams["bloom"]               = v.floatValue }
             if let v = dl["halation"]            as? NSNumber { shaderParams["halation"]            = v.floatValue }
+            // FIX: Lightroom 风格曲线参数（原来缺失，导致链路断裂）
+            if let v = dl["highlights"]          as? NSNumber { shaderParams["highlights"]          = v.floatValue }
+            if let v = dl["shadows"]             as? NSNumber { shaderParams["shadows"]             = v.floatValue }
+            if let v = dl["whites"]              as? NSNumber { shaderParams["whites"]              = v.floatValue }
+            if let v = dl["blacks"]              as? NSNumber { shaderParams["blacks"]              = v.floatValue }
+            if let v = dl["clarity"]             as? NSNumber { shaderParams["clarity"]             = v.floatValue }
+            if let v = dl["vibrance"]            as? NSNumber { shaderParams["vibrance"]            = v.floatValue }
+            // FIX: noiseAmount（兼容 noise 和 noiseAmount 两种键名）
+            if let v = dl["noise"]               as? NSNumber { shaderParams["noise"]               = v.floatValue }
+            if let v = dl["noiseAmount"]         as? NSNumber { shaderParams["noise"]               = v.floatValue }
             // FQS / CPM35 专用
             if let v = dl["colorBiasR"]          as? NSNumber { shaderParams["colorBiasR"]          = v.floatValue }
             if let v = dl["colorBiasG"]          as? NSNumber { shaderParams["colorBiasG"]          = v.floatValue }
