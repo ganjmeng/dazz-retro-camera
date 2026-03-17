@@ -37,7 +37,8 @@ class PreviewRenderParams {
        policy = policy ?? const PreviewPolicy(
          enableLut: false, enableTemperature: false, enableContrast: false,
          enableSaturation: false, enableVignette: false, enableLightLensEffect: false,
-         enableGrain: false, enableBloom: false, enableChromaticAberration: false,
+         enableGrain: false, enableBloom: false, enableHalation: false,
+         enablePaperTexture: false, enableChromaticAberration: false,
          enableFrameComposite: false, enableWatermarkComposite: false,
        );
 
