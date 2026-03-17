@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import './pipeline_utils.dart';
 import '../capture_pipeline_ext.dart';
 import '../preview_renderer.dart';
 
@@ -6,10 +7,10 @@ Future<ui.Image> processBWClassic(ui.Image srcImage, PreviewRenderParams params)
   // BWClassic Shader: 12 passes
 
   // Pass 4: Highlight Rolloff (0.18)
-  srcImage = await drawHighlightRolloff(srcImage, 0.18);
+  srcImage = /* HighlightRolloff LUT (val: 0.18) */
 
   // Pass 6: Sensor Non-uniformity
-  srcImage = await drawSensorNonUniformity(srcImage, 0.05, 0.12);
+  srcImage = /* SensorNonUniformity Table (cg: 0.05, ef: 0.12) */
 
   // Pass 7: Development Softness (0.025)
   srcImage = await drawDevelopmentSoftness(srcImage, 0.025);

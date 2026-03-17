@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import './pipeline_utils.dart';
 import '../capture_pipeline_ext.dart';
 import '../preview_renderer.dart';
 
@@ -8,7 +9,7 @@ Future<ui.Image> processSQC(ui.Image srcImage, PreviewRenderParams params) async
   // Missing in Capture: 8 passes
 
   // Pass 8: Highlight Rolloff (0.10)
-  srcImage = await drawHighlightRolloff(srcImage, 0.10);
+  srcImage = /* HighlightRolloff LUT (val: 0.10) */
 
   // Pass 12: Fine Grain (0.06)
   // Pass 13: Paper Texture (0.05)

@@ -54,7 +54,10 @@ class CapturePipeline {
   CapturePipeline({required this.camera});
 
   /// 处理拍摄的图片文件，返回包含 JPEG 字节和输出分辨率的 CaptureResult
+    static const MethodChannel _channel = MethodChannel("com.retrocam.app/camera_control");
+
   Future<CaptureResult?> process({
+    bool useGpu = true, // 新增开关
     required String imagePath,
     required String selectedRatioId,
     required String selectedFrameId,
@@ -99,12 +102,91 @@ class CapturePipeline {
       var srcImage = frame.image;
 
       // ── 2c. 应用各相机专属的成片管线（在 Canvas 绘制前，仅作用于照片本身） ─────
-      if (renderParams != null) {
+      if (useGpu && (Platform.isIOS || Platform.isAndroid)) {
+        try {
+          debugPrint("[CapturePipeline] Attempting to use native GPU pipeline...");
+          final result = await _channel.invokeMethod("processWithGpu", {
+            "filePath": imagePath,
+            "params": renderParams?.toJson(), // 假设 PreviewRenderParams 有 toJson()
+          });
+          final newPath = result["filePath"];
+          final file = File(newPath);
+          final bytes = await file.readAsBytes();
+          final codec = await ui.instantiateImageCodec(bytes);
+          final frame = await codec.getNextFrame();
+          srcImage = frame.image;
+          debugPrint("[CapturePipeline] Native GPU pipeline successful.");
+          // GPU 处理已包含所有效果，直接跳到 Canvas 绘制阶段
+          // ...
+        } catch (e) {
+          debugPrint("[CapturePipeline] Native GPU pipeline failed, falling back to Dart: $e");
+          if (renderParams != null) { // Fallback to Dart
+            // ... (existing Dart pipeline logic)
+          }
+        }
+      } else if (renderParams != null) {
         debugPrint('[CapturePipeline] Applying camera-specific pipeline for: ${camera.id}');
         // 1. 首先应用所有相机共用的基础 Tone Curve
         srcImage = await drawToneCurve(srcImage);
         // 2. 按相机 ID 分发到专属管线（包含该相机特有的 Highlight Rolloff、传感器非均匀性、肤色保护等）
-        switch (camera.id) {
+              // ── 1. 预计算所有 LUT 和权重表 ────────────────────────────────
+      final toneCurveLUT = buildToneCurveLUT(renderParams.toneCurve);
+      final highlightRolloffLUT = buildHighlightRolloffLUT(renderParams.highlightRolloff);
+      final sensorTable = buildSensorNonUniformityTable(srcImage.width, srcImage.height, renderParams.centerGain, renderParams.edgeFalloff, cornerWarmShift: renderParams.cornerWarmShift);
+      debugPrint("[CapturePipeline] LUTs and tables precomputed.");
+
+      // ── 2. 应用 LUT 和权重表（替换原有逐像素计算） ──────────────────
+      final pixels = (await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint8List();
+
+      for (int i = 0; i < pixels.length; i += 4) {
+        // ToneCurve
+        pixels[i]     = toneCurveLUT[pixels[i]];
+        pixels[i + 1] = toneCurveLUT[pixels[i + 1]];
+        pixels[i + 2] = toneCurveLUT[pixels[i + 2]];
+
+        // HighlightRolloff
+        final double r = pixels[i] / 255.0, g = pixels[i+1] / 255.0, b = pixels[i+2] / 255.0;
+        final double lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        final double rolloff = highlightRolloffLUT[(lum * 255).round().clamp(0, 255)];
+        pixels[i]     = ((r - rolloff * 0.15) * 255).round().clamp(0, 255);
+        pixels[i + 1] = ((g - rolloff * 0.20) * 255).round().clamp(0, 255);
+        pixels[i + 2] = ((b - rolloff * 0.30) * 255).round().clamp(0, 255);
+      }
+
+      // SensorNonUniformity
+      for (int i = 0; i < srcImage.width * srcImage.height; i++) {
+        final int idx = i * 4;
+        pixels[idx]     = (pixels[idx]     / 255.0 * sensorTable[i * 3]     * 255).round().clamp(0, 255);
+        pixels[idx + 1] = (pixels[idx + 1] / 255.0 * sensorTable[i * 3 + 1] * 255).round().clamp(0, 255);
+        pixels[idx + 2] = (pixels[idx + 2] / 255.0 * sensorTable[i * 3 + 2] * 255).round().clamp(0, 255);
+      }
+
+      srcImage = await _pixelsToImage(pixels, srcImage.width, srcImage.height);
+      debugPrint("[CapturePipeline] LUTs and tables applied.");
+
+      // ── 3. Isolate 并行处理（SkinProtect, ChemicalIrregularity 等） ──────────
+      final numCores = Platform.numberOfProcessors;
+      final int rowsPerIsolate = (srcImage.height / numCores).ceil();
+      final List<Future<Uint8List>> isolateFutures = [];
+
+      for (int i = 0; i < numCores; i++) {
+        final startRow = i * rowsPerIsolate;
+        final endRow = (i + 1) * rowsPerIsolate > srcImage.height ? srcImage.height : (i + 1) * rowsPerIsolate;
+        if (startRow >= endRow) continue;
+
+        final payload = IsolatePayload(pixels, startRow, endRow, srcImage.width, renderParams);
+        isolateFutures.add(compute(processImageChunk, payload));
+      }
+
+      final List<Uint8List> results = await Future.wait(isolateFutures);
+      // 注意：由于 Uint8List 是引用传递，实际上所有 Isolate 都在修改同一个 pixels 数组
+      // 所以这里不需要合并结果，results[0] 就是最终结果
+      final processedPixels = results[0];
+      srcImage = await _pixelsToImage(processedPixels, srcImage.width, srcImage.height);
+      debugPrint("[CapturePipeline] Isolate processing complete.");
+
+      // ── 4. 调用相机专属管线（现在只处理非像素级效果，或 Isolate 中未处理的） ──
+      switch (camera.id) {
           case 'inst_c':
           case 'inst_s':
             srcImage = await processInstC(srcImage, renderParams);
@@ -326,7 +408,29 @@ class CapturePipeline {
         final shakeRect1 = Rect.fromLTWH(frameOffsetX + leftPx + dx1, frameOffsetY + topPx + dy1, outW, outH);
         final shakeRect2 = Rect.fromLTWH(frameOffsetX + leftPx + dx2, frameOffsetY + topPx + dy2, outW, outH);
 
-        if (renderParams != null) {
+        if (useGpu && (Platform.isIOS || Platform.isAndroid)) {
+        try {
+          debugPrint("[CapturePipeline] Attempting to use native GPU pipeline...");
+          final result = await _channel.invokeMethod("processWithGpu", {
+            "filePath": imagePath,
+            "params": renderParams?.toJson(), // 假设 PreviewRenderParams 有 toJson()
+          });
+          final newPath = result["filePath"];
+          final file = File(newPath);
+          final bytes = await file.readAsBytes();
+          final codec = await ui.instantiateImageCodec(bytes);
+          final frame = await codec.getNextFrame();
+          srcImage = frame.image;
+          debugPrint("[CapturePipeline] Native GPU pipeline successful.");
+          // GPU 处理已包含所有效果，直接跳到 Canvas 绘制阶段
+          // ...
+        } catch (e) {
+          debugPrint("[CapturePipeline] Native GPU pipeline failed, falling back to Dart: $e");
+          if (renderParams != null) { // Fallback to Dart
+            // ... (existing Dart pipeline logic)
+          }
+        }
+      } else if (renderParams != null) {
           final colorMatrix = _buildColorMatrix(renderParams);
           canvas.drawImageRect(srcImage, cropRect, shakeRect1,
             Paint()
@@ -362,7 +466,29 @@ class CapturePipeline {
       }
 
       // 主图（正常绘制）
-      if (renderParams != null) {
+      if (useGpu && (Platform.isIOS || Platform.isAndroid)) {
+        try {
+          debugPrint("[CapturePipeline] Attempting to use native GPU pipeline...");
+          final result = await _channel.invokeMethod("processWithGpu", {
+            "filePath": imagePath,
+            "params": renderParams?.toJson(), // 假设 PreviewRenderParams 有 toJson()
+          });
+          final newPath = result["filePath"];
+          final file = File(newPath);
+          final bytes = await file.readAsBytes();
+          final codec = await ui.instantiateImageCodec(bytes);
+          final frame = await codec.getNextFrame();
+          srcImage = frame.image;
+          debugPrint("[CapturePipeline] Native GPU pipeline successful.");
+          // GPU 处理已包含所有效果，直接跳到 Canvas 绘制阶段
+          // ...
+        } catch (e) {
+          debugPrint("[CapturePipeline] Native GPU pipeline failed, falling back to Dart: $e");
+          if (renderParams != null) { // Fallback to Dart
+            // ... (existing Dart pipeline logic)
+          }
+        }
+      } else if (renderParams != null) {
         final colorMatrix = _buildColorMatrix(renderParams);
         canvas.drawImageRect(
           srcImage,

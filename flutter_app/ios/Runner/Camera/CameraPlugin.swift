@@ -515,3 +515,88 @@ extension RetroCamPlugin: FlutterStreamHandler {
         return nil
     }
 }
+
+
+// ── Metal Compute Pipeline ───────────────────────────────────────────
+
+private func handleProcessWithGpu(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let args = call.arguments as? [String: Any],
+          let filePath = args["filePath"] as? String,
+          let params = args["params"] as? [String: Any] else {
+        result(FlutterError(code: "INVALID_ARG", message: "filePath and params required", details: nil))
+        return
+    }
+
+    // 1. 加载图像
+    guard let image = UIImage(contentsOfFile: filePath),
+          let cgImage = image.cgImage else {
+        result(FlutterError(code: "LOAD_FAILED", message: "Failed to load image", details: nil))
+        return
+    }
+
+    // 2. 设置 Metal
+    guard let device = MTLCreateSystemDefaultDevice(),
+          let commandQueue = device.makeCommandQueue(),
+          let defaultLibrary = device.makeDefaultLibrary() else {
+        result(FlutterError(code: "METAL_INIT_FAILED", message: "Failed to init Metal", details: nil))
+        return
+    }
+
+    // 3. 创建 Compute Pipeline State
+    guard let kernelFunction = defaultLibrary.makeFunction(name: "capturePipeline"),
+          let pipelineState = try? device.makeComputePipelineState(function: kernelFunction) else {
+        result(FlutterError(code: "KERNEL_NOT_FOUND", message: "capturePipeline kernel not found", details: nil))
+        return
+    }
+
+    // 4. 创建纹理
+    let textureLoader = MTKTextureLoader(device: device)
+    guard let inTexture = try? textureLoader.newTexture(cgImage: cgImage, options: nil) else {
+        result(FlutterError(code: "TEXTURE_LOAD_FAILED", message: "Failed to create input texture", details: nil))
+        return
+    }
+
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+        pixelFormat: inTexture.pixelFormat,
+        width: inTexture.width,
+        height: inTexture.height,
+        mipmapped: false)
+    descriptor.usage = [.shaderRead, .shaderWrite]
+    guard let outTexture = device.makeTexture(descriptor: descriptor) else {
+        result(FlutterError(code: "TEXTURE_CREATE_FAILED", message: "Failed to create output texture", details: nil))
+        return
+    }
+
+    // 5. 创建 Command Buffer 和 Encoder
+    guard let commandBuffer = commandQueue.makeCommandBuffer(),
+          let computeCommandEncoder = commandBuffer.makeComputeCommandEncoder() else {
+        result(FlutterError(code: "COMMAND_BUFFER_FAILED", message: "Failed to create command buffer", details: nil))
+        return
+    }
+
+    // 6. 设置参数和纹理
+    computeCommandEncoder.setComputePipelineState(pipelineState)
+    computeCommandEncoder.setTexture(inTexture, index: 0)
+    computeCommandEncoder.setTexture(outTexture, index: 1)
+
+    // let captureParams = CaptureParams(...) // 从 params 字典构建
+    // computeCommandEncoder.setBytes(&captureParams, length: MemoryLayout<CaptureParams>.size, index: 0)
+
+    // 7. 设置线程组
+    let threadgroupSize = MTLSize(width: 16, height: 16, depth: 1)
+    let threadgroupCount = MTLSize(
+        width: (inTexture.width + threadgroupSize.width - 1) / threadgroupSize.width,
+        height: (inTexture.height + threadgroupSize.height - 1) / threadgroupSize.height,
+        depth: 1)
+    computeCommandEncoder.dispatchThreadgroups(threadgroupCount, threadsPerThreadgroup: threadgroupSize)
+
+    // 8. 结束并提交
+    computeCommandEncoder.endEncoding()
+    commandBuffer.commit()
+    commandBuffer.waitUntilCompleted()
+
+    // 9. 从 outTexture 读取结果并保存
+    // ... (code to read texture data and save to a new file)
+
+    result(["filePath": "path/to/gpu_processed_image.jpg"])
+}

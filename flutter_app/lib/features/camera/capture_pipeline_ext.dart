@@ -423,3 +423,62 @@ Future<ui.Image> drawDevelopmentSoftness(ui.Image srcImage, double amount) async
 
   return _pixelsToImage(pixels, srcImage.width, srcImage.height);
 }
+
+
+/// 构建用于 Highlight Rolloff 的 256-entry 查找表 (LUT)
+///
+/// 预计算每个亮度级别的滚落系数，避免逐像素计算。
+Float32List buildHighlightRolloffLUT(double rolloff) {
+  final lut = Float32List(256);
+  if (rolloff < 0.001) return lut;
+
+  for (int i = 0; i < 256; i++) {
+    final double lum = i / 255.0;
+    if (lum > 0.70) {
+      final double t = (lum - 0.70) / 0.30;
+      lut[i] = t * t * (3.0 - 2.0 * t) * rolloff;
+    } else {
+      lut[i] = 0.0;
+    }
+  }
+  return lut;
+}
+
+/// 构建用于 Sensor Non-uniformity 的权重表
+///
+/// 预计算每个像素的增益/衰减系数，避免逐像素坐标计算。
+Float32List buildSensorNonUniformityTable(int width, int height, double centerGain, double edgeFalloff, {double cornerWarmShift = 0.0}) {
+  final table = Float32List(width * height * 3);
+  if (centerGain < 0.001 && edgeFalloff < 0.001 && cornerWarmShift.abs() < 0.001) return table;
+
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      final int i = y * width + x;
+      final double u = x / (width - 1) - 0.5;
+      final double v = y / (height - 1) - 0.5;
+      final double dist2 = u * u + v * v;
+
+      // Edge Falloff
+      final double falloff = (1.0 - dist2 * 2.0 * edgeFalloff).clamp(0.0, 1.0);
+
+      // Center Gain
+      final double centerMask = (1.0 - dist2 * 4.0).clamp(0.0, 1.0);
+      final double gainR = 1.0 + centerMask * centerGain * 1.2;
+      final double gainG = 1.0 + centerMask * centerGain;
+      final double gainB = 1.0 + centerMask * centerGain * 0.7;
+
+      // Corner Warm Shift
+      double shiftR = 0.0, shiftB = 0.0;
+      if (cornerWarmShift.abs() > 0.001) {
+        final double cornerMask = (dist2 - 0.15).clamp(0.0, 0.3) / 0.3;
+        shiftR = cornerWarmShift * cornerMask;
+        shiftB = -cornerWarmShift * cornerMask;
+      }
+
+      table[i * 3]     = falloff * gainR + shiftR;
+      table[i * 3 + 1] = falloff * gainG;
+      table[i * 3 + 2] = falloff * gainB + shiftB;
+    }
+  }
+  return table;
+}
