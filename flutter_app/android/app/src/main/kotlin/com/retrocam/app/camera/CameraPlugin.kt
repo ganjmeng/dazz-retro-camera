@@ -473,6 +473,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 (look["edgeFalloff"]         as? Number)?.let { params["edgeFalloff"]         = it }
                 (look["exposureVariation"]   as? Number)?.let { params["exposureVariation"]   = it }
                 (look["cornerWarmShift"]     as? Number)?.let { params["cornerWarmShift"]     = it }
+                // 用户曝光补偿（胶囊区拖条，必须在此映射，否则预览无效）
+                (look["exposureOffset"]       as? Number)?.let { params["exposureOffset"]       = it }
                 // SQC 专用字段
                 (look["centerGain"]           as? Number)?.let { params["centerGain"]           = it }
                 (look["developmentSoftness"]  as? Number)?.let { params["developmentSoftness"]  = it }
@@ -1095,6 +1097,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             (look["edgeFalloff"]         as? Number)?.let { params["edgeFalloff"]         = it }
             (look["exposureVariation"]   as? Number)?.let { params["exposureVariation"]   = it }
             (look["cornerWarmShift"]     as? Number)?.let { params["cornerWarmShift"]     = it }
+            // 用户曝光补偿（必须映射，否则预览无效）
+            (look["exposureOffset"]       as? Number)?.let { params["exposureOffset"]       = it }
             (look["centerGain"]           as? Number)?.let { params["centerGain"]           = it }
             (look["developmentSoftness"]  as? Number)?.let { params["developmentSoftness"]  = it }
             (look["chemicalIrregularity"] as? Number)?.let { params["chemicalIrregularity"] = it }
