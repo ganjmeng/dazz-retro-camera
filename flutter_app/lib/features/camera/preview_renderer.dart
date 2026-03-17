@@ -119,6 +119,19 @@ class PreviewRenderParams {
   double get paperTexture => defaultLook.paperTexture.clamp(0.0, 1.0);
   double get developmentSoftness => defaultLook.developmentSoftness.clamp(0.0, 1.0);
 
+  // 化学不规则感参数
+  double get irregUvScale => defaultLook.irregUvScale;
+  double get irregFreq1 => defaultLook.irregFreq1;
+  double get irregFreq2 => defaultLook.irregFreq2;
+  double get irregWeight1 => defaultLook.irregWeight1;
+  double get irregWeight2 => defaultLook.irregWeight2;
+
+  // 相纸纹理参数
+  double get paperUvScale1 => defaultLook.paperUvScale1;
+  double get paperUvScale2 => defaultLook.paperUvScale2;
+  double get paperWeight1 => defaultLook.paperWeight1;
+  double get paperWeight2 => defaultLook.paperWeight2;
+
   Map<String, dynamic> toJson() => {
         'cameraId': defaultLook.id,
         'contrast': effectiveContrast,
@@ -150,6 +163,17 @@ class PreviewRenderParams {
         'skinSatProtect': defaultLook.skinSatProtect,
         'skinLumaSoften': defaultLook.skinLumaSoften,
         'skinRedLimit': defaultLook.skinRedLimit,
+
+        'irregUvScale': irregUvScale,
+        'irregFreq1': irregFreq1,
+        'irregFreq2': irregFreq2,
+        'irregWeight1': irregWeight1,
+        'irregWeight2': irregWeight2,
+
+        'paperUvScale1': paperUvScale1,
+        'paperUvScale2': paperUvScale2,
+        'paperWeight1': paperWeight1,
+        'paperWeight2': paperWeight2,
       };
 }
 

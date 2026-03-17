@@ -168,12 +168,21 @@ class DefaultLook {
   // 化学显影特性组
   final double highlightRolloff;     // 0.0 ~ 1.0 高光柔和滴落（Inst C=0.20，SQC=0.28）
   final double paperTexture;         // 0.0 ~ 1.0 相纸纹理强度（Inst C=0.06，SQC=0.05）
+  final double paperUvScale1;
+  final double paperUvScale2;
+  final double paperWeight1;
+  final double paperWeight2;
   final double edgeFalloff;          // 0.0 ~ 1.0 边缘曝光衰减（不均匀曝光）
   final double exposureVariation;    // 0.0 ~ 1.0 全局曝光不均匀幅度
   final double cornerWarmShift;      // 0.0 ~ 1.0 边角偏暖（化学显影边缘特征）
   final double centerGain;           // 0.0 ~ 0.2 中心增亮（内置闪光灯中心亮度，Inst C=0.02，SQC=0.03）
   final double developmentSoftness;  // 0.0 ~ 0.2 显影柔化（化学扩散软化，Inst C=0.03，SQC=0.04）
   final double chemicalIrregularity; // 0.0 ~ 0.1 化学不规则感（胶片面积越小越低，Inst C=0.015，SQC=0.02）
+  final double irregUvScale;
+  final double irregFreq1;
+  final double irregFreq2;
+  final double irregWeight1;
+  final double irregWeight2;
   // 肤色保护组（拍立得以人像为主，防止肤色过橙/过红）
   final bool skinHueProtect;         // 肤色色相保护开关（Inst C=true，SQC=true）
   final double skinSatProtect;       // 0.0 ~ 1.0 肤色饱和度保护（Inst C=0.92，SQC=0.95）
@@ -207,12 +216,21 @@ class DefaultLook {
     // 拍立得即时成像专属字段（默认为 0，不影响其他相机）
     this.highlightRolloff = 0,
     this.paperTexture = 0,
+    this.paperUvScale1 = 8.0,
+    this.paperUvScale2 = 32.0,
+    this.paperWeight1 = 0.7,
+    this.paperWeight2 = 0.3,
     this.edgeFalloff = 0,
     this.exposureVariation = 0,
     this.cornerWarmShift = 0,
     this.centerGain = 0,
     this.developmentSoftness = 0,
     this.chemicalIrregularity = 0,
+    this.irregUvScale = 2.5,
+    this.irregFreq1 = 1.0,
+    this.irregFreq2 = 1.7,
+    this.irregWeight1 = 0.6,
+    this.irregWeight2 = 0.4,
     this.skinHueProtect = false,
     this.skinSatProtect = 1.0,
     this.skinLumaSoften = 0,
@@ -260,13 +278,22 @@ class DefaultLook {
     sharpness: (json['sharpness'] as num? ?? 1.0).toDouble(),
     // 拍立得即时成像专属字段
     highlightRolloff: (json['highlightRolloff'] as num? ?? 0).toDouble(),
-    paperTexture: (json['paperTexture'] as num? ?? 0).toDouble(),
+    paperTexture: (json["paperTexture"] as num? ?? 0).toDouble(),
+    paperUvScale1: (json["paperUvScale1"] as num? ?? 8.0).toDouble(),
+    paperUvScale2: (json["paperUvScale2"] as num? ?? 32.0).toDouble(),
+    paperWeight1: (json["paperWeight1"] as num? ?? 0.7).toDouble(),
+    paperWeight2: (json["paperWeight2"] as num? ?? 0.3).toDouble(),
     edgeFalloff: (json['edgeFalloff'] as num? ?? 0).toDouble(),
     exposureVariation: (json['exposureVariation'] as num? ?? 0).toDouble(),
     cornerWarmShift: (json['cornerWarmShift'] as num? ?? 0).toDouble(),
     centerGain: (json['centerGain'] as num? ?? 0).toDouble(),
     developmentSoftness: (json['developmentSoftness'] as num? ?? 0).toDouble(),
-    chemicalIrregularity: (json['chemicalIrregularity'] as num? ?? 0).toDouble(),
+    chemicalIrregularity: (json["chemicalIrregularity"] as num? ?? 0).toDouble(),
+    irregUvScale: (json["irregUvScale"] as num? ?? 2.5).toDouble(),
+    irregFreq1: (json["irregFreq1"] as num? ?? 1.0).toDouble(),
+    irregFreq2: (json["irregFreq2"] as num? ?? 1.7).toDouble(),
+    irregWeight1: (json["irregWeight1"] as num? ?? 0.6).toDouble(),
+    irregWeight2: (json["irregWeight2"] as num? ?? 0.4).toDouble(),
     skinHueProtect: json['skinHueProtect'] as bool? ?? false,
     skinSatProtect: (json['skinSatProtect'] as num? ?? 1.0).toDouble(),
     skinLumaSoften: (json['skinLumaSoften'] as num? ?? 0).toDouble(),
