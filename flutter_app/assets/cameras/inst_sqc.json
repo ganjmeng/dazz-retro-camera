@@ -35,7 +35,7 @@
     "sharpness": 1.0,
     "bloom": 0.08,
     "halation": 0.02,
-    "highlightRolloff": 0.22,
+    "highlightRolloff": 0.25,
     "vignette": 0.05,
     "edgeFalloff": 0.06,
     "exposureVariation": 0.045,
