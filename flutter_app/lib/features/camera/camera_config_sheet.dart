@@ -264,6 +264,66 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
   // Tab 已移除
   final ScrollController _cameraScrollCtrl = ScrollController();
 
+  // 相机列表每个 cell 的宽度（72px）+ 间距（12px）= 84px
+  static const double _kCellStride = 84.0;
+  // 列表左右 padding = 16px
+  static const double _kListPadding = 16.0;
+
+  @override
+  void initState() {
+    super.initState();
+    // 菜单打开后，在下一帧自动滚动到当前选中相机（仅当相机在可视区域外时才滚动）
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToActiveCamera());
+  }
+
+  /// 计算当前选中相机的索引，并在其不可见时自动滚动到该位置
+  void _scrollToActiveCamera() {
+    if (!mounted) return;
+    if (!_cameraScrollCtrl.hasClients) return;
+
+    final st = ref.read(cameraAppProvider);
+    final managerAsync = ref.read(cameraManagerProvider);
+
+    // 构建与 _buildCameraRow 相同的有序相机列表
+    final List<String> orderedIds;
+    if (managerAsync.hasValue) {
+      final mgr = managerAsync.value!;
+      orderedIds = [
+        ...mgr.favoriteIds,
+        ...mgr.nonFavoriteIds,
+      ].where((id) => mgr.enabledIds.contains(id)).toList();
+    } else {
+      orderedIds = kAllCameras.map((c) => c.id).toList();
+    }
+
+    final activeId = st.activeCameraId;
+    if (activeId == null) return;
+    final index = orderedIds.indexOf(activeId);
+    if (index < 0) return;
+
+    // 计算该 cell 的左边缘和右边缘在 ScrollView 内容坐标中的位置
+    final cellLeft  = _kListPadding + index * _kCellStride;
+    final cellRight = cellLeft + 72.0; // cell 宽度 72px
+
+    final viewportWidth = _cameraScrollCtrl.position.viewportDimension;
+    final scrollOffset  = _cameraScrollCtrl.position.pixels;
+    final visibleLeft   = scrollOffset;
+    final visibleRight  = scrollOffset + viewportWidth;
+
+    // 仅当 cell 不完全可见时才滚动
+    if (cellLeft >= visibleLeft && cellRight <= visibleRight) return;
+
+    // 计算目标偏移：将选中 cell 居中显示
+    final targetOffset = (cellLeft - (viewportWidth - 72.0) / 2)
+        .clamp(0.0, _cameraScrollCtrl.position.maxScrollExtent);
+
+    _cameraScrollCtrl.animateTo(
+      targetOffset,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   @override
   void dispose() {
     _cameraScrollCtrl.dispose();

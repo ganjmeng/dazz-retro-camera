@@ -3,11 +3,11 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:photo_view/photo_view.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/camera_registry.dart';
 import '../../core/l10n.dart';
+import '../image_edit/image_edit_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 全局缩略图字节缓存（内存级，App 存活期间有效，避免重复解码）
@@ -452,7 +452,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       itemBuilder: (ctx, index) {
         if (index == 0) {
           return GestureDetector(
-            onTap: () {},
+            onTap: () => openImageImportFlow(context),
             child: Container(
               color: const Color(0xFF1A1A1A),
               child: Column(
@@ -731,8 +731,6 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   // 优先显示原图，如果原图未加载则显示缩略图占位（避免闪烁）
   final Map<String, Uint8List> _fullDataCache = {};  // 原图数据
   final Map<String, Uint8List> _thumbDataCache = {}; // 缩略图占位数据
-  // 每页的 PhotoViewScaleStateController（用于重置缩放）
-  final Map<int, PhotoViewScaleStateController> _scaleControllers = {};
 
   // 滑动返回相关
   double _dragOffset = 0.0;
@@ -753,9 +751,6 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   @override
   void dispose() {
     _pageController.dispose();
-    for (final c in _scaleControllers.values) {
-      c.dispose();
-    }
     _fullDataCache.clear();
     _thumbDataCache.clear();
     super.dispose();
@@ -802,10 +797,6 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   /// 获取某页应显示的图片数据：原图优先，其次缩略图，最后 null
   Uint8List? _getDisplayData(String assetId) {
     return _fullDataCache[assetId] ?? _thumbDataCache[assetId];
-  }
-
-  PhotoViewScaleStateController _getScaleController(int index) {
-    return _scaleControllers.putIfAbsent(index, () => PhotoViewScaleStateController());
   }
 
   Future<void> _shareAsset() async {
@@ -922,12 +913,10 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
                 itemBuilder: (ctx, i) {
                   final pageAsset = widget.allAssets.isEmpty ? widget.asset : widget.allAssets[i];
                   final data = _getDisplayData(pageAsset.id);
-                  final scaleController = _getScaleController(i);
 
                   return _PhotoViewPage(
                     asset: pageAsset,
                     data: data,
-                    scaleController: scaleController,
                     onScaleChanged: (isZoomed) {
                       if (i == _currentIndex) {
                         setState(() => _isZoomed = isZoomed);
@@ -1003,27 +992,100 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 单页照片视图（PhotoView 手势缩放 + 缩略图占位）
+// 单页照片视图
+// 业界最佳实践：使用 InteractiveViewer 处理捏合缩放，
+// 通过 transformationController 监听缩放状态，
+// 缩放 > 1 时通知父级禁用 PageView 的横向翻页手势，
+// 从而彻底解决捏合放大与左右滑动的手势冲突。
 // ─────────────────────────────────────────────────────────────────────────────
-class _PhotoViewPage extends StatelessWidget {
+class _PhotoViewPage extends StatefulWidget {
   final AssetEntity asset;
   final Uint8List? data;
-  final PhotoViewScaleStateController scaleController;
   final void Function(bool isZoomed) onScaleChanged;
 
   const _PhotoViewPage({
     required this.asset,
     required this.data,
-    required this.scaleController,
     required this.onScaleChanged,
   });
+
+  @override
+  State<_PhotoViewPage> createState() => _PhotoViewPageState();
+}
+
+class _PhotoViewPageState extends State<_PhotoViewPage> with TickerProviderStateMixin {
+  final TransformationController _transformCtrl = TransformationController();
+  bool _isZoomed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _transformCtrl.addListener(_onTransformChanged);
+  }
+
+  void _onTransformChanged() {
+    // 从变换矩阵中提取缩放比例（M[0][0] 即 scaleX）
+    final scale = _transformCtrl.value.getMaxScaleOnAxis();
+    final zoomed = scale > 1.01; // 留 0.01 浮点容差
+    if (zoomed != _isZoomed) {
+      setState(() => _isZoomed = zoomed);
+      widget.onScaleChanged(zoomed);
+    }
+  }
+
+  /// 双击切换缩放：已缩放则重置，未缩放则放大到 2.5x（居中于点击位置）
+  void _onDoubleTapDown(TapDownDetails details) {
+    if (_isZoomed) {
+      // 已放大：重置到原始大小（带动画）
+      _animateToIdentity();
+    } else {
+      // 未放大：放大到 2.5x，以点击位置为中心
+      final position = details.localPosition;
+      final renderBox = context.findRenderObject() as RenderBox?;
+      if (renderBox == null) return;
+      final size = renderBox.size;
+      const scale = 2.5;
+      // 计算平移量，使点击位置成为缩放中心
+      final dx = -(position.dx - size.width / 2) * (scale - 1);
+      final dy = -(position.dy - size.height / 2) * (scale - 1);
+      final target = Matrix4.identity()
+        ..translate(dx, dy)
+        ..scale(scale);
+      _animateTo(target);
+    }
+  }
+
+  /// 带动画地将变换矩阵重置到 identity
+  void _animateToIdentity() {
+    _animateTo(Matrix4.identity());
+  }
+
+  void _animateTo(Matrix4 target) {
+    // 使用 AnimationController 实现平滑动画
+    final controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    final animation = Matrix4Tween(
+      begin: _transformCtrl.value,
+      end: target,
+    ).animate(CurvedAnimation(parent: controller, curve: Curves.easeOutCubic));
+    animation.addListener(() => _transformCtrl.value = animation.value);
+    controller.forward().then((_) => controller.dispose());
+  }
+
+  @override
+  void dispose() {
+    _transformCtrl.removeListener(_onTransformChanged);
+    _transformCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
 
-    if (data == null) {
-      // 数据未加载：显示占位
+    if (widget.data == null) {
       return Container(
         color: Colors.black,
         child: const Center(
@@ -1038,25 +1100,31 @@ class _PhotoViewPage extends StatelessWidget {
         children: [
           SizedBox(height: mq.padding.top),
           Expanded(
-            child: PhotoView(
-              imageProvider: MemoryImage(data!),
-              scaleStateController: scaleController,
-              minScale: PhotoViewComputedScale.contained,
-              maxScale: PhotoViewComputedScale.covered * 4.0,
-              initialScale: PhotoViewComputedScale.contained,
-              backgroundDecoration: const BoxDecoration(color: Colors.black),
-              // 缩放状态变化回调
-              scaleStateChangedCallback: (state) {
-                final isZoomed = state != PhotoViewScaleState.initial &&
-                    state != PhotoViewScaleState.zoomedOut;
-                onScaleChanged(isZoomed);
-              },
-              // 双击恢复原始大小
-              enableRotation: false,
-              tightMode: false,
-              filterQuality: FilterQuality.medium,
-              // 加载时用模糊缩略图占位（gaplessPlayback）
-              loadingBuilder: (ctx, event) => Container(color: Colors.black),
+            child: GestureDetector(
+              // 双击缩放（需要 onDoubleTapDown 获取点击位置，onDoubleTap 触发逻辑）
+              onDoubleTapDown: _onDoubleTapDown,
+              onDoubleTap: () {}, // 必须声明 onDoubleTap 才能让 onDoubleTapDown 生效
+              child: InteractiveViewer(
+                transformationController: _transformCtrl,
+                // 最小缩放：1.0（不允许缩小到比原始更小）
+                minScale: 1.0,
+                // 最大缩放：5.0
+                maxScale: 5.0,
+                // 关键：clipBehavior=none 允许图片在缩放时超出边界（配合 panEnabled 的边界限制）
+                clipBehavior: Clip.none,
+                // 缩放 > 1 时允许拖动，= 1 时禁止拖动（避免与 PageView 横滑冲突）
+                panEnabled: _isZoomed,
+                // 始终允许捏合缩放
+                scaleEnabled: true,
+                // 对齐到中心
+                alignment: Alignment.center,
+                child: Image.memory(
+                  widget.data!,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.medium,
+                  gaplessPlayback: true,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 90), // 底部操作栏占位
