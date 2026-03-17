@@ -372,12 +372,14 @@ class CapturePipeline {
       }
 
       // ── 4c. 暗角 ──────────────────────────────────────────────────────────────
-      if (renderParams != null && renderParams.effectiveVignette > 0.01) {
+      // GPU 成片管线已包含 Vignette Pass，仅在 Dart 降级时由 Canvas 补充
+      if (!gpuProcessed && renderParams != null && renderParams.effectiveVignette > 0.01) {
         _drawVignette(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, renderParams.effectiveVignette);
       }
 
       // ── 4c3. 胶片颗粒感（grain）+ 数字噪点（noise）──────────────────────────
-      if (renderParams != null && (renderParams.effectiveGrain > 0.01 || renderParams.noiseAmount > 0.001)) {
+      // GPU 成片管线已包含 Film Grain + Digital Noise Pass，仅在 Dart 降级时由 Canvas 补充
+      if (!gpuProcessed && renderParams != null && (renderParams.effectiveGrain > 0.01 || renderParams.noiseAmount > 0.001)) {
         _drawFilmGrain(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, renderParams.effectiveGrain, noiseAmount: renderParams.noiseAmount);
       }
 
@@ -393,8 +395,9 @@ class CapturePipeline {
       }
 
       // ── 4e. 色差（Chromatic Aberration）──────────────────────────────────────
-      // 与预览层 _ChromaticAberrationLayer 对齐：R 向左偏移，B 向右偏移
-      if (renderParams != null &&
+      // GPU 成片管线已包含 Chromatic Aberration Pass，仅在 Dart 降级时由 Canvas 补充
+      if (!gpuProcessed &&
+          renderParams != null &&
           renderParams.policy.enableChromaticAberration &&
           renderParams.effectiveChromaticAberration > 0.001) {
         _drawChromaticAberration(
@@ -405,8 +408,9 @@ class CapturePipeline {
       }
 
       // ── 4e2. Bloom / 柔焦光晕 ────────────────────────────────────────────────
-      // 与预览层 _BloomLayer 对齐：模糊图像叠加暖色调半透明层
-      if (renderParams != null &&
+      // GPU 成片管线已包含 Bloom Pass，仅在 Dart 降级时由 Canvas 补充
+      if (!gpuProcessed &&
+          renderParams != null &&
           renderParams.policy.enableBloom &&
           (renderParams.effectiveBloom > 0.01 || renderParams.effectiveSoftFocus > 0.01)) {
         _drawBloom(

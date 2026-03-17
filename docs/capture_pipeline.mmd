@@ -1,0 +1,61 @@
+graph TD
+    subgraph "触发"
+        A["用户按下快门"]
+    end
+
+    subgraph "Dart 成片管线 capture_pipeline.dart"
+        B["1. 读取原始 JPEG<br/>解码限制 maxDimension"]
+        C["2c. 尝试 Native GPU 处理<br/>processWithGpu(filePath, params)"]
+        D{"GPU 处理<br/>成功?"}
+        E["Dart 降级管线<br/>参数驱动 6 步处理<br/>Highlight Rolloff / Sensor /<br/>Skin / Chemical / Paper / Dev"]
+        F["2. 计算裁剪区域<br/>_calcCropRect(ratio)"]
+        G["3. 相框 inset 计算<br/>+ supportedRatios 校验"]
+        H1["4a. 背景色填充"]
+        H2["4b. 主图绘制<br/>drawImageRect"]
+        H3["4c-4e2. Dart 降级补充效果<br/>暗角 / 颗粒 / 色差 / Bloom<br/>仅 GPU 失败时执行"]
+        H4["4c2. 内嵌阴影<br/>相框专属 · 始终执行"]
+        H5["4d. 漏光 Light Leak<br/>相框专属 · 始终执行"]
+        H6["4e3. 鱼眼遮罩<br/>几何遮罩 · 始终执行"]
+        I["4f. 相框纹理 PNG 叠加"]
+        J["4g. 水印绘制"]
+        K["5. 旋转 + JPEG 编码<br/>输出 CaptureResult"]
+    end
+
+    subgraph "Android Native GPU 成片"
+        L["CaptureGLProcessor.kt<br/>processImage(filePath, params)"]
+        M["EGL PBuffer 离屏上下文<br/>JPEG → GL Texture"]
+        N["GLSL Fragment Shader<br/>19 Pass 完整管线"]
+        O["glReadPixels → Bitmap<br/>→ JPEG 临时文件"]
+    end
+
+    subgraph "iOS Native GPU 成片"
+        P["CaptureProcessor.swift<br/>processImage(filePath, params)"]
+        Q["Metal Compute Shader<br/>CapturePipeline.metal"]
+        R["17 Pass Compute Kernel<br/>capturePipeline()"]
+        S["MTLTexture → CGImage<br/>→ JPEG 临时文件"]
+    end
+
+    A --> B
+    B --> C
+    C --> D
+    D -->|"是 gpuProcessed=true"| F
+    D -->|"否"| E
+    E --> F
+    C -->|"Android"| L
+    C -->|"iOS"| P
+    L --> M --> N --> O
+    P --> Q --> R --> S
+    O -->|"filePath"| D
+    S -->|"filePath"| D
+    F --> G --> H1 --> H2
+    H2 -->|"仅 !gpuProcessed"| H3
+    H2 -->|"gpuProcessed 跳过"| H4
+    H3 --> H4
+    H4 --> H5 --> H6 --> I --> J --> K
+
+    style A fill:#ffcdd2
+    style N fill:#c8e6c9
+    style R fill:#c8e6c9
+    style E fill:#fff9c4
+    style H3 fill:#fff9c4,stroke-dasharray:5 5
+    style K fill:#e1f5fe

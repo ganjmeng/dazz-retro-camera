@@ -1,0 +1,57 @@
+graph TD
+    subgraph "数据源"
+        A["📷 CameraX / AVCapture<br/>相机传感器实时帧"]
+    end
+
+    subgraph "JSON 参数配置"
+        B["📄 cameras/*.json<br/>defaultLook + filters + lenses"]
+    end
+
+    subgraph "Dart 参数层"
+        C["PreviewRenderParams<br/>聚合 defaultLook + filter + lens + 用户调节"]
+        D["toJson()<br/>生成 40+ 键值对 Map"]
+    end
+
+    subgraph "Platform Channel"
+        E["MethodChannel<br/>updateParams(Map)"]
+    end
+
+    subgraph "Android Native GPU 预览"
+        F["CameraGLRenderer.kt<br/>updateParams() → @Volatile 字段"]
+        G["GLSL Fragment Shader<br/>20 Pass 实时渲染"]
+        H["eglSwapBuffers<br/>→ Flutter SurfaceTexture"]
+    end
+
+    subgraph "iOS Native GPU 预览"
+        I["MetalRenderer.swift<br/>updateParams() → CCDParams struct"]
+        J["CameraShaders.metal<br/>ccdFragmentShader 9 Pass"]
+        K["CVPixelBuffer<br/>→ Flutter Texture"]
+    end
+
+    subgraph "Flutter UI 层"
+        L["PreviewFilterWidget<br/>纯 Texture(textureId) 显示"]
+        M["WatermarkOverlay + GridOverlay<br/>UI 叠加层"]
+    end
+
+    A -->|"OES 纹理 / CVPixelBuffer"| F
+    A -->|"CMSampleBuffer"| I
+    B --> C
+    C --> D
+    D --> E
+    E -->|"Android"| F
+    E -->|"iOS"| I
+    F --> G
+    G --> H
+    I --> J
+    J --> K
+    H --> L
+    K --> L
+    L --> M
+
+    style A fill:#e1f5fe
+    style B fill:#fff3e0
+    style C fill:#f3e5f5
+    style D fill:#f3e5f5
+    style G fill:#c8e6c9
+    style J fill:#c8e6c9
+    style L fill:#e8eaf6

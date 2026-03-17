@@ -1,0 +1,80 @@
+流程图已生成：
+- preview_pipeline.png: 预览管线全流程（JSON→Dart→Channel→Native GPU→Flutter Texture）
+- capture_pipeline.png: 成片管线全流程（快门→JPEG→GPU/Dart降级→裁剪→Canvas→相框→水印→JPEG）
+
+Android 预览 Shader Pass 顺序（CameraGLRenderer.kt FRAGMENT_SHADER）：
+Pass 0: Sharpen (Unsharp Mask)
+Pass 1: Chromatic Aberration
+Pass 2: Temperature + Tint
+Pass 3: Blacks/Whites
+Pass 4: Highlights/Shadows
+Pass 5: Contrast
+Pass 6: Clarity
+Pass 7: Saturation + Vibrance
+Pass 8: ColorBias (RGB)
+Pass 9: Bloom
+Pass 10: Halation
+Pass 11: Highlight Rolloff (preview)
+Pass 12: Sensor Non-uniformity (CenterGain + EdgeFalloff + ExposureVariation + CornerWarm)
+Pass 13: Skin Protection
+Pass 14: Development Softness
+Pass 15: Highlight Rolloff 2 (tone curve)
+Pass 16: Tone Curve
+Pass 17: Paper Texture
+Pass 18: Film Grain
+Pass 19: Digital Noise (noise + luminanceNoise + chromaNoise)
+Pass 20: Vignette
+
+Android 成片 Shader Pass 顺序（CaptureGLProcessor.kt）：
+Pass 1: Chromatic Aberration
+Pass 2: Temperature + Tint
+Pass 3: Blacks/Whites
+Pass 4: Highlights/Shadows
+Pass 5: Contrast
+Pass 6: Clarity
+Pass 7: Saturation + Vibrance
+Pass 8: ColorBias (RGB)
+Pass 9: Bloom
+Pass 10: Halation
+Pass 11: Highlight Rolloff
+Pass 12: Center Gain
+Pass 13: Skin Protection
+Pass 14: Edge Falloff + Corner Warm
+Pass 15: Chemical Irregularity
+Pass 16: Paper Texture
+Pass 17: Film Grain
+Pass 18: Digital Noise
+Pass 19: Vignette
+
+iOS 预览 Shader Pass 顺序（CameraShaders.metal ccdFragmentShader）：
+Pass 0: Sharpen
+Pass 1: Chromatic Aberration
+Pass 2: Temperature + Tint + ColorBias + Contrast + Saturation
+Pass 2.1: Highlights/Shadows/Whites/Blacks + Clarity + Vibrance
+Pass 2.5: Highlight Rolloff
+Pass 3: Bloom
+Pass 4: Grain (预留)
+Pass 5: Digital Noise (noise + luminanceNoise + chromaNoise)
+Pass 6: Sensor Non-uniformity + Skin Protection
+Pass 7: LUT
+Pass 8: Tone Curve
+Pass 8.5: Paper Texture + Chemical Irregularity
+Pass 9: Vignette
+
+iOS 成片 Shader Pass 顺序（CapturePipeline.metal capturePipeline kernel）：
+Pass 2: Temperature + Tint
+Pass 3: Blacks/Whites
+Pass 4: Highlights/Shadows
+Pass 5: Contrast
+Pass 6: Clarity
+Pass 7: Saturation + Vibrance
+Pass 8: ColorBias (RGB)
+Pass 9: Bloom
+Pass 10: Highlight Rolloff
+Pass 11: Center Gain
+Pass 12: Skin Protection
+Pass 13: Edge Falloff + Corner Warm
+Pass 14: Chemical Irregularity
+Pass 15: Paper Texture
+Pass 16: Film Grain
+Pass 17: Vignette

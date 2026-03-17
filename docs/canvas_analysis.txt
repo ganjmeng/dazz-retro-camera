@@ -1,0 +1,26 @@
+Canvas 绘制步骤分析（GPU 处理成功后 Dart 层仍执行的操作）：
+
+步骤 4a: 填充画布背景色（仅有相框时）
+步骤 4b: 填充相框背景色（无 PNG 边框时的纯色背景）
+步骤 4b-main: 绘制主图（GPU 已处理的 srcImage，直接 drawImageRect，无 colorMatrix）
+步骤 4c: 暗角 Vignette（如果 effectiveVignette > 0.01）—— 这是 Dart Canvas 层的暗角
+步骤 4c3: 胶片颗粒 grain + 数字噪点 noise（如果 effectiveGrain > 0.01 或 noiseAmount > 0.001）—— Dart Canvas 层
+步骤 4c2: 内嵌阴影（拟物相纸厚度感，仅有相框且 innerShadow=true 时）
+步骤 4d: 漏光效果 lightLeak（仅有相框且 lightLeak > 0.01 时）
+步骤 4e: 色差 Chromatic Aberration（如果 enableChromaticAberration 且 > 0.001）—— Dart Canvas 层
+步骤 4e2: Bloom / 柔焦光晕（如果 enableBloom 且 > 0.01）—— Dart Canvas 层
+步骤 4e3: 鱼眼四角黑色遮罩
+步骤 4f: 相框纹理 PNG 叠加
+步骤 4g: 水印绘制
+
+关键问题：
+即使 GPU 管线已经处理了暗角、颗粒、色差、Bloom 等效果，Dart Canvas 层仍然会重复叠加这些效果！
+这意味着这些效果被双重应用了（GPU 一次 + Dart Canvas 一次）。
+
+但是——用户的问题是关于流程图描述不准确。流程图中"暗角→颗粒→内阴影→漏光→色差→Bloom→鱼眼遮罩"确实是 Dart Canvas 层实际执行的步骤。
+问题在于：GPU 成片管线已经包含了暗角、颗粒、色差、Bloom，那 Dart 层为什么还要再做一遍？
+
+查看代码：这些确实是在 GPU 处理之后、Canvas 绘制阶段执行的。
+这可能是一个实际存在的双重应用问题，或者 GPU 管线故意不处理这些（让 Canvas 来做）。
+
+需要确认：renderParams.policy.enableChromaticAberration 等 policy 开关是否在 GPU 处理后被关闭。
