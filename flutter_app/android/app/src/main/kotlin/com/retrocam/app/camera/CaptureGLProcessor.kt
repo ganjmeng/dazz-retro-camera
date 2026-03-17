@@ -646,10 +646,15 @@ void main() {
             val rawBitmap = BitmapFactory.decodeFile(filePath, options)
                 ?: return null.also { Log.e(TAG, "Failed to decode: $filePath") }
 
-            // 注意：不在 GPU 管线中处理 EXIF 旋转。
-            // Dart 层的 capture_pipeline.dart 会根据 deviceQuarter（设备传感器方向）
-            // 统一处理旋转，两者是同一方向信息的不同来源，不能重复处理。
-            val inBitmap = rawBitmap
+            // ── FIX: 读取 EXIF Orientation 并旋转/翻转 Bitmap ──────────────────
+            // BitmapFactory.decodeFile 不会自动应用 EXIF 旋转，
+            // 导致所有带 EXIF 旋转标记的照片（前置/后置均有）方向错误。
+            // EXIF Orientation 可表达 8 种变换（旋转+镜像），而 Dart 层的
+            // deviceQuarter 只能表达 4 种旋转，无法处理前置摄像头的镜像翻转。
+            // 因此必须在此处通过 EXIF 完整修正方向，Dart 层在 GPU 处理成功后
+            // 跳过 deviceQuarter 旋转，避免双重旋转。
+            val inBitmap = applyExifRotation(rawBitmap, filePath)
+            if (inBitmap !== rawBitmap) rawBitmap.recycle()
 
             val width = inBitmap.width
             val height = inBitmap.height

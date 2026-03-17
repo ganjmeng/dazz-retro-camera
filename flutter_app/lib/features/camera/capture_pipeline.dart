@@ -472,11 +472,17 @@ class CapturePipeline {
       final picture = recorder.endRecording();
       final outputImage = await picture.toImage(canvasW.toInt(), canvasH.toInt());
 
-      // ── 5b. 根据设备方向旋转图片 ──────────────────────────────────────────────
+      //      // ── 5b. 根据设备方向旋转图片 ────────────────────────────────────
+      // FIX: 当 GPU 管线已成功处理时，跳过 deviceQuarter 旋转。
+      // GPU 管线中的 applyExifRotation 已通过 EXIF Orientation 完整修正了
+      // 图像方向（包括旋转和镜像翻转），如果再用 deviceQuarter 旋转
+      // 会导致双重旋转。仅在 Dart 降级管线（未经 GPU 处理）时才用
+      // deviceQuarter 旋转。
+      final effectiveQuarter = gpuProcessed ? 0 : deviceQuarter;
       ui.Image finalImage = outputImage;
-      if (deviceQuarter != 0) {
-        final rotAngle = deviceQuarter * math.pi / 2;
-        final isLandscape = deviceQuarter == 1 || deviceQuarter == 3;
+      if (effectiveQuarter != 0) {
+        final rotAngle = effectiveQuarter * math.pi / 2;
+        final isLandscape = effectiveQuarter == 1 || effectiveQuarter == 3;
         final rotW = isLandscape ? canvasH : canvasW;
         final rotH = isLandscape ? canvasW : canvasH;
         final rotRecorder = ui.PictureRecorder();
@@ -487,16 +493,16 @@ class CapturePipeline {
         rotCanvas.drawImage(outputImage, Offset.zero, Paint());
         final rotPicture = rotRecorder.endRecording();
         finalImage = await rotPicture.toImage(rotW.toInt(), rotH.toInt());
-        debugPrint('[CapturePipeline] rotated: quarter=$deviceQuarter, ${rotW.toInt()}x${rotH.toInt()}');
+        debugPrint('[CapturePipeline] rotated: quarter=$effectiveQuarter, ${rotW.toInt()}x${rotH.toInt()}');
       }
 
-      // ── 5b-2. 应用 GL Shader 中缺失的效果 (已移动到 Canvas 绘制前) ──────────────
+      // ── 5b-2. 应用 GL Shader 中缺失的效果 (已移动到 Canvas 绘制前) ────────────
 
       final byteData = await finalImage.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (byteData == null) return null;
 
-      final finalW = deviceQuarter == 1 || deviceQuarter == 3 ? canvasH.toInt() : canvasW.toInt();
-      final finalH = deviceQuarter == 1 || deviceQuarter == 3 ? canvasW.toInt() : canvasH.toInt();
+      final finalW = effectiveQuarter == 1 || effectiveQuarter == 3 ? canvasH.toInt() : canvasW.toInt();
+      final finalH = effectiveQuarter == 1 || effectiveQuarter == 3 ? canvasW.toInt() : canvasH.toInt();
 
       final jpegBytes = await _encodeJpeg(
         byteData.buffer.asUint8List(),
