@@ -141,6 +141,36 @@ class CameraSessionManager: NSObject {
         }
     }
 
+    // MARK: - Focus & Exposure Point
+
+    /// 点击对焦 + 对焦点曝光（与 Android CameraX FocusMeteringAction 对等）
+    /// x, y: 归一化坐标 [0, 1]，原点在左上角
+    func setFocusAndExposure(x: CGFloat, y: CGFloat) {
+        guard let device = currentVideoInput?.device else { return }
+        // AVCaptureDevice 的 focusPointOfInterest 坐标系与屏幕一致：(0,0)=左上, (1,1)=右下
+        let point = CGPoint(x: x, y: y)
+        sessionQueue.async {
+            do {
+                try device.lockForConfiguration()
+                // 对焦
+                if device.isFocusPointOfInterestSupported &&
+                   device.isFocusModeSupported(.autoFocus) {
+                    device.focusPointOfInterest = point
+                    device.focusMode = .autoFocus
+                }
+                // 曝光
+                if device.isExposurePointOfInterestSupported &&
+                   device.isExposureModeSupported(.autoExpose) {
+                    device.exposurePointOfInterest = point
+                    device.exposureMode = .autoExpose
+                }
+                device.unlockForConfiguration()
+            } catch {
+                print("[CameraSessionManager] setFocusAndExposure error: \(error)")
+            }
+        }
+    }
+
     // MARK: - White Balance
 
     /// 手动夹紧白平衡增益值到设备支持的范围 [1.0, maxWhiteBalanceGain]

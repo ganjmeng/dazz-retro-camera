@@ -85,7 +85,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   double _tempDragStart = 0;
   double _tempAtDragStart = 0;
 
-  // ── 对焦圈 + 曝光太阳（取景框内） ──────────────────────────────────────────
+   // ── 对焦圈 + 曝光太阳（取景框内） ────────────────────────────────────
   // 对焦点（相对取景框的局部坐标）
   Offset? _focusPoint;
   // 曝光太阳在垂直轨道上的偏移量（像素，正=下=暗，负=上=亮）
@@ -99,6 +99,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _showFocusRing = false;
   // 是否正在拖动太阳（控制竖轨道线显示）
   bool _isDraggingSun = false;
+  // 对焦圈动画用 key（每次点击新位置时重建 widget，重新播放动画）
+  Key _focusRingKey = UniqueKey();
+  // 取景框尺寸（用于对焦坐标归一化）
+  double _viewfinderW = 0;
+  double _viewfinderH = 0;
   // 取景框中央文字提示（闪光灯/倒计时切换时显示）
   String? _viewfinderHint;
   Timer? _hintTimer;
@@ -437,9 +442,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     setState(() {
       _focusPoint = d.localPosition;
       _showFocusRing = true;
-      // 新对焦点时太阳视觉从中间开始（偏移清零），曝光值保留
+      // 新对焦点时太阳视觉从中间开始（偏移清零），曝光値保留
       _sunOffsetY = 0;
+      // 每次点击新位置都重建对焦圈 widget，重新播放动画
+      _focusRingKey = UniqueKey();
     });
+    // 调用原生对焦接口（将屏幕坐标归一化为 [0,1]）
+    if (_viewfinderW > 0 && _viewfinderH > 0) {
+      final nx = (d.localPosition.dx / _viewfinderW).clamp(0.0, 1.0);
+      final ny = (d.localPosition.dy / _viewfinderH).clamp(0.0, 1.0);
+      ref.read(cameraServiceProvider.notifier).setFocus(nx, ny);
+    }
     // 3秒后淡出对焦圈
     _focusFadeTimer?.cancel();
     _focusFadeTimer = Timer(const Duration(seconds: 3), () {
@@ -750,7 +763,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               child: SizedBox(
                 width: viewfinderW,
                 height: viewfinderH,
-                child: _buildViewfinderArea(st, camSvc, viewfinderH, viewfinderW),
+                child: Builder(builder: (ctx) {
+                  // 记录取景框尺寸，供对焦坐标归一化使用
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted && (_viewfinderW != viewfinderW || _viewfinderH != viewfinderH)) {
+                      setState(() {
+                        _viewfinderW = viewfinderW;
+                        _viewfinderH = viewfinderH;
+                      });
+                    }
+                  });
+                  return _buildViewfinderArea(st, camSvc, viewfinderH, viewfinderW);
+                }),
               ),
             ),
           ),
@@ -999,6 +1023,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // ── 对焦圈 + 曝光太阳 overlay ──
           if (_showFocusRing && _focusPoint != null)
             _FocusExposureOverlay(
+              key: _focusRingKey,
               focusPoint: _focusPoint!,
               sunOffsetY: _sunOffsetY,
               viewfinderH: areaH,
@@ -3624,8 +3649,18 @@ class _ColorWheelPainter extends CustomPainter {
 }
 
 // ─── 对焦圈 + 曝光太阳 Overlay ─────────────────────────────────────────────────
-// 复刻截图：白色圆形对焦圈（左），垂直白线轨道（右），太阳图标可上下拖动
-class _FocusExposureOverlay extends StatelessWidget {
+// 对焦框动画阶段：
+//   1. appearing  : 缩放 1.3→1.0 + 淡入（120ms）
+//   2. focusing   : 圈闪烁 2 次（400ms）
+//   3. confirming : 圈缩小到 0.85 再弹回 1.0（200ms）
+//   4. idle       : 静止显示，等待父层 3s 后 AnimatedOpacity 淡出
+//
+// 太阳图标与曝光轨道不参与对焦动画，保持原有交互逻辑不变
+
+/// 对焦动画阶段
+enum _FocusAnimPhase { appearing, focusing, confirming, idle }
+
+class _FocusExposureOverlay extends StatefulWidget {
   final Offset focusPoint;
   final double sunOffsetY;
   final double viewfinderH;
@@ -3635,6 +3670,7 @@ class _FocusExposureOverlay extends StatelessWidget {
   final GestureDragEndCallback onSunDragEnd;
 
   const _FocusExposureOverlay({
+    super.key,
     required this.focusPoint,
     required this.sunOffsetY,
     required this.viewfinderH,
@@ -3645,27 +3681,149 @@ class _FocusExposureOverlay extends StatelessWidget {
   });
 
   @override
+  State<_FocusExposureOverlay> createState() => _FocusExposureOverlayState();
+}
+
+class _FocusExposureOverlayState extends State<_FocusExposureOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _scaleAnim;
+  late Animation<double> _fadeInAnim;
+  late Animation<double> _blinkAnim;
+  late Animation<double> _confirmAnim;
+  _FocusAnimPhase _phase = _FocusAnimPhase.appearing;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 120));
+    _buildAppearAnims();
+    _playAppear();
+  }
+
+  void _buildAppearAnims() {
+    _scaleAnim = Tween<double>(begin: 1.3, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic),
+    );
+    _fadeInAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeOut),
+    );
+  }
+
+  void _buildBlinkAnims() {
+    _blinkAnim = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.25), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 0.25, end: 1.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.25), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 0.25, end: 1.0), weight: 1),
+    ]).animate(CurvedAnimation(parent: _ctrl, curve: Curves.linear));
+  }
+
+  void _buildConfirmAnims() {
+    _confirmAnim = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.85), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 0.85, end: 1.0), weight: 1),
+    ]).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  void _playAppear() {
+    setState(() => _phase = _FocusAnimPhase.appearing);
+    _ctrl.duration = const Duration(milliseconds: 120);
+    _ctrl.forward(from: 0).then((_) {
+      if (!mounted) return;
+      _playBlink();
+    });
+  }
+
+  void _playBlink() {
+    _buildBlinkAnims();
+    setState(() => _phase = _FocusAnimPhase.focusing);
+    _ctrl.duration = const Duration(milliseconds: 400);
+    _ctrl.forward(from: 0).then((_) {
+      if (!mounted) return;
+      _playConfirm();
+    });
+  }
+
+  void _playConfirm() {
+    _buildConfirmAnims();
+    setState(() => _phase = _FocusAnimPhase.confirming);
+    _ctrl.duration = const Duration(milliseconds: 200);
+    _ctrl.forward(from: 0).then((_) {
+      if (!mounted) return;
+      setState(() => _phase = _FocusAnimPhase.idle);
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Widget _buildRingWidget(double ringR) {
+    return SizedBox(
+      width: ringR * 2,
+      height: ringR * 2,
+      child: const DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.fromBorderSide(
+            BorderSide(color: Colors.white, width: 1.5),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // 对焦圈半径
     const ringR = 36.0;
-    // 太阳图标尺寸
     const sunSize = 28.0;
-    // 太阳距对焦圈右侧的水平偏移（固定，不随 Y 变化）
     const sunOffsetX = 48.0;
-    // 轨道高度：固定 160px，对齐参考截图中的短竖条
     const trackH = 160.0;
-    // 太阳中心 Y（相对取景框）= 对焦点 Y + sunOffsetY（随拖动移动）
-    final sunCenterY = focusPoint.dy + sunOffsetY;
-    // 太阳中心 X：固定在对焦点右侧
+    final focusPoint = widget.focusPoint;
+    final sunCenterY = focusPoint.dy + widget.sunOffsetY;
     final sunCenterX = focusPoint.dx + sunOffsetX;
-    // 轨道线的 X：与太阳同一列，但 top 固定在对焦点附近（不随太阳 Y 移动）
     final trackTop = focusPoint.dy - trackH / 2;
+
+    // 根据当前阶段构建对焦圈（含动画）
+    Widget ringWidget;
+    switch (_phase) {
+      case _FocusAnimPhase.appearing:
+        ringWidget = AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, child) => Opacity(
+            opacity: _fadeInAnim.value,
+            child: Transform.scale(scale: _scaleAnim.value, child: child),
+          ),
+          child: _buildRingWidget(ringR),
+        );
+        break;
+      case _FocusAnimPhase.focusing:
+        ringWidget = AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, child) => Opacity(opacity: _blinkAnim.value, child: child),
+          child: _buildRingWidget(ringR),
+        );
+        break;
+      case _FocusAnimPhase.confirming:
+        ringWidget = AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, child) => Transform.scale(scale: _confirmAnim.value, child: child),
+          child: _buildRingWidget(ringR),
+        );
+        break;
+      case _FocusAnimPhase.idle:
+        ringWidget = _buildRingWidget(ringR);
+        break;
+    }
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 垂直轨道线：拖动时才显示，位置固定在对焦点右侧（不随太阳移动）
-        if (isDragging)
+        // 垂直轨道线：拖动时才显示
+        if (widget.isDragging)
           Positioned(
             left: sunCenterX - 0.5,
             top: trackTop,
@@ -3675,18 +3833,11 @@ class _FocusExposureOverlay extends StatelessWidget {
               color: Colors.white.withAlpha(200),
             ),
           ),
-        // 对焦圈（白色空心圆，点击位置居中）
+        // 对焦圈（带动画）
         Positioned(
           left: focusPoint.dx - ringR,
           top: focusPoint.dy - ringR,
-          child: Container(
-            width: ringR * 2,
-            height: ringR * 2,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 1.5),
-            ),
-          ),
+          child: ringWidget,
         ),
         // 曝光太阳（可拖动，拖动时高亮）
         Positioned(
@@ -3694,16 +3845,15 @@ class _FocusExposureOverlay extends StatelessWidget {
           top: sunCenterY - sunSize / 2,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onVerticalDragStart: onSunDragStart,
-            onVerticalDragUpdate: onSunDragUpdate,
-            onVerticalDragEnd: onSunDragEnd,
+            onVerticalDragStart: widget.onSunDragStart,
+            onVerticalDragUpdate: widget.onSunDragUpdate,
+            onVerticalDragEnd: widget.onSunDragEnd,
             child: SizedBox(
               width: sunSize,
               height: sunSize,
               child: Icon(
                 Icons.wb_sunny_outlined,
-                // 拖动时太阳图标变为黄色，对齐参考截图
-                color: isDragging ? const Color(0xFFFFD60A) : Colors.white,
+                color: widget.isDragging ? const Color(0xFFFFD60A) : Colors.white,
                 size: sunSize,
               ),
             ),

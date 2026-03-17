@@ -16,6 +16,8 @@ import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.camera2.interop.CaptureRequestOptions
 import android.util.Size
 import androidx.camera.core.*
+import androidx.camera.core.FocusMeteringAction
+import androidx.camera.core.SurfaceOrientedMeteringPointFactory
 import androidx.camera.core.resolutionselector.ResolutionFilter
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
@@ -153,6 +155,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "takePhoto"       -> handleTakePhoto(call, result)
             "setZoom"         -> handleSetZoom(call, result)
             "setExposure"     -> handleSetExposure(call, result)
+            "setFocus"        -> handleSetFocus(call, result)
             "setFlash"        -> handleSetFlash(call, result)
             "setWhiteBalance" -> handleSetWhiteBalance(call, result)
             "setSharpen"         -> handleSetSharpen(call, result)
@@ -703,6 +706,36 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             result.success(null)
         } catch (e: Exception) {
             result.error("EXPOSURE_FAILED", e.message, null)
+        }
+    }
+
+    /**
+     * 点击对焦 + 对焦点曝光（行业最佳实践）
+     * x, y: 归一化坐标 [0, 1]，原点在左上角
+     * 使用 CameraX FocusMeteringAction + SurfaceOrientedMeteringPointFactory
+     */
+    private fun handleSetFocus(call: MethodCall, result: MethodChannel.Result) {
+        val x = call.argument<Double>("x")?.toFloat() ?: 0.5f
+        val y = call.argument<Double>("y")?.toFloat() ?: 0.5f
+        val cam = camera
+        val st = surfaceTexture
+        if (cam == null || st == null) {
+            result.success(null)
+            return
+        }
+        try {
+            // SurfaceOrientedMeteringPointFactory 使用归一化坐标，自动处理旋转和镜像
+            val factory = SurfaceOrientedMeteringPointFactory(1.0f, 1.0f)
+            val point = factory.createPoint(x, y)
+            val action = FocusMeteringAction.Builder(point,
+                FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
+                .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+            cam.cameraControl.startFocusAndMetering(action)
+            result.success(null)
+        } catch (e: Exception) {
+            Log.w(TAG, "setFocus failed: ${e.message}")
+            result.success(null) // 对焦失败不影响拍摄流程
         }
     }
 

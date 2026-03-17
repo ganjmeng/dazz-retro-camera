@@ -171,6 +171,16 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
+  /// 点击对焦 + 对焦点曝光
+  /// [x], [y]: 归一化坐标 [0, 1]，原点在取景框左上角
+  Future<void> setFocus(double x, double y) async {
+    try {
+      await _channel.invokeMethod('setFocus', {'x': x, 'y': y});
+    } catch (e) {
+      print('Error setting focus: $e');
+    }
+  }
+
   /// 设置清晰度（锐化强度）
   /// [level] 0.0=低, 0.5=中, 1.0=高
   Future<void> setSharpen(double level) async {

@@ -75,6 +75,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleSetZoom(call: call, result: result)
         case "setExposure":
             handleSetExposure(call: call, result: result)
+        case "setFocus":
+            handleSetFocus(call: call, result: result)
         case "setWhiteBalance":
             handleSetWhiteBalance(call: call, result: result)
         case "setSharpen":
@@ -270,6 +272,21 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             return
         }
         cameraManager?.setExposure(bias: Float(ev))
+        result(nil)
+    }
+
+    // ─────────────────────────────────────────────
+    // setFocus — 点击对焦 + 对焦点曝光（与 Android CameraX FocusMeteringAction 对等）
+    // x, y: 归一化坐标 [0, 1]，原点在左上角
+    // ─────────────────────────────────────────────
+    private func handleSetFocus(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any]
+        guard let x = args?["x"] as? Double,
+              let y = args?["y"] as? Double else {
+            result(nil)
+            return
+        }
+        cameraManager?.setFocusAndExposure(x: CGFloat(x), y: CGFloat(y))
         result(nil)
     }
 
