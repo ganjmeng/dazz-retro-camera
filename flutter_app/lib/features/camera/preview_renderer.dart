@@ -113,8 +113,11 @@ class PreviewRenderParams {
   double get edgeFalloff => defaultLook.edgeFalloff.clamp(0.0, 1.0);
   double get skinHueProtect => defaultLook.skinHueProtect ? 1.0 : 0.0;
   double get chemicalIrregularity => defaultLook.chemicalIrregularity.clamp(0.0, 0.1);
-  /// noiseAmount 目前在 DefaultLook 中没有对应字段，暂时返回 0
-  double get noiseAmount => 0.0;
+  /// FIX: noiseAmount 现已添加到 DefaultLook
+  double get noiseAmount => defaultLook.noiseAmount.clamp(0.0, 1.0);
+  double get skinSatProtect => defaultLook.skinSatProtect.clamp(0.0, 1.0);
+  double get skinLumaSoften => defaultLook.skinLumaSoften.clamp(0.0, 0.2);
+  double get skinRedLimit => defaultLook.skinRedLimit.clamp(0.9, 1.2);
 
   double get paperTexture => defaultLook.paperTexture.clamp(0.0, 1.0);
   double get developmentSoftness => defaultLook.developmentSoftness.clamp(0.0, 1.0);
@@ -133,7 +136,6 @@ class PreviewRenderParams {
   double get paperWeight2 => defaultLook.paperWeight2;
 
   Map<String, dynamic> toJson() => {
-        'cameraId': defaultLook.id,
         'contrast': effectiveContrast,
         'saturation': effectiveSaturation,
         'temperatureShift': effectiveTemperature,

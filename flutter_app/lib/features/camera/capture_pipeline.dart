@@ -349,25 +349,9 @@ class CapturePipeline {
         final ghostAlpha2 = (shakeStrength * 35).clamp(0, 35).toInt();
         final shakeRect1 = Rect.fromLTWH(frameOffsetX + leftPx + dx1, frameOffsetY + topPx + dy1, outW, outH);
         final shakeRect2 = Rect.fromLTWH(frameOffsetX + leftPx + dx2, frameOffsetY + topPx + dy2, outW, outH);
-
-        if (useGpu && (Platform.isIOS || Platform.isAndroid)) {
-        try {
-          debugPrint("[CapturePipeline] Attempting to use native GPU pipeline...");
-          final result = await _channel.invokeMethod("processWithGpu", {
-            "filePath": imagePath,
-            "params": renderParams?.toJson(), // 假设 PreviewRenderParams 有 toJson()
-          });
-          final newPath = result["filePath"];
-          final file = File(newPath);
-          final bytes = await file.readAsBytes();
-          final codec = await ui.instantiateImageCodec(bytes);
-          final frame = await codec.getNextFrame();
-          srcImage = frame.image;
-          debugPrint("[CapturePipeline] Native GPU pipeline successful.");
-          // GPU 处理已包含所有效果，gpuProcessed=true，Canvas 阶段直接绘制即可
-        } catch (e) {
-          debugPrint("[CapturePipeline] Native GPU pipeline failed, falling back to Dart: $e");
-        }
+        // TODO: 使用 shakeRect1/shakeRect2/ghostAlpha1/ghostAlpha2 绘制抑影效果
+        // ignore: unused_local_variable
+        final _unused = [shakeRect1, shakeRect2, ghostAlpha1, ghostAlpha2];
       }
 
       // 鱼眼模式：先 save/clipPath 圆形区域，使图片只在圆内绘制（与 GL shader 一致）

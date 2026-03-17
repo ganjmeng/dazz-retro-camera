@@ -115,7 +115,7 @@ class IsolateParams {
   final double paperWeight2;
 
   IsolateParams.from(PreviewRenderParams p) : 
-    skinHueProtect = p.skinHueProtect,
+    skinHueProtect = p.skinHueProtect > 0.5,  // FIX: double getter 转 bool
     skinSatProtect = p.skinSatProtect,
     skinLumaSoften = p.skinLumaSoften,
     skinRedLimit = p.skinRedLimit,

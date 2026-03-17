@@ -2,7 +2,7 @@ import 'dart:ui' as ui;
 import './pipeline_utils.dart';
 import '../capture_pipeline_ext.dart';
 import '../preview_renderer.dart';
-import './instc_pipeline.dart' show _applyIsolateEffects;
+import './instc_pipeline.dart' show applyIsolateEffects;
 
 /// BW Classic 专属成片管线
 /// 对标 BWClassicShader.metal（12 Pass），补全预览中被 SIMPLIFIED 注释掉的 2 个 Pass

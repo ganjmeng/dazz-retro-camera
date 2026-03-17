@@ -37,14 +37,14 @@ Future<ui.Image> processInstC(ui.Image srcImage, PreviewRenderParams params) asy
   if (isoParams.chemicalIrregularity > 0.001 ||
       isoParams.paperTexture > 0.001 ||
       isoParams.skinHueProtect) {
-    srcImage = await _applyIsolateEffects(srcImage, isoParams);
+    srcImage = await applyIsolateEffects(srcImage, isoParams);
   }
 
   return srcImage;
 }
 
 /// 通用 Isolate 并行处理入口（所有专属管线共用）
-Future<ui.Image> _applyIsolateEffects(ui.Image image, IsolateParams isoParams) async {
+Future<ui.Image> applyIsolateEffects(ui.Image image, IsolateParams isoParams) async {
   final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
   if (byteData == null) return image;
 

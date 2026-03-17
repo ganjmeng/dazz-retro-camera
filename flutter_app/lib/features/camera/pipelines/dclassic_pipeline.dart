@@ -2,7 +2,7 @@ import 'dart:ui' as ui;
 import './pipeline_utils.dart';
 import '../capture_pipeline_ext.dart';
 import '../preview_renderer.dart';
-import './instc_pipeline.dart' show _applyIsolateEffects;
+import './instc_pipeline.dart' show applyIsolateEffects;
 
 /// D-Classic 专属成片管线
 /// 对标 CameraShaders.metal（通用 CCD Shader），参数参考 D-Classic defaultLook
@@ -31,7 +31,7 @@ Future<ui.Image> processDClassic(ui.Image srcImage, PreviewRenderParams params) 
   // skinSatProtect=0.98, skinLumaSoften=0.01, skinRedLimit=1.02（最保守参数）
   final isoParams = IsolateParams.from(params);
   if (isoParams.skinHueProtect) {
-    srcImage = await _applyIsolateEffects(srcImage, isoParams);
+    srcImage = await applyIsolateEffects(srcImage, isoParams);
   }
 
   return srcImage;

@@ -2,7 +2,7 @@ import 'dart:ui' as ui;
 import './pipeline_utils.dart';
 import '../capture_pipeline_ext.dart';
 import '../preview_renderer.dart';
-import './instc_pipeline.dart' show _applyIsolateEffects;
+import './instc_pipeline.dart' show applyIsolateEffects;
 
 /// FQS 专属成片管线
 /// 对标 FQSShader.metal（15 Pass），补全预览中被 SIMPLIFIED 注释掉的 4 个 Pass
@@ -36,7 +36,7 @@ Future<ui.Image> processFQS(ui.Image srcImage, PreviewRenderParams params) async
   // FQS chemicalIrregularity=0.022（较强，FQS 化学显影不均匀感明显）
   final isoParams = IsolateParams.from(params);
   if (isoParams.chemicalIrregularity > 0.001 || isoParams.skinHueProtect) {
-    srcImage = await _applyIsolateEffects(srcImage, isoParams);
+    srcImage = await applyIsolateEffects(srcImage, isoParams);
   }
 
   return srcImage;

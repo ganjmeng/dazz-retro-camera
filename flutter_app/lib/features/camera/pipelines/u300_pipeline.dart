@@ -2,7 +2,7 @@ import 'dart:ui' as ui;
 import './pipeline_utils.dart';
 import '../capture_pipeline_ext.dart';
 import '../preview_renderer.dart';
-import './instc_pipeline.dart' show _applyIsolateEffects;
+import './instc_pipeline.dart' show applyIsolateEffects;
 
 /// U300 专属成片管线
 /// 对标 U300Shader.metal（14 Pass），补全预览中被 SIMPLIFIED 注释掉的 5 个 Pass
@@ -37,7 +37,7 @@ Future<ui.Image> processU300(ui.Image srcImage, PreviewRenderParams params) asyn
   // U300 defaultLook: chemicalIrregularity=0.025（较强，模拟廉价传感器噪声）
   final isoParams = IsolateParams.from(params);
   if (isoParams.chemicalIrregularity > 0.001 || isoParams.skinHueProtect) {
-    srcImage = await _applyIsolateEffects(srcImage, isoParams);
+    srcImage = await applyIsolateEffects(srcImage, isoParams);
   }
 
   return srcImage;

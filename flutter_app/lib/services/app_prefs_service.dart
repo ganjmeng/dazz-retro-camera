@@ -31,7 +31,7 @@ class AppPrefs {
     this.minimapEnabled         = false,
     this.shutterSoundEnabled    = true,
     this.shutterVibrationEnabled = true,
-    this.lastCameraId           = kDefaultCameraOrder[0],
+    this.lastCameraId           = 'fxn_r',  // FIX: const default (kDefaultCameraOrder[0] is not const-evaluable)
     this.mirrorFrontCamera      = true,
   });
 }

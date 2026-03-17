@@ -2,7 +2,7 @@ import 'dart:ui' as ui;
 import './pipeline_utils.dart';
 import '../capture_pipeline_ext.dart';
 import '../preview_renderer.dart';
-import './instc_pipeline.dart' show _applyIsolateEffects;
+import './instc_pipeline.dart' show applyIsolateEffects;
 
 /// SQC / Inst SQ 专属成片管线
 /// 对标 SQCShader.metal（19 Pass），补全预览中被 SIMPLIFIED 注释掉的 8 个 Pass
@@ -38,7 +38,7 @@ Future<ui.Image> processSQC(ui.Image srcImage, PreviewRenderParams params) async
   if (isoParams.chemicalIrregularity > 0.001 ||
       isoParams.paperTexture > 0.001 ||
       isoParams.skinHueProtect) {
-    srcImage = await _applyIsolateEffects(srcImage, isoParams);
+    srcImage = await applyIsolateEffects(srcImage, isoParams);
   }
 
   return srcImage;
