@@ -96,11 +96,12 @@ static float cp_random(float2 uv, float seed) {
     return fract(sin(dot(uv + seed, float2(127.1, 311.7))) * 43758.5453123);
 }
 
-/// 色温偏移：负值偏冷（蓝），正值偏暖（橙）
+/// 色温偏移：正值偏暖（加R减B），负值偏冷（减R加B）
+/// 与预览 Shader (CameraShaders.metal applyTemperatureShift) 方向一致
 static float3 cp_temperatureShift(float3 color, float shift) {
     float s = shift / 1000.0;
-    color.r = clamp(color.r - s * 0.3, 0.0, 1.0);
-    color.b = clamp(color.b + s * 0.3, 0.0, 1.0);
+    color.r = clamp(color.r + s * 0.3, 0.0, 1.0);
+    color.b = clamp(color.b - s * 0.3, 0.0, 1.0);
     return color;
 }
 

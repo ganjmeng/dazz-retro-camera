@@ -358,12 +358,24 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           ? snapshot.zoomLevel : 1.0;
       // retainFrame 开启时：有快照则恢复快照值（含 null=关闭相框）；无快照则用默认值
       // retainFrame 关闭时：始终使用 defaults.frameId
-      final String? frameId;
+      // FIX: 恢复 frameId 时必须检查当前相机是否支持该 frame，以及当前 ratio 是否兼容
+      String? frameId;
       if (retainState.retainFrame && snapshot != null) {
-        // 快照存在时，直接使用快照中的 frameId（null 表示用户主动关闭了相框）
         frameId = snapshot.frameId;
       } else {
         frameId = defaults.frameId;
+      }
+      // 验证 frameId 在当前相机中存在（非拍立得相机的 frames 为空，frameId 会被清空）
+      if (frameId != null && camera.frameById(frameId) == null) {
+        frameId = null;
+      }
+      // 验证 frame 支持当前 ratio（如 2:3 比例下拍立得相框不可用）
+      if (frameId != null) {
+        final frame = camera.frameById(frameId);
+        if (frame != null && frame.supportedRatios.isNotEmpty &&
+            !frame.supportedRatios.contains(defaults.ratioId)) {
+          frameId = null;
+        }
       }
 
       state = state.copyWith(

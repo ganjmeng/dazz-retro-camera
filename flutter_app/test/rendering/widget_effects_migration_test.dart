@@ -113,12 +113,9 @@ void main() {
       // In Phase 2, we want to ensure the Dart-side ColorFilter doesn't double-apply
       // the contrast and saturation if the policy disables it.
       
-      // Get the matrix that would be used by ColorFiltered widget
-      // Note: buildColorMatrix is private in _ColorCorrectedTexture, but we can access it via computeColorMatrix
-      // if it was exported, or we can just verify the logic here.
-      // For this test, we assume computeColorMatrix respects the policy.
-      
-      // Since computeColorMatrix might not be exposed, we'll verify the policy state directly
+      // Phase 2 重构后：ColorFilter/buildColorMatrix/computeColorMatrix 已全部删除
+      // Flutter 层不再做像素级渲染，所有色彩处理由 Native Shader 完成
+      // 验证 policy 状态仍然正确（用于 Native 层判断是否启用某些 pass）
       expect(params.policy.enableContrast, isFalse);
       expect(params.policy.enableSaturation, isFalse);
       

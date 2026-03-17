@@ -300,6 +300,79 @@ float3 applyHighlightRolloff(float3 color, float rolloff) {
     return clamp(color * compress, 0.0, 1.0);
 }
 
+// MARK: - Tint 偏移（绿-品轴）
+/// 正值 = 偏绿（+G -M），负值 = 偏品（-G +M）
+float3 applyTintShift(float3 color, float shift) {
+    float s = shift / 1000.0;
+    color.g = clamp(color.g + s * 0.2, 0.0, 1.0);
+    return color;
+}
+
+// MARK: - ColorBias （RGB 通道偏移）
+float3 applyColorBias(float3 color, float biasR, float biasG, float biasB) {
+    color.r = clamp(color.r + biasR, 0.0, 1.0);
+    color.g = clamp(color.g + biasG, 0.0, 1.0);
+    color.b = clamp(color.b + biasB, 0.0, 1.0);
+    return color;
+}
+
+// MARK: - Lightroom 风格参数
+float3 applyHighlightsShadows(float3 color, float highlights, float shadows, float whites, float blacks) {
+    float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
+    // Highlights: 影响亮部（luma > 0.5）
+    float hiMask = clamp((luma - 0.5) * 2.0, 0.0, 1.0);
+    color += hiMask * highlights * 0.01;
+    // Shadows: 影响暗部（luma < 0.5）
+    float shMask = clamp((0.5 - luma) * 2.0, 0.0, 1.0);
+    color += shMask * shadows * 0.01;
+    // Whites: 影响极亮部（luma > 0.75）
+    float whMask = clamp((luma - 0.75) * 4.0, 0.0, 1.0);
+    color += whMask * whites * 0.01;
+    // Blacks: 影响极暗部（luma < 0.25）
+    float blMask = clamp((0.25 - luma) * 4.0, 0.0, 1.0);
+    color += blMask * blacks * 0.01;
+    return clamp(color, 0.0, 1.0);
+}
+
+float3 applyClarity(float3 color, texture2d<float> tex, sampler s, float2 uv, float2 texelSize, float clarity) {
+    if (clarity == 0.0) return color;
+    // 简化版清晰度：局部对比度增强
+    float3 blurred =
+        tex.sample(s, uv + float2(-texelSize.x * 2.0, 0.0)).rgb * 0.25 +
+        tex.sample(s, uv + float2( texelSize.x * 2.0, 0.0)).rgb * 0.25 +
+        tex.sample(s, uv + float2(0.0, -texelSize.y * 2.0)).rgb * 0.25 +
+        tex.sample(s, uv + float2(0.0,  texelSize.y * 2.0)).rgb * 0.25;
+    float3 detail = color - blurred;
+    return clamp(color + detail * clarity * 0.5, 0.0, 1.0);
+}
+
+float3 applyVibrance(float3 color, float vibrance) {
+    if (vibrance == 0.0) return color;
+    float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float maxC = max(max(color.r, color.g), color.b);
+    float minC = min(min(color.r, color.g), color.b);
+    float sat = (maxC > 0.0) ? (maxC - minC) / maxC : 0.0;
+    // 低饱和区域增强更多
+    float boost = (1.0 - sat) * vibrance * 0.02;
+    return clamp(mix(float3(luma), color, 1.0 + boost), 0.0, 1.0);
+}
+
+// MARK: - Paper Texture （相纸纹理）
+float3 applyPaperTexture(float3 color, float2 uv, float amount, float time) {
+    if (amount <= 0.0) return color;
+    float paper = random(uv * 8.0, time * 0.001 + 42.0);
+    return clamp(color + (paper - 0.5) * amount * 0.15, 0.0, 1.0);
+}
+
+// MARK: - Chemical Irregularity （化学不规则感）
+float3 applyChemicalIrregularity(float3 color, float2 uv, float amount, float time) {
+    if (amount <= 0.0) return color;
+    float irr = random(uv * 3.0, time * 0.002 + 17.0) - 0.5;
+    float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float midMask = 1.0 - abs(luma - 0.5) * 2.0;
+    return clamp(color + irr * amount * midMask * 0.2, 0.0, 1.0);
+}
+
 // MARK: - CCD 风格片段着色器
 fragment float4 ccdFragmentShader(
     VertexOut in [[stage_in]],
@@ -348,8 +421,15 @@ fragment float4 ccdFragmentShader(
 
     // === Pass 2: 基础色彩调整 ===
     color = applyTemperatureShift(color, params.temperatureShift);
+    color = applyTintShift(color, params.tintShift);
+    color = applyColorBias(color, params.colorBiasR, params.colorBiasG, params.colorBiasB);
     color = applyContrast(color, params.contrast);
     color = applySaturation(color, params.saturation);
+    
+    // === Pass 2.1: Lightroom 风格参数 ===
+    color = applyHighlightsShadows(color, params.highlights, params.shadows, params.whites, params.blacks);
+    color = applyClarity(color, cameraTexture, textureSampler, uv, texelSize, params.clarity);
+    color = applyVibrance(color, params.vibrance);
     
     // === Pass 2.5: 高光柔和滚落 (Highlight Rolloff) ===
     // FXN-R=0.16：高光层次保留，防止过曝失真
@@ -432,6 +512,10 @@ fragment float4 ccdFragmentShader(
         curved.b = applyFxnrToneCurve(color.b);
         color = mix(color, curved, params.toneCurveStrength);
     }
+
+    // === Pass 8.5: Paper Texture + Chemical Irregularity ===
+    color = applyPaperTexture(color, uv, params.paperTexture, params.time);
+    color = applyChemicalIrregularity(color, uv, params.chemicalIrregularity, params.time);
 
     // === Pass 9: 暗角 (Vignette) ===
     // 鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗

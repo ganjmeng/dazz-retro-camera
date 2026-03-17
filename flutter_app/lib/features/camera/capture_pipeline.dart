@@ -3,16 +3,6 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'capture_pipeline_ext.dart';
-import 'pipelines/instc_pipeline.dart';
-import 'pipelines/sqc_pipeline.dart';
-import 'pipelines/fqs_pipeline.dart';
-import 'pipelines/cpm35_pipeline.dart';
-import 'pipelines/grdr_pipeline.dart';
-import 'pipelines/bwclassic_pipeline.dart';
-import 'pipelines/u300_pipeline.dart';
-import 'pipelines/ccdr_pipeline.dart';
-import 'pipelines/fxnr_pipeline.dart';
-import 'pipelines/dclassic_pipeline.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -126,64 +116,42 @@ class CapturePipeline {
         }
       }
       if (!gpuProcessed && renderParams != null) {
-        debugPrint('[CapturePipeline] Applying camera-specific pipeline for: ${camera.id}');
-        // Dart 降级管线（LUT 预计算 + 专属管线）
-      switch (camera.id) {
-          case 'inst_c':
-          case 'inst_s':
-            srcImage = await processInstC(srcImage, renderParams);
-            break;
-          case 'sqc':
-          case 'inst_sq':
-            srcImage = await processSQC(srcImage, renderParams);
-            break;
-          case 'fqs':
-            srcImage = await processFQS(srcImage, renderParams);
-            break;
-          case 'cpm35':
-            srcImage = await processCPM35(srcImage, renderParams);
-            break;
-          case 'grd_r':
-            srcImage = await processGRDR(srcImage, renderParams);
-            break;
-          case 'bw_classic':
-            srcImage = await processBWClassic(srcImage, renderParams);
-            break;
-          case 'u300':
-            srcImage = await processU300(srcImage, renderParams);
-            break;
-          case 'ccd_r':
-          case 'ccd_m':
-            srcImage = await processCCDR(srcImage, renderParams);
-            break;
-          case 'fxn_r':
-            srcImage = await processFXNR(srcImage, renderParams);
-            break;
-          case 'd_classic':
-            srcImage = await processDClassic(srcImage, renderParams);
-            break;
-          default:
-            // fisheye 等其他相机：使用 renderParams 中的通用参数兜底
-            if (renderParams.highlightRolloff > 0.001) {
-              srcImage = await drawHighlightRolloff(srcImage, renderParams.highlightRolloff);
-            }
-            if (renderParams.centerGain > 0.001 || renderParams.edgeFalloff > 0.001) {
-              srcImage = await drawSensorNonUniformity(srcImage, renderParams.centerGain, renderParams.edgeFalloff);
-            }
-            if (renderParams.skinHueProtect > 0.5) {
-              srcImage = await drawSkinHueProtect(srcImage, renderParams.skinHueProtect);
-            }
-            if (renderParams.chemicalIrregularity > 0.001) {
-              srcImage = await drawChemicalIrregularity(srcImage, renderParams.chemicalIrregularity);
-            }
-            if (renderParams.paperTexture > 0.001) {
-              srcImage = await drawPaperTexture(srcImage, renderParams.paperTexture);
-            }
-            if (renderParams.developmentSoftness > 0.001) {
-              srcImage = await drawDevelopmentSoftness(srcImage, renderParams.developmentSoftness);
-            }
+        debugPrint('[CapturePipeline] Applying universal Dart fallback pipeline for: ${camera.id}');
+        // ── 统一 Dart 降级管线（参数驱动，不再按相机 ID 路由）──────────────
+        // 所有相机差异完全由 renderParams（来自 DefaultLook JSON）驱动
+        // 处理顺序与 Native Shader（CaptureGLProcessor / CapturePipeline.metal）一致：
+        //   1. Highlight Rolloff → 2. Sensor Non-uniformity → 3. Skin Protection
+        //   → 4. Chemical Irregularity → 5. Paper Texture → 6. Development Softness
+        if (renderParams.highlightRolloff > 0.001) {
+          srcImage = await drawHighlightRolloff(srcImage, renderParams.highlightRolloff);
         }
-        debugPrint('[CapturePipeline] Camera-specific pipeline applied.');
+        if (renderParams.centerGain > 0.001 || renderParams.edgeFalloff > 0.001) {
+          srcImage = await drawSensorNonUniformity(
+            srcImage,
+            renderParams.centerGain,
+            renderParams.edgeFalloff,
+            cornerWarmShift: renderParams.cornerWarmShift,
+          );
+        }
+        if (renderParams.skinHueProtect > 0.5) {
+          srcImage = await drawSkinHueProtect(
+            srcImage,
+            renderParams.skinHueProtect,
+            satProtect: renderParams.skinSatProtect,
+            lumaSoften: renderParams.skinLumaSoften,
+            redLimit: renderParams.skinRedLimit,
+          );
+        }
+        if (renderParams.chemicalIrregularity > 0.001) {
+          srcImage = await drawChemicalIrregularity(srcImage, renderParams.chemicalIrregularity);
+        }
+        if (renderParams.paperTexture > 0.001) {
+          srcImage = await drawPaperTexture(srcImage, renderParams.paperTexture);
+        }
+        if (renderParams.developmentSoftness > 0.001) {
+          srcImage = await drawDevelopmentSoftness(srcImage, renderParams.developmentSoftness);
+        }
+        debugPrint('[CapturePipeline] Universal fallback pipeline applied.');
       }
 
       final srcW = srcImage.width.toDouble();
@@ -215,6 +183,13 @@ class CapturePipeline {
           selectedFrameId != 'none') {
         try {
           frameOpt = camera.modules.frames.firstWhere((f) => f.id == selectedFrameId);
+          // FIX: 检查相框是否支持当前 ratio（如 2:3 比例下拍立得相框不可用）
+          if (frameOpt.supportedRatios.isNotEmpty &&
+              !frameOpt.supportedRatios.contains(selectedRatioId)) {
+            debugPrint('[CapturePipeline] frame ${selectedFrameId} does not support ratio $selectedRatioId, skipping');
+            frameOpt = null;
+          }
+          if (frameOpt == null) throw StateError('frame not supported for ratio');
           final refSize = math.min(outW, outH);
           final scale = refSize / 1080.0;
           final activeInset = frameOpt.insetForRatio(selectedRatioId);

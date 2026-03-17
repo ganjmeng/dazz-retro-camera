@@ -94,12 +94,12 @@ void main() {
       expect(params.effectiveSaturation, 1.5);
       expect(params.effectiveTemperature, 50.0);
       
-      // We can also verify the old ColorFilter matrix generation as a baseline
-      final matrix = computeColorMatrix(params);
-      expect(matrix.length, 20);
-      // Ensure the matrix is not just the identity matrix
-      final isIdentity = matrix[0] == 1.0 && matrix[6] == 1.0 && matrix[12] == 1.0;
-      expect(isIdentity, isFalse);
+      // Phase 2 重构后：computeColorMatrix 已删除，所有色彩处理由 Native Shader 完成
+      // 验证 toJson 包含所有必要的参数
+      final json = params.toJson();
+      expect(json['contrast'], 1.2);
+      expect(json['saturation'], 1.5);
+      expect(json['temperatureShift'], 50.0);
     });
   });
 }

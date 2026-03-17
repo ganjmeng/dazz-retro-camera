@@ -149,13 +149,17 @@ vec3 applyChromaticAberration(sampler2D tex, vec2 uv, float amount) {
 
 // ── Pass 2: 色温 ──────────────────────────────────────────────────────
 vec3 applyTemperature(vec3 c, float shift) {
-    c.r = clamp(c.r + shift * 0.1, 0.0, 1.0);
-    c.b = clamp(c.b - shift * 0.1, 0.0, 1.0);
+    // shift 范围 -200~+200，/1000 后约 ±0.2，与预览 Shader 对齐
+    float s = shift / 1000.0;
+    c.r = clamp(c.r + s * 0.3, 0.0, 1.0);
+    c.b = clamp(c.b - s * 0.3, 0.0, 1.0);
     return c;
 }
 
 vec3 applyTint(vec3 c, float shift) {
-    c.g = clamp(c.g + shift * 0.05, 0.0, 1.0);
+    // shift 范围 -200~+200，/1000 后约 ±0.2，与预览 Shader 对齐
+    float s = shift / 1000.0;
+    c.g = clamp(c.g + s * 0.2, 0.0, 1.0);
     return c;
 }
 
@@ -222,7 +226,8 @@ vec3 applyVibrance(vec3 c, float vibrance) {
 
 // ── Pass 8: RGB 通道偏移 ──────────────────────────────────────────────
 vec3 applyColorBias(vec3 c, float r, float g, float b) {
-    return clamp(c + vec3(r, g, b) * 0.1, 0.0, 1.0);
+    // colorBias 值已是归一化的小数（如 -0.030, +0.048），直接加，与预览 Shader 对齐
+    return clamp(c + vec3(r, g, b), 0.0, 1.0);
 }
 
 // ── Pass 9: Bloom ─────────────────────────────────────────────────────

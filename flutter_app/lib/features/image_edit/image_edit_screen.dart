@@ -389,21 +389,18 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   }
 
   Widget _buildTransformedImage(CameraAppState st, BoxConstraints constraints) {
-    final params = st.renderParams ?? const renderer_lib.PreviewRenderParams();
-    final colorMatrix = renderer_lib.computeColorMatrix(params);
+    // Phase 2 重构：色彩处理已统一由 Native GPU Shader 完成
+    // image_edit_screen 显示的是 GPU 处理后的成片，不再叠加 Flutter ColorFilter
     return Transform(
       alignment: Alignment.center,
       transform: Matrix4.identity()
         ..rotateZ(_totalRotation * math.pi / 180.0)
         ..scale(_flipH ? -1.0 : 1.0, 1.0),
-      child: ColorFiltered(
-        colorFilter: ColorFilter.matrix(colorMatrix),
-        child: Image.file(
-          File(widget.imagePath),
-          fit: BoxFit.cover,
-          width: constraints.maxWidth,
-          height: constraints.maxHeight,
-        ),
+      child: Image.file(
+        File(widget.imagePath),
+        fit: BoxFit.cover,
+        width: constraints.maxWidth,
+        height: constraints.maxHeight,
       ),
     );
   }

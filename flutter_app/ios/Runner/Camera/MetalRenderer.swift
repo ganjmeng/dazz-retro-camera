@@ -181,50 +181,19 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         buildPipeline(cameraId: camId)
     }
 
-    /// 根据相机 ID 选择对应的 Fragment Shader 并构建 MTLRenderPipelineState
-    ///
-    /// 映射规则：
-    ///   fqs   → fqsVertexShader   / fqsFragmentShader   (FQSShader.metal)
-    ///   cpm35 → cpm35VertexShader / cpm35FragmentShader  (CPM35Shader.metal)
-    ///   其他  → vertexShader      / ccdFragmentShader    (CameraShaders.metal)
+    /// 构建通用 MTLRenderPipelineState
+    /// Phase 1 统一重构：所有相机使用通用 CameraShaders.metal
+    /// 相机差异完全由 JSON defaultLook 参数驱动
     private func buildPipeline(cameraId: String) {
         guard let library = device.makeDefaultLibrary() else {
             print("[MetalRenderer] Failed to load default Metal library")
             return
         }
 
-        let vertexName: String
-        let fragmentName: String
-
-        switch cameraId {
-        case "fqs":
-            vertexName   = "fqsVertexShader"
-            fragmentName = "fqsFragmentShader"
-        case "cpm35":
-            vertexName   = "cpm35VertexShader"
-            fragmentName = "cpm35FragmentShader"
-        case "inst_c":
-            vertexName   = "instcVertexShader"
-            fragmentName = "instcFragmentShader"
-        case "sqc":
-            vertexName   = "sqcVertexShader"
-            fragmentName = "sqcFragmentShader"
-        case "grd_r":
-            vertexName   = "grdrVertexShader"
-            fragmentName = "grdrFragmentShader"
-        case "u300":
-            vertexName   = "u300VertexShader"
-            fragmentName = "u300FragmentShader"
-        case "ccd_r":
-            vertexName   = "ccdrVertexShader"
-            fragmentName = "ccdrFragmentShader"
-        case "bw_classic":
-            vertexName   = "bwClassicVertexShader"
-            fragmentName = "bwClassicFragmentShader"
-        default:
-            vertexName   = "vertexShader"
-            fragmentName = "ccdFragmentShader"
-        }
+        // Phase 1 统一重构：所有相机统一使用通用 CameraShaders.metal
+        // 相机差异完全由 JSON defaultLook 参数驱动，不再按相机 ID 选择不同 Shader
+        let vertexName   = "vertexShader"
+        let fragmentName = "ccdFragmentShader"
 
         // 尝试加载目标 Shader，失败时降级到通用 CCD Shader
         let vertexFn: MTLFunction

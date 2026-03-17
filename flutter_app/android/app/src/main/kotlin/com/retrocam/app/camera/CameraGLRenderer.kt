@@ -93,6 +93,24 @@ uniform float uChromaNoise;         // 色度噪声（FXN-R=0.01）
 // ── LUT + Tone Curve + Highlight Rolloff ──
 uniform float uHighlightRolloff2;   // 高光柔和滚落（FXN-R=0.16）
 uniform float uToneCurveStrength;   // Tone Curve 强度（FXN-R=1.0）
+// ── Lightroom 风格参数（Phase 2 下沉：原 Flutter ColorFilter 矩阵逻辑）──
+uniform float uHighlights;          // 高光调整 (-200~+200)
+uniform float uShadows;             // 阴影调整 (-200~+200)
+uniform float uWhites;              // 白场 (-200~+200)
+uniform float uBlacks;              // 黑场 (-200~+200)
+uniform float uClarity;             // 清晰度 (-200~+200)
+uniform float uVibrance;            // 自然饱和度 (-200~+200)
+// ── RGB 通道偏移 + Tint ──
+uniform float uColorBiasR;          // R 通道偏移（如 CCD R: +0.048）
+uniform float uColorBiasG;          // G 通道偏移（如 CCD R: -0.008）
+uniform float uColorBiasB;          // B 通道偏移（如 CCD R: -0.030）
+uniform float uTintShift;           // 色调偏移（绿-品红轴）
+// ── 光学特效（Phase 2 下沉：原 Flutter Widget 层 Bloom/Halation）──
+uniform float uHalationAmount;      // 高光辉光（如 FQS: 0.12）
+uniform float uBloomAmount;         // 高光光晕（如 CPM35: 0.15）
+uniform float uGrainSize;           // 颗粒大小（如 FQS: 1.2）
+uniform float uHighlightRolloff;    // 高光滚落（预览用，如 INST C: 0.18）
+uniform float uPaperTexture;        // 相纸纹理（如 INST C: 0.15）
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────────
 // 高光柔和滚落
@@ -244,16 +262,102 @@ vec2 fisheyeUV(vec2 uv, float aspect) {
     return texCoord;
 }
 
-// ── 主函数 ────────────────────────────────────────────────────────
+// ── Phase 2 下沉工具函数：Blacks/Whites、Highlights/Shadows、Clarity、Vibrance、Tint、ColorBias、Bloom、Halation ──
+vec3 applyBlacksWhites(vec3 c, float blacks, float whites) {
+    float b = blacks / 200.0;
+    float w = whites / 200.0;
+    c = c * (1.0 + w - b) + b;
+    return clamp(c, 0.0, 1.0);
+}
+vec3 applyHighlightsShadows(vec3 c, float highlights, float shadows) {
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    float h = highlights / 200.0;
+    float s = shadows / 200.0;
+    float highlightMask = smoothstep(0.5, 1.0, lum);
+    float shadowMask    = 1.0 - smoothstep(0.0, 0.5, lum);
+    c = c + c * h * highlightMask - c * h * highlightMask * highlightMask;
+    c = c + (1.0 - c) * s * shadowMask;
+    return clamp(c, 0.0, 1.0);
+}
+vec3 applyClarity(vec3 c, vec2 uv, float clarity) {
+    if (abs(clarity) < 0.5) return c;
+    vec3 blurred = vec3(0.0);
+    float w = uTexelSize.x * 3.0;
+    float h = uTexelSize.y * 3.0;
+    blurred += texture(uCameraTexture, uv + vec2(-w, -h)).rgb * 0.0625;
+    blurred += texture(uCameraTexture, uv + vec2( 0, -h)).rgb * 0.125;
+    blurred += texture(uCameraTexture, uv + vec2( w, -h)).rgb * 0.0625;
+    blurred += texture(uCameraTexture, uv + vec2(-w,  0)).rgb * 0.125;
+    blurred += texture(uCameraTexture, uv + vec2( 0,  0)).rgb * 0.25;
+    blurred += texture(uCameraTexture, uv + vec2( w,  0)).rgb * 0.125;
+    blurred += texture(uCameraTexture, uv + vec2(-w,  h)).rgb * 0.0625;
+    blurred += texture(uCameraTexture, uv + vec2( 0,  h)).rgb * 0.125;
+    blurred += texture(uCameraTexture, uv + vec2( w,  h)).rgb * 0.0625;
+    float midMask = 1.0 - abs(dot(c, vec3(0.2126, 0.7152, 0.0722)) * 2.0 - 1.0);
+    vec3 detail = c - blurred;
+    return clamp(c + detail * clarity * 0.003 * midMask, 0.0, 1.0);
+}
+vec3 applyVibrance(vec3 c, float vibrance) {
+    if (abs(vibrance) < 0.5) return c;
+    float v = vibrance / 100.0;
+    float sat = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+    float mask = 1.0 - sat;
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    return clamp(mix(vec3(lum), c, 1.0 + v * mask), 0.0, 1.0);
+}
+vec3 applyTint(vec3 c, float shift) {
+    float s = shift / 1000.0;
+    c.g = clamp(c.g + s * 0.2, 0.0, 1.0);
+    return c;
+}
+vec3 applyColorBias(vec3 c, float r, float g, float b) {
+    return clamp(c + vec3(r, g, b), 0.0, 1.0);
+}
+vec3 applyBloom(vec3 c, float amount) {
+    if (amount < 0.001) return c;
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    if (lum > 0.75) {
+        float bloom = clamp((lum - 0.75) * amount * 2.5, 0.0, 0.25);
+        c.r = clamp(c.r + bloom * 0.9, 0.0, 1.0);
+        c.g = clamp(c.g + bloom * 0.8, 0.0, 1.0);
+        c.b = clamp(c.b + bloom * 0.6, 0.0, 1.0);
+    }
+    return c;
+}
+vec3 applyHalation(vec3 c, float amount) {
+    if (amount < 0.001) return c;
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    if (lum > 0.65) {
+        float halo = clamp((lum - 0.65) * amount * 2.0, 0.0, 0.3);
+        c.r = clamp(c.r + halo * 1.0, 0.0, 1.0);
+        c.g = clamp(c.g + halo * 0.3, 0.0, 1.0);
+    }
+    return c;
+}
+vec3 applyPaperTexture(vec3 c, vec2 uv, float amount) {
+    if (amount < 0.001) return c;
+    float n = random(uv * 50.0, 0.0) - 0.5;
+    return clamp(c + n * amount * 0.04, 0.0, 1.0);
+}
+vec3 applyHighlightRolloffPreview(vec3 c, float rolloff) {
+    if (rolloff < 0.001) return c;
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    if (lum > 0.70) {
+        float t = (lum - 0.70) / 0.30;
+        float compress = 1.0 - t * t * (3.0 - 2.0 * t) * rolloff * 0.3;
+        c *= compress;
+    }
+    return clamp(c, 0.0, 1.0);
+}
+
+// ── 主函数（统一渲染管线，所有相机差异由 uniform 参数驱动）────────────
 void main() {
     vec2 uv = vTexCoord;
-    bool isCircleOutside = false;
 
     // 鱼眼模式：重映射 UV 坐标
     if (uFisheyeMode > 0.5) {
         vec2 fUV = fisheyeUV(uv, uAspectRatio);
         if (fUV.x < 0.0) {
-            // 圆形以外：输出纯黑
             fragColor = vec4(0.0, 0.0, 0.0, 1.0);
             return;
         }
@@ -264,8 +368,6 @@ void main() {
     vec3 color = applySharpen(uv, uSharpen);
 
     // Pass 1: 色差 (Chromatic Aberration)
-    // ca 字段范围 0~1.0，乘以 uTexelSize.x * 20.0 转换为像素级偏移
-    // 例：ca=0.18 在 1080p 下≈ 0.18*20*(1/1080) ≈ 0.003 UV 单位 ≈ 3px，视觉上轻微色差
     if (uChromaticAberration > 0.0) {
         float ca = uChromaticAberration * uTexelSize.x * 20.0;
         float r = texture(uCameraTexture, uv + vec2(ca, 0.0)).r;
@@ -274,25 +376,90 @@ void main() {
         color = vec3(r, g, b);
     }
 
-    // Pass 2: 基础色彩调整
+    // Pass 2: 色温 + Tint
     color = applyTemperature(color, uTemperatureShift);
-    color = applyContrast(color, uContrast);
-    color = applySaturation(color, uSaturation);
+    color = applyTint(color, uTintShift);
 
-    // Pass 3: 程序化胶片颗粒（不依赖外部纹理）
+    // Pass 3: 黑场/白场
+    color = applyBlacksWhites(color, uBlacks, uWhites);
+
+    // Pass 4: 高光/阴影
+    color = applyHighlightsShadows(color, uHighlights, uShadows);
+
+    // Pass 5: 对比度
+    color = applyContrast(color, uContrast);
+
+    // Pass 6: Clarity
+    color = applyClarity(color, uv, uClarity);
+
+    // Pass 7: 饱和度 + Vibrance
+    color = applySaturation(color, uSaturation);
+    color = applyVibrance(color, uVibrance);
+
+    // Pass 8: RGB 通道偏移
+    color = applyColorBias(color, uColorBiasR, uColorBiasG, uColorBiasB);
+
+    // Pass 9: Bloom
+    color = applyBloom(color, uBloomAmount);
+
+    // Pass 10: Halation
+    color = applyHalation(color, uHalationAmount);
+
+    // Pass 11: Highlight Rolloff
+    color = applyHighlightRolloffPreview(color, uHighlightRolloff);
+
+    // Pass 12: 传感器非均匀性
+    if (uCenterGain > 0.0 || uEdgeFalloff > 0.0) {
+        float factor = ccdCenterEdge(uv, uCenterGain, uEdgeFalloff);
+        color = clamp(color * factor, 0.0, 1.0);
+    }
+    if (uExposureVariation > 0.0) {
+        float evn = random(uv * 0.1, uTime * 0.01) - 0.5;
+        color = clamp(color + evn * uExposureVariation * 0.3, 0.0, 1.0);
+    }
+    if (uCornerWarmShift != 0.0) {
+        color = ccdCornerWarm(uv, color, uCornerWarmShift);
+    }
+
+    // Pass 13: 肤色保护
+    color = ccdSkinProtect(color, uSkinHueProtect, uSkinSatProtect, uSkinLumaSoften, uSkinRedLimit);
+
+    // Pass 14: 显影柔化
+    if (uDevelopmentSoftness > 0.0) {
+        color = ccdDevelopmentSoften(uv, color, uDevelopmentSoftness);
+    }
+
+    // Pass 15: 高光柔和滚落 2（Tone Curve 配合）
+    if (uHighlightRolloff2 > 0.0) {
+        color = ccdHighlightRolloff(color, uHighlightRolloff2);
+    }
+
+    // Pass 16: Tone Curve
+    if (uToneCurveStrength > 0.0) {
+        vec3 curved = vec3(
+            fxnrToneCurve(color.r),
+            fxnrToneCurve(color.g),
+            fxnrToneCurve(color.b)
+        );
+        color = mix(color, curved, uToneCurveStrength);
+    }
+
+    // Pass 17: 相纸纹理
+    color = applyPaperTexture(color, uv, uPaperTexture);
+
+    // Pass 18: 胶片颗粒
     if (uGrainAmount > 0.0) {
         float grain = random(uv, floor(uTime * 24.0) / 24.0) - 0.5;
         color = clamp(color + grain * uGrainAmount * 0.25, 0.0, 1.0);
     }
 
-    // Pass 4: 动态数字噪点
+    // Pass 19: 数字噪点
     if (uNoiseAmount > 0.0) {
         float lum   = dot(color, vec3(0.2126, 0.7152, 0.0722));
         float noise = random(uv, uTime) - 0.5;
         float dark  = 1.0 - lum;
         color = clamp(color + noise * uNoiseAmount * 0.2 * dark, 0.0, 1.0);
     }
-    // FXN-R: luminanceNoise=0.02, chromaNoise=0.01
     if (uLuminanceNoise > 0.0) {
         float ln = random(uv, uTime + 1.7) - 0.5;
         color = clamp(color + ln * uLuminanceNoise * 0.15, 0.0, 1.0);
@@ -304,44 +471,7 @@ void main() {
         color = clamp(color + vec3(cr, cg, cb) * uChromaNoise * 0.08, 0.0, 1.0);
     }
 
-    // Pass 5: 传感器非均匀性 + 肤色保护
-    // FXN-R: centerGain=0.010, edgeFalloff=0.035
-    if (uCenterGain > 0.0 || uEdgeFalloff > 0.0) {
-        float factor = ccdCenterEdge(uv, uCenterGain, uEdgeFalloff);
-        color = clamp(color * factor, 0.0, 1.0);
-    }
-    // FXN-R: exposureVariation=0.020
-    if (uExposureVariation > 0.0) {
-        float evn = random(uv * 0.1, uTime * 0.01) - 0.5;
-        color = clamp(color + evn * uExposureVariation * 0.3, 0.0, 1.0);
-    }
-    // FXN-R: cornerWarmShift=-0.015 (负値=偏冷青)
-    if (uCornerWarmShift != 0.0) {
-        color = ccdCornerWarm(uv, color, uCornerWarmShift);
-    }
-    // FXN-R: developmentSoftness=0.020
-    if (uDevelopmentSoftness > 0.0) {
-        color = ccdDevelopmentSoften(uv, color, uDevelopmentSoftness);
-    }
-    // FXN-R: skinHueProtect=1.0, skinSatProtect=0.96, skinLumaSoften=0.03, skinRedLimit=1.04
-    color = ccdSkinProtect(color, uSkinHueProtect, uSkinSatProtect, uSkinLumaSoften, uSkinRedLimit);
-
-    // Pass 6: 高光柔和滚落（Highlight Rolloff）
-    // FXN-R=0.16：高光层次保留，防止过曝失真
-    if (uHighlightRolloff2 > 0.0) {
-        color = ccdHighlightRolloff(color, uHighlightRolloff2);
-    }
-    // Pass 7: Tone Curve
-    // FXN-R Tone Curve：阴影压、中间调通透、高光滚落
-    if (uToneCurveStrength > 0.0) {
-        vec3 curved = vec3(
-            fxnrToneCurve(color.r),
-            fxnrToneCurve(color.g),
-            fxnrToneCurve(color.b)
-        );
-        color = mix(color, curved, uToneCurveStrength);
-    }
-    // Pass 8: 暗角（鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗）
+    // Pass 20: 暗角（鱼眼模式下不叠加额外暗角）
     if (uFisheyeMode < 0.5) {
         float vignette = vignetteEffect(uv, uVignetteAmount);
         color *= vignette;
@@ -585,19 +715,8 @@ void main() {
             return
         }
 
-         // ── 7. 编译着色器（根据 cameraId 选择专用 Shader）──────────────
-        val fragShader = when (currentCameraId) {
-            "fqs"       -> FQSShaderSource.FRAGMENT_SHADER
-            "cpm35"     -> CPM35ShaderSource.FRAGMENT_SHADER
-            "inst_c"    -> InstCShaderSource.FRAGMENT_SHADER
-            "sqc"       -> SQCGLRenderer.FRAGMENT_SHADER
-            "grd_r"     -> GRDRGLRenderer.FRAGMENT_SHADER
-            "u300"      -> U300GLRenderer.FRAGMENT_SHADER
-            "ccd_r"     -> CCDRGLRenderer.FRAGMENT_SHADER
-            "bw_classic" -> BWClassicGLRenderer.FRAGMENT_SHADER
-            else        -> FRAGMENT_SHADER
-        }
-        programId = createProgram(VERTEX_SHADER, fragShader)
+          // ── 7. 编译着色器（统一使用通用 Shader，所有相机差异由 uniform 参数驱动）───
+        programId = createProgram(VERTEX_SHADER, FRAGMENT_SHADER)
         if (programId == 0) {
             Log.e(TAG, "Failed to create shader program")
             return
@@ -813,7 +932,9 @@ void main() {
         (params["noise"]               as? Number)?.let { noiseAmount         = it.toFloat() }
         (params["noiseAmount"]         as? Number)?.let { noiseAmount         = it.toFloat() }
         (params["vignette"]            as? Number)?.let { vignetteAmount      = it.toFloat() }
+        (params["vignetteAmount"]      as? Number)?.let { vignetteAmount      = it.toFloat() }
         (params["grain"]               as? Number)?.let { grainAmount         = it.toFloat() }
+        (params["grainAmount"]         as? Number)?.let { grainAmount         = it.toFloat() }
         (params["sharpen"]             as? Number)?.let { sharpen             = it.toFloat() }
         // FIX: Lightroom 风格曲线参数
         (params["highlights"]          as? Number)?.let { highlights          = it.toFloat() }
@@ -849,6 +970,11 @@ void main() {
         // LUT + Tone Curve + Highlight Rolloff
         (params["highlightRolloff"]     as? Number)?.let { highlightRolloff2    = it.toFloat() }
         (params["toneCurveStrength"]    as? Number)?.let { toneCurveStrength    = it.toFloat() }
+        // Phase 2 下沉：新增参数（之前由 Flutter Widget 层处理，现在由 Native Shader 处理）
+        (params["lensVignette"]         as? Number)?.let { vignetteAmount      = it.toFloat() }
+        (params["exposureOffset"]       as? Number)?.let { /* TODO: 添加 exposureOffset uniform */ }
+        (params["softFocus"]            as? Number)?.let { /* TODO: 添加 softFocus uniform */ }
+        (params["distortion"]           as? Number)?.let { fisheyeMode         = it.toFloat() }
     }
 
     /**
@@ -874,19 +1000,8 @@ void main() {
                 GLES30.glDeleteProgram(programId)
                 programId = 0
             }
-            // 编译新 Shader
-            val fragShader = when (cameraId) {
-                "fqs"    -> FQSShaderSource.FRAGMENT_SHADER
-                "cpm35"  -> CPM35ShaderSource.FRAGMENT_SHADER
-                "inst_c" -> InstCShaderSource.FRAGMENT_SHADER
-                "sqc"    -> SQCGLRenderer.FRAGMENT_SHADER
-                "grd_r"  -> GRDRGLRenderer.FRAGMENT_SHADER
-                "u300"   -> U300GLRenderer.FRAGMENT_SHADER
-                "ccd_r"  -> CCDRGLRenderer.FRAGMENT_SHADER
-                "bw_classic" -> BWClassicGLRenderer.FRAGMENT_SHADER
-                else     -> FRAGMENT_SHADER
-            }
-            programId = createProgram(VERTEX_SHADER, fragShader)
+            // 编译新 Shader（统一使用通用 Shader，所有相机差异由 uniform 参数驱动）
+            programId = createProgram(VERTEX_SHADER, FRAGMENT_SHADER)
             if (programId == 0) {
                 Log.e(TAG, "setCameraId: failed to recompile shader for cameraId=$cameraId")
                 return@execute
