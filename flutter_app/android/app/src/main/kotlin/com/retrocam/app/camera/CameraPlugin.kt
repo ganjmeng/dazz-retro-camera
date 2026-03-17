@@ -849,10 +849,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         // 1. 更新 GL 渲染器中的 Unsharp Mask 强度
         glRenderer?.setSharpen(currentSharpenLevel)
         // 2. 重建 ImageCapture 并重新绑定（切换拍摄分辨率）
-        // CRITICAL FIX: result.success must be called ONLY AFTER imageCapture is fully
+        // CRITICAL FIX #1: result.success must be called ONLY AFTER imageCapture is fully
         // rebound. Previously result.success(null) was called immediately after launching
         // bgExecutor.execute{}, causing Flutter's takePhoto to run before the new
         // high-res ImageCapture was bound — resulting in 2MP output even in high-quality mode.
+        //
+        // CRITICAL FIX #2: unbindAll + bindToLifecycle triggers Preview.setSurfaceProvider
+        // callback on cameraExecutor (async), which recreates CameraGLRenderer.
+        // result.success must be called ONLY AFTER the new renderer is ready (latch.await),
+        // otherwise Flutter's setCamera/updateLensParams/updateRenderParams arrive when
+        // glRenderer is still null and all shader params are lost (preview effect disappears).
         val owner = lifecycleOwner
         val provider = cameraProvider
         if (owner != null && provider != null) {
@@ -861,6 +867,10 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                     val newImageCapture = buildImageCapture(currentSharpenLevel)
                     @Suppress("UnsafeOptInUsageError")
                     val cameraSelector = buildCameraSelector(provider)
+                    // Create a new latch BEFORE bindToLifecycle so the SurfaceProvider
+                    // callback (which runs on cameraExecutor) can count it down.
+                    val latch = java.util.concurrent.CountDownLatch(1)
+                    rendererReadyLatch = latch
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         try {
                             // CRITICAL FIX: Must unbindAll and rebind ALL use cases together.
@@ -877,7 +887,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                                 imageCapture,
                                 videoCapture
                             )
-                            Log.d(TAG, "setSharpen: level=$level, imageCapture rebuilt")
+                            Log.d(TAG, "setSharpen: level=$level, imageCapture rebuilt, waiting for renderer")
                             // 3. 使用 Camera2Interop 设置 EDGE_MODE（锐化算法）
                             // Must run after bindToLifecycle so cam.cameraControl is valid
                             try {
@@ -900,8 +910,23 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                             } catch (e: Exception) {
                                 Log.w(TAG, "setSharpen EDGE_MODE failed: ${e.message}")
                             }
-                            // Return to Flutter ONLY after imageCapture is fully rebound
-                            result.success(null)
+                            // Wait for new CameraGLRenderer to be ready on bgExecutor
+                            // (same pattern as handleInitCamera's rendererReadyLatch)
+                            bgExecutor.execute {
+                                try {
+                                    val ready = latch.await(5, java.util.concurrent.TimeUnit.SECONDS)
+                                    if (!ready) Log.w(TAG, "setSharpen: renderer ready timeout (5s)")
+                                    Log.d(TAG, "setSharpen: renderer ready, returning to Flutter")
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "setSharpen: latch await failed: ${e.message}")
+                                }
+                                // Return to Flutter ONLY after new renderer is fully ready.
+                                // Flutter's cycleSharpen will then call setCamera/updateLensParams/
+                                // updateRenderParams and they will find glRenderer non-null.
+                                ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext).execute {
+                                    result.success(null)
+                                }
+                            }
                         } catch (e: Exception) {
                             Log.w(TAG, "rebind imageCapture failed: ${e.message}")
                             result.success(null) // Unblock Flutter even on failure
