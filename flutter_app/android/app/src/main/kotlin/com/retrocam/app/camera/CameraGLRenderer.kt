@@ -1179,30 +1179,16 @@ void main() {
     }
 
     fun setCameraId(cameraId: String) {
-        if (currentCameraId == cameraId) return
+        // ── FIX: FRAGMENT_SHADER 是编译期常量，不依赖 cameraId。
+        // 旧代码在此处异步重编译 shader，存在严重的竞态风险：
+        //   1. 重编译期间 programId=0 → renderFrame 跳过渲染（画面瞬间黑屏）
+        //   2. 如果 eglMakeCurrent 或 createProgram 失败，programId 永久为 0，
+        //      而 currentCameraId 已被设置，后续调用会因早期返回而永远无法恢复。
+        // 因此移除不必要的重编译，仅更新 cameraId 标记。
+        // initGL 中已经编译了正确的 shader 并缓存了 uniform 位置。
         currentCameraId = cameraId
         pendingCameraId = cameraId
-        if (!initialized.get()) return
-        glExecutor.execute {
-            val targetId = pendingCameraId
-            if (targetId != cameraId) {
-                Log.d(TAG, "setCameraId: skipping stale recompile for $cameraId, pending=$targetId")
-                return@execute
-            }
-            if (!EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) return@execute
-            // 重编译 Pass 2 效果 Shader
-            if (programId != 0) {
-                GLES30.glDeleteProgram(programId)
-                programId = 0
-            }
-            programId = createProgram(VERTEX_SHADER_PASS2, FRAGMENT_SHADER)
-            if (programId == 0) {
-                Log.e(TAG, "setCameraId: failed to recompile shader for cameraId=$cameraId")
-                return@execute
-            }
-            cachePass2Uniforms()
-            Log.d(TAG, "setCameraId: shader recompiled for cameraId=$cameraId")
-        }
+        Log.d(TAG, "setCameraId: updated to cameraId=$cameraId (no shader recompile needed)")
     }
 
     fun setSharpen(level: Float) {

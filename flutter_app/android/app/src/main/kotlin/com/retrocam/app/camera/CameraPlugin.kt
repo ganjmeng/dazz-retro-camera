@@ -80,6 +80,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     // Filter state
     private var currentPresetJson: Map<*, *>? = null
     private var currentSharpenLevel: Float = 0.5f
+    // ── 缓存 lens 参数，供 switchLens 后重新应用 ──
+    private var cachedLensFisheyeMode: Boolean = false
+    private var cachedLensVignette: Double = 0.0
     // GL Renderer
     private var glRenderer: CameraGLRenderer? = null
 
@@ -837,6 +840,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private fun handleUpdateLensParams(call: MethodCall, result: MethodChannel.Result) {
         val fisheyeMode = call.argument<Boolean>("fisheyeMode") ?: false
         val vignette    = call.argument<Double>("vignette")    ?: 0.0
+        // ── 缓存 lens 参数，供 switchLens 后重新应用 ──
+        cachedLensFisheyeMode = fisheyeMode
+        cachedLensVignette = vignette
         // 将鱼眼模式传递到 GL 渲染器
         glRenderer?.setFisheyeMode(fisheyeMode)
         // 将暗角传递到 GL 渲染器
@@ -1030,6 +1036,15 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         if (cameraId.isNotEmpty()) {
             renderer.setCameraId(cameraId)
         }
+
+        // ── FIX: 恢复缓存的 lens 参数（fisheyeMode / vignette）──────────────
+        // switchLens 后 Dart 层的 setCamera + updateLensParams 可能在
+        // SurfaceProvider 回调（新 renderer 创建）之前就已经执行完毕，
+        // 此时 glRenderer 仍为 null，导致 lens 参数丢失。
+        // 因此必须在此处从缓存中恢复 lens 参数。
+        renderer.setFisheyeMode(cachedLensFisheyeMode)
+        renderer.updateParams(mapOf("vignette" to cachedLensVignette))
+        Log.d(TAG, "reapplyPresetToRenderer: restored lens params fisheyeMode=$cachedLensFisheyeMode, vignette=$cachedLensVignette")
     }
 
     private fun sendEvent(type: String, payload: Map<String, Any>) {
