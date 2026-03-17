@@ -1,4 +1,5 @@
-// ImageEditScreen — 导入图片编辑页
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 设计哲学：Darkroom Aesthetics — 纯黑背景，白色控件，复用相机页所有效果逻辑
 // 底部工具按钮显示/隐藏由当前相机 uiCap 决定，完全复用拍摄页逻辑
 import 'dart:io';
@@ -75,6 +76,14 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   bool _gpuProcessing = false;   // 是否正在 GPU 处理中
   int _gpuRequestId = 0;         // 用于取消过期的 GPU 请求
 
+  // ── 高清图片缩小后的预览源路径（避免 OOM）──────────────────────────────────
+  String? _resizedPreviewPath;   // 缩小到 ≤4096px 的预览源
+  static const int _kMaxPreviewDim = 4096;
+
+  // ── 白平衡/曝光控件状态 ──────────────────────────────────────────────────
+  bool _showExposureSlider = false;
+  bool _showWbPanel = false;
+
   double get _totalRotation => _coarseRotation.toDouble() + _fineRotation;
 
   @override
@@ -83,16 +92,46 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     _initPreview();
   }
 
+  /// 初始化预览：先缩小高清图片到安全尺寸，再生成 GPU 预览
   Future<void> _initPreview() async {
     try {
-      await File(widget.imagePath).readAsBytes();
+      // 1. 读取原图并检查尺寸
+      final originalBytes = await File(widget.imagePath).readAsBytes();
+      final codec = await ui.instantiateImageCodec(originalBytes);
+      final frame = await codec.getNextFrame();
+      final srcW = frame.image.width;
+      final srcH = frame.image.height;
+      frame.image.dispose();
+
+      // 2. 如果原图超过 _kMaxPreviewDim，缩小到安全尺寸
+      if (srcW > _kMaxPreviewDim || srcH > _kMaxPreviewDim) {
+        final scale = _kMaxPreviewDim / math.max(srcW, srcH);
+        final newW = (srcW * scale).round();
+        final newH = (srcH * scale).round();
+        // 使用 image 库缩小
+        final decoded = image_lib.decodeImage(originalBytes);
+        if (decoded != null) {
+          final resized = image_lib.copyResize(decoded, width: newW, height: newH,
+              interpolation: image_lib.Interpolation.linear);
+          final resizedJpg = image_lib.encodeJpg(resized, quality: 92);
+          final tmpPath = '${Directory.systemTemp.path}/dazz_resized_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          await File(tmpPath).writeAsBytes(resizedJpg);
+          _resizedPreviewPath = tmpPath;
+          debugPrint('[ImageEditScreen] Resized ${srcW}x$srcH → ${newW}x$newH for preview');
+        }
+      }
+
       if (mounted) setState(() => _isLoading = false);
       // 初始 GPU 预览
       _refreshGpuPreview();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[ImageEditScreen] _initPreview error: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
+  /// GPU 预览使用的源路径（缩小后的 or 原图）
+  String get _previewSourcePath => _resizedPreviewPath ?? widget.imagePath;
 
   /// 调用 Native GPU Shader 生成带滤镜效果的预览图
   Future<void> _refreshGpuPreview() async {
@@ -106,7 +145,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
 
     try {
       final result = await _gpuChannel.invokeMethod<Map>('processWithGpu', {
-        'filePath': widget.imagePath,
+        'filePath': _previewSourcePath,
         'params': renderParams.toJson(),
       });
       // 检查请求是否过期（用户可能已经切换了相机/滤镜）
@@ -135,6 +174,10 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     if (_gpuPreviewPath != null) {
       try { File(_gpuPreviewPath!).deleteSync(); } catch (_) {}
     }
+    // 清理缩小后的预览源
+    if (_resizedPreviewPath != null) {
+      try { File(_resizedPreviewPath!).deleteSync(); } catch (_) {}
+    }
     super.dispose();
   }
 
@@ -158,7 +201,33 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         setState(() => _isSaving = false);
         return;
       }
-      final transformedBytes = await _applyTransforms();
+
+      // 保存时使用原始高清图重新 GPU 处理（保证成片质量）
+      final renderParams = st.renderParams;
+      String gpuSourceForSave = widget.imagePath;
+
+      if (renderParams != null) {
+        try {
+          final result = await _gpuChannel.invokeMethod<Map>('processWithGpu', {
+            'filePath': widget.imagePath, // 使用原始高清图
+            'params': renderParams.toJson(),
+          });
+          if (result != null && result['filePath'] != null) {
+            gpuSourceForSave = result['filePath'] as String;
+          }
+        } catch (e) {
+          debugPrint('[ImageEditScreen] GPU save processing failed, using preview: $e');
+          // 降级：使用预览图
+          gpuSourceForSave = _gpuPreviewPath ?? widget.imagePath;
+        }
+      }
+
+      final transformedBytes = await _applyTransforms(sourcePath: gpuSourceForSave);
+      // 清理保存用的 GPU 临时文件
+      if (gpuSourceForSave != widget.imagePath && gpuSourceForSave != _gpuPreviewPath) {
+        try { File(gpuSourceForSave).deleteSync(); } catch (_) {}
+      }
+
       if (transformedBytes == null) {
         _showSnack(sOf(ref.read(languageProvider)).imageProcessFailed);
         setState(() => _isSaving = false);
@@ -170,15 +239,14 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       final pipeline = CapturePipeline(camera: camera);
       const maxDim = CapturePipeline.kMaxDimHigh;
       const jpegQ = CapturePipeline.kJpegQualityHigh;
-      // _applyTransforms 已使用 GPU 预览图（带滤镜效果），
       // pipeline.process 中跳过色彩处理（useGpu=false + renderParams=null），
-      // 仅做相框/水印合成
+      // 仅做水印合成（相框已取消）
       final result = await pipeline.process(
         imagePath: tmpPath,
         useGpu: false,        // 跳过 GPU 色彩处理
-        renderParams: null,   // 跳过 Dart 降级色彩处理（色彩已由 GPU 预览完成）
+        renderParams: null,   // 跳过 Dart 降级色彩处理（色彩已由 GPU 完成）
         selectedRatioId: st.activeRatioId ?? '',
-        selectedFrameId: st.activeFrameId ?? '',
+        selectedFrameId: '',  // 编辑页不使用相框
         selectedWatermarkId: st.activeWatermarkId ?? '',
         frameBackgroundColor: st.frameBackgroundColor,
         watermarkColorOverride: st.watermarkColor,
@@ -218,12 +286,11 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     }
   }
 
-  /// 应用裁剪/旋转/翻转变换，输入源为 GPU 预览图（已带滤镜效果）或原图
-  Future<Uint8List?> _applyTransforms() async {
+  /// 应用裁剪/旋转/翻转变换
+  Future<Uint8List?> _applyTransforms({String? sourcePath}) async {
     try {
-      // 优先使用 GPU 预览图（已带滤镜效果），降级时使用原图
-      final sourcePath = _gpuPreviewPath ?? widget.imagePath;
-      final bytes = await File(sourcePath).readAsBytes();
+      final path = sourcePath ?? _gpuPreviewPath ?? _previewSourcePath;
+      final bytes = await File(path).readAsBytes();
       final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
       final src = frame.image;
@@ -275,7 +342,11 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   void _showSnack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
+      SnackBar(
+        content: Text(msg),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 
@@ -286,11 +357,10 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   Widget build(BuildContext context) {
     final st = ref.watch(cameraAppProvider);
     final camera = st.camera;
-    final uiCap = camera?.uiCapabilities;
 
     // 监听相机/滤镜/参数变化，实时刷新 GPU 预览
     ref.listen<CameraAppState>(cameraAppProvider, (prev, next) {
-      // renderParams 变化时重新生成 GPU 预览（切换相机、滤镜、曝光等）
+      // renderParams 变化时重新生成 GPU 预览（切换相机、滤镜、镜头、曝光、白平衡等）
       if (prev?.renderParams?.toJson().toString() != next.renderParams?.toJson().toString()) {
         _refreshGpuPreview();
       }
@@ -303,13 +373,13 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
           children: [
             // ── 顶部导航栏 ──────────────────────────────────────────────────
             _buildTopBar(),
-            // ── 图片预览区 ──────────────────────────────────────────────────
+            // ── 图片预览区（含白平衡/曝光控件）────────────────────────────────
             Expanded(
               child: _buildPreviewArea(st, camera),
             ),
             // ── 旋转刻度尺 ──────────────────────────────────────────────────
             _buildRotationRuler(),
-            // ── 相机菜单（常驻底部）────────────────────────────────────────
+            // ── 相机菜单（常驻底部，含镜头选择）────────────────────────────────
             _buildInlineCameraMenu(st),
             // ── 上滑子面板 ──────────────────────────────────────────────────
             if (_activePanel != null && camera != null)
@@ -377,90 +447,241 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     );
   }
 
-  // ── 图片预览区 ────────────────────────────────────────────────────────────
+  // ── 图片预览区（含白平衡/曝光胶囊控件）──────────────────────────────────────
   Widget _buildPreviewArea(CameraAppState st, CameraDefinition? camera) {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-      );
-    }
-    return GestureDetector(
-      // 双击重置缩放
-      onDoubleTap: () => setState(() {
-        _previewScale = 1.0;
-        _previewOffset = Offset.zero;
-      }),
-      // 捕合缩放
-      onScaleStart: (d) {
-        _scaleStart = _previewScale;
-        _panStart = d.focalPoint - _previewOffset;
-      },
-      onScaleUpdate: (d) {
-        setState(() {
-          // 缩放：1.0 ~ 5.0
-          _previewScale = (_scaleStart * d.scale).clamp(1.0, 5.0);
-          // 拖动（只在缩放 > 1 时允许拖动）
-          if (_previewScale > 1.0) {
-            _previewOffset = d.focalPoint - _panStart;
-          } else {
-            _previewOffset = Offset.zero;
-          }
-        });
-      },
-      child: Center(
-        child: Transform(
-          alignment: Alignment.center,
-          transform: Matrix4.identity()
-            ..translate(_previewOffset.dx, _previewOffset.dy)
-            ..scale(_previewScale),
-          child: AspectRatio(
-            aspectRatio: st.previewAspectRatio,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ClipRect(
-                      child: _buildTransformedImage(st, constraints),
-                    ),
-                    if (st.activeFrame != null)
-                      IgnorePointer(
-                        child: _FramePreviewOverlay(
-                          frame: st.activeFrame!,
-                          ratioId: st.activeRatioId ?? '',
-                        ),
-                      ),
-                    if (st.activeWatermark != null && !st.activeWatermark!.isNone)
-                      IgnorePointer(
-                        child: _WatermarkPreviewOverlay(
-                          watermark: st.activeWatermark!,
-                          colorOverride: st.watermarkColor,
-                          positionOverride: st.watermarkPosition,
-                          sizeOverride: st.watermarkSize,
-                          directionOverride: st.watermarkDirection,
-                          styleId: st.watermarkStyle,
-                        ),
-                      ),
-                    if (_isCropMode)
-                      _CropOverlay(
-                        cropRect: _cropRect,
-                        onCropChanged: (rect) => setState(() => _cropRect = rect),
-                      ),
-                  ],
-                );
-              },
+      // 带 App Icon 的加载过渡动画（同拍摄界面）
+      return Center(
+        child: AnimatedScale(
+          scale: 1.0,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutBack,
+          child: Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(120),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: Image.asset(
+                'assets/images/app_icon.png',
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Center(
+                  child: Icon(Icons.camera_alt, color: Colors.white, size: 48),
+                ),
+              ),
             ),
           ),
         ),
-      ),
+      );
+    }
+    return Stack(
+      children: [
+        // 图片预览（可缩放/拖动）
+        GestureDetector(
+          // 双击重置缩放
+          onDoubleTap: () => setState(() {
+            _previewScale = 1.0;
+            _previewOffset = Offset.zero;
+          }),
+          // 捕合缩放
+          onScaleStart: (d) {
+            _scaleStart = _previewScale;
+            _panStart = d.focalPoint - _previewOffset;
+          },
+          onScaleUpdate: (d) {
+            setState(() {
+              // 缩放：1.0 ~ 5.0
+              _previewScale = (_scaleStart * d.scale).clamp(1.0, 5.0);
+              // 拖动（只在缩放 > 1 时允许拖动）
+              if (_previewScale > 1.0) {
+                _previewOffset = d.focalPoint - _panStart;
+              } else {
+                _previewOffset = Offset.zero;
+              }
+            });
+          },
+          child: Center(
+            child: Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()
+                ..translate(_previewOffset.dx, _previewOffset.dy)
+                ..scale(_previewScale),
+              child: AspectRatio(
+                aspectRatio: st.previewAspectRatio,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ClipRect(
+                          child: _buildTransformedImage(st, constraints),
+                        ),
+                        // 相框预览已取消（用户要求）
+                        if (st.activeWatermark != null && !st.activeWatermark!.isNone)
+                          IgnorePointer(
+                            child: _WatermarkPreviewOverlay(
+                              watermark: st.activeWatermark!,
+                              colorOverride: st.watermarkColor,
+                              positionOverride: st.watermarkPosition,
+                              sizeOverride: st.watermarkSize,
+                              directionOverride: st.watermarkDirection,
+                              styleId: st.watermarkStyle,
+                            ),
+                          ),
+                        if (_isCropMode)
+                          _CropOverlay(
+                            cropRect: _cropRect,
+                            onCropChanged: (rect) => setState(() => _cropRect = rect),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+        // ── 白平衡+曝光胶囊控件（预览区底部，同取景框位置）──
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: _showExposureSlider || _showWbPanel ? 64 : 12,
+          child: Center(child: _buildEditControlCapsule(st)),
+        ),
+        // ── 曝光滑动条（胶囊上方展开）──
+        if (_showExposureSlider)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 12,
+            height: 52,
+            child: Center(
+              child: _ExposureHorizontalSlider(
+                value: st.exposureValue,
+                onChanged: (v) =>
+                    ref.read(cameraAppProvider.notifier).setExposure(v),
+                onReset: () =>
+                    ref.read(cameraAppProvider.notifier).setExposure(0),
+              ),
+            ),
+          ),
+        // ── 白平衡面板（胶囊上方展开）──
+        if (_showWbPanel && !_showExposureSlider)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 12,
+            height: 52,
+            child: Center(
+              child: _WbControlPanel(
+                colorTempK: st.colorTempK,
+                wbMode: st.wbMode,
+                onTempChanged: (k) =>
+                    ref.read(cameraAppProvider.notifier).setColorTempK(k),
+                onPreset: (mode) {
+                  ref.read(cameraAppProvider.notifier).setWhiteBalance(mode);
+                },
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 编辑页的白平衡+曝光胶囊控件（同拍摄界面风格，无缩放按钮）
+  Widget _buildEditControlCapsule(CameraAppState st) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 色温按钮（圆形，点击弹出色温面板）
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _showWbPanel = !_showWbPanel;
+              if (_showWbPanel) _showExposureSlider = false; // 互斥
+            });
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: (_showWbPanel || st.wbMode != 'auto')
+                  ? Colors.white.withAlpha(230)
+                  : Colors.black.withAlpha(160),
+            ),
+            child: Center(
+              child: Icon(
+                _showWbPanel ? Icons.keyboard_arrow_down : Icons.thermostat_outlined,
+                size: 16,
+                color: (_showWbPanel || st.wbMode != 'auto') ? Colors.black : Colors.white,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        // 曝光按钮（胶囊形，点击展开水平滑动条）
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _showExposureSlider = !_showExposureSlider;
+              if (_showExposureSlider) _showWbPanel = false; // 与色温面板互斥
+            });
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              color: (_showExposureSlider || st.exposureValue != 0)
+                  ? Colors.white.withAlpha(230)
+                  : Colors.black.withAlpha(160),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _showExposureSlider ? Icons.keyboard_arrow_down : Icons.wb_sunny_outlined,
+                  size: 14,
+                  color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : Colors.white,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  st.exposureValue == 0
+                      ? '0.0'
+                      : (st.exposureValue > 0 ? '+' : '') +
+                          st.exposureValue.toStringAsFixed(1),
+                  style: TextStyle(
+                    color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildTransformedImage(CameraAppState st, BoxConstraints constraints) {
-    // 显示 GPU Shader 处理后的预览图（带滤镜效果），降级时显示原图
+    // 显示 GPU Shader 处理后的预览图（带滤镜效果），降级时显示缩小后的预览源
     final previewFile = _gpuPreviewPath != null
         ? File(_gpuPreviewPath!)
-        : File(widget.imagePath);
+        : File(_previewSourcePath);
     return Transform(
       alignment: Alignment.center,
       transform: Matrix4.identity()
@@ -472,7 +693,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         width: constraints.maxWidth,
         height: constraints.maxHeight,
         // 当 GPU 预览更新时强制刷新（避免 Flutter 缓存旧图片）
-        key: ValueKey(_gpuPreviewPath ?? widget.imagePath),
+        key: ValueKey(_gpuPreviewPath ?? _previewSourcePath),
       ),
     );
   }
@@ -560,98 +781,9 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     );
   }
 
-  // ── 常驻底部相机菜单 ─────────────────────────────────────────────────
+  // ── 常驻底部相机菜单（含镜头选择）────────────────────────────────────────
   Widget _buildInlineCameraMenu(CameraAppState st) {
-    return const CameraConfigInlinePanel(showLens: false);
-  }
-
-  // ── 相机选择横向列表（备用，已不在主流程中使用）─────────────────────────────
-  Widget _buildCameraSelector(CameraAppState st) {
-    return GestureDetector(
-      onTap: () => showCameraConfigSheet(context),
-      child: Container(
-        height: 52,
-        color: const Color(0xFF111111),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Row(
-          children: [
-            const Icon(Icons.camera_alt_outlined, color: Colors.white54, size: 18),
-            const SizedBox(width: 8),
-            Text(
-              st.camera?.name ?? sOf(ref.read(languageProvider)).selectCamera,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-            const SizedBox(width: 4),
-            const Icon(Icons.keyboard_arrow_up, color: Colors.white38, size: 18),
-            const Spacer(),
-            // 当前滤镜/边框标签
-            if (st.activeFilterId != null)
-              _TagChip(label: st.activeFilterId!),
-            if (st.activeFrameId != null && st.activeFrameId != 'none')
-              _TagChip(label: sOf(ref.read(languageProvider)).frame),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── 底部工具按钮行 ────────────────────────────────────────────────────────
-  Widget _buildBottomToolbar(CameraAppState st, CameraDefinition? camera, UiCapabilities? uiCap) {
-    if (camera == null) {
-      return const SizedBox(height: 72);
-    }
-    return Container(
-      height: 80,
-      color: Colors.black,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          // 水印开关（由uiCap.enableWatermark决定）
-          if (uiCap?.enableWatermark == true)
-            _ToolIconBtn(
-              icon: st.activeWatermark != null && !st.activeWatermark!.isNone
-                  ? Icons.access_time
-                  : Icons.access_time_outlined,
-              label: sOf(ref.read(languageProvider)).watermark,
-              isActive: st.activeWatermark != null && !st.activeWatermark!.isNone,
-              onTap: () => _togglePanel('watermark'),
-            ),
-          // 边框开关（由uiCap.enableFrame决定）
-          if (uiCap?.enableFrame == true)
-            _ToolIconBtn(
-              icon: st.activeFrameId != null && st.activeFrameId != 'none'
-                  ? Icons.crop_square
-                  : Icons.crop_square_outlined,
-              label: sOf(ref.read(languageProvider)).frame,
-              isActive: st.activeFrameId != null && st.activeFrameId != 'none',
-              onTap: () => _togglePanel('frame'),
-            ),
-          // 滤镜（由uiCap.enableFilter决定）
-          if (uiCap?.enableFilter == true)
-            _ToolIconBtn(
-              icon: Icons.filter_vintage_outlined,
-              label: sOf(ref.read(languageProvider)).filter,
-              isActive: _activePanel == 'filter',
-              onTap: () => _togglePanel('filter'),
-            ),
-          // 翻转（始终显示）
-          _ToolIconBtn(
-            icon: Icons.flip_outlined,
-            label: sOf(ref.read(languageProvider)).flip,
-            isActive: _flipH,
-            onTap: _flipHorizontal,
-          ),
-          // 裁剪（始终显示）
-          _ToolIconBtn(
-            icon: Icons.crop_outlined,
-            label: sOf(ref.read(languageProvider)).crop,
-            isActive: _isCropMode,
-            onTap: () => setState(() => _isCropMode = !_isCropMode),
-          ),
-        ],
-      ),
-    );
+    return const CameraConfigInlinePanel(showLens: true);
   }
 
   // ── 上滑子面板 ────────────────────────────────────────────────────────────
@@ -709,6 +841,223 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 曝光水平滑动条（复用拍摄页风格）
+// ─────────────────────────────────────────────────────────────────────────────
+class _ExposureHorizontalSlider extends StatelessWidget {
+  final double value; // -2.0 .. 2.0
+  final ValueChanged<double> onChanged;
+  final VoidCallback onReset;
+
+  const _ExposureHorizontalSlider({
+    required this.value,
+    required this.onChanged,
+    required this.onReset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        children: [
+          // 重置按钮
+          GestureDetector(
+            onTap: onReset,
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black.withAlpha(180),
+                border: Border.all(color: Colors.white.withAlpha(60), width: 1),
+              ),
+              child: const Center(
+                child: Icon(Icons.refresh, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // 水平滑动轨道
+          Expanded(
+            child: SliderTheme(
+              data: SliderThemeData(
+                trackHeight: 3,
+                activeTrackColor: Colors.white,
+                inactiveTrackColor: Colors.white.withAlpha(80),
+                thumbColor: Colors.white,
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: 10,
+                  elevation: 0,
+                ),
+                overlayShape: SliderComponentShape.noOverlay,
+              ),
+              child: Slider(
+                value: value.clamp(-2.0, 2.0),
+                min: -2.0,
+                max: 2.0,
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 白平衡控制面板（复用拍摄页风格）
+// ─────────────────────────────────────────────────────────────────────────────
+class _WbControlPanel extends StatelessWidget {
+  final int colorTempK;
+  final String wbMode;
+  final ValueChanged<int> onTempChanged;
+  final ValueChanged<String> onPreset;
+
+  const _WbControlPanel({
+    required this.colorTempK,
+    required this.wbMode,
+    required this.onTempChanged,
+    required this.onPreset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final sliderVal = ((colorTempK - 1800) / (8000 - 1800)).clamp(0.0, 1.0);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        children: [
+          // 渐变滑动条
+          Expanded(
+            flex: 3,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  height: 30,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFF6B8FE8), // 冷蓝
+                        Color(0xFFB08AE0), // 中紫
+                        Color(0xFFE8A05A), // 暖橙
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned.fill(
+                  child: CustomPaint(painter: _WbTrackDotsPainter()),
+                ),
+                SliderTheme(
+                  data: SliderThemeData(
+                    trackHeight: 0,
+                    activeTrackColor: Colors.transparent,
+                    inactiveTrackColor: Colors.transparent,
+                    thumbColor: Colors.white,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 10,
+                      elevation: 2,
+                    ),
+                    overlayShape: SliderComponentShape.noOverlay,
+                  ),
+                  child: Slider(
+                    value: sliderVal,
+                    min: 0.0,
+                    max: 1.0,
+                    onChanged: (v) {
+                      final k = (1800 + v * (8000 - 1800)).round();
+                      onTempChanged(k);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // K 值标签
+          SizedBox(
+            width: 42,
+            child: Text(
+              '${colorTempK}K',
+              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(width: 4),
+          // 三个预设按钮
+          _WbPresetBtn(label: 'A', isActive: wbMode == 'auto', onTap: () => onPreset('auto')),
+          const SizedBox(width: 4),
+          _WbPresetBtn(icon: Icons.wb_sunny_outlined, isActive: wbMode == 'daylight', onTap: () => onPreset('daylight')),
+          const SizedBox(width: 4),
+          _WbPresetBtn(icon: Icons.lightbulb_outline, isActive: wbMode == 'incandescent', onTap: () => onPreset('incandescent')),
+        ],
+      ),
+    );
+  }
+}
+
+class _WbPresetBtn extends StatelessWidget {
+  final String? label;
+  final IconData? icon;
+  final bool isActive;
+  final VoidCallback onTap;
+  const _WbPresetBtn({this.label, this.icon, required this.isActive, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isActive ? Colors.white : const Color(0xFF3A3A3C),
+        ),
+        child: Center(
+          child: label != null
+              ? Text(
+                  label!,
+                  style: TextStyle(
+                    color: isActive ? const Color(0xFFE8A05A) : Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                )
+              : Icon(
+                  icon,
+                  color: isActive ? const Color(0xFF1C1C1E) : Colors.white.withAlpha(180),
+                  size: 16,
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WbTrackDotsPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withAlpha(80)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.fill;
+    const dotR = 1.5;
+    const spacing = 10.0;
+    final cy = size.height / 2;
+    var x = spacing;
+    while (x < size.width - spacing) {
+      canvas.drawCircle(Offset(x, cy), dotR, paint);
+      x += spacing;
+    }
+  }
+  @override
+  bool shouldRepaint(_WbTrackDotsPainter old) => false;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -834,56 +1183,6 @@ class _RulerIconBtn extends StatelessWidget {
           color: isActive ? const Color(0xFFFF8C00) : Colors.white54,
           size: 18,
         ),
-      ),
-    );
-  }
-}
-
-class _ToolIconBtn extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool isActive;
-  const _ToolIconBtn({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.isActive = false,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isActive
-                  ? const Color(0xFFFF8C00).withOpacity(0.2)
-                  : Colors.white10,
-              border: isActive
-                  ? Border.all(color: const Color(0xFFFF8C00), width: 1.5)
-                  : null,
-            ),
-            child: Icon(
-              icon,
-              color: isActive ? const Color(0xFFFF8C00) : Colors.white70,
-              size: 22,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: isActive ? const Color(0xFFFF8C00) : Colors.white38,
-              fontSize: 11,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1296,25 +1595,6 @@ class _CropPainter extends CustomPainter {
 }
 
 enum _CropHandle { topLeft, topRight, bottomLeft, bottomRight, move }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 相框预览 Overlay（复用拍摄页）
-// ─────────────────────────────────────────────────────────────────────────────
-class _FramePreviewOverlay extends StatelessWidget {
-  final FrameDefinition frame;
-  final String ratioId;
-  const _FramePreviewOverlay({required this.frame, required this.ratioId});
-  @override
-  Widget build(BuildContext context) {
-    final assetPath = frame.assetForRatio(ratioId);
-    if (assetPath == null) return const SizedBox.shrink();
-    return Image.asset(
-      assetPath,
-      fit: BoxFit.fill,
-      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-    );
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 水印预览 Overlay（复用拍摄页）
