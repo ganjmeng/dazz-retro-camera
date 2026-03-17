@@ -198,6 +198,19 @@ class DefaultLook {
   final double skinSatProtect;       // 0.0 ~ 1.0 肤色饱和度保护（Inst C=0.92，SQC=0.95）
   final double skinLumaSoften;       // 0.0 ~ 0.2 肤色亮度柔化（Inst C=0.05，SQC=0.04）
   final double skinRedLimit;         // 0.9 ~ 1.2 肤色红限（Inst C=1.02，SQC=1.03）
+  // ── Fade / Split Toning / Light Leak（新增）───────────────────────────────────────
+  final double fadeAmount;           // 0.0 ~ 0.3 褒色强度（提升黑场）
+  final double shadowTintR;          // -0.2 ~ 0.2 阴影色调 R
+  final double shadowTintG;          // -0.2 ~ 0.2 阴影色调 G
+  final double shadowTintB;          // -0.2 ~ 0.2 阴影色调 B
+  final double highlightTintR;       // -0.2 ~ 0.2 高光色调 R
+  final double highlightTintG;       // -0.2 ~ 0.2 高光色调 G
+  final double highlightTintB;       // -0.2 ~ 0.2 高光色调 B
+  final double splitToneBalance;     // 0.0 ~ 1.0 分离色调平衡（默认 0.5）
+  final double lightLeakAmount;      // 0.0 ~ 1.0 漏光强度
+  final double luminanceNoise;       // 0.0 ~ 0.5 亮度噪声
+  final double chromaNoise;          // 0.0 ~ 0.5 色度噪声
+  final double toneCurveStrength;    // 0.0 ~ 1.0 Tone Curve 强度
 
   const DefaultLook({
     this.baseLut,
@@ -246,6 +259,19 @@ class DefaultLook {
     this.skinSatProtect = 1.0,
     this.skinLumaSoften = 0,
     this.skinRedLimit = 1.0,
+    // Fade / Split Toning / Light Leak
+    this.fadeAmount = 0,
+    this.shadowTintR = 0,
+    this.shadowTintG = 0,
+    this.shadowTintB = 0,
+    this.highlightTintR = 0,
+    this.highlightTintG = 0,
+    this.highlightTintB = 0,
+    this.splitToneBalance = 0.5,
+    this.lightLeakAmount = 0,
+    this.luminanceNoise = 0,
+    this.chromaNoise = 0,
+    this.toneCurveStrength = 0,
   });
 
   /// 占位默认値（相机 JSON 未加载时使用）
@@ -310,6 +336,19 @@ class DefaultLook {
     skinSatProtect: (json['skinSatProtect'] as num? ?? 1.0).toDouble(),
     skinLumaSoften: (json['skinLumaSoften'] as num? ?? 0).toDouble(),
     skinRedLimit: (json['skinRedLimit'] as num? ?? 1.0).toDouble(),
+    // Fade / Split Toning / Light Leak
+    fadeAmount: (json['fadeAmount'] as num? ?? 0).toDouble(),
+    shadowTintR: (json['shadowTintR'] as num? ?? 0).toDouble(),
+    shadowTintG: (json['shadowTintG'] as num? ?? 0).toDouble(),
+    shadowTintB: (json['shadowTintB'] as num? ?? 0).toDouble(),
+    highlightTintR: (json['highlightTintR'] as num? ?? 0).toDouble(),
+    highlightTintG: (json['highlightTintG'] as num? ?? 0).toDouble(),
+    highlightTintB: (json['highlightTintB'] as num? ?? 0).toDouble(),
+    splitToneBalance: (json['splitToneBalance'] as num? ?? 0.5).toDouble(),
+    lightLeakAmount: (json['lightLeakAmount'] as num? ?? 0).toDouble(),
+    luminanceNoise: (json['luminanceNoise'] as num? ?? 0).toDouble(),
+    chromaNoise: (json['chromaNoise'] as num? ?? 0).toDouble(),
+    toneCurveStrength: (json['toneCurveStrength'] as num? ?? 0).toDouble(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -350,6 +389,19 @@ class DefaultLook {
     if (skinSatProtect != 1.0) 'skinSatProtect': skinSatProtect,
     if (skinLumaSoften != 0) 'skinLumaSoften': skinLumaSoften,
     if (skinRedLimit != 1.0) 'skinRedLimit': skinRedLimit,
+    // Fade / Split Toning / Light Leak
+    if (fadeAmount != 0) 'fadeAmount': fadeAmount,
+    if (shadowTintR != 0) 'shadowTintR': shadowTintR,
+    if (shadowTintG != 0) 'shadowTintG': shadowTintG,
+    if (shadowTintB != 0) 'shadowTintB': shadowTintB,
+    if (highlightTintR != 0) 'highlightTintR': highlightTintR,
+    if (highlightTintG != 0) 'highlightTintG': highlightTintG,
+    if (highlightTintB != 0) 'highlightTintB': highlightTintB,
+    if (splitToneBalance != 0.5) 'splitToneBalance': splitToneBalance,
+    if (lightLeakAmount != 0) 'lightLeakAmount': lightLeakAmount,
+    if (luminanceNoise != 0) 'luminanceNoise': luminanceNoise,
+    if (chromaNoise != 0) 'chromaNoise': chromaNoise,
+    if (toneCurveStrength != 0) 'toneCurveStrength': toneCurveStrength,
   };
 }
 

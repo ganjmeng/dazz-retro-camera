@@ -185,6 +185,21 @@ class PreviewRenderParams {
         'exposureOffset': exposureOffset + effectiveLensExposure,
         'softFocus': effectiveSoftFocus,
         'distortion': effectiveDistortion,
+        'grainSize': defaultLook.grainSize.clamp(0.5, 3.0),
+        'luminanceNoise': defaultLook.luminanceNoise.clamp(0.0, 0.5),
+        'chromaNoise': defaultLook.chromaNoise.clamp(0.0, 0.5),
+        'exposureVariation': defaultLook.exposureVariation.clamp(0.0, 0.1),
+        // ── 新增：Fade / Split Toning / Light Leak ──
+        'fadeAmount': defaultLook.fadeAmount.clamp(0.0, 0.5),
+        'fade': defaultLook.fadeAmount.clamp(0.0, 0.5),
+        'shadowTintR': defaultLook.shadowTintR.clamp(-0.2, 0.2),
+        'shadowTintG': defaultLook.shadowTintG.clamp(-0.2, 0.2),
+        'shadowTintB': defaultLook.shadowTintB.clamp(-0.2, 0.2),
+        'highlightTintR': defaultLook.highlightTintR.clamp(-0.2, 0.2),
+        'highlightTintG': defaultLook.highlightTintG.clamp(-0.2, 0.2),
+        'highlightTintB': defaultLook.highlightTintB.clamp(-0.2, 0.2),
+        'splitToneBalance': defaultLook.splitToneBalance.clamp(0.0, 1.0),
+        'lightLeakAmount': defaultLook.lightLeakAmount.clamp(0.0, 1.0),
       };
 }
 

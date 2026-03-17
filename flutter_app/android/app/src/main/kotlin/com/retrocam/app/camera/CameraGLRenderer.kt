@@ -131,6 +131,14 @@ uniform float uBloomAmount;         // 高光光晕（如 CPM35: 0.15）
 uniform float uGrainSize;           // 颗粒大小（如 FQS: 1.2）
 uniform float uHighlightRolloff;    // 高光滚落（预览用，如 INST C: 0.18）
 uniform float uPaperTexture;        // 相纸纹理（如 INST C: 0.15）
+// ── Fade（褒色）+ Split Toning（分离色调）──
+uniform float uFadeAmount;           // 褒色强度（0.0~0.3，提升黑场为深灰）
+uniform vec3  uShadowTint;           // 阴影色调（如 vec3(0.1, 0.1, 0.2) 偏蓝）
+uniform vec3  uHighlightTint;        // 高光色调（如 vec3(0.2, 0.15, 0.05) 偏暖）
+uniform float uSplitToneBalance;     // 分离色调平衡（0.0=偏阴影，1.0=偏高光，默认0.5）
+// ── Light Leak（GPU 漏光）──
+uniform float uLightLeakAmount;      // 漏光强度（0.0~1.0）
+uniform float uLightLeakSeed;        // 漏光随机种子（每次拍照随机变化）
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────────
 // 高光柔和滚落
@@ -323,25 +331,57 @@ vec3 applyTint(vec3 c, float shift) {
 vec3 applyColorBias(vec3 c, float r, float g, float b) {
     return clamp(c + vec3(r, g, b), 0.0, 1.0);
 }
-vec3 applyBloom(vec3 c, float amount) {
+vec3 applyBloom(vec3 c, float amount, vec2 uv) {
     if (amount < 0.001) return c;
-    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    if (lum > 0.75) {
-        float bloom = clamp((lum - 0.75) * amount * 2.5, 0.0, 0.25);
-        c.r = clamp(c.r + bloom * 0.9, 0.0, 1.0);
-        c.g = clamp(c.g + bloom * 0.8, 0.0, 1.0);
-        c.b = clamp(c.b + bloom * 0.6, 0.0, 1.0);
+    // 采样周围像素的高光区域，模拟光线向周围扩散
+    float bloomRadius = amount * 12.0;
+    vec3 bloomColor = vec3(0.0);
+    float totalWeight = 0.0;
+    // 9 点采样（十字形 + 对角线）模拟高斯扩散
+    for (int i = -1; i <= 1; i++) {
+        for (int j = -1; j <= 1; j++) {
+            vec2 offset = vec2(float(i), float(j)) * uTexelSize * bloomRadius;
+            vec3 sample_c = texture(uInputTexture, uv + offset).rgb;
+            float sLum = dot(sample_c, vec3(0.2126, 0.7152, 0.0722));
+            // 只提取高光区域（亮度 > 0.7）
+            float highlight = clamp((sLum - 0.7) / 0.3, 0.0, 1.0);
+            float w = (i == 0 && j == 0) ? 4.0 : (abs(i) + abs(j) == 1 ? 2.0 : 1.0);
+            bloomColor += sample_c * highlight * w;
+            totalWeight += w;
+        }
     }
+    bloomColor /= totalWeight;
+    // 添加暖色偏移（模拟镜头内部反射的暖色色散）
+    bloomColor *= vec3(1.0, 0.9, 0.7);
+    c = clamp(c + bloomColor * amount * 1.5, 0.0, 1.0);
     return c;
 }
-vec3 applyHalation(vec3 c, float amount) {
+vec3 applyHalation(vec3 c, float amount, vec2 uv) {
     if (amount < 0.001) return c;
-    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    if (lum > 0.65) {
-        float halo = clamp((lum - 0.65) * amount * 2.0, 0.0, 0.3);
-        c.r = clamp(c.r + halo * 1.0, 0.0, 1.0);
-        c.g = clamp(c.g + halo * 0.3, 0.0, 1.0);
+    // Halation：光线穿透胶片乳剂层后在背板反射，产生红橙色光晕
+    // 采样更大范围（模拟胶片内部散射距离更远）
+    float haloRadius = amount * 18.0;
+    vec3 haloColor = vec3(0.0);
+    float totalWeight = 0.0;
+    for (int i = -2; i <= 2; i++) {
+        for (int j = -2; j <= 2; j++) {
+            if (abs(i) + abs(j) > 3) continue; // 跳过角落，保持圆形
+            vec2 offset = vec2(float(i), float(j)) * uTexelSize * haloRadius;
+            vec3 sample_c = texture(uInputTexture, uv + offset).rgb;
+            float sLum = dot(sample_c, vec3(0.2126, 0.7152, 0.0722));
+            float highlight = clamp((sLum - 0.6) / 0.4, 0.0, 1.0);
+            float dist = float(abs(i) + abs(j));
+            float w = 1.0 / (1.0 + dist);
+            haloColor += sample_c * highlight * w;
+            totalWeight += w;
+        }
     }
+    haloColor /= totalWeight;
+    // Halation 特征色：红橙色（R 通道最强，G 较弱，B 最弱）
+    float haloLum = dot(haloColor, vec3(0.2126, 0.7152, 0.0722));
+    c.r = clamp(c.r + haloLum * amount * 1.2, 0.0, 1.0);
+    c.g = clamp(c.g + haloLum * amount * 0.35, 0.0, 1.0);
+    c.b = clamp(c.b + haloLum * amount * 0.05, 0.0, 1.0);
     return c;
 }
 vec3 applyPaperTexture(vec3 c, vec2 uv, float amount) {
@@ -358,6 +398,51 @@ vec3 applyHighlightRolloffPreview(vec3 c, float rolloff) {
         c *= compress;
     }
     return clamp(c, 0.0, 1.0);
+}
+
+// ── Fade（褒色）──────────────────────────────────────────────────────────────
+vec3 applyFade(vec3 c, float amount) {
+    if (amount < 0.001) return c;
+    // 提升黑场：纯黑变为深灰，模拟老胶片的低对比度感
+    c = c * (1.0 - amount) + amount;
+    // 同时轻微压缩高光，避免过曝
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    float hlCompress = smoothstep(0.8, 1.0, lum) * amount * 0.3;
+    c = c - hlCompress;
+    return clamp(c, 0.0, 1.0);
+}
+// ── Split Toning（分离色调）──────────────────────────────────────────────────────
+vec3 applySplitTone(vec3 c, vec3 shadowTint, vec3 highlightTint, float balance) {
+    if (length(shadowTint) + length(highlightTint) < 0.001) return c;
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    // 阴影区域着色（亮度低于平衡点）
+    float shadowMask = 1.0 - smoothstep(0.0, balance, lum);
+    // 高光区域着色（亮度高于平衡点）
+    float highlightMask = smoothstep(balance, 1.0, lum);
+    c = c + shadowTint * shadowMask + highlightTint * highlightMask;
+    return clamp(c, 0.0, 1.0);
+}
+// ── Light Leak（GPU 漏光）────────────────────────────────────────────────────────
+vec3 applyLightLeak(vec3 c, vec2 uv, float amount, float seed) {
+    if (amount < 0.001) return c;
+    // 使用低频噪声生成随机漏光位置和颜色
+    float angle = random(vec2(seed, seed * 0.7), 0.0) * 6.2832; // 随机角度
+    vec2 leakCenter = vec2(
+        0.5 + cos(angle) * 0.5, // 漏光中心在边缘
+        0.5 + sin(angle) * 0.5
+    );
+    float dist = length(uv - leakCenter);
+    float leak = smoothstep(0.8, 0.0, dist) * amount;
+    // 漏光颜色：随机的暖色色调（橙红~金黄）
+    float hue = random(vec2(seed * 1.3, seed * 2.1), 0.0);
+    vec3 leakColor = mix(
+        vec3(1.0, 0.4, 0.1),  // 橙红
+        vec3(1.0, 0.8, 0.2),  // 金黄
+        hue
+    );
+    // 以 Screen 混合模式叠加（保持高光不过曝）
+    vec3 leaked = 1.0 - (1.0 - c) * (1.0 - leakColor * leak);
+    return clamp(leaked, 0.0, 1.0);
 }
 
 // ── 主函数（统一渲染管线，所有相机差异由 uniform 参数驱动）────────────
@@ -409,11 +494,11 @@ void main() {
     // Pass 8: RGB 通道偏移
     color = applyColorBias(color, uColorBiasR, uColorBiasG, uColorBiasB);
 
-    // Pass 9: Bloom
-    color = applyBloom(color, uBloomAmount);
+    // Pass 9: Bloom（空间扩散光晕）
+    color = applyBloom(color, uBloomAmount, uv);
 
-    // Pass 10: Halation
-    color = applyHalation(color, uHalationAmount);
+    // Pass 10: Halation（红橙色胶片辉光）
+    color = applyHalation(color, uHalationAmount, uv);
 
     // Pass 11: Highlight Rolloff
     color = applyHighlightRolloffPreview(color, uHighlightRolloff);
@@ -457,10 +542,20 @@ void main() {
     // Pass 17: 相纸纹理
     color = applyPaperTexture(color, uv, uPaperTexture);
 
-    // Pass 18: 胶片颗粒
+    // Pass 18: 胶片颗粒（亮度依赖 + grainSize 控制）
     if (uGrainAmount > 0.0) {
-        float grain = random(uv, floor(uTime * 24.0) / 24.0) - 0.5;
-        color = clamp(color + grain * uGrainAmount * 0.25, 0.0, 1.0);
+        // 使用 grainSize 缩放 UV，控制颗粒大小（值越大颗粒越粗）
+        vec2 grainUV = uv / max(uGrainSize * uTexelSize * 800.0, vec2(0.001));
+        float timeSeed = floor(uTime * 24.0) / 24.0;
+        // 多层噪声叠加：模拟银盐晶体的自然随机分布
+        float grain = random(grainUV, timeSeed) - 0.5;
+        grain += (random(grainUV * 1.7, timeSeed + 1.0) - 0.5) * 0.5;
+        grain *= 0.667; // 归一化
+        // 亮度依赖掩码：中间调颗粒最强，纯黑/纯白区域平滑
+        float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
+        float lumMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 2.0); // 抛物线：0→0, 0.5→1, 1→0
+        lumMask = mix(0.3, 1.0, lumMask); // 保留最低 30% 强度，避免完全无颗粒
+        color = clamp(color + grain * uGrainAmount * 0.25 * lumMask, 0.0, 1.0);
     }
 
     // Pass 19: 数字噪点
@@ -481,7 +576,16 @@ void main() {
         color = clamp(color + vec3(cr, cg, cb) * uChromaNoise * 0.08, 0.0, 1.0);
     }
 
-    // Pass 20: 暗角（鱼眼模式下不叠加额外暗角）
+    // Pass 20: Fade（褒色）
+    color = applyFade(color, uFadeAmount);
+
+    // Pass 21: Split Toning（分离色调）
+    color = applySplitTone(color, uShadowTint, uHighlightTint, uSplitToneBalance);
+
+    // Pass 22: Light Leak（GPU 漏光）
+    color = applyLightLeak(color, uv, uLightLeakAmount, uLightLeakSeed);
+
+    // Pass 23: 暗角（鱼眼模式下不叠加额外暗角）
     if (uFisheyeMode < 0.5) {
         float vignette = vignetteEffect(uv, uVignetteAmount);
         color *= vignette;
@@ -564,6 +668,12 @@ void main() {
     private var uSkinRedLimit: Int = -1
     private var uHighlightRolloff2: Int = -1
     private var uToneCurveStrength: Int = -1
+    private var uFadeAmount: Int = -1
+    private var uShadowTint: Int = -1
+    private var uHighlightTint: Int = -1
+    private var uSplitToneBalance: Int = -1
+    private var uLightLeakAmount: Int = -1
+    private var uLightLeakSeed: Int = -1
 
     // Pass 2 Attrib 位置
     private var aPositionLoc: Int = -1
@@ -625,6 +735,16 @@ void main() {
     @Volatile private var skinRedLimit: Float = 1.0f
     @Volatile private var highlightRolloff2: Float = 0.0f
     @Volatile private var toneCurveStrength: Float = 0.0f
+    @Volatile private var fadeAmount: Float = 0.0f
+    @Volatile private var shadowTintR: Float = 0.0f
+    @Volatile private var shadowTintG: Float = 0.0f
+    @Volatile private var shadowTintB: Float = 0.0f
+    @Volatile private var highlightTintR: Float = 0.0f
+    @Volatile private var highlightTintG: Float = 0.0f
+    @Volatile private var highlightTintB: Float = 0.0f
+    @Volatile private var splitToneBalance: Float = 0.5f
+    @Volatile private var lightLeakAmount: Float = 0.0f
+    @Volatile private var lightLeakSeed: Float = 0.0f
     @Volatile private var previewWidth: Int = 1280
     @Volatile private var previewHeight: Int = 720
 
@@ -841,6 +961,12 @@ void main() {
         uSkinRedLimit         = GLES30.glGetUniformLocation(programId, "uSkinRedLimit")
         uHighlightRolloff2    = GLES30.glGetUniformLocation(programId, "uHighlightRolloff2")
         uToneCurveStrength    = GLES30.glGetUniformLocation(programId, "uToneCurveStrength")
+        uFadeAmount           = GLES30.glGetUniformLocation(programId, "uFadeAmount")
+        uShadowTint           = GLES30.glGetUniformLocation(programId, "uShadowTint")
+        uHighlightTint        = GLES30.glGetUniformLocation(programId, "uHighlightTint")
+        uSplitToneBalance     = GLES30.glGetUniformLocation(programId, "uSplitToneBalance")
+        uLightLeakAmount      = GLES30.glGetUniformLocation(programId, "uLightLeakAmount")
+        uLightLeakSeed        = GLES30.glGetUniformLocation(programId, "uLightLeakSeed")
     }
 
     // ── 渲染（两步架构）─────────────────────────────────────────────────────
@@ -963,6 +1089,12 @@ void main() {
         GLES30.glUniform1f(uSkinRedLimit,        skinRedLimit)
         GLES30.glUniform1f(uHighlightRolloff2,   highlightRolloff2)
         GLES30.glUniform1f(uToneCurveStrength,   toneCurveStrength)
+        GLES30.glUniform1f(uFadeAmount,           fadeAmount)
+        GLES30.glUniform3f(uShadowTint,           shadowTintR, shadowTintG, shadowTintB)
+        GLES30.glUniform3f(uHighlightTint,        highlightTintR, highlightTintG, highlightTintB)
+        GLES30.glUniform1f(uSplitToneBalance,     splitToneBalance)
+        GLES30.glUniform1f(uLightLeakAmount,      lightLeakAmount)
+        GLES30.glUniform1f(uLightLeakSeed,        lightLeakSeed)
         time += 0.016f
 
         // 绘制全屏四边形
@@ -1032,6 +1164,18 @@ void main() {
         (params["exposureOffset"]       as? Number)?.let { /* TODO: 添加 exposureOffset uniform */ }
         (params["softFocus"]            as? Number)?.let { /* TODO: 添加 softFocus uniform */ }
         (params["distortion"]           as? Number)?.let { fisheyeMode         = it.toFloat() }
+        // ── 新增：Fade / Split Toning / Light Leak ──
+        (params["fadeAmount"]           as? Number)?.let { fadeAmount          = it.toFloat() }
+        (params["fade"]                 as? Number)?.let { fadeAmount          = it.toFloat() }
+        (params["shadowTintR"]          as? Number)?.let { shadowTintR         = it.toFloat() }
+        (params["shadowTintG"]          as? Number)?.let { shadowTintG         = it.toFloat() }
+        (params["shadowTintB"]          as? Number)?.let { shadowTintB         = it.toFloat() }
+        (params["highlightTintR"]       as? Number)?.let { highlightTintR      = it.toFloat() }
+        (params["highlightTintG"]       as? Number)?.let { highlightTintG      = it.toFloat() }
+        (params["highlightTintB"]       as? Number)?.let { highlightTintB      = it.toFloat() }
+        (params["splitToneBalance"]     as? Number)?.let { splitToneBalance    = it.toFloat() }
+        (params["lightLeakAmount"]      as? Number)?.let { lightLeakAmount     = it.toFloat() }
+        (params["lightLeakSeed"]        as? Number)?.let { lightLeakSeed       = it.toFloat() }
     }
 
     fun setCameraId(cameraId: String) {

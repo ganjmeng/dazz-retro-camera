@@ -114,6 +114,16 @@ uniform float uSkinHueProtect;
 uniform float uSkinSatProtect;
 uniform float uSkinLumaSoften;
 uniform float uSkinRedLimit;
+uniform float uGrainSize;            // 颗粒大小
+uniform float uLuminanceNoise;       // 亮度噪声
+uniform float uChromaNoise;           // 色度噪声
+// ── Fade / Split Toning / Light Leak ──
+uniform float uFadeAmount;
+uniform vec3  uShadowTint;
+uniform vec3  uHighlightTint;
+uniform float uSplitToneBalance;
+uniform float uLightLeakAmount;
+uniform float uLightLeakSeed;
 
 // ── 工具函数 ──────────────────────────────────────────────────────────
 
@@ -234,27 +244,52 @@ vec3 applyColorBias(vec3 c, float r, float g, float b) {
     return clamp(c + vec3(r, g, b), 0.0, 1.0);
 }
 
-// ── Pass 9: Bloom ─────────────────────────────────────────────────────
-vec3 applyBloom(vec3 c, float amount) {
+// ── Pass 9: Bloom（空间扩散光晕）───────────────────────────────────────────
+vec3 applyBloom(vec3 c, float amount, vec2 uv) {
     if (amount < 0.001) return c;
-    float lum = luminance(c);
-    if (lum > 0.75) {
-        float bloom = clamp((lum - 0.75) * amount * 2.5, 0.0, 0.25);
-        c.r = clamp(c.r + bloom * 0.9, 0.0, 1.0);
-        c.g = clamp(c.g + bloom * 0.8, 0.0, 1.0);
-        c.b = clamp(c.b + bloom * 0.6, 0.0, 1.0);
+    float bloomRadius = amount * 12.0;
+    vec3 bloomColor = vec3(0.0);
+    float totalWeight = 0.0;
+    for (int i = -1; i <= 1; i++) {
+        for (int j = -1; j <= 1; j++) {
+            vec2 offset = vec2(float(i), float(j)) * uTexelSize * bloomRadius;
+            vec3 sample_c = texture(uInputTexture, uv + offset).rgb;
+            float sLum = luminance(sample_c);
+            float highlight = clamp((sLum - 0.7) / 0.3, 0.0, 1.0);
+            float w = (i == 0 && j == 0) ? 4.0 : (abs(i) + abs(j) == 1 ? 2.0 : 1.0);
+            bloomColor += sample_c * highlight * w;
+            totalWeight += w;
+        }
     }
+    bloomColor /= totalWeight;
+    bloomColor *= vec3(1.0, 0.9, 0.7);
+    c = clamp(c + bloomColor * amount * 1.5, 0.0, 1.0);
     return c;
 }
-
-// ── Pass 10: Halation（高光辉光）─────────────────────────────────────
-vec3 applyHalation(vec3 c, float amount) {
+// ── Pass 10: Halation（红橙色胶片辉光，空间扩散）───────────────────────
+vec3 applyHalation(vec3 c, float amount, vec2 uv) {
     if (amount < 0.001) return c;
-    float lum = luminance(c);
-    float mask = smoothstep(0.6, 1.0, lum);
-    c.r = clamp(c.r + mask * amount * 0.3, 0.0, 1.0);
-    c.g = clamp(c.g + mask * amount * 0.05, 0.0, 1.0);
-    c.b = clamp(c.b - mask * amount * 0.05, 0.0, 1.0);
+    float haloRadius = amount * 18.0;
+    vec3 haloColor = vec3(0.0);
+    float totalWeight = 0.0;
+    for (int i = -2; i <= 2; i++) {
+        for (int j = -2; j <= 2; j++) {
+            if (abs(i) + abs(j) > 3) continue;
+            vec2 offset = vec2(float(i), float(j)) * uTexelSize * haloRadius;
+            vec3 sample_c = texture(uInputTexture, uv + offset).rgb;
+            float sLum = luminance(sample_c);
+            float highlight = clamp((sLum - 0.6) / 0.4, 0.0, 1.0);
+            float dist = float(abs(i) + abs(j));
+            float w = 1.0 / (1.0 + dist);
+            haloColor += sample_c * highlight * w;
+            totalWeight += w;
+        }
+    }
+    haloColor /= totalWeight;
+    float haloLum = luminance(haloColor);
+    c.r = clamp(c.r + haloLum * amount * 1.2, 0.0, 1.0);
+    c.g = clamp(c.g + haloLum * amount * 0.35, 0.0, 1.0);
+    c.b = clamp(c.b + haloLum * amount * 0.05, 0.0, 1.0);
     return c;
 }
 
@@ -365,13 +400,17 @@ vec3 applyPaperTexture(vec3 c, vec2 uv, float amount, float time) {
     return clamp(c * paper * (1.0 + amount * 0.1) - vec3(amount * 0.02), 0.0, 1.0);
 }
 
-// ── Pass 17: Film Grain（成片专用：hash 低频颗粒，更接近真实胶片质感）────────────
-vec3 applyGrain(vec3 c, vec2 uv, float amount, float time) {
+// ── Pass 17: Film Grain（亮度依赖 + grainSize 控制）─────────────────────
+vec3 applyGrain(vec3 c, vec2 uv, float amount, float time, float grainSz) {
     if (amount < 0.001) return c;
-    float grain = hash(uv * 500.0 + vec2(time * 0.1)) - 0.5;
-    float grain2 = hash(uv * 250.0 + vec2(time * 0.07, time * 0.13)) - 0.5;
-    float g = mix(grain, grain2, 0.3);
-    return clamp(c + g * amount * 0.25, 0.0, 1.0);
+    vec2 grainUV = uv / max(grainSz * uTexelSize * 800.0, vec2(0.001));
+    float grain = hash(grainUV + vec2(time * 0.1)) - 0.5;
+    grain += (hash(grainUV * 1.7 + vec2(time * 0.07, time * 0.13)) - 0.5) * 0.5;
+    grain *= 0.667;
+    float lum = luminance(c);
+    float lumMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 2.0);
+    lumMask = mix(0.3, 1.0, lumMask);
+    return clamp(c + grain * amount * 0.25 * lumMask, 0.0, 1.0);
 }
 
 // ── Pass 18: Digital Noise（成片专用：hash 暗部增强噪点）────────────────────
@@ -422,11 +461,11 @@ void main() {
     // Pass 8: RGB 通道偏移
     color = applyColorBias(color, uColorBiasR, uColorBiasG, uColorBiasB);
 
-    // Pass 9: Bloom
-    color = applyBloom(color, uBloomAmount);
+    // Pass 9: Bloom（空间扩散光晕）
+    color = applyBloom(color, uBloomAmount, uv);
 
-    // Pass 10: Halation
-    color = applyHalation(color, uHalationAmount);
+    // Pass 10: Halation（红橙色胶片辉光）
+    color = applyHalation(color, uHalationAmount, uv);
 
     // Pass 11: Highlight Rolloff（成片专属）
     color = applyHighlightRolloff(color, uHighlightRolloff);
@@ -465,13 +504,53 @@ void main() {
     // Pass 16: Paper Texture（成片专属）
     color = applyPaperTexture(color, uv, uPaperTexture, uTime);
 
-    // Pass 17: Film Grain
-    color = applyGrain(color, uv, uGrainAmount, uTime);
+    // Pass 17: Film Grain（亮度依赖 + grainSize）
+    color = applyGrain(color, uv, uGrainAmount, uTime, uGrainSize);
 
     // Pass 18: Digital Noise
     color = applyNoise(color, uv, uNoiseAmount, uTime);
 
-    // Pass 19: Vignette
+    // Pass 18b: Luminance Noise
+    if (uLuminanceNoise > 0.0) {
+        float ln = hash(uv * 600.0 + vec2(uTime + 1.7)) - 0.5;
+        color = clamp(color + ln * uLuminanceNoise * 0.15, 0.0, 1.0);
+    }
+    // Pass 18c: Chroma Noise
+    if (uChromaNoise > 0.0) {
+        float cr = hash(uv * 500.0 + vec2(uTime + 3.1)) - 0.5;
+        float cg = hash(uv * 500.0 + vec2(uTime + 5.3)) - 0.5;
+        float cb = hash(uv * 500.0 + vec2(uTime + 7.7)) - 0.5;
+        color = clamp(color + vec3(cr, cg, cb) * uChromaNoise * 0.08, 0.0, 1.0);
+    }
+
+    // Pass 20: Fade（褒色）
+    if (uFadeAmount > 0.0) {
+        color = color * (1.0 - uFadeAmount) + uFadeAmount;
+        float fadeLum = luminance(color);
+        float hlCompress = smoothstep(0.8, 1.0, fadeLum) * uFadeAmount * 0.3;
+        color = clamp(color - hlCompress, 0.0, 1.0);
+    }
+
+    // Pass 21: Split Toning（分离色调）
+    if (length(uShadowTint) + length(uHighlightTint) > 0.001) {
+        float stLum = luminance(color);
+        float shadowMask = 1.0 - smoothstep(0.0, uSplitToneBalance, stLum);
+        float highlightMask = smoothstep(uSplitToneBalance, 1.0, stLum);
+        color = clamp(color + uShadowTint * shadowMask + uHighlightTint * highlightMask, 0.0, 1.0);
+    }
+
+    // Pass 22: Light Leak（GPU 漏光）
+    if (uLightLeakAmount > 0.001) {
+        float angle = hash(vec2(uLightLeakSeed, uLightLeakSeed * 0.7)) * 6.2832;
+        vec2 leakCenter = vec2(0.5 + cos(angle) * 0.5, 0.5 + sin(angle) * 0.5);
+        float dist = length(uv - leakCenter);
+        float leak = smoothstep(0.8, 0.0, dist) * uLightLeakAmount;
+        float hue = hash(vec2(uLightLeakSeed * 1.3, uLightLeakSeed * 2.1));
+        vec3 leakColor = mix(vec3(1.0, 0.4, 0.1), vec3(1.0, 0.8, 0.2), hue);
+        color = clamp(1.0 - (1.0 - color) * (1.0 - leakColor * leak), 0.0, 1.0);
+    }
+
+    // Pass 23: Vignette
     float vigTotal = min(uVignetteAmount + uLensVignette, 1.0);
     color = applyVignette(color, uv, vigTotal);
 
@@ -537,6 +616,15 @@ void main() {
     private var uSkinSatProtect = -1
     private var uSkinLumaSoften = -1
     private var uSkinRedLimit = -1
+    private var uGrainSize = -1
+    private var uLuminanceNoise = -1
+    private var uChromaNoise = -1
+    private var uFadeAmount = -1
+    private var uShadowTint = -1
+    private var uHighlightTint = -1
+    private var uSplitToneBalance = -1
+    private var uLightLeakAmount = -1
+    private var uLightLeakSeed = -1
 
     private var currentWidth = 0
     private var currentHeight = 0
@@ -784,6 +872,15 @@ void main() {
         uSkinSatProtect = loc("uSkinSatProtect")
         uSkinLumaSoften = loc("uSkinLumaSoften")
         uSkinRedLimit = loc("uSkinRedLimit")
+        uGrainSize = loc("uGrainSize")
+        uLuminanceNoise = loc("uLuminanceNoise")
+        uChromaNoise = loc("uChromaNoise")
+        uFadeAmount = loc("uFadeAmount")
+        uShadowTint = loc("uShadowTint")
+        uHighlightTint = loc("uHighlightTint")
+        uSplitToneBalance = loc("uSplitToneBalance")
+        uLightLeakAmount = loc("uLightLeakAmount")
+        uLightLeakSeed = loc("uLightLeakSeed")
     }
 
     private fun setUniforms(params: Map<String, Any>) {
@@ -829,6 +926,15 @@ void main() {
         GLES30.glUniform1f(uSkinSatProtect, f("skinSatProtect", 1.0f))
         GLES30.glUniform1f(uSkinLumaSoften, f("skinLumaSoften"))
         GLES30.glUniform1f(uSkinRedLimit, f("skinRedLimit", 1.0f))
+        GLES30.glUniform1f(uGrainSize, f("grainSize", 1.0f))
+        GLES30.glUniform1f(uLuminanceNoise, f("luminanceNoise"))
+        GLES30.glUniform1f(uChromaNoise, f("chromaNoise"))
+        GLES30.glUniform1f(uFadeAmount, f("fadeAmount"))
+        GLES30.glUniform3f(uShadowTint, f("shadowTintR"), f("shadowTintG"), f("shadowTintB"))
+        GLES30.glUniform3f(uHighlightTint, f("highlightTintR"), f("highlightTintG"), f("highlightTintB"))
+        GLES30.glUniform1f(uSplitToneBalance, f("splitToneBalance", 0.5f))
+        GLES30.glUniform1f(uLightLeakAmount, f("lightLeakAmount"))
+        GLES30.glUniform1f(uLightLeakSeed, f("lightLeakSeed", System.currentTimeMillis().toFloat() / 1000.0f))
     }
 
     private fun uploadBitmapToTexture(bitmap: Bitmap): Int {

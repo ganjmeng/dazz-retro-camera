@@ -68,7 +68,16 @@
     "paperUvScale1": 8.0,
     "paperUvScale2": 32.0,
     "paperWeight1": 0.7,
-    "paperWeight2": 0.3
+    "paperWeight2": 0.3,
+    "fadeAmount": 0.08,
+    "shadowTintR": 0.0,
+    "shadowTintG": 0.0,
+    "shadowTintB": 0.0,
+    "highlightTintR": 0.0,
+    "highlightTintG": 0.0,
+    "highlightTintB": 0.0,
+    "splitToneBalance": 0.5,
+    "lightLeakAmount": 0.0
   },
   "modules": {
     "filters": [
