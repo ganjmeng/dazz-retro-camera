@@ -889,16 +889,41 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     // ─────────────────────────────────────────────
 
     private fun handleUpdateLensParams(call: MethodCall, result: MethodChannel.Result) {
-        val fisheyeMode = call.argument<Boolean>("fisheyeMode") ?: false
-        val vignette    = call.argument<Double>("vignette")    ?: 0.0
+        val fisheyeMode           = call.argument<Boolean>("fisheyeMode") ?: false
+        val vignette              = call.argument<Double>("vignette")    ?: 0.0
+        val chromaticAberration   = call.argument<Double>("chromaticAberration") ?: 0.0
+        val bloom                 = call.argument<Double>("bloom") ?: 0.0
+        val softFocus             = call.argument<Double>("softFocus") ?: 0.0
+        val distortion            = call.argument<Double>("distortion") ?: 0.0
+        val exposure              = call.argument<Double>("exposure") ?: 0.0
+        val contrast              = call.argument<Double>("contrast") ?: 0.0
+        val saturation            = call.argument<Double>("saturation") ?: 0.0
+        val highlightCompression  = call.argument<Double>("highlightCompression") ?: 0.0
+        val zoomFactor            = call.argument<Double>("zoomFactor") ?: 1.0
+
         // ── 缓存 lens 参数，供 switchLens 后重新应用 ──
         cachedLensFisheyeMode = fisheyeMode
         cachedLensVignette = vignette
+
         // 将鱼眼模式传递到 GL 渲染器
         glRenderer?.setFisheyeMode(fisheyeMode)
-        // 将暗角传递到 GL 渲染器
-        glRenderer?.updateParams(mapOf("vignette" to vignette))
-        Log.d(TAG, "updateLensParams: fisheyeMode=$fisheyeMode, vignette=$vignette")
+
+        // ── FIX: 将所有镜头参数传递到 GL 渲染器（之前只传了 vignette）──
+        val params = mutableMapOf<String, Any>(
+            "vignette" to vignette,
+            "chromaticAberration" to chromaticAberration,
+            "bloomAmount" to bloom,
+            "softFocus" to softFocus,
+            "distortion" to distortion,
+        )
+        // 曝光、对比度、饱和度是镜头的叠加偏移量，不直接设置到 shader（它们通过 renderParams 组合后统一发送）
+        // 但仍然需要缓存以供 switchLens 后重新应用
+        glRenderer?.updateParams(params)
+
+        Log.d(TAG, "updateLensParams: fisheyeMode=$fisheyeMode, vignette=$vignette, " +
+            "chromaticAberration=$chromaticAberration, bloom=$bloom, softFocus=$softFocus, " +
+            "distortion=$distortion, exposure=$exposure, contrast=$contrast, " +
+            "saturation=$saturation, zoomFactor=$zoomFactor")
         result.success(null)
     }
 

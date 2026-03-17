@@ -179,6 +179,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             vignette: lens?.vignette ?? 0.0,
             zoomFactor: lens?.zoomFactor ?? 1.0,
             fisheyeMode: lens?.fisheyeMode ?? false,
+            chromaticAberration: lens?.chromaticAberration ?? 0.0,
+            bloom: lens?.bloom ?? 0.0,
+            softFocus: lens?.softFocus ?? 0.0,
+            exposure: lens?.exposure ?? 0.0,
+            contrast: lens?.contrast ?? 0.0,
+            saturation: lens?.saturation ?? 0.0,
+            highlightCompression: lens?.highlightCompression ?? 0.0,
           );
         }
         // 同步清晰度档位对应的原生分辨率（initCamera 默认 1080p，需根据当前档位切换）
@@ -307,6 +314,27 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final cameraBack = ref.read(cameraAppProvider).camera;
     if (cameraBack != null) {
       await ref.read(cameraServiceProvider.notifier).setCamera(cameraBack);
+      // 同步镜头参数（所有字段）
+      final lensIdBack = ref.read(cameraAppProvider).activeLensId;
+      final lensBack = cameraBack.lensById(lensIdBack);
+      await ref.read(cameraServiceProvider.notifier).updateLensParams(
+        distortion: lensBack?.distortion ?? 0.0,
+        vignette: lensBack?.vignette ?? 0.0,
+        zoomFactor: lensBack?.zoomFactor ?? 1.0,
+        fisheyeMode: lensBack?.fisheyeMode ?? false,
+        chromaticAberration: lensBack?.chromaticAberration ?? 0.0,
+        bloom: lensBack?.bloom ?? 0.0,
+        softFocus: lensBack?.softFocus ?? 0.0,
+        exposure: lensBack?.exposure ?? 0.0,
+        contrast: lensBack?.contrast ?? 0.0,
+        saturation: lensBack?.saturation ?? 0.0,
+        highlightCompression: lensBack?.highlightCompression ?? 0.0,
+      );
+      // 同步完整渲染参数（滤镜+镜头+defaultLook 组合值）
+      final renderParams = ref.read(cameraAppProvider).renderParams;
+      if (renderParams != null) {
+        ref.read(cameraServiceProvider.notifier).updateRenderParams(renderParams.toJson());
+      }
     }
     // 同步清晰度档位对应的原生分辨率
     // IMPORTANT: must await so the transition overlay stays visible until the

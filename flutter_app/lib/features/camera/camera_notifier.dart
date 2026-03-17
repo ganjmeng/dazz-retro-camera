@@ -405,6 +405,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         vignette: defaultLens?.vignette ?? 0.0,
         zoomFactor: defaultLens?.zoomFactor ?? 1.0,
         fisheyeMode: defaultLens?.fisheyeMode ?? false,
+        chromaticAberration: defaultLens?.chromaticAberration ?? 0.0,
+        bloom: defaultLens?.bloom ?? 0.0,
+        softFocus: defaultLens?.softFocus ?? 0.0,
+        exposure: defaultLens?.exposure ?? 0.0,
+        contrast: defaultLens?.contrast ?? 0.0,
+        saturation: defaultLens?.saturation ?? 0.0,
+        highlightCompression: defaultLens?.highlightCompression ?? 0.0,
       );
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'Failed to load camera: $e');
@@ -445,6 +452,11 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   void selectFilter(String id) {
     state = state.copyWith(activeFilterId: id);
+    // ── FIX: 滤镜切换后必须将更新后的渲染参数发送到原生预览 Shader ──
+    // 之前只更新了 Dart state，原生 Shader 完全不知道滤镜变了。
+    // 滤镜影响 contrast、saturation、grain、grainSize、vignette、sharpness、halation，
+    // 这些参数通过 renderParams 组合后需要重新发送。
+    _applyCurrentRenderParamsToNative();
   }
 
   void selectLens(String id) {
@@ -456,19 +468,25 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     } else {
       newLensId = id;
     }
-    // 通知原生层更新镜头参数（在 GPU shader 中实现，零 CPU 开销）
     final newLens = state.camera?.lensById(newLensId);
-    final distortion = newLens?.distortion ?? 0.0;
-    final vignette = newLens?.vignette ?? 0.0;
-    final zoomFactor = newLens?.zoomFactor ?? 1.0;
     final fisheyeMode = newLens?.fisheyeMode ?? false;
     state = state.copyWith(activeLensId: newLensId, fisheyeMode: fisheyeMode);
+    // ── FIX: 将所有镜头参数发送到原生层（之前只发了 fisheyeMode 和 vignette）──
     _ref.read(cameraServiceProvider.notifier).updateLensParams(
-      distortion: distortion,
-      vignette: vignette,
-      zoomFactor: zoomFactor,
+      distortion: newLens?.distortion ?? 0.0,
+      vignette: newLens?.vignette ?? 0.0,
+      zoomFactor: newLens?.zoomFactor ?? 1.0,
       fisheyeMode: fisheyeMode,
+      chromaticAberration: newLens?.chromaticAberration ?? 0.0,
+      bloom: newLens?.bloom ?? 0.0,
+      softFocus: newLens?.softFocus ?? 0.0,
+      exposure: newLens?.exposure ?? 0.0,
+      contrast: newLens?.contrast ?? 0.0,
+      saturation: newLens?.saturation ?? 0.0,
+      highlightCompression: newLens?.highlightCompression ?? 0.0,
     );
+    // ── FIX: 镜头切换后也重发完整渲染参数（镜头影响 contrast、saturation、vignette 等组合值）──
+    _applyCurrentRenderParamsToNative();
   }
 
   void selectRatio(String id) {
@@ -770,12 +788,22 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         vignette: lens?.vignette ?? 0.0,
         zoomFactor: lens?.zoomFactor ?? 1.0,
         fisheyeMode: lens?.fisheyeMode ?? false,
+        chromaticAberration: lens?.chromaticAberration ?? 0.0,
+        bloom: lens?.bloom ?? 0.0,
+        softFocus: lens?.softFocus ?? 0.0,
+        exposure: lens?.exposure ?? 0.0,
+        contrast: lens?.contrast ?? 0.0,
+        saturation: lens?.saturation ?? 0.0,
+        highlightCompression: lens?.highlightCompression ?? 0.0,
       );
     }
 
     // 6. 同步清晰度档位
     const sharpenLevels = [0.0, 0.5, 1.0];
     await svc.setSharpen(sharpenLevels[state.sharpenLevel]);
+
+    // 7. 同步完整渲染参数（滤镜+镜头+defaultLook 组合值）
+    _applyCurrentRenderParamsToNative();
   }
 
   // ── Take photo ──
@@ -1066,6 +1094,16 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     } catch (e) {
       debugPrint('[CameraNotifier] Failed to write GPS EXIF: $e');
     }
+  }
+
+  // ── FIX: 将当前完整渲染参数（滤镜+镜头+defaultLook 组合后）发送到原生预览 Shader ──
+  /// 切换滤镜或镜头后调用，确保原生层实时预览与 Dart 状态同步。
+  void _applyCurrentRenderParamsToNative() {
+    final params = state.renderParams;
+    if (params == null) return;
+    final json = params.toJson();
+    debugPrint('[CameraNotifier] _applyCurrentRenderParamsToNative: sending ${json.length} params to native');
+    _ref.read(cameraServiceProvider.notifier).updateRenderParams(json);
   }
 }
 

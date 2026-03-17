@@ -182,15 +182,19 @@ class CameraService extends StateNotifier<CameraState> {
   }
 
   /// 更新镜头参数（切换镜头时将参数传递到原生层渲染管线）
-  /// [distortion] Brown-Conrady k1：负值=桶形(鱼眼), 正值=枕形, 0=无畸变
-  /// [vignette] 暗角强度 0.0~1.0（原生层 GPU shader 叠加）
-  /// [zoomFactor] 镜头缩放倍数（1.0=标准，0.5=超广角/鱼眼）
-  /// [fisheyeMode] 圆形鱼眼模式：画面映射为圆形+四周黑色（等距投影）
+  /// 包含所有 LensDefinition 中的效果字段
   Future<void> updateLensParams({
     required double distortion,
     double vignette = 0.0,
     double zoomFactor = 1.0,
     bool fisheyeMode = false,
+    double chromaticAberration = 0.0,
+    double bloom = 0.0,
+    double softFocus = 0.0,
+    double exposure = 0.0,
+    double contrast = 0.0,
+    double saturation = 0.0,
+    double highlightCompression = 0.0,
   }) async {
     try {
       await _channel.invokeMethod('updateLensParams', {
@@ -198,9 +202,34 @@ class CameraService extends StateNotifier<CameraState> {
         'vignette': vignette,
         'zoomFactor': zoomFactor,
         'fisheyeMode': fisheyeMode,
+        'chromaticAberration': chromaticAberration,
+        'bloom': bloom,
+        'softFocus': softFocus,
+        'exposure': exposure,
+        'contrast': contrast,
+        'saturation': saturation,
+        'highlightCompression': highlightCompression,
       });
     } catch (e) {
       print('Error updating lens params: $e');
+    }
+  }
+
+  /// 将完整渲染参数（滤镜+镜头+defaultLook 组合后的值）发送到原生预览 Shader
+  /// 复用 setPreset 通道中 glRenderer.updateParams 的能力
+  Future<void> updateRenderParams(Map<String, dynamic> params) async {
+    try {
+      // 通过 setPreset 通道发送，原生端会读取 defaultLook 子对象并 updateParams
+      // 但更直接的方式是新增一个专用 method channel
+      // 这里直接复用 setPreset：将 params 作为 defaultLook 传入
+      await _channel.invokeMethod('setPreset', {
+        'preset': {
+          'cameraId': '',  // 空字符串不会触发 setCameraId
+          'defaultLook': params,
+        },
+      });
+    } catch (e) {
+      print('Error updating render params: $e');
     }
   }
 

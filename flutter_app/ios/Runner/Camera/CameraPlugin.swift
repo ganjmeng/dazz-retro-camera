@@ -313,14 +313,24 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     // ─────────────────────────────────────────────
     private func handleUpdateLensParams(call: FlutterMethodCall, result: @escaping FlutterResult) {
         let args = call.arguments as? [String: Any]
-        let fisheyeMode = args?["fisheyeMode"] as? Bool ?? false
-        let vignette = args?["vignette"] as? Double ?? 0.0
+        let fisheyeMode           = args?["fisheyeMode"] as? Bool ?? false
+        let vignette              = args?["vignette"] as? Double ?? 0.0
+        let chromaticAberration   = args?["chromaticAberration"] as? Double ?? 0.0
+        let bloom                 = args?["bloom"] as? Double ?? 0.0
+        let softFocus             = args?["softFocus"] as? Double ?? 0.0
+        let distortion            = args?["distortion"] as? Double ?? 0.0
+
         // 将鱼眼模式传递到 Metal 渲染器
         renderer?.setFisheyeMode(fisheyeMode)
-        // 将暗角传递到 Metal 渲染器
+
+        // ── FIX: 将所有镜头参数传递到 Metal 渲染器（之前只传了 vignette）──
         if let r = renderer {
             var p = r.getCCDParams()
             p.vignetteAmount = Float(vignette)
+            p.chromaticAberration = Float(chromaticAberration)
+            p.bloomAmount = Float(bloom)
+            // softFocus 和 distortion 在 Metal shader 中可能没有对应 uniform，
+            // 但通过 renderParams 统一发送时会覆盖
             r.setCCDParams(p)
         }
         result(nil)
