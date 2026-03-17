@@ -743,13 +743,45 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     return LocationToggleResult.enabled;
   }
 
-  void cycleSharpen() {
+  /// 循环切换清晰度档位（低/中/高）。
+  ///
+  /// setSharpen 在原生层会重新配置相机分辨率（重建 CameraGLRenderer），
+  /// 导致之前设置的所有 GPU shader 参数丢失。
+  /// 参考 flipCamera 的处理方式：setSharpen 完成后重新同步完整渲染参数。
+  Future<void> cycleSharpen() async {
     final next = (state.sharpenLevel + 1) % 3;
     state = state.copyWith(sharpenLevel: next);
     AppPrefsService.instance.setSharpenLevel(next);
     // 0=低(0.0), 1=中(0.5), 2=高(1.0)
     const levels = [0.0, 0.5, 1.0];
-    _ref.read(cameraServiceProvider.notifier).setSharpen(levels[next]);
+    final svc = _ref.read(cameraServiceProvider.notifier);
+
+    // 1. 切换原生分辨率（此操作会重建 CameraGLRenderer，清空所有 shader 参数）
+    await svc.setSharpen(levels[next]);
+
+    // 2. 重新同步相机 shader 参数（与 flipCamera 保持一致）
+    final camera = state.camera;
+    if (camera != null) {
+      await svc.setCamera(camera);
+      // 3. 重新同步镜头参数
+      final lens = camera.lensById(state.activeLensId);
+      await svc.updateLensParams(
+        distortion:            lens?.distortion            ?? 0.0,
+        vignette:              lens?.vignette              ?? 0.0,
+        zoomFactor:            lens?.zoomFactor            ?? 1.0,
+        fisheyeMode:           lens?.fisheyeMode           ?? false,
+        chromaticAberration:   lens?.chromaticAberration   ?? 0.0,
+        bloom:                 lens?.bloom                 ?? 0.0,
+        softFocus:             lens?.softFocus             ?? 0.0,
+        exposure:              lens?.exposure              ?? 0.0,
+        contrast:              lens?.contrast              ?? 0.0,
+        saturation:            lens?.saturation            ?? 0.0,
+        highlightCompression:  lens?.highlightCompression  ?? 0.0,
+      );
+    }
+
+    // 4. 重新推送完整渲染参数（滤镜 + 镜头 + defaultLook 组合值）
+    _applyCurrentRenderParamsToNative();
   }
 
   void cycleFlash() {
