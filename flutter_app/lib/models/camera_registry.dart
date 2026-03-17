@@ -50,7 +50,7 @@ const List<String> kDefaultCameraOrder = [
   'grd_r',
   'fqs',
   'bw_classic',
-  'sqc',
+  'inst_sqc',
   'fisheye',
 ];
 
@@ -210,9 +210,9 @@ const List<CameraEntry> kAllCameras = [
     ],
   ),
   CameraEntry(
-    id: 'sqc',
+    id: 'inst_sqc',
     name: 'INST SQC',
-    assetPath: 'assets/cameras/sqc.json',
+    assetPath: 'assets/cameras/inst_sqc.json',
     category: 'instant',
     focalLengthLabel: '35mm',
     premium: false,

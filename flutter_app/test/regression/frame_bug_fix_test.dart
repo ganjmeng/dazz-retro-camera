@@ -11,11 +11,11 @@ import 'package:retro_cam/models/camera_definition.dart';
 void main() {
   group('Regression: 相框 Bug 修复', () {
     // 拍立得相机列表（应该有相框）
-    final instantCameras = {'inst_c', 'inst_s', 'inst_sq', 'sqc'};
+    final instantCameras = {'inst_c', 'inst_sqc'};
 
     // 非拍立得相机列表（不应该有相框）
     final nonInstantCameras = {
-      'bw_classic', 'ccd_m', 'ccd_r', 'cpm35', 'd_classic',
+      'bw_classic', 'ccd_r', 'cpm35', 'd_classic',
       'fqs', 'fxn_r', 'grd_r', 'u300', 'fisheye',
     };
 

@@ -13,7 +13,6 @@ void main() {
     // 所有相机的 temperature 值和预期行为
     final cameraTemperatureExpectations = {
       'ccd_r': {'temperature': -15, 'expectedBias': 'cool', 'maxShift': 0.01},
-      'ccd_m': {'temperature': -10, 'expectedBias': 'cool', 'maxShift': 0.01},
       'fqs': {'temperature': 5, 'expectedBias': 'warm', 'maxShift': 0.01},
       'inst_c': {'temperature': -20, 'expectedBias': 'cool', 'maxShift': 0.01},
       'u300': {'temperature': 40, 'expectedBias': 'warm', 'maxShift': 0.02},

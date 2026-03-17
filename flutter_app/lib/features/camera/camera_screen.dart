@@ -3454,9 +3454,8 @@ const _kVideoCameras = [
 const _kPhotoCameras = [
   _CameraItem(id: 'grd_r', name: 'GRD', emoji: '📷', hasR: true),
   _CameraItem(id: 'fxn_r', name: 'FXN', emoji: '📷', hasR: true),
-  _CameraItem(id: 'sqc', name: 'INST SQC', emoji: '🎞'),
+  _CameraItem(id: 'inst_sqc', name: 'INST SQC', emoji: '🎞'),
   _CameraItem(id: 'bw_classic', name: 'BW', emoji: '⬛'),
-  _CameraItem(id: 'ccd_m', name: 'CCD M', emoji: '📸'),
   _CameraItem(id: 'd_classic', name: 'D Classic', emoji: '📷'),
   _CameraItem(id: 'inst_c', name: 'INST C', emoji: '🎞'),
   _CameraItem(id: 'u300', name: 'U300', emoji: '📷'),

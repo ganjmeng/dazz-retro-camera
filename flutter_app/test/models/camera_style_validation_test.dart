@@ -31,14 +31,7 @@ void main() {
       expect(look.skinHueProtect, isTrue, reason: 'Skin protect needed for cold LUT');
     });
 
-    test('CCD-M: Warm tone, strong grain', () {
-      if (!cameras.containsKey('ccd_m')) return;
-      final look = cameras['ccd_m']!.defaultLook;
-      
-      // Note: ccd_m temperature is -10 in JSON, but the warm tone is achieved via LUT.
-      // We test the actual JSON values here.
-      expect(look.grain, greaterThanOrEqualTo(0.10), reason: 'Strong grain for consumer CCD');
-    });
+    // CCD-M removed (deprecated camera)
 
     test('BW Classic: High contrast, strong edge falloff, no skin protect', () {
       if (!cameras.containsKey('bw_classic')) return;
@@ -61,9 +54,9 @@ void main() {
       expect(look.developmentSoftness, greaterThan(0), reason: 'Should have development softness');
     });
 
-    test('SQC: Strongest highlight protection, paper texture', () {
-      if (!cameras.containsKey('sqc')) return;
-      final look = cameras['sqc']!.defaultLook;
+    test('INST SQC: Strongest highlight protection, paper texture', () {
+      if (!cameras.containsKey('inst_sqc')) return;
+      final look = cameras['inst_sqc']!.defaultLook;
       
       expect(look.highlightRolloff, greaterThanOrEqualTo(0.25), reason: 'Strongest highlight protection');
       expect(look.skinHueProtect, isTrue, reason: 'Skin protect for portraits');
