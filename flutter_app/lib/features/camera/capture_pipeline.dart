@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'capture_pipeline_ext.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -424,7 +425,37 @@ class CapturePipeline {
         final rotPicture = rotRecorder.endRecording();
         finalImage = await rotPicture.toImage(rotW.toInt(), rotH.toInt());
         debugPrint('[CapturePipeline] rotated: quarter=$deviceQuarter, ${rotW.toInt()}x${rotH.toInt()}');
-      }      // ── 5c. 编码为 JPEG（比 PNG 快 5-10x，quality=92 视觉无损）──────────────────
+      }
+
+      // ── 5b-2. 应用 GL Shader 中缺失的效果 ───────────────────────────────────
+      if (renderParams != null) {
+        debugPrint("[CapturePipeline] Applying missing shader effects...");
+        // 注意：这些效果是串联应用的，顺序很重要，应尽量与 Shader 的 Pass 顺序保持一致
+        // 1. Tone Curve
+        finalImage = await drawToneCurve(finalImage);
+        // 2. Highlight Rolloff
+        if (renderParams.highlightRolloff > 0.001) {
+          finalImage = await drawHighlightRolloff(finalImage, renderParams.highlightRolloff);
+        }
+        // 3. Sensor Non-uniformity (Center Gain & Edge Falloff)
+        if (renderParams.centerGain > 0.001 || renderParams.edgeFalloff > 0.001) {
+          finalImage = await drawSensorNonUniformity(finalImage, renderParams.centerGain, renderParams.edgeFalloff);
+        }
+        // 4. Skin Hue Protection
+        if (renderParams.skinHueProtect > 0.5) {
+          finalImage = await drawSkinHueProtect(finalImage, renderParams.skinHueProtect);
+        }
+        // 5. Chemical Irregularity
+        if (renderParams.chemicalIrregularity > 0.001) {
+          finalImage = await drawChemicalIrregularity(finalImage, renderParams.chemicalIrregularity);
+        }
+        // 6. Noise
+        if (renderParams.noiseAmount > 0.001) {
+          finalImage = await drawNoise(finalImage, renderParams.noiseAmount);
+        }
+        debugPrint("[CapturePipeline] Missing effects applied.");
+      }
+
       final byteData = await finalImage.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (byteData == null) return null;
 

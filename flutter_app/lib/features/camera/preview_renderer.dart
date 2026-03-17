@@ -106,6 +106,15 @@ class PreviewRenderParams {
   double get effectiveColorBiasR => defaultLook.colorBiasR.clamp(-1.0, 1.0);
   double get effectiveColorBiasG => defaultLook.colorBiasG.clamp(-1.0, 1.0);
   double get effectiveColorBiasB => defaultLook.colorBiasB.clamp(-1.0, 1.0);
+
+  // ── 拍立得即时成像专属参数 getter ──────────────────────────────────────────────
+  double get highlightRolloff => defaultLook.highlightRolloff.clamp(0.0, 1.0);
+  double get centerGain => defaultLook.centerGain.clamp(0.0, 0.2);
+  double get edgeFalloff => defaultLook.edgeFalloff.clamp(0.0, 1.0);
+  double get skinHueProtect => defaultLook.skinHueProtect ? 1.0 : 0.0;
+  double get chemicalIrregularity => defaultLook.chemicalIrregularity.clamp(0.0, 0.1);
+  /// noiseAmount 目前在 DefaultLook 中没有对应字段，暂时返回 0
+  double get noiseAmount => 0.0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
