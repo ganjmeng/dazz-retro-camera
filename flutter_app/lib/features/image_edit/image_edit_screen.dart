@@ -3,6 +3,7 @@
 // 设计哲学：Darkroom Aesthetics — 纯黑背景，白色控件，复用相机页所有效果逻辑
 // 底部工具按钮显示/隐藏由当前相机 uiCap 决定，完全复用拍摄页逻辑
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -28,6 +29,25 @@ Future<void> openImageImportFlow(BuildContext context) async {
   final XFile? file = await picker.pickImage(source: ImageSource.gallery);
   if (file == null) return;
   if (!context.mounted) return;
+
+  // 显示转圈遮罩：图片选好后到页面跳转前，高清图片需要时间处理
+  OverlayEntry? loadingOverlay;
+  loadingOverlay = OverlayEntry(
+    builder: (_) => const _ImportLoadingOverlay(),
+  );
+  Overlay.of(context).insert(loadingOverlay);
+
+  try {
+    // 预读取图片大小，确保文件可访问
+    await File(file.path).length();
+  } catch (_) {}
+
+  if (!context.mounted) {
+    loadingOverlay.remove();
+    return;
+  }
+
+  // 跳转到编辑页（页面内有自己的通用加载动画）
   await Navigator.of(context).push(
     MaterialPageRoute(
       builder: (ctx) => ProviderScope(
@@ -36,7 +56,40 @@ Future<void> openImageImportFlow(BuildContext context) async {
       ),
       fullscreenDialog: true,
     ),
-  );
+  ).then((_) => loadingOverlay?.remove()).catchError((_) => loadingOverlay?.remove());
+  // 如果 push 前尚未移除，在返回后移除
+  loadingOverlay.remove();
+}
+
+/// 导入图片时的转圈加载遮罩（独立于现有通用加载动画）
+class _ImportLoadingOverlay extends StatelessWidget {
+  const _ImportLoadingOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Material(
+      color: Colors.transparent,
+      child: Stack(
+        children: [
+          // 半透明黑色背景
+          Positioned.fill(
+            child: ColoredBox(color: Color(0xCC000000)),
+          ),
+          // 居中转圈
+          Center(
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 3,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,7 +145,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     _initPreview();
   }
 
-  /// 初始化预览：先缩小高清图片到安全尺寸，再生成 GPU 预览
+  /// 初始化预览：先缩小高清图片到安全尺寸（在 isolate 中执行，避免卡 UI），再生成 GPU 预览
   Future<void> _initPreview() async {
     try {
       // 1. 读取原图并检查尺寸
@@ -103,17 +156,20 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       final srcH = frame.image.height;
       frame.image.dispose();
 
-      // 2. 如果原图超过 _kMaxPreviewDim，缩小到安全尺寸
+      // 2. 如果原图超过 _kMaxPreviewDim，在后台 isolate 中缩小（避免卡 UI，让加载动画正常渲染）
       if (srcW > _kMaxPreviewDim || srcH > _kMaxPreviewDim) {
         final scale = _kMaxPreviewDim / math.max(srcW, srcH);
         final newW = (srcW * scale).round();
         final newH = (srcH * scale).round();
-        // 使用 image 库缩小
-        final decoded = image_lib.decodeImage(originalBytes);
-        if (decoded != null) {
+        // 在独立 isolate 中执行 CPU 密集的解码+缩放，主线程保持响应
+        final resizedJpg = await Isolate.run(() {
+          final decoded = image_lib.decodeImage(originalBytes);
+          if (decoded == null) return null;
           final resized = image_lib.copyResize(decoded, width: newW, height: newH,
               interpolation: image_lib.Interpolation.linear);
-          final resizedJpg = image_lib.encodeJpg(resized, quality: 92);
+          return image_lib.encodeJpg(resized, quality: 92);
+        });
+        if (resizedJpg != null) {
           final tmpPath = '${Directory.systemTemp.path}/dazz_resized_${DateTime.now().millisecondsSinceEpoch}.jpg';
           await File(tmpPath).writeAsBytes(resizedJpg);
           _resizedPreviewPath = tmpPath;
@@ -121,13 +177,40 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         }
       }
 
-      if (mounted) setState(() => _isLoading = false);
-      // 初始 GPU 预览
-      _refreshGpuPreview();
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      // 3. 等待 camera 就绪后再触发 GPU 预览
+      //    renderParams 依赖 camera != null，camera 由持久化异步加载，
+      //    此处轮询最多 3 秒，就绪后立即刷新；超时则降级显示原图。
+      await _waitForCameraAndRefresh();
     } catch (e) {
       debugPrint('[ImageEditScreen] _initPreview error: $e');
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// 等待 camera 就绪（最多 3 秒），就绪后触发 GPU 预览
+  Future<void> _waitForCameraAndRefresh() async {
+    // 先尝试直接刷新（camera 可能已经就绪）
+    if (ref.read(cameraAppProvider).renderParams != null) {
+      _refreshGpuPreview();
+      return;
+    }
+    // camera 尚未就绪，监听状态变化，最多等待 3 秒
+    const maxWait = Duration(seconds: 3);
+    const pollInterval = Duration(milliseconds: 100);
+    final deadline = DateTime.now().add(maxWait);
+    while (mounted && DateTime.now().isBefore(deadline)) {
+      await Future.delayed(pollInterval);
+      if (!mounted) return;
+      if (ref.read(cameraAppProvider).renderParams != null) {
+        _refreshGpuPreview();
+        return;
+      }
+    }
+    // 超时：camera 未就绪，降级显示原图（_gpuPreviewPath 为 null 时 _buildTransformedImage 显示原图）
+    debugPrint('[ImageEditScreen] Camera not ready after 3s, showing original image');
   }
 
   /// GPU 预览使用的源路径（缩小后的 or 原图）
@@ -287,52 +370,51 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   }
 
   /// 应用裁剪/旋转/翻转变换
+  /// 使用 image_lib 在后台 isolate 中处理，避免 rawRgba 大内存导致 OOM 崩溃
   Future<Uint8List?> _applyTransforms({String? sourcePath}) async {
     try {
       final path = sourcePath ?? _gpuPreviewPath ?? _previewSourcePath;
       final bytes = await File(path).readAsBytes();
-      final codec = await ui.instantiateImageCodec(bytes);
-      final frame = await codec.getNextFrame();
-      final src = frame.image;
-      final srcW = src.width.toDouble();
-      final srcH = src.height.toDouble();
-      final cropX = _cropRect.left * srcW;
-      final cropY = _cropRect.top * srcH;
-      final cropW = _cropRect.width * srcW;
-      final cropH = _cropRect.height * srcH;
-      final totalRad = _totalRotation * math.pi / 180.0;
-      final absCos = math.cos(totalRad).abs();
-      final absSin = math.sin(totalRad).abs();
-      final outW = (cropW * absCos + cropH * absSin).toInt();
-      final outH = (cropW * absSin + cropH * absCos).toInt();
-      // 安全检查：避免 0 尺寸导致崩溃
-      if (outW <= 0 || outH <= 0) {
-        debugPrint('[ImageEditScreen] Invalid output dimensions: ${outW}x$outH');
-        return null;
-      }
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-      canvas.translate(outW / 2.0, outH / 2.0);
-      canvas.rotate(totalRad);
-      if (_flipH) canvas.scale(-1.0, 1.0);
-      canvas.drawImageRect(
-        src,
-        Rect.fromLTWH(cropX, cropY, cropW, cropH),
-        Rect.fromLTWH(-cropW / 2.0, -cropH / 2.0, cropW, cropH),
-        Paint()..filterQuality = FilterQuality.high,
-      );
-      final picture = recorder.endRecording();
-      final outputImage = await picture.toImage(outW, outH);
-      final byteData = await outputImage.toByteData(format: ui.ImageByteFormat.rawRgba);
-      if (byteData == null) return null;
-      final img = image_lib.Image.fromBytes(
-        width: outW,
-        height: outH,
-        bytes: byteData.buffer,
-        format: image_lib.Format.uint8,
-        numChannels: 4,
-      );
-      return image_lib.encodeJpg(img, quality: 95);
+
+      // 捕获当前变换参数（不能在 isolate 中访问 'this'）
+      final cropRect = _cropRect;
+      final totalRotation = _totalRotation;
+      final flipH = _flipH;
+
+      // 在独立 isolate 中执行 CPU 密集的图像处理，避免主线程 OOM
+      final result = await Isolate.run(() {
+        final decoded = image_lib.decodeImage(bytes);
+        if (decoded == null) return null;
+
+        final srcW = decoded.width.toDouble();
+        final srcH = decoded.height.toDouble();
+        final cropX = (cropRect.left * srcW).round();
+        final cropY = (cropRect.top * srcH).round();
+        final cropW = (cropRect.width * srcW).round();
+        final cropH = (cropRect.height * srcH).round();
+
+        if (cropW <= 0 || cropH <= 0) return null;
+
+        // 裁剪
+        image_lib.Image current = image_lib.copyCrop(
+          decoded,
+          x: cropX, y: cropY, width: cropW, height: cropH,
+        );
+
+        // 翻转
+        if (flipH) {
+          current = image_lib.flipHorizontal(current);
+        }
+
+        // 旋转（image_lib 使用度数）
+        if (totalRotation.abs() > 0.1) {
+          current = image_lib.copyRotate(current, angle: totalRotation);
+        }
+
+        return image_lib.encodeJpg(current, quality: 95);
+      });
+
+      return result;
     } catch (e) {
       debugPrint('[ImageEditScreen] _applyTransforms error: $e');
       return null;
