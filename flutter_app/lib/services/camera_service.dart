@@ -216,7 +216,7 @@ class CameraService extends StateNotifier<CameraState> {
   /// 切换前后置摄像头（switchCamera 为 switchLens 的别名）
   Future<void> switchCamera() async => switchLens();
 
-  /// 切换前后置摄像头
+  /// 切换前后置摄像头（调用原生 switchLens）
   Future<void> switchLens() async {
     final newLens = state.currentLens == 'back' ? 'front' : 'back';
     try {
@@ -225,6 +225,13 @@ class CameraService extends StateNotifier<CameraState> {
     } catch (e) {
       print('Error switching lens: $e');
     }
+  }
+
+  /// 仅切换内部 lens 方向状态，不调用原生层。
+  /// 配合 stopPreview + initCamera 路径使用，由 initCamera 根据新方向重建相机。
+  void toggleLensDirection() {
+    final newLens = state.currentLens == 'back' ? 'front' : 'back';
+    state = state.copyWith(currentLens: newLens);
   }
 
   /// 触发拍照，返回 {filePath, captureWidth, captureHeight}

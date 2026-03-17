@@ -741,22 +741,41 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     state = state.copyWith(timerSeconds: options[(idx + 1) % options.length]);
   }
 
+  /// 切换前后置摄像头。
+  /// 复用与设置页返回相同的 stopPreview → initCamera → setCamera 路径，
+  /// 彻底避免 switchLens 路径下 SurfaceProvider 回调不触发导致 renderer 丢失的问题。
   Future<void> flipCamera() async {
+    final svc = _ref.read(cameraServiceProvider.notifier);
+
+    // 1. 切换前后置标记
     state = state.copyWith(isFrontCamera: !state.isFrontCamera);
-    await _ref.read(cameraServiceProvider.notifier).switchLens();
-    // ── FIX: switchLens 会重建 native renderer，所有 uniform 参数丢失。
-    // 必须重新发送当前相机参数和镜头参数到 native GPU shader。
+
+    // 2. 停止当前预览（释放旧 renderer + Surface）
+    await svc.stopPreview();
+
+    // 3. 切换 lens 方向（仅更新 CameraService 内部状态，不触发原生 switchLens）
+    svc.toggleLensDirection();
+
+    // 4. 重新初始化相机（重建 SurfaceTexture + CameraGLRenderer，等待 renderer 就绪）
+    await svc.initCamera();
+
+    // 5. 重新发送当前相机参数到新 renderer
     final camera = state.camera;
     if (camera != null) {
-      await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
+      await svc.setCamera(camera);
+      // 同步镜头参数
       final lens = camera.lensById(state.activeLensId);
-      _ref.read(cameraServiceProvider.notifier).updateLensParams(
+      await svc.updateLensParams(
         distortion: lens?.distortion ?? 0.0,
         vignette: lens?.vignette ?? 0.0,
         zoomFactor: lens?.zoomFactor ?? 1.0,
         fisheyeMode: lens?.fisheyeMode ?? false,
       );
     }
+
+    // 6. 同步清晰度档位
+    const sharpenLevels = [0.0, 0.5, 1.0];
+    await svc.setSharpen(sharpenLevels[state.sharpenLevel]);
   }
 
   // ── Take photo ──
