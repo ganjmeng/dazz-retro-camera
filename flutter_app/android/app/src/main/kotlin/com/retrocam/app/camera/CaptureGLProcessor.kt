@@ -3,6 +3,8 @@ package com.retrocam.app.camera
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.EGLContext
@@ -492,8 +494,14 @@ void main() {
         return try {
             // 1. 解码原始 JPEG
             val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
-            val inBitmap = BitmapFactory.decodeFile(filePath, options)
+            val rawBitmap = BitmapFactory.decodeFile(filePath, options)
                 ?: return null.also { Log.e(TAG, "Failed to decode: $filePath") }
+
+            // ── FIX: 读取 EXIF Orientation 并旋转 Bitmap ──────────────────────
+            // BitmapFactory.decodeFile 不会自动应用 EXIF 旋转，
+            // 导致所有带 EXIF 旋转标记的照片（前置/后置均有）方向错误。
+            val inBitmap = applyExifRotation(rawBitmap, filePath)
+            if (inBitmap !== rawBitmap) rawBitmap.recycle()
 
             val width = inBitmap.width
             val height = inBitmap.height
@@ -782,6 +790,43 @@ void main() {
             Log.e(TAG, "Shader compile error: ${GLES30.glGetShaderInfoLog(shader)}")
         }
         return shader
+    }
+
+    /**
+     * 读取 JPEG 文件的 EXIF Orientation 标签，返回旋转/翻转后的 Bitmap。
+     * 如果无需旋转则返回原 Bitmap（同一引用）。
+     */
+    private fun applyExifRotation(bitmap: Bitmap, filePath: String): Bitmap {
+        return try {
+            val exif = ExifInterface(filePath)
+            val orientation = exif.getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL
+            )
+            val matrix = Matrix()
+            when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90  -> matrix.postRotate(90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.preScale(-1f, 1f)
+                ExifInterface.ORIENTATION_FLIP_VERTICAL   -> matrix.preScale(1f, -1f)
+                ExifInterface.ORIENTATION_TRANSPOSE -> {
+                    matrix.postRotate(90f)
+                    matrix.preScale(-1f, 1f)
+                }
+                ExifInterface.ORIENTATION_TRANSVERSE -> {
+                    matrix.postRotate(270f)
+                    matrix.preScale(-1f, 1f)
+                }
+                else -> return bitmap // ORIENTATION_NORMAL or ORIENTATION_UNDEFINED
+            }
+            val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            Log.d(TAG, "EXIF orientation=$orientation, rotated ${bitmap.width}x${bitmap.height} -> ${rotated.width}x${rotated.height}")
+            rotated
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read EXIF orientation: ${e.message}")
+            bitmap
+        }
     }
 
     private fun flipVertically(buf: ByteBuffer, width: Int, height: Int): ByteBuffer {

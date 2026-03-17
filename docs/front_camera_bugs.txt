@@ -1,0 +1,47 @@
+前置摄像头两个 Bug 根因分析
+============================
+
+Bug 1: 切换前置后预览效果永久丢失
+------------------------------------
+根因：switchLens → bindCameraUseCases → provider.unbindAll() + 重新 bindToLifecycle
+这会触发 Preview.setSurfaceProvider 的回调，创建一个新的 CameraGLRenderer。
+
+但问题在于：
+- 新 renderer 创建后（line 273-275），glRenderer 被赋值为新实例
+- 然而 setPreset 不会被自动重新调用！
+- switchLens 之后，Dart 层没有重新调用 setPreset，所以新 renderer 的所有 uniform 参数都是默认值
+  （contrast=1.0, saturation=1.0, 其他全是 0.0）
+- 这意味着预览只有最基础的直通效果，看起来像"没有效果"
+
+验证：
+- 从截图看，前置预览确实有画面（不是黑屏），只是没有滤镜效果
+- 这与"所有 uniform 为默认值"的表现一致
+
+修复方案：
+- 在 bindCameraUseCases 中，新 renderer 创建后，如果有缓存的 preset（currentPresetJson），
+  立即重新应用参数
+- 或者：在 Dart 层 switchLens 后重新调用 setPreset
+
+Bug 2: 前置成片旋转 90°
+------------------------------------
+根因：CameraX ImageCapture 拍摄前置摄像头时，JPEG 文件的 EXIF Orientation 标签
+通常包含旋转信息（如 Orientation=6 表示需要旋转 90°）。
+
+capture_pipeline.dart 中：
+- 使用 _readJpegDimensions 读取 JPEG 文件头的原始尺寸（不考虑 EXIF）
+- 使用 instantiateImageCodec 解码图片（Flutter 默认不自动应用 EXIF 旋转）
+- deviceQuarter 只处理设备方向旋转，不处理 EXIF 旋转
+
+前置摄像头的传感器方向与后置不同：
+- 后置：传感器通常横向安装，CameraX 在 JPEG 中设置 EXIF Orientation=6（旋转90°）
+- 前置：传感器方向可能不同，EXIF Orientation 可能是不同的值
+
+但 capture_pipeline.dart 完全没有读取和处理 EXIF Orientation！
+这意味着：
+- 后置摄像头可能碰巧 deviceQuarter 补偿了 EXIF 旋转
+- 前置摄像头的 EXIF 旋转没有被补偿，导致成片旋转
+
+修复方案：
+- 在 capture_pipeline.dart 中读取 JPEG 的 EXIF Orientation
+- 在解码后根据 EXIF Orientation 旋转图片
+- 或者：让 CameraX 在保存时自动应用旋转（设置 ImageCapture.Builder().setTargetRotation()）

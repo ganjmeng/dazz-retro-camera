@@ -274,6 +274,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 renderer.initialize(w, h)
                 glRenderer = renderer
 
+                // ── FIX: 切换摄像头后重新应用缓存的 preset 参数 ──────────
+                // switchLens 会重建 renderer，但不会重新调用 setPreset，
+                // 导致新 renderer 的所有 uniform 参数为默认值（无效果）。
+                reapplyPresetToRenderer(renderer)
+
                 val inputSurface = renderer.getInputSurface()
                 if (inputSurface != null) {
                     Log.d("CameraPlugin", "GL renderer ready, providing GL input surface")
@@ -950,6 +955,81 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         textureEntry?.release()
         textureEntry = null
         surfaceTexture = null
+    }
+
+    /**
+     * 切换摄像头后重新应用缓存的 preset 参数到新创建的 renderer。
+     * switchLens 会重建 CameraGLRenderer，但不会重新调用 setPreset，
+     * 导致新 renderer 的所有 uniform 参数为默认值（无效果）。
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun reapplyPresetToRenderer(renderer: CameraGLRenderer) {
+        val preset = currentPresetJson ?: return
+        val cameraId = (preset["cameraId"] as? String) ?: (preset["id"] as? String) ?: ""
+        Log.d(TAG, "reapplyPresetToRenderer: cameraId=$cameraId")
+
+        val params = mutableMapOf<String, Any>()
+
+        // 从 preset 顶层读取通用参数（旧路径兼容）
+        (preset["contrast"]            as? Number)?.let { params["contrast"]            = it }
+        (preset["saturation"]          as? Number)?.let { params["saturation"]          = it }
+        (preset["temperatureShift"]    as? Number)?.let { params["temperatureShift"]    = it }
+        (preset["chromaticAberration"] as? Number)?.let { params["chromaticAberration"] = it }
+        (preset["noise"]               as? Number)?.let { params["noise"]               = it }
+        (preset["vignette"]            as? Number)?.let { params["vignette"]            = it }
+        (preset["grain"]               as? Number)?.let { params["grain"]               = it }
+        (preset["sharpen"]             as? Number)?.let { params["sharpen"]             = it }
+
+        // 从 defaultLook 子对象读取完整参数
+        val look = preset["defaultLook"] as? Map<*, *>
+        if (look != null) {
+            (look["contrast"]            as? Number)?.let { params["contrast"]            = it }
+            (look["saturation"]          as? Number)?.let { params["saturation"]          = it }
+            (look["vignette"]            as? Number)?.let { params["vignette"]            = it }
+            (look["chromaticAberration"] as? Number)?.let { params["chromaticAberration"] = it }
+            (look["grain"]               as? Number)?.let { params["grain"]               = it }
+            (look["temperature"]         as? Number)?.let { params["temperatureShift"]    = it }
+            (look["tint"]                as? Number)?.let { params["tintShift"]           = it }
+            (look["halation"]            as? Number)?.let { params["halationAmount"]      = it }
+            (look["bloom"]               as? Number)?.let { params["bloomAmount"]         = it }
+            (look["sharpness"]           as? Number)?.let { params["sharpen"]             = it }
+            (look["highlights"]          as? Number)?.let { params["highlights"]          = it }
+            (look["shadows"]             as? Number)?.let { params["shadows"]             = it }
+            (look["whites"]              as? Number)?.let { params["whites"]              = it }
+            (look["blacks"]              as? Number)?.let { params["blacks"]              = it }
+            (look["clarity"]             as? Number)?.let { params["clarity"]             = it }
+            (look["vibrance"]            as? Number)?.let { params["vibrance"]            = it }
+            (look["noise"]               as? Number)?.let { params["noiseAmount"]         = it }
+            (look["noiseAmount"]         as? Number)?.let { params["noiseAmount"]         = it }
+            (look["colorBiasR"]          as? Number)?.let { params["colorBiasR"]          = it }
+            (look["colorBiasG"]          as? Number)?.let { params["colorBiasG"]          = it }
+            (look["colorBiasB"]          as? Number)?.let { params["colorBiasB"]          = it }
+            (look["grainSize"]           as? Number)?.let { params["grainSize"]           = it }
+            (look["luminanceNoise"]      as? Number)?.let { params["luminanceNoise"]      = it }
+            (look["chromaNoise"]         as? Number)?.let { params["chromaNoise"]         = it }
+            (look["highlightWarmAmount"] as? Number)?.let { params["highlightWarmAmount"] = it }
+            (look["highlightRolloff"]    as? Number)?.let { params["highlightRolloff"]    = it }
+            (look["paperTexture"]        as? Number)?.let { params["paperTexture"]        = it }
+            (look["edgeFalloff"]         as? Number)?.let { params["edgeFalloff"]         = it }
+            (look["exposureVariation"]   as? Number)?.let { params["exposureVariation"]   = it }
+            (look["cornerWarmShift"]     as? Number)?.let { params["cornerWarmShift"]     = it }
+            (look["centerGain"]           as? Number)?.let { params["centerGain"]           = it }
+            (look["developmentSoftness"]  as? Number)?.let { params["developmentSoftness"]  = it }
+            (look["chemicalIrregularity"] as? Number)?.let { params["chemicalIrregularity"] = it }
+            val skinProtect = look["skinHueProtect"]
+            if (skinProtect is Boolean) params["skinHueProtect"] = if (skinProtect) 1.0 else 0.0
+            else (skinProtect as? Number)?.let { params["skinHueProtect"] = it }
+            (look["skinSatProtect"]       as? Number)?.let { params["skinSatProtect"]       = it }
+            (look["skinLumaSoften"]       as? Number)?.let { params["skinLumaSoften"]       = it }
+            (look["skinRedLimit"]         as? Number)?.let { params["skinRedLimit"]         = it }
+        }
+
+        if (params.isNotEmpty()) {
+            renderer.updateParams(params)
+        }
+        if (cameraId.isNotEmpty()) {
+            renderer.setCameraId(cameraId)
+        }
     }
 
     private fun sendEvent(type: String, payload: Map<String, Any>) {
