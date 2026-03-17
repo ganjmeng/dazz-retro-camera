@@ -92,33 +92,48 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
     }
     
     func updateParams(_ params: [String: Any]) {
+        // Flutter MethodChannel 传来的 Dart double 在 iOS 侧是 NSNumber(Double)
+        // 必须用 (as? NSNumber)?.floatValue 而不是 as? Float，否则类型转换静默失败
+        func f(_ key: String) -> Float? { (params[key] as? NSNumber)?.floatValue }
+
         // ── 基础色彩 ─────────────────────────────────────────────
-        if let contrast    = params["contrast"]         as? Float { ccdParams.contrast         = contrast }
-        if let saturation  = params["saturation"]       as? Float { ccdParams.saturation       = saturation }
-        if let temperature = params["temperatureShift"] as? Float { ccdParams.temperatureShift = temperature }
-        if let exposure   = params["exposureOffset"]   as? Float { ccdParams.exposureOffset   = exposure }
-        if let tint        = params["tintShift"]        as? Float { ccdParams.tintShift        = tint }
+        if let v = f("contrast")         { ccdParams.contrast         = v }
+        if let v = f("saturation")       { ccdParams.saturation       = v }
+        if let v = f("temperatureShift") { ccdParams.temperatureShift = v }
+        if let v = f("exposureOffset")   { ccdParams.exposureOffset   = v }
+        if let v = f("tintShift")        { ccdParams.tintShift        = v }
         // ── Lightroom 风格曲线 ──────────────────────────────────────
-        if let highlights  = params["highlights"]       as? Float { ccdParams.highlights       = highlights }
-        if let shadows     = params["shadows"]          as? Float { ccdParams.shadows          = shadows }
-        if let whites      = params["whites"]           as? Float { ccdParams.whites           = whites }
-        if let blacks      = params["blacks"]           as? Float { ccdParams.blacks           = blacks }
-        if let clarity     = params["clarity"]          as? Float { ccdParams.clarity          = clarity }
-        if let vibrance    = params["vibrance"]         as? Float { ccdParams.vibrance         = vibrance }
-        // ── RGB 通道偏移 ────────────────────────────────────────────
+        if let v = f("highlights")  { ccdParams.highlights  = v }
+        if let v = f("shadows")     { ccdParams.shadows     = v }
+        if let v = f("whites")      { ccdParams.whites      = v }
+        if let v = f("blacks")      { ccdParams.blacks      = v }
+        if let v = f("clarity")     { ccdParams.clarity     = v }
+        if let v = f("vibrance")    { ccdParams.vibrance    = v }
+        // ── RGB 通道偏移（toJson 输出平铺键 colorBiasR/G/B）────────
+        if let v = f("colorBiasR")  { ccdParams.colorBiasR = v }
+        if let v = f("colorBiasG")  { ccdParams.colorBiasG = v }
+        if let v = f("colorBiasB")  { ccdParams.colorBiasB = v }
+        // 兼容旧版嵌套字典格式 colorBias: {r, g, b}
         if let cb = params["colorBias"] as? [String: Any] {
-            if let r = cb["r"] as? Float { ccdParams.colorBiasR = r }
-            if let g = cb["g"] as? Float { ccdParams.colorBiasG = g }
-            if let b = cb["b"] as? Float { ccdParams.colorBiasB = b }
+            if let r = (cb["r"] as? NSNumber)?.floatValue { ccdParams.colorBiasR = r }
+            if let g = (cb["g"] as? NSNumber)?.floatValue { ccdParams.colorBiasG = g }
+            if let b = (cb["b"] as? NSNumber)?.floatValue { ccdParams.colorBiasB = b }
         }
         // ── 胶片效果 ──────────────────────────────────────────────────
-        if let ca      = params["chromaticAberration"] as? Float { ccdParams.chromaticAberration = ca }
-        if let noise   = params["noise"]               as? Float { ccdParams.noiseAmount         = noise }
-        if let vignette = params["vignette"]           as? Float { ccdParams.vignetteAmount      = vignette }
-        if let bloom   = params["bloom"]               as? Float { ccdParams.bloomAmount         = bloom }
-        if let grain   = params["grain"]               as? Float { ccdParams.grainAmount         = grain }
+        if let v = f("chromaticAberration") { ccdParams.chromaticAberration = v }
+        if let v = f("noiseAmount")         { ccdParams.noiseAmount         = v }
+        if let v = f("noise")               { ccdParams.noiseAmount         = v }  // 兼容旧键名
+        if let v = f("vignetteAmount")      { ccdParams.vignetteAmount      = v }
+        if let v = f("vignette")            { ccdParams.vignetteAmount      = v }  // 兼容旧键名
+        if let v = f("bloomAmount")         { ccdParams.bloomAmount         = v }
+        if let v = f("bloom")               { ccdParams.bloomAmount         = v }  // 兼容旧键名
+        if let v = f("grainAmount")         { ccdParams.grainAmount         = v }
+        if let v = f("grain")               { ccdParams.grainAmount         = v }  // 兼容旧键名
+        if let v = f("halationAmount")      { ccdParams.halationAmount      = v }
+        if let v = f("lensVignette")        { ccdParams.lensVignette        = v }
+        if let v = f("softFocus")           { ccdParams.blurRadius          = v }
         // 镜头畸变：Brown-Conrady k1 系数，负值=桶形(鱼眼), 正值=枕形
-        if let distortion = params["distortion"]       as? Float { ccdParams.distortion          = distortion }
+        if let v = f("distortion")          { ccdParams.distortion          = v }
         
         // In a real implementation, we would load the textures from Flutter assets here
         // using FlutterPluginRegistrar.lookupKey(forAsset:) and MTKTextureLoader
