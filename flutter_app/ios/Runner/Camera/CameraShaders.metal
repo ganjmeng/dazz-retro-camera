@@ -72,6 +72,11 @@ struct CCDParams {
     float clarity;
     float vibrance;
     float noiseAmountExtra;  // 对应 Swift 侧第二个 noiseAmount 字段（预留，内容与 noiseAmount 相同）
+    // ── LUT + ToneCurve 参数（新增字段，追加到末尾）─────────────────────────────────
+    float lutEnabled;        // 1.0=启用 LUT，0.0=跳过
+    float lutSize;           // LUT 尺寸（通常 33 或 64）
+    float lutStrength;       // LUT 混合强度（0.0~1.0）
+    float toneCurveStrength; // Tone Curve 强度（0.0~1.0）
 };
 
 // MARK: - 工具函数

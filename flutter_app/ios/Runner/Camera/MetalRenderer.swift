@@ -58,6 +58,11 @@ struct CCDParams {
     var clarity: Float = 0.0               // 中间调微对比度（-100 ~ +100）
     var vibrance: Float = 0.0              // 智能饱和度（-100 ~ +100）
     var noiseAmountExtra: Float = 0.0      // 预留字段，与 Metal Shader 中的 noiseAmountExtra 对应
+    // ── LUT + ToneCurve 参数（新增字段，追加到末尾）─────────────────────────────────
+    var lutEnabled: Float = 0.0        // 1.0=启用 LUT，0.0=跳过
+    var lutSize: Float = 33.0          // LUT 尺寸（通常 33 或 64）
+    var lutStrength: Float = 1.0       // LUT 混合强度（0.0~1.0）
+    var toneCurveStrength: Float = 0.0 // Tone Curve 强度（0.0~1.0）
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
