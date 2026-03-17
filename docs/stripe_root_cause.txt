@@ -1,0 +1,63 @@
+动态斜纹 Bug — 深入根因分析（CA 已排除）
+==========================================
+
+CA=0 的相机（bw_classic, inst_sq）也有斜纹，说明不是 CA Pass 的问题。
+
+重新审视截图特征：
+- 彩色水平/斜向条纹
+- 动态变化
+- 所有相机都有
+- 条纹呈 RGB 分离的彩虹色
+
+所有相机都会执行的通用代码路径（即使参数为 0 也会执行的）：
+
+1. Pass 0: applySharpen — 即使 uSharpen=0，也会执行 texture(uCameraTexture, uv).rgb
+   - 但 amount<=0 时直接返回 center，不做模糊差值
+   
+2. Pass 2: applyTemperature — 即使 shift=0，也会执行 s = 0/1000 = 0，无效果
+
+3. Pass 5: applyContrast — 即使 contrast=1.0，(c-0.5)*1.0+0.5 = c，无效果
+
+4. Pass 7: applySaturation — 即使 sat=1.0，mix(lum, c, 1.0) = c，无效果
+
+5. Pass 16: Tone Curve — 如果 uToneCurveStrength > 0，会应用 fxnrToneCurve
+   - 但这不会产生条纹
+
+6. Pass 20: Vignette — vignetteEffect 是平滑的，不会产生条纹
+
+关键怀疑：这不是 Shader 内部的问题，而是 OES 纹理 + SurfaceTexture 的同步问题！
+
+可能的根因方向：
+
+A. SurfaceTexture 帧积压 (Frame Backlog)
+   - renderFrame() 在 glExecutor 上执行
+   - 如果渲染速度跟不上相机帧率，帧会积压
+   - 积压的帧在 updateTexImage() 时只取最新帧，但 OES 纹理内容可能不完整
+   - 代码注释中已提到："避免积压导致斜条纹"
+
+B. OES 纹理的 GL_TEXTURE_EXTERNAL_OES 特殊性
+   - OES 纹理不保证在同一帧内多次采样结果一致
+   - Shader 中对 uCameraTexture 采样了 25+ 次（锐化 9 次 + CA 3 次 + Clarity 9 次 + 柔化 4 次）
+   - 某些 GPU 驱动（特别是 Mali/Adreno）在 OES 纹理上多次采样时可能出现不一致
+   - 这会导致同一帧内不同采样点看到不同帧的数据 → 条纹！
+
+C. 最可能的根因：Shader 中多次从 OES 纹理采样导致的帧间撕裂
+   - applySharpen: 9 次采样
+   - applyClarity: 9 次采样  
+   - ccdDevelopmentSoften: 4 次采样
+   - CA: 3 次采样
+   - 这些采样在 GPU 的 tile-based 渲染中可能跨越不同的 tile
+   - 如果 OES 纹理在渲染过程中被更新（下一帧到来），就会出现条纹
+
+D. 解决方案：先将 OES 纹理拷贝到普通 2D 纹理，再从 2D 纹理采样
+   - 这是 Android OpenGL 处理 OES 纹理的标准最佳实践
+   - 第一个 Pass：OES → FBO（普通 GL_TEXTURE_2D）
+   - 后续所有 Pass：从 GL_TEXTURE_2D 采样
+   - 这样可以保证所有采样都来自同一帧数据
+
+或者更简单的方案：
+E. 减少 OES 纹理的采样次数
+   - 将锐化、Clarity、柔化等需要多次采样的 Pass 改为从中间结果采样
+   - 但这需要 multi-pass FBO，改动较大
+
+最佳方案：D — 两步渲染（OES→2D→效果处理）

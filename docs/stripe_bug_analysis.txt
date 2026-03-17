@@ -1,0 +1,43 @@
+动态斜纹 Bug 根因分析
+=====================
+
+症状：所有相机预览中出现彩色水平/斜向条纹（RGB 分离的彩虹色），动态变化。
+
+关键发现 — Pass 1 色差 (Chromatic Aberration) 实现有严重问题：
+
+```glsl
+// Pass 1: 色差 (Chromatic Aberration)
+if (uChromaticAberration > 0.0) {
+    float ca = uChromaticAberration * uTexelSize.x * 20.0;
+    float r = texture(uCameraTexture, uv + vec2(ca, 0.0)).r;
+    float g = texture(uCameraTexture, uv).g;
+    float b = texture(uCameraTexture, uv - vec2(ca, 0.0)).b;
+    color = vec3(r, g, b);  // ← 问题！完全覆盖了 Pass 0 锐化的结果！
+}
+```
+
+问题 1：CA 覆盖了锐化结果
+- Pass 0 applySharpen() 返回了锐化后的 color
+- 但 Pass 1 的 CA 直接从 uCameraTexture（原始纹理）重新采样 R/G/B
+- 完全丢弃了 Pass 0 的锐化结果
+
+问题 2：CA 只做水平偏移
+- 只在 X 方向偏移，不做径向偏移
+- 真实镜头色差应该是从中心向外的径向偏移
+- 纯水平偏移在垂直边缘处会产生明显的彩色条纹
+
+但这些问题不会导致"动态斜纹"。动态斜纹更可能来自：
+
+问题 3：OES 纹理采样 + 非同步 updateTexImage
+- SurfaceTexture 的 OES 纹理在 updateTexImage() 后内容才更新
+- 如果 Shader 中多次采样 uCameraTexture（Pass 0 锐化 9 次 + Pass 1 CA 3 次 + Pass 6 Clarity 9 次 + Pass 14 柔化 4 次 = 25+ 次采样）
+- 在某些 GPU 驱动上，OES 纹理的多次采样可能不一致
+- 特别是 CA 的偏移采样可能触发 GPU 的 tiling/缓存不一致
+
+问题 4：最可能的根因 — CA 偏移量过大
+- uChromaticAberration = 0.4（FQS），clamp 到 0.1 后
+- ca = 0.1 * (1/width) * 20.0 = 2.0/width
+- 对于 1280px 宽度：ca = 2.0/1280 = 0.00156 → 约 2 像素偏移
+- 这个偏移量本身不大，但...
+- 如果 effectiveChromaticAberration 没有被 clamp（Dart 端可能没有 clamp），
+  那

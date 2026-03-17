@@ -19,19 +19,18 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * CameraGLRenderer — 修复版
+ * CameraGLRenderer — 两步渲染架构
  *
- * 渲染链：
+ * 渲染链（修复 OES 纹理多次采样导致的动态斜纹）：
  *   CameraX Preview → inputSurfaceTexture (GL_TEXTURE_EXTERNAL_OES)
- *     → 片段着色器（色差 / 对比度 / 饱和度 / 颗粒 / 暗角 / Unsharp Mask 锐化）
+ *     → Pass 1: 直通 Shader 将 OES 拷贝到 FBO (GL_TEXTURE_2D)
+ *     → Pass 2: 效果 Shader 从稳定的 GL_TEXTURE_2D 采样（20 Pass 渲染）
  *     → eglSwapBuffers → Flutter SurfaceTexture（Window Surface）
  *
- * 修复的关键问题：
- * 1. eglCreateWindowSurface 必须在 flutterSurfaceTexture.setDefaultBufferSize() 之后调用
- * 2. 必须检查 eglCreateWindowSurface 返回值，失败时记录 EGL 错误码
- * 3. uGrainTexture 改为纯噪点（不依赖外部纹理文件），避免未绑定纹理导致 GL 错误
- * 4. renderFrame() 中每次都调用 eglMakeCurrent，确保 GL context 在正确线程激活
- * 5. initialize() 通过 CountDownLatch 同步，调用方不在 glExecutor 上等待
+ * 根因：GL_TEXTURE_EXTERNAL_OES 在 tile-based GPU（Mali/Adreno）上
+ * 不保证同一帧内多次采样的一致性，当 Shader 对 OES 纹理采样 25+ 次时
+ * （锐化 9 + CA 3 + Clarity 9 + 柔化 4），会出现帧间数据不一致导致的彩色斜纹。
+ * 解决方案：先将 OES 拷贝到普通 2D 纹理，再从 2D 纹理做所有效果处理。
  */
 class CameraGLRenderer(
     private val flutterSurfaceTexture: SurfaceTexture
@@ -39,7 +38,7 @@ class CameraGLRenderer(
     companion object {
         private const val TAG = "CameraGLRenderer"
 
-                // ── 顶点着色器 ──────────────────────────────────────────────
+        // ── 顶点着色器（两个 Pass 共用）──────────────────────────────────────
         private const val VERTEX_SHADER = """#version 300 es
 in vec4 aPosition;
 in vec2 aTexCoord;
@@ -47,20 +46,41 @@ out vec2 vTexCoord;
 uniform mat4 uSTMatrix;
 void main() {
     gl_Position = aPosition;
-    // 使用 SurfaceTexture.getTransformMatrix() 修正 OES 纹理方向
     vTexCoord = (uSTMatrix * vec4(aTexCoord, 0.0, 1.0)).xy;
 }"""
 
-        // ── 片段着色器（OES 外部纹理 + CCD 效果 + Unsharp Mask 锐化）──────────
-        // 注意：去掉了 uGrainTexture sampler2D，改用程序化噪点，避免未绑定纹理错误
-        private const val FRAGMENT_SHADER = """#version 300 es
+        // ── 顶点着色器（Pass 2 效果处理，不需要 ST 矩阵变换）──────────────────
+        private const val VERTEX_SHADER_PASS2 = """#version 300 es
+in vec4 aPosition;
+in vec2 aTexCoord;
+out vec2 vTexCoord;
+void main() {
+    gl_Position = aPosition;
+    vTexCoord = aTexCoord;
+}"""
+
+        // ── Pass 1: OES → 2D 直通 Shader ────────────────────────────────────
+        // 仅做一次采样，将 OES 纹理内容拷贝到 FBO 上的普通 2D 纹理
+        private const val COPY_FRAGMENT_SHADER = """#version 300 es
 #extension GL_OES_EGL_image_external_essl3 : require
+precision mediump float;
+in  vec2 vTexCoord;
+out vec4 fragColor;
+uniform samplerExternalOES uCameraTexture;
+void main() {
+    fragColor = texture(uCameraTexture, vTexCoord);
+}"""
+
+        // ── Pass 2: 效果处理 Shader（从普通 sampler2D 采样）──────────────────
+        // 关键变化：uInputTexture 是 sampler2D 而非 samplerExternalOES
+        // 这保证了所有采样都来自同一帧的稳定数据
+        private const val FRAGMENT_SHADER = """#version 300 es
 precision mediump float;
 
 in  vec2 vTexCoord;
 out vec4 fragColor;
 
-uniform samplerExternalOES uCameraTexture;
+uniform sampler2D uInputTexture;
 
 // CCD 参数
 uniform float uContrast;
@@ -124,8 +144,6 @@ vec3 ccdHighlightRolloff(vec3 color, float rolloff) {
 }
 // FXN-R Tone Curve（分段线性插値）
 float fxnrToneCurve(float x) {
-    // Input:  0     16    32    64    96    128   160   192   224   255
-    // Output: 0     10    24    57    92    124   168   210   238   250
     float[10] inp = float[10](0.0, 0.0627, 0.1255, 0.2510, 0.3765, 0.5020, 0.6275, 0.7529, 0.8784, 1.0);
     float[10] outVals = float[10](0.0, 0.0392, 0.0941, 0.2235, 0.3608, 0.4863, 0.6588, 0.8235, 0.9333, 0.9804);
     for (int i = 0; i < 9; i++) {
@@ -150,8 +168,6 @@ vec3 applySaturation(vec3 c, float sat) {
 }
 
 vec3 applyTemperature(vec3 c, float shift) {
-    // 正值 = 偏暖（加R减B），负值 = 偏冷（减R加B）
-    // shift 范围 -200~+200，/1000 后约 ±0.2
     float s = shift / 1000.0;
     c.r = clamp(c.r + s * 0.3, 0.0, 1.0);
     c.b = clamp(c.b - s * 0.3, 0.0, 1.0);
@@ -165,19 +181,19 @@ float vignetteEffect(vec2 uv, float amount) {
 
 // Unsharp Mask: 3x3 高斯模糊 + 差值增强
 vec3 applySharpen(vec2 uv, float amount) {
-    vec3 center = texture(uCameraTexture, uv).rgb;
+    vec3 center = texture(uInputTexture, uv).rgb;
     if (amount <= 0.0) return center;
 
     vec3 blur =
-        texture(uCameraTexture, uv + vec2(-uTexelSize.x, -uTexelSize.y)).rgb * 1.0 +
-        texture(uCameraTexture, uv + vec2( 0.0,          -uTexelSize.y)).rgb * 2.0 +
-        texture(uCameraTexture, uv + vec2( uTexelSize.x, -uTexelSize.y)).rgb * 1.0 +
-        texture(uCameraTexture, uv + vec2(-uTexelSize.x,  0.0         )).rgb * 2.0 +
+        texture(uInputTexture, uv + vec2(-uTexelSize.x, -uTexelSize.y)).rgb * 1.0 +
+        texture(uInputTexture, uv + vec2( 0.0,          -uTexelSize.y)).rgb * 2.0 +
+        texture(uInputTexture, uv + vec2( uTexelSize.x, -uTexelSize.y)).rgb * 1.0 +
+        texture(uInputTexture, uv + vec2(-uTexelSize.x,  0.0         )).rgb * 2.0 +
         center                                                                * 4.0 +
-        texture(uCameraTexture, uv + vec2( uTexelSize.x,  0.0         )).rgb * 2.0 +
-        texture(uCameraTexture, uv + vec2(-uTexelSize.x,  uTexelSize.y)).rgb * 1.0 +
-        texture(uCameraTexture, uv + vec2( 0.0,           uTexelSize.y)).rgb * 2.0 +
-        texture(uCameraTexture, uv + vec2( uTexelSize.x,  uTexelSize.y)).rgb * 1.0;
+        texture(uInputTexture, uv + vec2( uTexelSize.x,  0.0         )).rgb * 2.0 +
+        texture(uInputTexture, uv + vec2(-uTexelSize.x,  uTexelSize.y)).rgb * 1.0 +
+        texture(uInputTexture, uv + vec2( 0.0,           uTexelSize.y)).rgb * 2.0 +
+        texture(uInputTexture, uv + vec2( uTexelSize.x,  uTexelSize.y)).rgb * 1.0;
     blur /= 16.0;
 
     float strength = amount * 2.0;
@@ -203,10 +219,10 @@ vec3 ccdCornerWarm(vec2 uv, vec3 color, float shift) {
 vec3 ccdDevelopmentSoften(vec2 uv, vec3 color, float softness) {
     if (softness <= 0.0) return color;
     vec3 blurred =
-        texture(uCameraTexture, uv + vec2(-uTexelSize.x, 0.0)).rgb * 0.25 +
-        texture(uCameraTexture, uv + vec2( uTexelSize.x, 0.0)).rgb * 0.25 +
-        texture(uCameraTexture, uv + vec2(0.0, -uTexelSize.y)).rgb * 0.25 +
-        texture(uCameraTexture, uv + vec2(0.0,  uTexelSize.y)).rgb * 0.25;
+        texture(uInputTexture, uv + vec2(-uTexelSize.x, 0.0)).rgb * 0.25 +
+        texture(uInputTexture, uv + vec2( uTexelSize.x, 0.0)).rgb * 0.25 +
+        texture(uInputTexture, uv + vec2(0.0, -uTexelSize.y)).rgb * 0.25 +
+        texture(uInputTexture, uv + vec2(0.0,  uTexelSize.y)).rgb * 0.25;
     return mix(color, blurred, softness * 0.5);
 }
 vec3 ccdRgbToHsl(vec3 rgb) {
@@ -238,31 +254,24 @@ vec3 ccdSkinProtect(vec3 color, float protect, float satProt, float lumaSoften, 
     return mix(color, prot, skinMask);
 }
 // ── 圆形鱼眼投影 ──────────────────────────────────────────────────
-// 等距投影：将屏幕像素映射到球面，圆形以外输出纯黑
-// 原理：以画面中心为原点，将 [-1,1] 的归一化坐标做极坐标变换，
-//       r = sqrt(x²+y²) 是到中心的距离，r>1 时为圆外（黑色）
-//       圆内通过等距投影反算纹理坐标，产生强烈桶形畸变
 vec2 fisheyeUV(vec2 uv, float aspect) {
-    // 转为以中心为原点的坐标，并修正宽高比使圆形不变形
     vec2 p = (uv - 0.5) * 2.0;
-    p.x *= aspect; // 修正宽高比
+    p.x *= aspect;
     float r = length(p);
-    if (r > 1.0) return vec2(-1.0); // 圆外标记
-    // 等距投影：theta = r * (π/2)，即 r=1 对应 90° 视角边缘
-    float theta = r * 1.5707963; // π/2
+    if (r > 1.0) return vec2(-1.0);
+    float theta = r * 1.5707963; // pi/2
     float phi = atan(p.y, p.x);
-    // 球面坐标反算纹理坐标（等距投影到平面）
     float sinTheta = sin(theta);
     vec2 texCoord = vec2(
         sinTheta * cos(phi),
         sinTheta * sin(phi)
     );
-    // 映射回 [0,1]
     texCoord = texCoord * 0.5 + 0.5;
     return texCoord;
 }
 
-// ── Phase 2 下沉工具函数：Blacks/Whites、Highlights/Shadows、Clarity、Vibrance、Tint、ColorBias、Bloom、Halation ──
+// ── Phase 2 下沉工具函数：Blacks/Whites、Highlights/Shadows、Clarity、Vibrance、
+//    ColorBias、Tint、Bloom、Halation、PaperTexture、HighlightRolloff ──
 vec3 applyBlacksWhites(vec3 c, float blacks, float whites) {
     float b = blacks / 200.0;
     float w = whites / 200.0;
@@ -284,15 +293,15 @@ vec3 applyClarity(vec3 c, vec2 uv, float clarity) {
     vec3 blurred = vec3(0.0);
     float w = uTexelSize.x * 3.0;
     float h = uTexelSize.y * 3.0;
-    blurred += texture(uCameraTexture, uv + vec2(-w, -h)).rgb * 0.0625;
-    blurred += texture(uCameraTexture, uv + vec2( 0, -h)).rgb * 0.125;
-    blurred += texture(uCameraTexture, uv + vec2( w, -h)).rgb * 0.0625;
-    blurred += texture(uCameraTexture, uv + vec2(-w,  0)).rgb * 0.125;
-    blurred += texture(uCameraTexture, uv + vec2( 0,  0)).rgb * 0.25;
-    blurred += texture(uCameraTexture, uv + vec2( w,  0)).rgb * 0.125;
-    blurred += texture(uCameraTexture, uv + vec2(-w,  h)).rgb * 0.0625;
-    blurred += texture(uCameraTexture, uv + vec2( 0,  h)).rgb * 0.125;
-    blurred += texture(uCameraTexture, uv + vec2( w,  h)).rgb * 0.0625;
+    blurred += texture(uInputTexture, uv + vec2(-w, -h)).rgb * 0.0625;
+    blurred += texture(uInputTexture, uv + vec2( 0, -h)).rgb * 0.125;
+    blurred += texture(uInputTexture, uv + vec2( w, -h)).rgb * 0.0625;
+    blurred += texture(uInputTexture, uv + vec2(-w,  0)).rgb * 0.125;
+    blurred += texture(uInputTexture, uv + vec2( 0,  0)).rgb * 0.25;
+    blurred += texture(uInputTexture, uv + vec2( w,  0)).rgb * 0.125;
+    blurred += texture(uInputTexture, uv + vec2(-w,  h)).rgb * 0.0625;
+    blurred += texture(uInputTexture, uv + vec2( 0,  h)).rgb * 0.125;
+    blurred += texture(uInputTexture, uv + vec2( w,  h)).rgb * 0.0625;
     float midMask = 1.0 - abs(dot(c, vec3(0.2126, 0.7152, 0.0722)) * 2.0 - 1.0);
     vec3 detail = c - blurred;
     return clamp(c + detail * clarity * 0.003 * midMask, 0.0, 1.0);
@@ -370,9 +379,9 @@ void main() {
     // Pass 1: 色差 (Chromatic Aberration)
     if (uChromaticAberration > 0.0) {
         float ca = uChromaticAberration * uTexelSize.x * 20.0;
-        float r = texture(uCameraTexture, uv + vec2(ca, 0.0)).r;
-        float g = texture(uCameraTexture, uv).g;
-        float b = texture(uCameraTexture, uv - vec2(ca, 0.0)).b;
+        float r = texture(uInputTexture, uv + vec2(ca, 0.0)).r;
+        float g = texture(uInputTexture, uv).g;
+        float b = texture(uInputTexture, uv - vec2(ca, 0.0)).b;
         color = vec3(r, g, b);
     }
 
@@ -481,8 +490,6 @@ void main() {
 }"""
 
         // 全屏四边形顶点（位置 + UV）
-        // UV Y 轴翻转（0 在底部，1 在顶部），配合 uSTMatrix 修正 OES 纹理方向
-        // 注意：OES 纹理 + SurfaceTexture.getTransformMatrix() 需要 UV 从底部开始
         private val QUAD_VERTICES = floatArrayOf(
             -1f,  1f,  0f, 1f,   // 左上  → UV(0,1)
             -1f, -1f,  0f, 0f,   // 左下  → UV(0,0)
@@ -497,11 +504,24 @@ void main() {
     private var eglSurface: EGLSurface = EGL14.EGL_NO_SURFACE
 
     // ── GL 资源 ──────────────────────────────────────────────────────────────
+    // Pass 1: OES → FBO 直通
+    private var copyProgramId: Int = 0
+    private var copyUCameraTexture: Int = -1
+    private var copyUSTMatrix: Int = -1
+    private var copyAPositionLoc: Int = -1
+    private var copyATexCoordLoc: Int = -1
+
+    // FBO（中间 2D 纹理）
+    private var fboId: Int = 0
+    private var fboTexId: Int = 0
+
+    // Pass 2: 效果处理
     private var programId: Int = 0
     private var cameraTexId: Int = 0
     private var vertexBuffer: FloatBuffer? = null
 
-    // Uniform 位置（初始化时缓存，避免每帧 glGetUniformLocation 调用）
+    // Pass 2 Uniform 位置
+    private var uInputTexture: Int = -1
     private var uContrast: Int = -1
     private var uSaturation: Int = -1
     private var uTemperatureShift: Int = -1
@@ -512,18 +532,14 @@ void main() {
     private var uSharpen: Int = -1
     private var uTime: Int = -1
     private var uTexelSize: Int = -1
-    private var uSTMatrix: Int = -1
     private var uFisheyeMode: Int = -1
     private var uAspectRatio: Int = -1
-    private var uCameraTexture: Int = -1  // 性能优化：缓存 sampler uniform 位置
-    // FIX: Lightroom 风格曲线参数 uniform 位置
     private var uHighlights: Int = -1
     private var uShadows: Int = -1
     private var uWhites: Int = -1
     private var uBlacks: Int = -1
     private var uClarity: Int = -1
     private var uVibrance: Int = -1
-    // FQS/CPM35 专有 uniform 位置（通用 Shader 中不存在，glGetUniformLocation 返回 -1，glUniform1f(-1,...) 是 no-op）
     private var uColorBiasR: Int = -1
     private var uColorBiasG: Int = -1
     private var uColorBiasB: Int = -1
@@ -533,13 +549,11 @@ void main() {
     private var uGrainSize: Int = -1
     private var uLuminanceNoise: Int = -1
     private var uChromaNoise: Int = -1
-    // Inst C / SQC 共用 uniform 位置
     private var uHighlightRolloff: Int = -1
     private var uPaperTexture: Int = -1
     private var uEdgeFalloff: Int = -1
     private var uExposureVariation: Int = -1
     private var uCornerWarmShift: Int = -1
-    // 拍立得/数码通用 uniform 位置（Inst C / SQC / FXN-R 共用）
     private var uCenterGain: Int = -1
     private var uDevelopmentSoftness: Int = -1
     private var uChemicalIrregularity: Int = -1
@@ -547,25 +561,27 @@ void main() {
     private var uSkinSatProtect: Int = -1
     private var uSkinLumaSoften: Int = -1
     private var uSkinRedLimit: Int = -1
-    // LUT + Tone Curve + Highlight Rolloff uniform 位置
     private var uHighlightRolloff2: Int = -1
     private var uToneCurveStrength: Int = -1
 
-    // Attrib 位置（初始化时缓存，避免每帧 glGetAttribLocation 调用 — 关键热路径优化）
-    // glGetAttribLocation 是同步 GPU driver 查询，每帧调用在高端机上约 0.1ms，低端机约 0.5ms
-    // 60fps 下每秒额外开销：高端机 12ms，低端机 60ms（相当于白白浪费 1 帧预算）
+    // Pass 2 Attrib 位置
     private var aPositionLoc: Int = -1
     private var aTexCoordLoc: Int = -1
 
-    // SurfaceTexture 变换矩阵（修正 OES 纹理方向）
+    // SurfaceTexture 变换矩阵
     private val stMatrix = FloatArray(16)
+    // 单位矩阵（Pass 2 不需要 ST 变换）
+    private val identityMatrix = floatArrayOf(
+        1f, 0f, 0f, 0f,
+        0f, 1f, 0f, 0f,
+        0f, 0f, 1f, 0f,
+        0f, 0f, 0f, 1f
+    )
 
     // ── 相机输入 SurfaceTexture ──────────────────────────────────────────────
     private var inputSurfaceTexture: SurfaceTexture? = null
     private var inputSurface: Surface? = null
-    // ── 当前相机 ID（用于切换专用 Shader）────────────────────────────────────────────
     @Volatile private var currentCameraId: String = ""
-    // 待处理的相机 ID（快速连续切换时只保留最新的，避免积压多个重编译任务）
     @Volatile private var pendingCameraId: String = ""
 
     // ── 渲染参数 ─────────────────────────────────────────────────────────────────
@@ -578,15 +594,13 @@ void main() {
     @Volatile private var grainAmount: Float = 0.0f
     @Volatile private var sharpen: Float = 0.0f
     @Volatile private var time: Float = 0.0f
-    @Volatile private var fisheyeMode: Float = 0.0f // 0=normal, 1=circular fisheye
-    // FIX: Lightroom 风格曲线参数
+    @Volatile private var fisheyeMode: Float = 0.0f
     @Volatile private var highlights: Float = 0.0f
     @Volatile private var shadows: Float = 0.0f
     @Volatile private var whites: Float = 0.0f
     @Volatile private var blacks: Float = 0.0f
     @Volatile private var clarity: Float = 0.0f
     @Volatile private var vibrance: Float = 0.0f
-    // FQS/CPM35 专有参数
     @Volatile private var colorBiasR: Float = 0.0f
     @Volatile private var colorBiasG: Float = 0.0f
     @Volatile private var colorBiasB: Float = 0.0f
@@ -596,13 +610,11 @@ void main() {
     @Volatile private var grainSize: Float = 1.0f
     @Volatile private var luminanceNoise: Float = 0.0f
     @Volatile private var chromaNoise: Float = 0.0f
-    // Inst C / SQC 共用参数
     @Volatile private var highlightRolloff: Float = 0.0f
     @Volatile private var paperTexture: Float = 0.0f
     @Volatile private var edgeFalloff: Float = 0.0f
     @Volatile private var exposureVariation: Float = 0.0f
     @Volatile private var cornerWarmShift: Float = 0.0f
-    // 拍立得/数码通用参数（Inst C / SQC / FXN-R 共用）
     @Volatile private var centerGain: Float = 0.0f
     @Volatile private var developmentSoftness: Float = 0.0f
     @Volatile private var chemicalIrregularity: Float = 0.0f
@@ -610,7 +622,6 @@ void main() {
     @Volatile private var skinSatProtect: Float = 1.0f
     @Volatile private var skinLumaSoften: Float = 0.0f
     @Volatile private var skinRedLimit: Float = 1.0f
-    // LUT + Tone Curve + Highlight Rolloff 参数
     @Volatile private var highlightRolloff2: Float = 0.0f
     @Volatile private var toneCurveStrength: Float = 0.0f
     @Volatile private var previewWidth: Int = 1280
@@ -624,10 +635,6 @@ void main() {
 
     // ── 初始化 ───────────────────────────────────────────────────────────────
 
-    /**
-     * 初始化 GL 渲染器并同步等待完成（最多 2 秒）
-     * 必须从非 glExecutor 线程调用（否则会死锁）。
-     */
     fun initialize(width: Int, height: Int) {
         if (initialized.get()) return
         previewWidth = width
@@ -661,7 +668,7 @@ void main() {
         }
         Log.d(TAG, "EGL version: ${version[0]}.${version[1]}")
 
-        // ── 2. 选择 EGL config（支持 ES2/ES3 + Window Surface）──────────────
+        // ── 2. 选择 EGL config ──────────────────────────────────────────────
         val attribList = intArrayOf(
             EGL14.EGL_RED_SIZE,         8,
             EGL14.EGL_GREEN_SIZE,       8,
@@ -684,7 +691,6 @@ void main() {
         val contextAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE)
         eglContext = EGL14.eglCreateContext(eglDisplay, config, EGL14.EGL_NO_CONTEXT, contextAttribs, 0)
         if (eglContext == EGL14.EGL_NO_CONTEXT) {
-            // 降级到 ES 2.0
             Log.w(TAG, "ES3 context failed, trying ES2")
             val ctx2Attribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE)
             eglContext = EGL14.eglCreateContext(eglDisplay, config, EGL14.EGL_NO_CONTEXT, ctx2Attribs, 0)
@@ -695,11 +701,9 @@ void main() {
         }
 
         // ── 4. 设置 Flutter SurfaceTexture 的缓冲区大小 ─────────────────────
-        // 必须在 eglCreateWindowSurface 之前调用，否则 Surface 尺寸为 0
         flutterSurfaceTexture.setDefaultBufferSize(width, height)
 
-        // ── 5. 创建 Window Surface（绑定到 Flutter SurfaceTexture）──────────
-        // Surface(SurfaceTexture) 是合法的 EGL native window
+        // ── 5. 创建 Window Surface ──────────────────────────────────────────
         val flutterSurface = Surface(flutterSurfaceTexture)
         val surfaceAttribs = intArrayOf(EGL14.EGL_NONE)
         eglSurface = EGL14.eglCreateWindowSurface(eglDisplay, config, flutterSurface, surfaceAttribs, 0)
@@ -715,10 +719,21 @@ void main() {
             return
         }
 
-          // ── 7. 编译着色器（统一使用通用 Shader，所有相机差异由 uniform 参数驱动）───
-        programId = createProgram(VERTEX_SHADER, FRAGMENT_SHADER)
+        // ── 7a. 编译 Pass 1 直通 Shader（OES → FBO）────────────────────────
+        copyProgramId = createProgram(VERTEX_SHADER, COPY_FRAGMENT_SHADER)
+        if (copyProgramId == 0) {
+            Log.e(TAG, "Failed to create copy shader program")
+            return
+        }
+        copyUCameraTexture = GLES30.glGetUniformLocation(copyProgramId, "uCameraTexture")
+        copyUSTMatrix      = GLES30.glGetUniformLocation(copyProgramId, "uSTMatrix")
+        copyAPositionLoc   = GLES30.glGetAttribLocation(copyProgramId, "aPosition")
+        copyATexCoordLoc   = GLES30.glGetAttribLocation(copyProgramId, "aTexCoord")
+
+        // ── 7b. 编译 Pass 2 效果 Shader（sampler2D）────────────────────────
+        programId = createProgram(VERTEX_SHADER_PASS2, FRAGMENT_SHADER)
         if (programId == 0) {
-            Log.e(TAG, "Failed to create shader program")
+            Log.e(TAG, "Failed to create effect shader program")
             return
         }
 
@@ -732,16 +747,56 @@ void main() {
         GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
         GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
 
+        // ── 8b. 创建 FBO + 2D 纹理（中间缓冲）──────────────────────────────
+        val fboTexIds = IntArray(1)
+        GLES30.glGenTextures(1, fboTexIds, 0)
+        fboTexId = fboTexIds[0]
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, fboTexId)
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA, width, height, 0,
+            GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+
+        val fboIds = IntArray(1)
+        GLES30.glGenFramebuffers(1, fboIds, 0)
+        fboId = fboIds[0]
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboId)
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0,
+            GLES30.GL_TEXTURE_2D, fboTexId, 0)
+        val fboStatus = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER)
+        if (fboStatus != GLES30.GL_FRAMEBUFFER_COMPLETE) {
+            Log.e(TAG, "FBO incomplete: 0x${Integer.toHexString(fboStatus)}")
+            return
+        }
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        Log.d(TAG, "FBO created: ${width}x${height}")
+
         // ── 9. 创建 SurfaceTexture（相机帧输入）─────────────────────────────
         inputSurfaceTexture = SurfaceTexture(cameraTexId)
         inputSurfaceTexture!!.setDefaultBufferSize(width, height)
         inputSurfaceTexture!!.setOnFrameAvailableListener {
-            // 每当相机有新帧时，在 GL 线程上渲染
             glExecutor.execute { renderFrame() }
         }
         inputSurface = Surface(inputSurfaceTexture)
 
-        // ── 10. 获取 uniform 位置 ────────────────────────────────────────────
+        // ── 10. 获取 Pass 2 uniform 位置 ────────────────────────────────────
+        cachePass2Uniforms()
+
+        // ── 11. 顶点缓冲 ─────────────────────────────────────────────────────
+        vertexBuffer = ByteBuffer.allocateDirect(QUAD_VERTICES.size * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+            .apply { put(QUAD_VERTICES); position(0) }
+
+        initialized.set(true)
+        Log.d(TAG, "GL initialized successfully (2-pass): ${width}x${height}")
+    }
+
+    /** 缓存 Pass 2 效果 Shader 的所有 uniform/attrib 位置 */
+    private fun cachePass2Uniforms() {
+        uInputTexture         = GLES30.glGetUniformLocation(programId, "uInputTexture")
         uContrast             = GLES30.glGetUniformLocation(programId, "uContrast")
         uSaturation           = GLES30.glGetUniformLocation(programId, "uSaturation")
         uTemperatureShift     = GLES30.glGetUniformLocation(programId, "uTemperatureShift")
@@ -752,21 +807,16 @@ void main() {
         uSharpen              = GLES30.glGetUniformLocation(programId, "uSharpen")
         uTime                 = GLES30.glGetUniformLocation(programId, "uTime")
         uTexelSize            = GLES30.glGetUniformLocation(programId, "uTexelSize")
-        uSTMatrix             = GLES30.glGetUniformLocation(programId, "uSTMatrix")
         uFisheyeMode          = GLES30.glGetUniformLocation(programId, "uFisheyeMode")
         uAspectRatio          = GLES30.glGetUniformLocation(programId, "uAspectRatio")
-        // 性能优化：同时缓存 sampler 和 attrib 位置，避免 renderFrame 每帧查询
-        uCameraTexture        = GLES30.glGetUniformLocation(programId, "uCameraTexture")
         aPositionLoc          = GLES30.glGetAttribLocation(programId, "aPosition")
         aTexCoordLoc          = GLES30.glGetAttribLocation(programId, "aTexCoord")
-        // FIX: Lightroom 风格曲线参数 uniform（通用 Shader 中返回 -1 时为 no-op，安全）
         uHighlights           = GLES30.glGetUniformLocation(programId, "uHighlights")
         uShadows              = GLES30.glGetUniformLocation(programId, "uShadows")
         uWhites               = GLES30.glGetUniformLocation(programId, "uWhites")
         uBlacks               = GLES30.glGetUniformLocation(programId, "uBlacks")
         uClarity              = GLES30.glGetUniformLocation(programId, "uClarity")
         uVibrance             = GLES30.glGetUniformLocation(programId, "uVibrance")
-        // FQS/CPM35 专有 uniform（通用 Shader 中返回 -1，glUniform1f(-1,...) 是 no-op，安全）
         uColorBiasR           = GLES30.glGetUniformLocation(programId, "uColorBiasR")
         uColorBiasG           = GLES30.glGetUniformLocation(programId, "uColorBiasG")
         uColorBiasB           = GLES30.glGetUniformLocation(programId, "uColorBiasB")
@@ -776,13 +826,11 @@ void main() {
         uGrainSize            = GLES30.glGetUniformLocation(programId, "uGrainSize")
         uLuminanceNoise       = GLES30.glGetUniformLocation(programId, "uLuminanceNoise")
         uChromaNoise          = GLES30.glGetUniformLocation(programId, "uChromaNoise")
-        // Inst C / SQC 共用 uniform（其他 Shader 中返回 -1，传入无效果）
         uHighlightRolloff     = GLES30.glGetUniformLocation(programId, "uHighlightRolloff")
         uPaperTexture         = GLES30.glGetUniformLocation(programId, "uPaperTexture")
         uEdgeFalloff          = GLES30.glGetUniformLocation(programId, "uEdgeFalloff")
         uExposureVariation    = GLES30.glGetUniformLocation(programId, "uExposureVariation")
         uCornerWarmShift      = GLES30.glGetUniformLocation(programId, "uCornerWarmShift")
-        // 拍立得/数码通用 uniform（Inst C / SQC / FXN-R 共用，其他 Shader 中 location=-1，传入无效果）
         uCenterGain           = GLES30.glGetUniformLocation(programId, "uCenterGain")
         uDevelopmentSoftness  = GLES30.glGetUniformLocation(programId, "uDevelopmentSoftness")
         uChemicalIrregularity = GLES30.glGetUniformLocation(programId, "uChemicalIrregularity")
@@ -790,61 +838,82 @@ void main() {
         uSkinSatProtect       = GLES30.glGetUniformLocation(programId, "uSkinSatProtect")
         uSkinLumaSoften       = GLES30.glGetUniformLocation(programId, "uSkinLumaSoften")
         uSkinRedLimit         = GLES30.glGetUniformLocation(programId, "uSkinRedLimit")
-        // LUT + Tone Curve + Highlight Rolloff
         uHighlightRolloff2    = GLES30.glGetUniformLocation(programId, "uHighlightRolloff2")
         uToneCurveStrength    = GLES30.glGetUniformLocation(programId, "uToneCurveStrength")
-
-        // ── 11. 顶点缓冲 ─────────────────────────────────────────────────────
-        vertexBuffer = ByteBuffer.allocateDirect(QUAD_VERTICES.size * 4)
-            .order(ByteOrder.nativeOrder())
-            .asFloatBuffer()
-            .apply { put(QUAD_VERTICES); position(0) }
-
-        initialized.set(true)
-        Log.d(TAG, "GL initialized successfully: ${width}x${height}")
     }
 
-    // ── 渲染 ─────────────────────────────────────────────────────────────────
+    // ── 渲染（两步架构）─────────────────────────────────────────────────────
 
-     private fun renderFrame() {
+    private fun renderFrame() {
         if (!initialized.get()) return
 
-        // shader 重编译期间 programId 暂时为 0：仍然消费帧（避免积压导致斜条纹），但不渲染
-        val skipRender = (programId == 0)
+        val skipRender = (programId == 0 || copyProgramId == 0)
 
-        // 每帧都重新激活 EGL context（确保在 GL 线程上）
         val eglOk = EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
         if (!eglOk) {
             Log.w(TAG, "renderFrame: eglMakeCurrent failed: 0x${Integer.toHexString(EGL14.eglGetError())}")
-            // eglMakeCurrent 失败时也要消费帧，否则帧积压
         }
 
         // 更新相机帧纹理（无论是否渲染都必须消费，否则帧积压导致斜条纹）
         try {
             inputSurfaceTexture?.updateTexImage()
-            // 获取 SurfaceTexture 变换矩阵（必须在 updateTexImage 后立即调用）
             inputSurfaceTexture?.getTransformMatrix(stMatrix)
         } catch (e: Exception) {
             Log.w(TAG, "updateTexImage failed: ${e.message}")
             return
         }
 
-        // shader 未就绪或 EGL context 失效时，跳过渲染（帧已消费，不会积压）
         if (skipRender || !eglOk) return
 
+        val vb = vertexBuffer ?: return
+        val stride = 4 * 4 // 4 floats * 4 bytes
+
+        // ════════════════════════════════════════════════════════════════════
+        // Pass 1: OES → FBO（将 OES 纹理拷贝到稳定的 2D 纹理）
+        // ════════════════════════════════════════════════════════════════════
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboId)
+        GLES30.glViewport(0, 0, previewWidth, previewHeight)
+        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+
+        GLES30.glUseProgram(copyProgramId)
+
+        // 绑定 OES 纹理
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, cameraTexId)
+        GLES30.glUniform1i(copyUCameraTexture, 0)
+
+        // 传入 ST 矩阵（修正 OES 纹理方向）
+        GLES30.glUniformMatrix4fv(copyUSTMatrix, 1, false, stMatrix, 0)
+
+        // 绘制全屏四边形
+        vb.position(0)
+        GLES30.glEnableVertexAttribArray(copyAPositionLoc)
+        GLES30.glVertexAttribPointer(copyAPositionLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
+        vb.position(2)
+        GLES30.glEnableVertexAttribArray(copyATexCoordLoc)
+        GLES30.glVertexAttribPointer(copyATexCoordLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
+
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+
+        GLES30.glDisableVertexAttribArray(copyAPositionLoc)
+        GLES30.glDisableVertexAttribArray(copyATexCoordLoc)
+
+        // ════════════════════════════════════════════════════════════════════
+        // Pass 2: 效果处理（从稳定的 2D 纹理采样）
+        // ════════════════════════════════════════════════════════════════════
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0) // 渲染到屏幕
         GLES30.glViewport(0, 0, previewWidth, previewHeight)
         GLES30.glClearColor(0f, 0f, 0f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
 
         GLES30.glUseProgram(programId)
 
-        // 绑定相机纹理（unit 0）
+        // 绑定 FBO 的 2D 纹理（而非 OES 纹理）
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
-        GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, cameraTexId)
-        // 性能优化：使用初始化时缓存的 location，不再每帧调用 glGetUniformLocation
-        GLES30.glUniform1i(uCameraTexture, 0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, fboTexId)
+        GLES30.glUniform1i(uInputTexture, 0)
 
-        // 设置 uniform 参数
+        // 设置所有效果 uniform 参数
         GLES30.glUniform1f(uContrast,            contrast)
         GLES30.glUniform1f(uSaturation,          saturation)
         GLES30.glUniform1f(uTemperatureShift,    temperatureShift)
@@ -859,14 +928,12 @@ void main() {
             1f / previewHeight.toFloat())
         GLES30.glUniform1f(uFisheyeMode,         fisheyeMode)
         GLES30.glUniform1f(uAspectRatio,         previewWidth.toFloat() / previewHeight.toFloat())
-        // FIX: Lightroom 风格曲线参数 uniform（通用 Shader 中 location=-1 时为 no-op，安全）
         GLES30.glUniform1f(uHighlights,          highlights)
         GLES30.glUniform1f(uShadows,             shadows)
         GLES30.glUniform1f(uWhites,              whites)
         GLES30.glUniform1f(uBlacks,              blacks)
         GLES30.glUniform1f(uClarity,             clarity)
         GLES30.glUniform1f(uVibrance,            vibrance)
-        // FQS/CPM35 专有 uniform（通用 Shader 中 location=-1，glUniform1f 是 no-op）
         GLES30.glUniform1f(uColorBiasR,          colorBiasR)
         GLES30.glUniform1f(uColorBiasG,          colorBiasG)
         GLES30.glUniform1f(uColorBiasB,          colorBiasB)
@@ -876,13 +943,11 @@ void main() {
         GLES30.glUniform1f(uGrainSize,           grainSize)
         GLES30.glUniform1f(uLuminanceNoise,      luminanceNoise)
         GLES30.glUniform1f(uChromaNoise,         chromaNoise)
-        // Inst C / SQC 共用 uniform（其他 Shader 中 location=-1，glUniform1f 是 no-op）
         GLES30.glUniform1f(uHighlightRolloff,    highlightRolloff)
         GLES30.glUniform1f(uPaperTexture,        paperTexture)
         GLES30.glUniform1f(uEdgeFalloff,         edgeFalloff)
         GLES30.glUniform1f(uExposureVariation,   exposureVariation)
         GLES30.glUniform1f(uCornerWarmShift,     cornerWarmShift)
-        // 拍立得/数码通用 uniform（Inst C / SQC / FXN-R 共用）
         GLES30.glUniform1f(uCenterGain,          centerGain)
         GLES30.glUniform1f(uDevelopmentSoftness, developmentSoftness)
         GLES30.glUniform1f(uChemicalIrregularity, chemicalIrregularity)
@@ -890,18 +955,11 @@ void main() {
         GLES30.glUniform1f(uSkinSatProtect,      skinSatProtect)
         GLES30.glUniform1f(uSkinLumaSoften,      skinLumaSoften)
         GLES30.glUniform1f(uSkinRedLimit,        skinRedLimit)
-        // LUT + Tone Curve + Highlight Rolloff
         GLES30.glUniform1f(uHighlightRolloff2,   highlightRolloff2)
         GLES30.glUniform1f(uToneCurveStrength,   toneCurveStrength)
-        // 传入 SurfaceTexture 变换矩阵（修正 OES 纹理方向）
-        GLES30.glUniformMatrix4fv(uSTMatrix, 1, false, stMatrix, 0)
         time += 0.016f
 
-        // 顶点属性：使用初始化时缓存的 attrib location（关键热路径优化）
-        // 原来每帧调用 glGetAttribLocation 是同步 GPU driver 查询，已全部消除
-        val vb = vertexBuffer ?: return
-        val stride = 4 * 4 // 4 floats * 4 bytes
-
+        // 绘制全屏四边形
         vb.position(0)
         GLES30.glEnableVertexAttribArray(aPositionLoc)
         GLES30.glVertexAttribPointer(aPositionLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
@@ -928,7 +986,6 @@ void main() {
         (params["saturation"]          as? Number)?.let { saturation          = it.toFloat() }
         (params["temperatureShift"]    as? Number)?.let { temperatureShift    = it.toFloat() }
         (params["chromaticAberration"] as? Number)?.let { chromaticAberration = it.toFloat() }
-        // FIX: 兼容 noise 和 noiseAmount 两种键名
         (params["noise"]               as? Number)?.let { noiseAmount         = it.toFloat() }
         (params["noiseAmount"]         as? Number)?.let { noiseAmount         = it.toFloat() }
         (params["vignette"]            as? Number)?.let { vignetteAmount      = it.toFloat() }
@@ -936,14 +993,12 @@ void main() {
         (params["grain"]               as? Number)?.let { grainAmount         = it.toFloat() }
         (params["grainAmount"]         as? Number)?.let { grainAmount         = it.toFloat() }
         (params["sharpen"]             as? Number)?.let { sharpen             = it.toFloat() }
-        // FIX: Lightroom 风格曲线参数
         (params["highlights"]          as? Number)?.let { highlights          = it.toFloat() }
         (params["shadows"]             as? Number)?.let { shadows             = it.toFloat() }
         (params["whites"]              as? Number)?.let { whites              = it.toFloat() }
         (params["blacks"]              as? Number)?.let { blacks              = it.toFloat() }
         (params["clarity"]             as? Number)?.let { clarity             = it.toFloat() }
         (params["vibrance"]            as? Number)?.let { vibrance            = it.toFloat() }
-        // FQS/CPM35 专有参数
         (params["colorBiasR"]          as? Number)?.let { colorBiasR          = it.toFloat() }
         (params["colorBiasG"]          as? Number)?.let { colorBiasG          = it.toFloat() }
         (params["colorBiasB"]          as? Number)?.let { colorBiasB          = it.toFloat() }
@@ -953,13 +1008,11 @@ void main() {
         (params["grainSize"]           as? Number)?.let { grainSize           = it.toFloat() }
         (params["luminanceNoise"]      as? Number)?.let { luminanceNoise      = it.toFloat() }
         (params["chromaNoise"]         as? Number)?.let { chromaNoise         = it.toFloat() }
-        // Inst C / SQC 共用参数
         (params["highlightRolloff"]    as? Number)?.let { highlightRolloff    = it.toFloat() }
         (params["paperTexture"]        as? Number)?.let { paperTexture        = it.toFloat() }
         (params["edgeFalloff"]         as? Number)?.let { edgeFalloff         = it.toFloat() }
         (params["exposureVariation"]   as? Number)?.let { exposureVariation   = it.toFloat() }
         (params["cornerWarmShift"]     as? Number)?.let { cornerWarmShift     = it.toFloat() }
-        // 拍立得/数码通用参数（Inst C / SQC / FXN-R 共用）
         (params["centerGain"]          as? Number)?.let { centerGain          = it.toFloat() }
         (params["developmentSoftness"] as? Number)?.let { developmentSoftness = it.toFloat() }
         (params["chemicalIrregularity"] as? Number)?.let { chemicalIrregularity = it.toFloat() }
@@ -967,87 +1020,37 @@ void main() {
         (params["skinSatProtect"]      as? Number)?.let { skinSatProtect      = it.toFloat() }
         (params["skinLumaSoften"]      as? Number)?.let { skinLumaSoften      = it.toFloat() }
         (params["skinRedLimit"]        as? Number)?.let { skinRedLimit        = it.toFloat() }
-        // LUT + Tone Curve + Highlight Rolloff
         (params["highlightRolloff"]     as? Number)?.let { highlightRolloff2    = it.toFloat() }
         (params["toneCurveStrength"]    as? Number)?.let { toneCurveStrength    = it.toFloat() }
-        // Phase 2 下沉：新增参数（之前由 Flutter Widget 层处理，现在由 Native Shader 处理）
         (params["lensVignette"]         as? Number)?.let { vignetteAmount      = it.toFloat() }
         (params["exposureOffset"]       as? Number)?.let { /* TODO: 添加 exposureOffset uniform */ }
         (params["softFocus"]            as? Number)?.let { /* TODO: 添加 softFocus uniform */ }
         (params["distortion"]           as? Number)?.let { fisheyeMode         = it.toFloat() }
     }
 
-    /**
-     * 切换相机 ID，重新编译对应的专用 Fragment Shader（FQS/CPM35/通用）。
-     * 必须在 GL 线程上执行（通过 glExecutor 调度），因为需要操作 GL 资源。
-     * 调用后下一帧自动使用新 Shader。
-     */
     fun setCameraId(cameraId: String) {
-        if (currentCameraId == cameraId) return // 同一相机无需重编译
+        if (currentCameraId == cameraId) return
         currentCameraId = cameraId
-        pendingCameraId = cameraId   // 记录最新目标 ID，快速切换时只执行最新的
-        if (!initialized.get()) return // 未初始化时只记录 ID，initialize() 会用正确的 Shader
+        pendingCameraId = cameraId
+        if (!initialized.get()) return
         glExecutor.execute {
-            // 如果队列里还有更新的任务，跳过本次重编译（避免无效的中间状态）
             val targetId = pendingCameraId
             if (targetId != cameraId) {
                 Log.d(TAG, "setCameraId: skipping stale recompile for $cameraId, pending=$targetId")
                 return@execute
             }
             if (!EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) return@execute
-            // 删除旧 program
+            // 重编译 Pass 2 效果 Shader
             if (programId != 0) {
                 GLES30.glDeleteProgram(programId)
                 programId = 0
             }
-            // 编译新 Shader（统一使用通用 Shader，所有相机差异由 uniform 参数驱动）
-            programId = createProgram(VERTEX_SHADER, FRAGMENT_SHADER)
+            programId = createProgram(VERTEX_SHADER_PASS2, FRAGMENT_SHADER)
             if (programId == 0) {
                 Log.e(TAG, "setCameraId: failed to recompile shader for cameraId=$cameraId")
                 return@execute
             }
-            // 重新缓存 uniform 位置
-            uContrast             = GLES30.glGetUniformLocation(programId, "uContrast")
-            uSaturation           = GLES30.glGetUniformLocation(programId, "uSaturation")
-            uTemperatureShift     = GLES30.glGetUniformLocation(programId, "uTemperatureShift")
-            uChromaticAberration  = GLES30.glGetUniformLocation(programId, "uChromaticAberration")
-            uNoiseAmount          = GLES30.glGetUniformLocation(programId, "uNoiseAmount")
-            uVignetteAmount       = GLES30.glGetUniformLocation(programId, "uVignetteAmount")
-            uGrainAmount          = GLES30.glGetUniformLocation(programId, "uGrainAmount")
-            uSharpen              = GLES30.glGetUniformLocation(programId, "uSharpen")
-            uTime                 = GLES30.glGetUniformLocation(programId, "uTime")
-            uTexelSize            = GLES30.glGetUniformLocation(programId, "uTexelSize")
-            uSTMatrix             = GLES30.glGetUniformLocation(programId, "uSTMatrix")
-            uFisheyeMode          = GLES30.glGetUniformLocation(programId, "uFisheyeMode")
-            uAspectRatio          = GLES30.glGetUniformLocation(programId, "uAspectRatio")
-            uCameraTexture        = GLES30.glGetUniformLocation(programId, "uCameraTexture")
-            aPositionLoc          = GLES30.glGetAttribLocation(programId, "aPosition")
-            aTexCoordLoc          = GLES30.glGetAttribLocation(programId, "aTexCoord")
-            uColorBiasR           = GLES30.glGetUniformLocation(programId, "uColorBiasR")
-            uColorBiasG           = GLES30.glGetUniformLocation(programId, "uColorBiasG")
-            uColorBiasB           = GLES30.glGetUniformLocation(programId, "uColorBiasB")
-            uTintShift            = GLES30.glGetUniformLocation(programId, "uTintShift")
-            uHalationAmount       = GLES30.glGetUniformLocation(programId, "uHalationAmount")
-            uBloomAmount          = GLES30.glGetUniformLocation(programId, "uBloomAmount")
-            uGrainSize            = GLES30.glGetUniformLocation(programId, "uGrainSize")
-            uLuminanceNoise       = GLES30.glGetUniformLocation(programId, "uLuminanceNoise")
-            uChromaNoise          = GLES30.glGetUniformLocation(programId, "uChromaNoise")
-            // Inst C / SQC 共用 uniform
-            uHighlightRolloff     = GLES30.glGetUniformLocation(programId, "uHighlightRolloff")
-            uPaperTexture         = GLES30.glGetUniformLocation(programId, "uPaperTexture")
-            uEdgeFalloff          = GLES30.glGetUniformLocation(programId, "uEdgeFalloff")
-            uExposureVariation    = GLES30.glGetUniformLocation(programId, "uExposureVariation")
-            uCornerWarmShift      = GLES30.glGetUniformLocation(programId, "uCornerWarmShift")
-            // 拍立得/数码通用 uniform（Inst C / SQC / FXN-R 共用）
-            uCenterGain           = GLES30.glGetUniformLocation(programId, "uCenterGain")
-            uDevelopmentSoftness  = GLES30.glGetUniformLocation(programId, "uDevelopmentSoftness")
-            uChemicalIrregularity = GLES30.glGetUniformLocation(programId, "uChemicalIrregularity")
-            uSkinHueProtect       = GLES30.glGetUniformLocation(programId, "uSkinHueProtect")
-            uSkinSatProtect       = GLES30.glGetUniformLocation(programId, "uSkinSatProtect")
-            uSkinLumaSoften       = GLES30.glGetUniformLocation(programId, "uSkinLumaSoften")
-            uSkinRedLimit         = GLES30.glGetUniformLocation(programId, "uSkinRedLimit")
-            uHighlightRolloff2    = GLES30.glGetUniformLocation(programId, "uHighlightRolloff2")
-            uToneCurveStrength    = GLES30.glGetUniformLocation(programId, "uToneCurveStrength")
+            cachePass2Uniforms()
             Log.d(TAG, "setCameraId: shader recompiled for cameraId=$cameraId")
         }
     }
@@ -1062,10 +1065,6 @@ void main() {
 
     // ── 获取相机输入 Surface ──────────────────────────────────────────────────
 
-    /**
-     * 返回 CameraX Preview 应该渲染到的 Surface。
-     * 必须在 initialize() 完成后调用。
-     */
     fun getInputSurface(): Surface? = if (initialized.get()) inputSurface else null
 
     // ── 释放 ─────────────────────────────────────────────────────────────────
@@ -1080,6 +1079,18 @@ void main() {
             if (programId != 0) {
                 GLES30.glDeleteProgram(programId)
                 programId = 0
+            }
+            if (copyProgramId != 0) {
+                GLES30.glDeleteProgram(copyProgramId)
+                copyProgramId = 0
+            }
+            if (fboId != 0) {
+                GLES30.glDeleteFramebuffers(1, intArrayOf(fboId), 0)
+                fboId = 0
+            }
+            if (fboTexId != 0) {
+                GLES30.glDeleteTextures(1, intArrayOf(fboTexId), 0)
+                fboTexId = 0
             }
             if (cameraTexId != 0) {
                 GLES30.glDeleteTextures(1, intArrayOf(cameraTexId), 0)
