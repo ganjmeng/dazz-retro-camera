@@ -571,12 +571,17 @@ void main() {
             return
         }
 
-        // ── 7. 编译着色器（根据 cameraId 选择专用 Shader）──────────────────
+         // ── 7. 编译着色器（根据 cameraId 选择专用 Shader）──────────────
         val fragShader = when (currentCameraId) {
-            "fqs"    -> FQSShaderSource.FRAGMENT_SHADER
-            "cpm35"  -> CPM35ShaderSource.FRAGMENT_SHADER
-            "inst_c" -> InstCShaderSource.FRAGMENT_SHADER
-            else     -> FRAGMENT_SHADER
+            "fqs"       -> FQSShaderSource.FRAGMENT_SHADER
+            "cpm35"     -> CPM35ShaderSource.FRAGMENT_SHADER
+            "inst_c"    -> InstCShaderSource.FRAGMENT_SHADER
+            "sqc"       -> SQCGLRenderer.FRAGMENT_SHADER
+            "grd_r"     -> GRDRGLRenderer.FRAGMENT_SHADER
+            "u300"      -> U300GLRenderer.FRAGMENT_SHADER
+            "ccd_r"     -> CCDRGLRenderer.FRAGMENT_SHADER
+            "bw_classic" -> BWClassicGLRenderer.FRAGMENT_SHADER
+            else        -> FRAGMENT_SHADER
         }
         programId = createProgram(VERTEX_SHADER, fragShader)
         if (programId == 0) {
@@ -663,15 +668,18 @@ void main() {
 
      private fun renderFrame() {
         if (!initialized.get()) return
-        // shader 重编译期间 programId 暂时为 0，跳过本帧避免黑屏（保留上一帧画面）
-        if (programId == 0) return
+
+        // shader 重编译期间 programId 暂时为 0：仍然消费帧（避免积压导致斜条纹），但不渲染
+        val skipRender = (programId == 0)
+
         // 每帧都重新激活 EGL context（确保在 GL 线程上）
-        if (!EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) {
+        val eglOk = EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
+        if (!eglOk) {
             Log.w(TAG, "renderFrame: eglMakeCurrent failed: 0x${Integer.toHexString(EGL14.eglGetError())}")
-            return
+            // eglMakeCurrent 失败时也要消费帧，否则帧积压
         }
 
-        // 更新相机帧纹理
+        // 更新相机帧纹理（无论是否渲染都必须消费，否则帧积压导致斜条纹）
         try {
             inputSurfaceTexture?.updateTexImage()
             // 获取 SurfaceTexture 变换矩阵（必须在 updateTexImage 后立即调用）
@@ -680,6 +688,9 @@ void main() {
             Log.w(TAG, "updateTexImage failed: ${e.message}")
             return
         }
+
+        // shader 未就绪或 EGL context 失效时，跳过渲染（帧已消费，不会积压）
+        if (skipRender || !eglOk) return
 
         GLES30.glViewport(0, 0, previewWidth, previewHeight)
         GLES30.glClearColor(0f, 0f, 0f, 1f)

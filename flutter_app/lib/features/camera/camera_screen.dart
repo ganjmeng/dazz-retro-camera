@@ -287,6 +287,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // Flutter 的 Texture widget 会冻结在最后一帧。必须重新 initCamera 才能恢复实时预览。
     if (!mounted) return;
     await ref.read(cameraServiceProvider.notifier).initCamera();
+    // initCamera 会创建新的 CameraGLRenderer，必须重新设置当前相机的 shader
+    // 否则新 renderer 会使用错误的默认 shader
+    final cameraBack = ref.read(cameraAppProvider).camera;
+    if (cameraBack != null) {
+      await ref.read(cameraServiceProvider.notifier).setCamera(cameraBack);
+    }
     // 同步清晰度档位对应的原生分辨率
     // IMPORTANT: must await so the transition overlay stays visible until the
     // native camera is fully reconfigured at the correct resolution.

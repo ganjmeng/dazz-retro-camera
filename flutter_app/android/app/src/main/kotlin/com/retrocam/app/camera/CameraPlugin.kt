@@ -272,7 +272,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                     request.provideSurface(
                         inputSurface,
                         cameraExecutor
-                    ) { renderer.release(); glRenderer = null }
+                    ) {
+                    // 只有当 glRenderer 仍然是本次创建的 renderer 时才清空
+                    // 避免 bindCameraUseCases 重新调用后，旧的 Surface 释放 callback 把新的 glRenderer 清空
+                    renderer.release()
+                    if (glRenderer === renderer) glRenderer = null
+                }
                 } else {
                     // GL 初始化失败，降级到直通模式
                     Log.w("CameraPlugin", "GL renderer init failed, falling back to direct mode")

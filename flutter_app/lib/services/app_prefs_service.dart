@@ -3,6 +3,7 @@
 // 负责：清晰度、地理位置、网格、小窗、快门声、快门振动、最后选择的相机
 
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/camera_registry.dart';
 
 const _kSharpenLevel        = 'pref_sharpen_level';
 const _kLocationEnabled     = 'pref_location_enabled';
@@ -20,7 +21,7 @@ class AppPrefs {
   final bool   minimapEnabled;      // 默认 false
   final bool   shutterSoundEnabled; // 默认 true
   final bool   shutterVibrationEnabled; // 默认 true
-  final String lastCameraId;        // 默认 'grd_r'
+  final String lastCameraId;        // 默认为 kDefaultCameraOrder 第一个相机
   final bool   mirrorFrontCamera;   // 默认 true
 
   const AppPrefs({
@@ -30,7 +31,7 @@ class AppPrefs {
     this.minimapEnabled         = false,
     this.shutterSoundEnabled    = true,
     this.shutterVibrationEnabled = true,
-    this.lastCameraId           = 'grd_r',
+    this.lastCameraId           = kDefaultCameraOrder[0],
     this.mirrorFrontCamera      = true,
   });
 }
@@ -48,7 +49,7 @@ class AppPrefsService {
       minimapEnabled:          p.getBool(_kMinimapEnabled)        ?? false,
       shutterSoundEnabled:     p.getBool(_kShutterSound)          ?? true,
       shutterVibrationEnabled: p.getBool(_kShutterVibration)      ?? true,
-      lastCameraId:            p.getString(_kLastCameraId)        ?? 'grd_r',
+      lastCameraId:            p.getString(_kLastCameraId)        ?? kDefaultCameraOrder[0],
       mirrorFrontCamera:       p.getBool(_kMirrorFrontCamera)     ?? true,
     );
   }
