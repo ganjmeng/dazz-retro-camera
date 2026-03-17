@@ -34,6 +34,7 @@ import io.flutter.view.TextureRegistry
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -85,6 +86,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private var cachedLensVignette: Double = 0.0
     // GL Renderer
     private var glRenderer: CameraGLRenderer? = null
+    // ── 用于 switchLens 等待新 renderer 就绪 ──
+    @Volatile private var rendererReadyLatch: CountDownLatch? = null
 
     // ─────────────────────────────────────────────
     // FlutterPlugin lifecycle
@@ -265,6 +268,10 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         @Suppress("UnsafeOptInUsageError")
         val cameraSelector = buildCameraSelector(provider)
 
+        // ── 创建 latch，供 handleSwitchLens 等待新 renderer 就绪 ──
+        val latch = CountDownLatch(1)
+        rendererReadyLatch = latch
+
         preview = Preview.Builder().build().also { prev ->
             // GL 渲染模式：相机帧 → CameraGLRenderer（EGL + 着色器）→ Flutter SurfaceTexture
             prev.setSurfaceProvider(cameraExecutor) { request ->
@@ -281,6 +288,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 // switchLens 会重建 renderer，但不会重新调用 setPreset，
                 // 导致新 renderer 的所有 uniform 参数为默认值（无效果）。
                 reapplyPresetToRenderer(renderer)
+
+                // ── 通知 handleSwitchLens：新 renderer 已就绪 ──
+                latch.countDown()
 
                 val inputSurface = renderer.getInputSurface()
                 if (inputSurface != null) {
@@ -481,7 +491,26 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
         try {
             bindCameraUseCases(owner)
-            result.success(null)
+
+            // ── FIX: 等待新 renderer 就绪后再返回，避免 Dart 层竞态 ────────
+            // bindCameraUseCases 中 SurfaceProvider 回调在 cameraExecutor 上异步执行，
+            // 如果立即返回 result.success，Dart 层的 setCamera() + updateLensParams()
+            // 会在新 renderer 创建前执行，导致参数发到 null。
+            // 在 bgExecutor 上等待 latch（不阻塞主线程），完成后在主线程回调 result。
+            val latch = rendererReadyLatch
+            val mainExecutor = ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
+            bgExecutor.execute {
+                try {
+                    // 等待新 renderer 就绪，最多 5 秒超时
+                    val ready = latch?.await(5, java.util.concurrent.TimeUnit.SECONDS) ?: true
+                    if (!ready) {
+                        Log.w(TAG, "switchLens: renderer ready timeout (5s)")
+                    }
+                    mainExecutor.execute { result.success(null) }
+                } catch (e: Exception) {
+                    mainExecutor.execute { result.error("SWITCH_LENS_FAILED", e.message, null) }
+                }
+            }
         } catch (e: Exception) {
             result.error("SWITCH_LENS_FAILED", e.message, null)
         }
