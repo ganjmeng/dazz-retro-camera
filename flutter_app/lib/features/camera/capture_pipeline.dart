@@ -465,6 +465,7 @@ class CapturePipeline {
           sizeOverride: watermarkSizeOverride,
           directionOverride: watermarkDirectionOverride,
           styleOverride: watermarkStyleOverride,
+          hasFrame: frameOpt != null,
         );
       }
 
@@ -1028,6 +1029,7 @@ class CapturePipeline {
     String? sizeOverride,
     String? directionOverride,
     String? styleOverride,
+    bool hasFrame = false,
   }) {
     final wmPresets = camera.modules.watermarks.presets;
     if (wmPresets.isEmpty) return;
@@ -1066,7 +1068,8 @@ class CapturePipeline {
 
     final isVertical = (directionOverride ?? 'horizontal') == 'vertical';
     final position = positionOverride ?? wmOpt.position ?? 'bottom_right';
-    final margin = w * 0.04;
+    // 有相框时增大 margin，让水印更靠照片内部，避免视觉上贴近相框边缘
+    final margin = w * (hasFrame ? 0.08 : 0.04);
 
     final fontFamily = styleDef.fontFamily ?? wmOpt.fontFamily;
     final letterSpacing = styleDef.letterSpacing;

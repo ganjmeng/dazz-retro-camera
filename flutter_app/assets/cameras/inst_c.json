@@ -405,8 +405,8 @@
       "presets": [
         {
           "id": "date_white",
-          "name": "白色日期",
-          "color": "#FFFFFF",
+          "name": "橙色日期",
+          "color": "#FF8A3D",
           "position": "bottom_right",
           "fontSize": 18,
           "fontFamily": "DigitalMono"
