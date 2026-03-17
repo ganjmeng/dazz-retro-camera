@@ -178,22 +178,26 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           return;
         }
 
-        // 初始化原生相机硬件（获取 textureId，开始预览）
-        await ref.read(cameraServiceProvider.notifier).initCamera();
-
         // ── FIX: 首次授权 bug 修复 ──
         // 场景：首次启动 → 权限弹窗 → 用户同意。此时 iOS/Android 系统层才真正将相机权限授予进程。
         // 问题：.request() 返回 granted 后，相机设备层可能尚未完全就绪，导致 initCamera 的
         //         MethodChannel 调用在系统层还没就绪时就到达，原生相机无预览输出。
-        // 修复：检测到「本次是首次授权」时，延迟 800ms 等待系统层相机就绪，再重新执行一次完整的
-        //         initCamera 流程（与「跳转设置再返回」所触发的 _pushWithCameraPause 恢复流程完全一致）。
+        // 修复：检测到「本次是首次授权」时，先显示过渡动画，延迟 800ms 等待系统层相机就绪，
+        //         再调用一次 initCamera（避免两次 isLoading=true 导致取景框黑屏两次）。
         final isFirstTimeGrant = !wasGrantedBefore && cameraGranted;
         if (isFirstTimeGrant) {
-          // 延迟等待系统层相机就绪（iOS 授权后内核需要时间初始化相机设备）
+          // 首次授权：显示过渡动画遮盖黑屏，延迟后再初始化
+          setState(() => _showTransition = true);
           await Future.delayed(const Duration(milliseconds: 800));
           if (!mounted) return;
-          // 重新初始化相机（相当于跳转设置再返回的效果）
-          await ref.read(cameraServiceProvider.notifier).initCamera();
+        }
+
+        // 初始化原生相机硬件（获取 textureId，开始预览）
+        await ref.read(cameraServiceProvider.notifier).initCamera();
+
+        if (isFirstTimeGrant) {
+          // 相机就绪后淡出过渡动画
+          if (mounted) setState(() => _showTransition = false);
         }
 
         // ── initCamera 返回后 renderer 已就绪，重新发送相机参数确保生效 ──
@@ -1393,13 +1397,37 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         aspectRatio: st.previewAspectRatio,
       );
     }
-    // 未初始化时显示占位提示
+    // 未初始化时显示占位：黑底 + App Icon（与切换相机的过渡动画一致，避免纯黑屏不美观）
     return Container(
       color: Colors.black,
-      child: Center(
-        child: Text(
-          _s().cameraInitializing,
-          style: const TextStyle(color: Colors.white54, fontSize: 14),
+      alignment: Alignment.center,
+      child: Container(
+        width: 120,
+        height: 120,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(120),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: Image.asset(
+            'assets/images/app_icon.png',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const Center(
+              child: Icon(
+                Icons.camera_alt,
+                color: Colors.white,
+                size: 48,
+              ),
+            ),
+          ),
         ),
       ),
     );
