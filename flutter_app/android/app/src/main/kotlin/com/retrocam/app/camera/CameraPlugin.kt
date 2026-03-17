@@ -930,42 +930,6 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 }
             }
         }
-
-            // 1. 加载图像
-            val inBitmap = BitmapFactory.decodeFile(filePath)
-            val outBitmap = Bitmap.createBitmap(inBitmap.width, inBitmap.height, inBitmap.config)
-
-            // 2. 创建 Allocation
-            val inAllocation = Allocation.createFromBitmap(rs, inBitmap)
-            val outAllocation = Allocation.createFromBitmap(rs, outBitmap)
-
-            // 3. 创建 ScriptIntrinsic
-            val script = ScriptC_capture_pipeline(rs)
-
-            // 4. 设置参数
-            // val captureParams = ScriptC_capture_pipeline.CaptureParams()
-            // captureParams.highlightRolloff = ...
-            // script.set_gParams(captureParams)
-
-            // 5. 执行内核
-            script.forEach_capturePipeline(inAllocation, outAllocation)
-
-            // 6. 拷贝结果到 Bitmap
-            outAllocation.copyTo(outBitmap)
-
-            // 7. 保存到新文件
-            val outputFile = File(context.cacheDir, "gpu_processed_${File(filePath).name}")
-            FileOutputStream(outputFile).use {
-                outBitmap.compress(Bitmap.CompressFormat.JPEG, 90, it)
-            }
-
-            rs.destroy()
-
-            result.success(mapOf("filePath" to outputFile.absolutePath))
-
-        } catch (e: Exception) {
-            result.error("RENDERSCRIPT_FAILED", e.message, null)
-        }
     }
 
     private fun handleDispose(result: MethodChannel.Result) {

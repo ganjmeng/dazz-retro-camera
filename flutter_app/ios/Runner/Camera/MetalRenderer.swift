@@ -57,7 +57,7 @@ struct CCDParams {
     var blacks: Float = 0.0                // 黑场偏移（-100 ~ +100）
     var clarity: Float = 0.0               // 中间调微对比度（-100 ~ +100）
     var vibrance: Float = 0.0              // 智能饱和度（-100 ~ +100）
-    var noiseAmount: Float = 0.0           // FIX: 数字噪点强度（0.0 ~ 1.0）
+    var noiseAmountExtra: Float = 0.0      // 预留字段，与 Metal Shader 中的 noiseAmountExtra 对应
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
