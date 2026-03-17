@@ -29,7 +29,7 @@
 //   → Pass 6: CCD Bloom + Halation（高光 bloom 强）
 //   → Pass 7: 肤色保护（防止冷 LUT 让肤色发青）
 //   → Pass 8: 传感器非均匀性（中心增亮 + 边缘衰减 + 冷角）
-//   → Pass 9: 传感器热噪声（chemicalIrregularity=0.008）
+// SIMPLIFIED: //   → Pass 9: 传感器热噪声（chemicalIrregularity=0.008）
 //   → Pass 10: 亮度噪声（luminanceNoise=0.08）
 //   → Pass 11: 彩色噪声（chromaNoise=0.08，早期 CCD 标志）
 //   → Pass 12: 颗粒（grain=0.22, grainSize=1.3）
@@ -56,7 +56,7 @@ struct CCDRParams {
     float saturation;
     float temperatureShift;
     float tintShift;
-    float grainAmount;
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     float grainAmount;
     float noiseAmount;
     float vignetteAmount;
     float chromaticAberration;
@@ -77,14 +77,14 @@ struct CCDRParams {
     float luminanceNoise;
     float chromaNoise;
     float highlightRolloff;
-    float paperTexture;
-    float edgeFalloff;
+// SIMPLIFIED:     float paperTexture;
+// SIMPLIFIED:     float edgeFalloff;
     float exposureVariation;
-    float cornerWarmShift;
+// SIMPLIFIED:     float cornerWarmShift;
     float centerGain;
-    float developmentSoftness;
-    float chemicalIrregularity;
-    float skinHueProtect;
+// SIMPLIFIED:     float developmentSoftness;
+// SIMPLIFIED:     float chemicalIrregularity;
+// SIMPLIFIED:     float skinHueProtect;
     float skinSatProtect;
     float skinLumaSoften;
     float skinRedLimit;
@@ -169,7 +169,7 @@ static float3 ccdrBloomHalation(float3 color, float bloom, float halation) {
 }
 
 /// 肤色保护（防止冷 LUT 让肤色发青）
-static float3 ccdrSkinProtect(float3 color, float protect,
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED: static float3 ccdrSkinProtect(float3 color, float protect,
                                float satProt, float lumaSoften, float redLimit) {
     if (protect < 0.5) return color;
     float maxC = max(max(color.r, color.g), color.b);
@@ -194,15 +194,15 @@ static float3 ccdrSkinProtect(float3 color, float protect,
 }
 
 /// 传感器非均匀性（中心增亮 + 边缘衰减）
-static float ccdrCenterEdge(float2 uv, float centerGain, float edgeFalloff) {
+// SIMPLIFIED: static float ccdrCenterEdge(float2 uv, float centerGain, float edgeFalloff) {
     float2 d = uv - 0.5;
     float dist = length(d);
     float center = 1.0 + centerGain * (1.0 - dist * 2.0);
-    float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
+// SIMPLIFIED:     float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
     return clamp(center * edge, 0.5, 1.5);
 }
 
-/// 角落偏冷（cornerWarmShift 为负值时偏冷蓝，CCD R 特征）
+// SIMPLIFIED: /// 角落偏冷（cornerWarmShift 为负值时偏冷蓝，CCD R 特征）
 static float3 ccdrCornerShift(float2 uv, float3 color, float shift) {
     float2 d = uv - 0.5;
     float cornerFactor = clamp(dot(d, d) * 4.0, 0.0, 1.0);
@@ -264,26 +264,26 @@ fragment float4 ccdrFragmentShader(
     color = ccdrBloomHalation(color, p.bloomAmount, p.halationAmount);
 
     // === Pass 7: 肤色保护（防止冷 LUT 让肤色发青）===
-    color = ccdrSkinProtect(color,
-        p.skinHueProtect, p.skinSatProtect,
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED:     color = ccdrSkinProtect(color,
+// SIMPLIFIED:         p.skinHueProtect, p.skinSatProtect,
         p.skinLumaSoften, p.skinRedLimit);
 
     // === Pass 8: 传感器非均匀性（中心增亮 + 边缘衰减 + 冷角）===
-    if (p.centerGain > 0.0 || p.edgeFalloff > 0.0) {
-        float factor = ccdrCenterEdge(uv, p.centerGain, p.edgeFalloff);
+// SIMPLIFIED:     if (p.centerGain > 0.0 || p.edgeFalloff > 0.0) {
+// SIMPLIFIED:         float factor = ccdrCenterEdge(uv, p.centerGain, p.edgeFalloff);
         color = clamp(color * factor, 0.0, 1.0);
     }
     if (p.exposureVariation > 0.0) {
         float evn = ccdrRandom(uv * 0.1, p.time * 0.01) - 0.5;
         color = clamp(color + evn * p.exposureVariation * 0.3, 0.0, 1.0);
     }
-    // cornerWarmShift 为负值 = 偏冷蓝
-    color = ccdrCornerShift(uv, color, p.cornerWarmShift);
+// SIMPLIFIED:     // cornerWarmShift 为负值 = 偏冷蓝
+// SIMPLIFIED:     color = ccdrCornerShift(uv, color, p.cornerWarmShift);
 
-    // === Pass 9: 传感器热噪声（chemicalIrregularity=0.008）===
-    if (p.chemicalIrregularity > 0.0) {
+// SIMPLIFIED:     // === Pass 9: 传感器热噪声（chemicalIrregularity=0.008）===
+// SIMPLIFIED:     if (p.chemicalIrregularity > 0.0) {
         float2 blockUV = floor(uv * 32.0) / 32.0; // 更大的块，模拟热噪声
-        float irr = (ccdrRandom(blockUV, 0.77) - 0.5) * p.chemicalIrregularity;
+// SIMPLIFIED:         float irr = (ccdrRandom(blockUV, 0.77) - 0.5) * p.chemicalIrregularity;
         color = clamp(color + irr * 0.5, 0.0, 1.0);
     }
 
@@ -308,12 +308,12 @@ fragment float4 ccdrFragmentShader(
     }
 
     // === Pass 12: 颗粒（grain=0.22, grainSize=1.3）===
-    if (p.grainAmount > 0.0) {
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     if (p.grainAmount > 0.0) {
         float2 grainUV = uv / max(p.grainSize * 0.003, 0.001);
         float grain = ccdrRandom(grainUV, floor(p.time * 30.0) / 30.0) - 0.5;
         float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
         float darkBoost = 1.0 + (1.0 - luma) * 0.6;
-        color = clamp(color + grain * p.grainAmount * 0.22 * darkBoost, 0.0, 1.0);
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:         color = clamp(color + grain * p.grainAmount * 0.22 * darkBoost, 0.0, 1.0);
     }
 
     // === Pass 13: 暗角（vignette=0.12）===

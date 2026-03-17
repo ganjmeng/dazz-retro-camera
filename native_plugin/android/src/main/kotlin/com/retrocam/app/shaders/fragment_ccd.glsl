@@ -223,25 +223,15 @@ void main() {
         color = applyColorBias(color, uColorBiasR, uColorBiasG, uColorBiasB);
     }
 
-    // === Pass 9: 高光溢出 (Bloom) ===
+    // === Pass 9: 高光溢出 (Bloom) - 移动到 CapturePipeline ===
+    // 预览中移除，以降低 GPU 负载
+
+    // === Pass 10: 胶片颗粒 (Grain) - 移动到 CapturePipeline ===
+    // 预览中移除，以降低 GPU 负载
+
+    // === Pass 11: 动态数字噪点 (Noise) - 移动到 CapturePipeline ===
+    // 预览中移除，以降低 GPU 负载
     float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
-    if (luminance > 0.8 && uBloomAmount > 0.0) {
-        float bloom = (luminance - 0.8) * uBloomAmount * 2.0;
-        color = clamp(color + vec3(bloom * 0.8, bloom * 0.7, bloom * 0.5), 0.0, 1.0);
-    }
-
-    // === Pass 10: 胶片颗粒 (Grain) ===
-    if (uGrainAmount > 0.0) {
-        vec3 grain = texture2D(uGrainTexture, uv * 2.0).rgb;
-        color = clamp(color + (grain - 0.5) * uGrainAmount * 0.3, 0.0, 1.0);
-    }
-
-    // === Pass 11: 动态数字噪点 (Noise) ===
-    if (uNoiseAmount > 0.0) {
-        float noise = random(uv, uTime) - 0.5;
-        float darkMask = 1.0 - luminance;
-        color = clamp(color + noise * uNoiseAmount * 0.2 * darkMask, 0.0, 1.0);
-    }
 
     // === Pass 12: 暗角 (Vignette) ===
     // preset 暗角 + 镜头层暗角叠加，上限 1.0

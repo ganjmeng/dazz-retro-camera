@@ -115,6 +115,9 @@ class PreviewRenderParams {
   double get chemicalIrregularity => defaultLook.chemicalIrregularity.clamp(0.0, 0.1);
   /// noiseAmount 目前在 DefaultLook 中没有对应字段，暂时返回 0
   double get noiseAmount => 0.0;
+
+  double get paperTexture => defaultLook.paperTexture.clamp(0.0, 1.0);
+  double get developmentSoftness => defaultLook.developmentSoftness.clamp(0.0, 1.0);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

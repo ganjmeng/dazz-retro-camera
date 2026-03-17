@@ -11,13 +11,13 @@
 //   2. 轻冷白平衡（temperature=-20，Instax 偏冷白）
 //   3. 轻微洋红（tint=+6）
 //   4. 高光柔和 rolloff（highlightRolloff=0.20）
-//   5. 轻微不均匀曝光（edgeFalloff=0.05, exposureVariation=0.04）
-//   6. 轻纸感纹理（paperTexture=0.06）
+// SIMPLIFIED: //   5. 轻微不均匀曝光（edgeFalloff=0.05, exposureVariation=0.04）
+// SIMPLIFIED: //   6. 轻纸感纹理（paperTexture=0.06）
 //   7. 轻颗粒（grain=0.08，非胶片重颗粒）
 //   8. 内置闪光灯中心增亮（centerGain=0.02，比 SQC 更自然）
-//   9. 化学显影柔化（developmentSoftness=0.03，Mini 显影更稳定）
-//  10. 化学不规则感（chemicalIrregularity=0.015，Mini 胶片面积小更均匀）
-//  11. 肤色保护系统（skinHueProtect=true，Mini 肤色偏粉嫩非橙）
+// SIMPLIFIED: //   9. 化学显影柔化（developmentSoftness=0.03，Mini 显影更稳定）
+// SIMPLIFIED: //  10. 化学不规则感（chemicalIrregularity=0.015，Mini 胶片面积小更均匀）
+// SIMPLIFIED: //  11. 肤色保护系统（skinHueProtect=true，Mini 肤色偏粉嫩非橙）
 //
 // GPU Pipeline 顺序（18 pass）：
 //   Camera Frame
@@ -30,13 +30,13 @@
 //   → Soft Bloom（轻柔光）
 //   → Halation（极轻高光发光）
 //   → Center Gain（中心增亮，内置闪光灯特征）
-//   → Fine Grain（轻颗粒）
-//   → Paper Texture（相纸纹理）
-//   → Edge Falloff / Uneven Exposure（不均匀曝光）
-//   → Corner Warm Shift（边角偏暖）
-//   → Development Softness（显影柔化）
-//   → Chemical Irregularity（化学不规则感）
-//   → Skin Protection（肤色保护）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: //   → Fine Grain（轻颗粒）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: //   → Paper Texture（相纸纹理）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: //   → Edge Falloff / Uneven Exposure（不均匀曝光）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: //   → Corner Warm Shift（边角偏暖）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: //   → Development Softness（显影柔化）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: //   → Chemical Irregularity（化学不规则感）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: //   → Skin Protection（肤色保护）
 //   → Vignette（极轻暗角）
 //   → Output
 //
@@ -75,7 +75,7 @@ struct InstCParams {
     float saturation;          // 饱和度倍数（Inst C=1.08）
     float temperatureShift;    // 色温偏移（Inst C=+6400，偏暖）
     float tintShift;           // 色调偏移（Inst C=+6，轻微洋红）
-    float grainAmount;         // 颗粒强度（Inst C=0.08，轻颗粒）
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     float grainAmount;         // 颗粒强度（Inst C=0.08，轻颗粒）
     float noiseAmount;         // 通用噪声量（Inst C 不使用）
     float vignetteAmount;      // 暗角强度（Inst C=0.06，极轻）
     float chromaticAberration; // 色差强度（Inst C=0.05）
@@ -98,14 +98,14 @@ struct InstCParams {
     float chromaNoise;         // 色度噪声（Inst C 不使用）
     // ── 拍立得即时成像专属字段（追加在 CCDParams 末尾，Inst C / SQC 通用）────
     float highlightRolloff;     // 高光柔和滴落强度（Inst C=0.20）
-    float paperTexture;         // 相纸纹理强度（Inst C=0.06）
-    float edgeFalloff;          // 边缘曝光衰减（不均匀曝光，Inst C=0.05）
+// SIMPLIFIED:     float paperTexture;         // 相纸纹理强度（Inst C=0.06）
+// SIMPLIFIED:     float edgeFalloff;          // 边缘曝光衰减（不均匀曝光，Inst C=0.05）
     float exposureVariation;    // 全局曝光不均匀幅度（Inst C=0.04）
-    float cornerWarmShift;      // 边角偏暖强度（Inst C=0.02）
+// SIMPLIFIED:     float cornerWarmShift;      // 边角偏暖强度（Inst C=0.02）
     float centerGain;           // 中心增亮（内置闪光灯，Inst C=0.02）
-    float developmentSoftness;  // 显影柔化（化学扩散，Inst C=0.03）
-    float chemicalIrregularity; // 化学不规则感（Inst C=0.015）
-    float skinHueProtect;       // 肤色色相保护（1.0=开启，Inst C=1.0）
+// SIMPLIFIED:     float developmentSoftness;  // 显影柔化（化学扩散，Inst C=0.03）
+// SIMPLIFIED:     float chemicalIrregularity; // 化学不规则感（Inst C=0.015）
+// SIMPLIFIED:     float skinHueProtect;       // 肤色色相保护（1.0=开启，Inst C=1.0）
     float skinSatProtect;       // 肤色饱和度保护（Inst C=0.92）
     float skinLumaSoften;       // 肤色亮度柔化（Inst C=0.05）
     float skinRedLimit;         // 肤色红限（Inst C=1.02）
@@ -214,9 +214,9 @@ float instcVignette(float2 uv, float amount) {
     return mix(1.0, vignette, amount);
 }
 
-/// Edge Falloff（边缘曝光衰减，模拟 Instax 不均匀曝光）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: /// Edge Falloff（边缘曝光衰减，模拟 Instax 不均匀曝光）
 /// 四周轻微暗，中心稍亮，模拟即时成像的不均匀化学显影
-float instcEdgeFalloff(float2 uv, float amount, float time) {
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED: float instcEdgeFalloff(float2 uv, float amount, float time) {
     if (amount < 0.001) return 1.0;
     float2 center = uv - 0.5;
     // 基础边缘衰减（椭圆形）
@@ -229,8 +229,8 @@ float instcEdgeFalloff(float2 uv, float amount, float time) {
     return mix(1.0, falloff, amount * 1.5);
 }
 
-/// Corner Warm Shift（边角偏暖，Instax 化学显影边缘特征）
-float3 instcCornerWarm(float3 color, float2 uv, float amount) {
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: /// Corner Warm Shift（边角偏暖，Instax 化学显影边缘特征）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED: float3 instcCornerWarm(float3 color, float2 uv, float amount) {
     if (amount < 0.001) return color;
     float2 center = uv - 0.5;
     float dist = length(center);
@@ -241,8 +241,8 @@ float3 instcCornerWarm(float3 color, float2 uv, float amount) {
     return color;
 }
 
-/// Paper Texture（相纸纹理，模拟 Instax 相纸表面微纹理）
-float3 instcPaperTexture(float3 color, float2 uv, float amount, float time) {
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: /// Paper Texture（相纸纹理，模拟 Instax 相纸表面微纹理）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED: float3 instcPaperTexture(float3 color, float2 uv, float amount, float time) {
     if (amount < 0.001) return color;
     float2 paperUV1 = uv * 8.0;
     float2 paperUV2 = uv * 32.0;
@@ -270,9 +270,9 @@ float3 instcCenterGain(float3 color, float2 uv, float amount) {
     return clamp(gainColor, 0.0, 1.0);
 }
 
-/// Development Softness（显影柔化，模拟 Instax 化学显影扩散）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: /// Development Softness（显影柔化，模拟 Instax 化学显影扩散）
 /// Inst C=0.03（比 SQC=0.04 更克制，Mini 显影过程更稳定）
-float3 instcDevelopmentSoftness(float3 color, float2 uv, float amount,
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED: float3 instcDevelopmentSoftness(float3 color, float2 uv, float amount,
                                  texture2d<float> tex, sampler s) {
     if (amount < 0.001) return color;
     float offset = amount * 0.004;  // 比 SQC 的 0.005 更小
@@ -288,9 +288,9 @@ float3 instcDevelopmentSoftness(float3 color, float2 uv, float amount,
     return clamp(mix(color, blurred, softMask), 0.0, 1.0);
 }
 
-/// Chemical Irregularity（化学不规则感，模拟 Instax 胶片化学分布不均）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: /// Chemical Irregularity（化学不规则感，模拟 Instax 胶片化学分布不均）
 /// Inst C=0.015（比 SQC=0.02 更低，Mini 胶片面积小化学分布更均匀）
-float3 instcChemicalIrregularity(float3 color, float2 uv, float amount, float time) {
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED: float3 instcChemicalIrregularity(float3 color, float2 uv, float amount, float time) {
     if (amount < 0.001) return color;
     float2 irregUV = uv * 2.5;
     float irreg1 = instcRandom(irregUV, floor(time * 0.1) * 0.1) * 2.0 - 1.0;
@@ -305,12 +305,12 @@ float3 instcChemicalIrregularity(float3 color, float2 uv, float amount, float ti
     return clamp(color + float3(brightVar) + colorShift, 0.0, 1.0);
 }
 
-/// Skin Protection（肤色保护系统）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: /// Skin Protection（肤色保护系统）
 /// Inst C：skinSatProtect=0.92，skinLumaSoften=0.05，skinRedLimit=1.02
 /// Mini 肤色偏粉嫩而非橙，比 SQC 更严格防止过红
-float3 instcSkinProtect(float3 color, float skinHueProtect,
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED: // SIMPLIFIED: float3 instcSkinProtect(float3 color, float skinHueProtect,
                          float skinSatProtect, float skinLumaSoften, float skinRedLimit) {
-    if (skinHueProtect < 0.5) return color;
+// SIMPLIFIED:     if (skinHueProtect < 0.5) return color;
     float maxC = max(max(color.r, color.g), color.b);
     float minC = min(min(color.r, color.g), color.b);
     float delta = maxC - minC;
@@ -415,45 +415,15 @@ fragment float4 instcFragmentShader(
         color = mix(color, halationColor, halationMask * params.halationAmount);
     }
 
-    // ── Pass 10: Fine Grain（轻颗粒，grain_color=false，Instax 不该有重颗粒）
-    if (params.grainAmount > 0.001) {
-        float timeSeed = floor(params.time * 24.0) / 24.0;
-        // 从噪点纹理采样
-        float2 grainUV = uv * max(params.grainSize, 0.1);
-        float grainTex = grainTexture.sample(s, grainUV).r;
-        float dynamicGrain = instcRandom(uv, timeSeed) - 0.5;
-        // 混合纹理颗粒和程序颗粒（8:2，Instax 更均匀）
-        float grain = mix(grainTex - 0.5, dynamicGrain, 0.2);
-        // 颗粒强度随亮度变化（中间调最明显）
-        float grainLum = dot(color, float3(0.2126, 0.7152, 0.0722));
-        float grainMask = 1.0 - abs(grainLum - 0.50) * 1.0;
-        grainMask = clamp(grainMask, 0.2, 1.0);
-        // 亮度颗粒（grain_color=false，Instax 颗粒不彩色）
-        color = clamp(color + float3(grain) * params.grainAmount * 0.18 * grainMask,
-                      0.0, 1.0);
-    }
-
-    // ── Pass 11: Paper Texture（相纸纹理，Instax 相纸表面微纹理）────────────
-    color = instcPaperTexture(color, uv, params.paperTexture, params.time);
-
-    // ── Pass 12: Edge Falloff / Uneven Exposure（不均匀曝光，Inst C 核心特征）
-    float edgeFactor = instcEdgeFalloff(uv, params.edgeFalloff, params.time);
-    color *= edgeFactor;
-
-    // ── Pass 13: Corner Warm Shift（边角偏暖，Instax 化学显影边缘特征）──────
-    color = instcCornerWarm(color, uv, params.cornerWarmShift);
-
-    // ── Pass 14: Development Softness（显影柔化，Inst C=0.03）───────────────
-    color = instcDevelopmentSoftness(color, uv, params.developmentSoftness,
-                                      cameraTexture, s);
-
-    // ── Pass 15: Chemical Irregularity（化学不规则感，Inst C=0.015）─────────
-    color = instcChemicalIrregularity(color, uv, params.chemicalIrregularity, params.time);
-
-    // ── Pass 16: Skin Protection（肤色保护，Inst C 偏粉嫩）──────────────────
-    color = instcSkinProtect(color, params.skinHueProtect,
-                              params.skinSatProtect, params.skinLumaSoften,
-                              params.skinRedLimit);
+    // ── Pass 10-16: 高开销效果（移动到 CapturePipeline） ──────────────────
+    // 在预览中禁用以下效果以保证流畅性，它们将在成片时由 Dart/CPU 实现：
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW:     // - Fine Grain (颗粒)
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW:     // - Paper Texture (相纸纹理)
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW:     // - Edge Falloff (边缘曝光衰减)
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW:     // - Corner Warm Shift (边角偏暖)
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW:     // - Development Softness (显影柔化)
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW:     // - Chemical Irregularity (化学不规则感)
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW:     // - Skin Protection (肤色保护)
 
     // ── Pass 17: Center Gain（中心增亮，内置闪光灯特征，Inst C=0.02）────────
     color = instcCenterGain(color, uv, params.centerGain);

@@ -16,10 +16,10 @@
 //   4. 粗颗粒（grain=0.26, grainSize=1.4，比彩色胶片更粗）
 //   5. 银盐光晕（bloom=0.04，高光区域银粒扩散，冷白色）
 //   6. 强 Tone Curve（阴影深压+高光干净+中间调清晰）
-//   7. 显影柔化（developmentSoftness=0.025，D-76 显影液扩散）
+// SIMPLIFIED: //   7. 显影柔化（developmentSoftness=0.025，D-76 显影液扩散）
 //   8. 明显暗角（vignette=0.18，35mm 相机特征）
 //   9. 无色差（chromaticAberration=0.0，黑白胶片无色差）
-//  10. 无肤色保护（黑白模式，skinHueProtect=0.0）
+// SIMPLIFIED: //  10. 无肤色保护（黑白模式，skinHueProtect=0.0）
 //
 // GPU Pipeline 顺序（12 pass）：
 //   Camera Frame
@@ -30,8 +30,8 @@
 //   → Pass 4: Highlight Rolloff（胶片高光保护，0.18）
 //   → Pass 5: 银盐光晕（bloom=0.04，冷白银盐扩散）
 //   → Pass 6: 传感器非均匀性（中心增亮+边缘衰减）
-//   → Pass 7: 显影柔化（developmentSoftness=0.025）
-//   → Pass 8: 化学不规则感（chemicalIrregularity=0.018）
+// SIMPLIFIED: //   → Pass 7: 显影柔化（developmentSoftness=0.025）
+// SIMPLIFIED: //   → Pass 8: 化学不规则感（chemicalIrregularity=0.018）
 //   → Pass 9: 亮度噪声（luminanceNoise=0.04）
 //   → Pass 10: 粗颗粒（grain=0.26, grainSize=1.4，暗部增强）
 //   → Pass 11: 暗角（vignette=0.18）
@@ -57,7 +57,7 @@ struct BWClassicParams {
     float saturation;
     float temperatureShift;
     float tintShift;
-    float grainAmount;
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     float grainAmount;
     float noiseAmount;
     float vignetteAmount;
     float chromaticAberration;
@@ -78,14 +78,14 @@ struct BWClassicParams {
     float luminanceNoise;
     float chromaNoise;
     float highlightRolloff;
-    float paperTexture;
-    float edgeFalloff;
+// SIMPLIFIED:     float paperTexture;
+// SIMPLIFIED:     float edgeFalloff;
     float exposureVariation;
-    float cornerWarmShift;
+// SIMPLIFIED:     float cornerWarmShift;
     float centerGain;
-    float developmentSoftness;
-    float chemicalIrregularity;
-    float skinHueProtect;
+// SIMPLIFIED:     float developmentSoftness;
+// SIMPLIFIED:     float chemicalIrregularity;
+// SIMPLIFIED:     float skinHueProtect;
     float skinSatProtect;
     float skinLumaSoften;
     float skinRedLimit;
@@ -154,11 +154,11 @@ static float bwSilverBloom(float luma, float bloom) {
 }
 
 /// 传感器非均匀性（35mm 相机，中心增亮+边缘衰减）
-static float bwCenterEdge(float2 uv, float centerGain, float edgeFalloff) {
+// SIMPLIFIED: static float bwCenterEdge(float2 uv, float centerGain, float edgeFalloff) {
     float2 d = uv - 0.5;
     float dist = length(d);
     float center = 1.0 + centerGain * (1.0 - dist * 2.0);
-    float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
+// SIMPLIFIED:     float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
     return clamp(center * edge, 0.5, 1.5);
 }
 
@@ -211,8 +211,8 @@ fragment float4 bwClassicFragmentShader(
     color = float3(luma);
 
     // === Pass 6: 传感器非均匀性（中心增亮+边缘衰减）===
-    if (p.centerGain > 0.0 || p.edgeFalloff > 0.0) {
-        float factor = bwCenterEdge(uv, p.centerGain, p.edgeFalloff);
+// SIMPLIFIED:     if (p.centerGain > 0.0 || p.edgeFalloff > 0.0) {
+// SIMPLIFIED:         float factor = bwCenterEdge(uv, p.centerGain, p.edgeFalloff);
         luma = clamp(luma * factor, 0.0, 1.0);
     }
     if (p.exposureVariation > 0.0) {
@@ -221,8 +221,8 @@ fragment float4 bwClassicFragmentShader(
     }
     color = float3(luma);
 
-    // === Pass 7: 显影柔化（developmentSoftness=0.025，D-76 显影液扩散）===
-    if (p.developmentSoftness > 0.0) {
+// SIMPLIFIED:     // === Pass 7: 显影柔化（developmentSoftness=0.025，D-76 显影液扩散）===
+// SIMPLIFIED:     if (p.developmentSoftness > 0.0) {
         float2 ts = float2(1.0 / 1080.0, 1.0 / 1440.0);
         float s1 = cameraTexture.sample(s, uv + float2(ts.x, 0.0)).r;
         float s2 = cameraTexture.sample(s, uv - float2(ts.x, 0.0)).r;
@@ -234,14 +234,14 @@ fragment float4 bwClassicFragmentShader(
         float n3 = dot(float3(s3), float3(bwR, bwG, bwB));
         float n4 = dot(float3(s4), float3(bwR, bwG, bwB));
         float blurred = (n1 + n2 + n3 + n4) * 0.25;
-        luma = mix(luma, blurred, p.developmentSoftness);
+// SIMPLIFIED:         luma = mix(luma, blurred, p.developmentSoftness);
         color = float3(luma);
     }
 
-    // === Pass 8: 化学不规则感（chemicalIrregularity=0.018，胶片冲洗批次差异）===
-    if (p.chemicalIrregularity > 0.0) {
+// SIMPLIFIED:     // === Pass 8: 化学不规则感（chemicalIrregularity=0.018，胶片冲洗批次差异）===
+// SIMPLIFIED:     if (p.chemicalIrregularity > 0.0) {
         float2 blockUV = floor(uv * 24.0) / 24.0;
-        float irr = (bwRandom(blockUV, 0.55) - 0.5) * p.chemicalIrregularity;
+// SIMPLIFIED:         float irr = (bwRandom(blockUV, 0.55) - 0.5) * p.chemicalIrregularity;
         luma = clamp(luma + irr * 0.6, 0.0, 1.0);
         color = float3(luma);
     }
@@ -256,12 +256,12 @@ fragment float4 bwClassicFragmentShader(
     }
 
     // === Pass 10: 粗颗粒（grain=0.26, grainSize=1.4，暗部增强 2x）===
-    if (p.grainAmount > 0.0) {
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     if (p.grainAmount > 0.0) {
         float2 grainUV = uv / max(p.grainSize * 0.003, 0.001);
         float grain = bwRandom(grainUV, floor(p.time * 30.0) / 30.0) - 0.5;
         // Tri-X 颗粒在暗部更明显（暗部颗粒是亮部的 2 倍）
         float darkBoost = 1.0 + (1.0 - luma) * 1.0;
-        luma = clamp(luma + grain * p.grainAmount * 0.28 * darkBoost, 0.0, 1.0);
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:         luma = clamp(luma + grain * p.grainAmount * 0.28 * darkBoost, 0.0, 1.0);
         color = float3(luma);
     }
 

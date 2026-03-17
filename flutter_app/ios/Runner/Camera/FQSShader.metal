@@ -9,7 +9,7 @@
 // 设计原则（FQS 复刻三要素）：
 //   1. Fuji Green Tone  — G+5%, 中间调微绿
 //   2. Soft Contrast    — 胶片曲线压低阴影、抬高中间调
-//   3. Film Grain       — grainAmount=0.28, grainSize=1.8
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED: //   3. Film Grain       — grainAmount=0.28, grainSize=1.8
 //
 // ⚠️  FQSParams 字段顺序必须与 Swift CCDParams 完全一致（Metal 按内存偏移读取）
 // ⚠️  新增字段只能追加到末尾，不能插入中间
@@ -45,7 +45,7 @@ struct FQSParams {
     float saturation;          // 饱和度倍数（FQS=1.05）
     float temperatureShift;    // 色温偏移（FQS=-40）
     float tintShift;           // 色调偏移（FQS=-18，偏绿）
-    float grainAmount;         // 颗粒强度（FQS=0.28）
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     float grainAmount;         // 颗粒强度（FQS=0.28）
     float noiseAmount;         // 通用噪声量（通用字段，FQS 不使用）
     float vignetteAmount;      // 暗角强度（FQS=0.15）
     float chromaticAberration; // 色差强度（FQS=0.4）
@@ -68,13 +68,13 @@ struct FQSParams {
     float chromaNoise;         // 色度噪声（FQS=0.05）
     // ── 胶片/数码通用参数（Inst C / SQC / FXN-R / FQS / CPM35 共用）──────────
     float highlightRolloff;    // 胶片高光柔和滴落（FQS=0.12）
-    float edgeFalloff;         // 边缘衰减（FQS=0.040）
+// SIMPLIFIED:     float edgeFalloff;         // 边缘衰减（FQS=0.040）
     float exposureVariation;   // 曝光波动（FQS=0.022）
-    float cornerWarmShift;     // 角落偏移（FQS=-0.008，负值偏冷）
+// SIMPLIFIED:     float cornerWarmShift;     // 角落偏移（FQS=-0.008，负值偏冷）
     float centerGain;          // 中心增亮（FQS=0.018）
-    float developmentSoftness; // 显影柔化（FQS=0.032）
-    float chemicalIrregularity;// 化学不规则感（FQS=0.022）
-    float skinHueProtect;      // 肤色保护开关（FQS=1.0）
+// SIMPLIFIED:     float developmentSoftness; // 显影柔化（FQS=0.032）
+// SIMPLIFIED:     float chemicalIrregularity;// 化学不规则感（FQS=0.022）
+// SIMPLIFIED:     float skinHueProtect;      // 肤色保护开关（FQS=1.0）
     float skinSatProtect;      // 肤色饱和度保护（FQS=0.93）
     float skinLumaSoften;      // 肤色亮度柔化（FQS=0.035）
     float skinRedLimit;        // 肤色红限（FQS=1.01）
@@ -185,22 +185,22 @@ float3 fqsHighlightRolloff(float3 c, float rolloff) {
 
 /// 传感器非均匀性（中心增亮 + 边缘衰减 + 角落色温偏移）
 float3 fqsSensorVariation(float3 c, float2 uv,
-                           float centerGain, float edgeFalloff,
-                           float exposureVariation, float cornerWarmShift,
+// SIMPLIFIED:                            float centerGain, float edgeFalloff,
+// SIMPLIFIED:                            float exposureVariation, float cornerWarmShift,
                            float time) {
     float2 d = uv - 0.5;
     float r2 = dot(d, d);
     // 中心增亮
     float center = 1.0 + centerGain * (1.0 - r2 * 4.0);
     // 边缘衰减
-    float edge = 1.0 - edgeFalloff * r2 * 3.5;
+// SIMPLIFIED:     float edge = 1.0 - edgeFalloff * r2 * 3.5;
     // 曝光波动（低频噪声模拟）
     float variation = 1.0 + exposureVariation * (fract(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.3;
     c *= clamp(center * edge * variation, 0.6, 1.4);
     // 角落色温偏移（负值=偏冷青，正值=偏暖橙）
     float cornerMask = clamp(r2 * 4.0 - 0.5, 0.0, 1.0);
-    c.r = clamp(c.r + cornerWarmShift * cornerMask * 0.8, 0.0, 1.0);
-    c.b = clamp(c.b - cornerWarmShift * cornerMask * 1.0, 0.0, 1.0);
+// SIMPLIFIED:     c.r = clamp(c.r + cornerWarmShift * cornerMask * 0.8, 0.0, 1.0);
+// SIMPLIFIED:     c.b = clamp(c.b - cornerWarmShift * cornerMask * 1.0, 0.0, 1.0);
     return c;
 }
 
@@ -266,7 +266,7 @@ fragment float4 fqsFragmentShader(
     }
 
         // ── Pass 1.5: 显影柔化（胶片冲洗扩散，在曲线前应用）──────────────
-    color = fqsDevelopmentSoften(color, uv, params.developmentSoftness, cameraTexture, s);
+// SIMPLIFIED:     color = fqsDevelopmentSoften(color, uv, params.developmentSoftness, cameraTexture, s);
 
     // ── Pass 2: Tone Curve（胶片曲线，分通道应用保留色偏）──────────────
     color.r = fqsToneCurve(color.r);
@@ -292,7 +292,7 @@ fragment float4 fqsFragmentShader(
     color = fqsHighlightRolloff(color, params.highlightRolloff);
 
     // ── Pass 7: 肤色保护（防止冷绿 LUT 让肤色发青）────────────────
-    color = fqsSkinProtect(color, params.skinHueProtect, params.skinSatProtect,
+// SIMPLIFIED:     color = fqsSkinProtect(color, params.skinHueProtect, params.skinSatProtect,
                            params.skinLumaSoften, params.skinRedLimit);
 
     // ── Pass 8: Highlight Halation（高光发光，模拟胶片高光溢出）──────────────
@@ -316,7 +316,7 @@ fragment float4 fqsFragmentShader(
     }
 
     // ── Pass 10: 胶片颗粒（Film Grain）──────────────────────────────────────
-    if (params.grainAmount > 0.001) {
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     if (params.grainAmount > 0.001) {
         // 时间种子锁定到 24fps，避免颗粒闪烁过快
         float timeSeed = floor(params.time * 24.0) / 24.0;
 
@@ -342,7 +342,7 @@ fragment float4 fqsFragmentShader(
         float3 lumaGrain = float3(grain);
         float3 totalGrain = mix(lumaGrain, colorGrain, 0.4);  // 60% 亮度 + 40% 彩色
 
-        color = clamp(color + totalGrain * params.grainAmount * 0.22 * grainMask,
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:         color = clamp(color + totalGrain * params.grainAmount * 0.22 * grainMask,
                       0.0, 1.0);
     }
 
@@ -364,8 +364,8 @@ fragment float4 fqsFragmentShader(
 
       // ── Pass 11.5: 传感器非均匀性（中心增亮 + 边缘衰减 + 角落色温）────────────
     color = fqsSensorVariation(color, uv,
-                               params.centerGain, params.edgeFalloff,
-                               params.exposureVariation, params.cornerWarmShift,
+// SIMPLIFIED:                                params.centerGain, params.edgeFalloff,
+// SIMPLIFIED:                                params.exposureVariation, params.cornerWarmShift,
                                params.time);
 
     // ── Pass 12: 暗角（Vignette）───────────────────────────────────────────

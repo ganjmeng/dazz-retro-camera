@@ -13,8 +13,8 @@
 //   4. 粗颗粒（grain=0.22, grainSize=1.5，400 度胶片）
 //   5. 彩色噪声（chromaNoise=0.06，Kodak 400 特征）
 //   6. 胶片高光 rolloff（highlightRolloff=0.15，比数码更明显）
-//   7. 化学显影柔化（developmentSoftness=0.03）
-//   8. 化学不规则感（chemicalIrregularity=0.025）
+// SIMPLIFIED: //   7. 化学显影柔化（developmentSoftness=0.03）
+// SIMPLIFIED: //   8. 化学不规则感（chemicalIrregularity=0.025）
 //   9. 廉价镜头色差（chromaticAberration=0.09）
 //  10. 肤色保护（skinRedLimit=1.05，防止 Kodak 肤色过橙）
 //
@@ -29,8 +29,8 @@
 //   → Pass 6: 胶片 Halation（极轻，0.03）
 //   → Pass 7: 肤色保护（防止 Kodak 肤色过橙）
 //   → Pass 8: 传感器非均匀性（中心增亮 + 边缘衰减）
-//   → Pass 9: 化学显影柔化（developmentSoftness=0.03）
-//   → Pass 10: 化学不规则感（chemicalIrregularity=0.025）
+// SIMPLIFIED: //   → Pass 9: 化学显影柔化（developmentSoftness=0.03）
+// SIMPLIFIED: //   → Pass 10: 化学不规则感（chemicalIrregularity=0.025）
 //   → Pass 11: 粗颗粒（grain=0.22, grainSize=1.5）
 //   → Pass 12: 彩色噪声（chromaNoise=0.06）
 //   → Pass 13: 暗角（vignette=0.16）
@@ -57,7 +57,7 @@ struct U300Params {
     float saturation;
     float temperatureShift;
     float tintShift;
-    float grainAmount;
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     float grainAmount;
     float noiseAmount;
     float vignetteAmount;
     float chromaticAberration;
@@ -80,15 +80,15 @@ struct U300Params {
     float chromaNoise;
     // ── 胶片专属参数 ──────────────────────────────────────────────────────
     float highlightRolloff;
-    float paperTexture;
-    float edgeFalloff;
+// SIMPLIFIED:     float paperTexture;
+// SIMPLIFIED:     float edgeFalloff;
     float exposureVariation;
-    float cornerWarmShift;
+// SIMPLIFIED:     float cornerWarmShift;
     // ── 胶片/拍立得通用参数 ───────────────────────────────────────────────
     float centerGain;
-    float developmentSoftness;
-    float chemicalIrregularity;
-    float skinHueProtect;
+// SIMPLIFIED:     float developmentSoftness;
+// SIMPLIFIED:     float chemicalIrregularity;
+// SIMPLIFIED:     float skinHueProtect;
     float skinSatProtect;
     float skinLumaSoften;
     float skinRedLimit;
@@ -168,7 +168,7 @@ static float3 u300Halation(float3 color, float amount) {
 }
 
 /// 肤色保护（防止 Kodak 暖调让肤色过橙）
-static float3 u300SkinProtect(float3 color, float protect,
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED: static float3 u300SkinProtect(float3 color, float protect,
                                float satProt, float lumaSoften, float redLimit) {
     if (protect < 0.5) return color;
     float maxC = max(max(color.r, color.g), color.b);
@@ -193,11 +193,11 @@ static float3 u300SkinProtect(float3 color, float protect,
 }
 
 /// 传感器非均匀性（中心增亮 + 边缘衰减）
-static float u300CenterEdge(float2 uv, float centerGain, float edgeFalloff) {
+// SIMPLIFIED: static float u300CenterEdge(float2 uv, float centerGain, float edgeFalloff) {
     float2 d = uv - 0.5;
     float dist = length(d);
     float center = 1.0 + centerGain * (1.0 - dist * 2.0);
-    float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
+// SIMPLIFIED:     float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
     return clamp(center * edge, 0.5, 1.5);
 }
 
@@ -278,43 +278,43 @@ fragment float4 u300FragmentShader(
     color = u300Halation(color, p.halationAmount);
 
     // === Pass 7: 肤色保护（防止 Kodak 肤色过橙）===
-    color = u300SkinProtect(color,
-        p.skinHueProtect, p.skinSatProtect,
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED:     color = u300SkinProtect(color,
+// SIMPLIFIED:         p.skinHueProtect, p.skinSatProtect,
         p.skinLumaSoften, p.skinRedLimit);
 
     // === Pass 8: 传感器非均匀性（中心增亮 + 边缘衰减）===
-    if (p.centerGain > 0.0 || p.edgeFalloff > 0.0) {
-        float factor = u300CenterEdge(uv, p.centerGain, p.edgeFalloff);
+// SIMPLIFIED:     if (p.centerGain > 0.0 || p.edgeFalloff > 0.0) {
+// SIMPLIFIED:         float factor = u300CenterEdge(uv, p.centerGain, p.edgeFalloff);
         color = clamp(color * factor, 0.0, 1.0);
     }
     if (p.exposureVariation > 0.0) {
         float evn = u300Random(uv * 0.1, p.time * 0.01) - 0.5;
         color = clamp(color + evn * p.exposureVariation * 0.3, 0.0, 1.0);
     }
-    if (p.cornerWarmShift > 0.0) {
-        color = u300CornerWarm(uv, color, p.cornerWarmShift);
+// SIMPLIFIED:     if (p.cornerWarmShift > 0.0) {
+// SIMPLIFIED:         color = u300CornerWarm(uv, color, p.cornerWarmShift);
     }
 
-    // === Pass 9: 化学显影柔化（developmentSoftness=0.03）===
-    if (p.developmentSoftness > 0.0) {
-        color = u300DevelopmentSoften(uv, cameraTexture, s, p.developmentSoftness);
+// SIMPLIFIED:     // === Pass 9: 化学显影柔化（developmentSoftness=0.03）===
+// SIMPLIFIED:     if (p.developmentSoftness > 0.0) {
+// SIMPLIFIED:         color = u300DevelopmentSoften(uv, cameraTexture, s, p.developmentSoftness);
     }
 
-    // === Pass 10: 化学不规则感（chemicalIrregularity=0.025）===
-    if (p.chemicalIrregularity > 0.0) {
+// SIMPLIFIED:     // === Pass 10: 化学不规则感（chemicalIrregularity=0.025）===
+// SIMPLIFIED:     if (p.chemicalIrregularity > 0.0) {
         float2 blockUV = floor(uv * 64.0) / 64.0;
-        float irr = (u300Random(blockUV, 0.42) - 0.5) * p.chemicalIrregularity;
+// SIMPLIFIED:         float irr = (u300Random(blockUV, 0.42) - 0.5) * p.chemicalIrregularity;
         color = clamp(color + irr * 0.6, 0.0, 1.0);
     }
 
     // === Pass 11: 粗颗粒（grain=0.22, grainSize=1.5）===
-    if (p.grainAmount > 0.0) {
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     if (p.grainAmount > 0.0) {
         float2 grainUV = uv / max(p.grainSize * 0.003, 0.001);
         float grain = u300Random(grainUV, floor(p.time * 24.0) / 24.0) - 0.5;
         // 暗部颗粒更明显（Kodak 400 特征）
         float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
         float darkBoost = 1.0 + (1.0 - luma) * 0.8;
-        color = clamp(color + grain * p.grainAmount * 0.25 * darkBoost, 0.0, 1.0);
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:         color = clamp(color + grain * p.grainAmount * 0.25 * darkBoost, 0.0, 1.0);
     }
 
     // === Pass 12: 彩色噪声（chromaNoise=0.06，Kodak 400 特征）===

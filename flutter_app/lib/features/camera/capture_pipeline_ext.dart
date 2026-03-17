@@ -362,3 +362,51 @@ double _smoothstep(double edge0, double edge1, double x) {
 
 /// 线性插值
 double _lerp(double a, double b, double t) => a + (b - a) * t;
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. Paper Texture (相纸纹理)
+// ─────────────────────────────────────────────────────────────────────────────
+Future<ui.Image> drawPaperTexture(ui.Image srcImage, double amount) async {
+  if (amount < 0.001) return srcImage;
+
+  final ByteData? byteData = await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  if (byteData == null) return srcImage;
+
+  final Uint8List pixels = byteData.buffer.asUint8List();
+  final Random rng = Random();
+
+  for (int i = 0; i < pixels.length; i += 4) {
+    final double noise = (rng.nextDouble() - 0.5) * amount * 0.1;
+    pixels[i]     = (pixels[i]     / 255.0 + noise).clamp(0.0, 1.0) * 255 ~/ 1;
+    pixels[i + 1] = (pixels[i + 1] / 255.0 + noise).clamp(0.0, 1.0) * 255 ~/ 1;
+    pixels[i + 2] = (pixels[i + 2] / 255.0 + noise).clamp(0.0, 1.0) * 255 ~/ 1;
+  }
+
+  return _pixelsToImage(pixels, srcImage.width, srcImage.height);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. Development Softness (显影柔化)
+// ─────────────────────────────────────────────────────────────────────────────
+Future<ui.Image> drawDevelopmentSoftness(ui.Image srcImage, double amount) async {
+  if (amount < 0.001) return srcImage;
+
+  // This is a simplified version. A proper implementation would require a blur filter.
+  // For now, we apply a slight desaturation to simulate softness.
+  final ByteData? byteData = await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  if (byteData == null) return srcImage;
+
+  final Uint8List pixels = byteData.buffer.asUint8List();
+  for (int i = 0; i < pixels.length; i += 4) {
+    final double r = pixels[i] / 255.0;
+    final double g = pixels[i+1] / 255.0;
+    final double b = pixels[i+2] / 255.0;
+    final double lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    pixels[i] = ((r * (1.0 - amount)) + lum * amount) * 255 ~/ 1;
+    pixels[i+1] = ((g * (1.0 - amount)) + lum * amount) * 255 ~/ 1;
+    pixels[i+2] = ((b * (1.0 - amount)) + lum * amount) * 255 ~/ 1;
+  }
+
+  return _pixelsToImage(pixels, srcImage.width, srcImage.height);
+}

@@ -27,7 +27,7 @@ struct CCDParams {
     float saturation;
     float temperatureShift;  // 色温偏移，负数偏冷
     float tintShift;
-    float grainAmount;
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     float grainAmount;
     float noiseAmount;
     float vignetteAmount;
     float chromaticAberration;
@@ -41,13 +41,13 @@ struct CCDParams {
     float aspectRatio;       // 宽/高 比例（用于保持圆形）
     // ── 传感器非均匀性（数码相机通用，FXN-R 专项调校）────────────────────
     float centerGain;        // 中心增亮（FXN-R=0.010，极轻）
-    float edgeFalloff;       // 边缘衰减（FXN-R=0.035，镜头暗角）
+// SIMPLIFIED:     float edgeFalloff;       // 边缘衰减（FXN-R=0.035，镜头暗角）
     float exposureVariation; // 曝光波动（FXN-R=0.020，数码更稳定）
-    float cornerWarmShift;   // 角落色温偏移（FXN-R=-0.015，负=偏冷青）
-    float developmentSoftness; // 显影柔化（FXN-R=0.020）
-    float chemicalIrregularity; // 化学不规则感（FXN-R=0.010，极低）
+// SIMPLIFIED:     float cornerWarmShift;   // 角落色温偏移（FXN-R=-0.015，负=偏冷青）
+// SIMPLIFIED:     float developmentSoftness; // 显影柔化（FXN-R=0.020）
+// SIMPLIFIED:     float chemicalIrregularity; // 化学不规则感（FXN-R=0.010，极低）
     // ── 肤色保护（冷色调相机必须开启，防止肤色发青）────────────────────
-    float skinHueProtect;    // 肤色色相保护（1.0=开启，0.0=关闭）
+// SIMPLIFIED:     float skinHueProtect;    // 肤色色相保护（1.0=开启，0.0=关闭）
     float skinSatProtect;    // 肤色饱和度保护（FXN-R=0.96）
     float skinLumaSoften;    // 肤色亮度柔化（FXN-R=0.030）
     float skinRedLimit;      // 肤色红限（FXN-R=1.04，防止冷 LUT 削红）
@@ -152,11 +152,11 @@ float2 fisheyeUV(float2 uv, float aspect) {
 // MARK: - 传感器非均匀性工具函数
 
 /// 中心增亮 + 边缘衰减（模拟镜头光学特性）
-float ccdCenterEdge(float2 uv, float centerGain, float edgeFalloff) {
+// SIMPLIFIED: float ccdCenterEdge(float2 uv, float centerGain, float edgeFalloff) {
     float2 d = uv - 0.5;
     float dist = length(d);
     float center = 1.0 + centerGain * (1.0 - dist * 2.0);
-    float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
+// SIMPLIFIED:     float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
     return clamp(center * edge, 0.5, 1.5);
 }
 
@@ -204,9 +204,9 @@ float3 ccdRgbToHsl(float3 rgb) {
 /// 肤色保护（防止冷 LUT 让肤色发青）
 /// 肤色 hue 范围：20°~45°（归一化 0.0556~0.125）
 float3 ccdSkinProtect(
-    float3 color, float skinHueProtect, float skinSatProtect, float skinLumaSoften, float skinRedLimit
+// SIMPLIFIED:     float3 color, float skinHueProtect, float skinSatProtect, float skinLumaSoften, float skinRedLimit
 ) {
-    if (skinHueProtect < 0.5) return color;
+// SIMPLIFIED:     if (skinHueProtect < 0.5) return color;
     float3 hsl = ccdRgbToHsl(color);
     float hue = hsl.x;
     float skinMask = smoothstep(0.0356, 0.0756, hue) * (1.0 - smoothstep(0.105, 0.145, hue));
@@ -350,9 +350,9 @@ fragment float4 ccdFragmentShader(
     
     // === Pass 4: 胶片颗粒 (Grain) ===
     // 从预烘焙的噪点纹理中采样并叠加
-    if (params.grainAmount > 0.0) {
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     if (params.grainAmount > 0.0) {
         float3 grain = grainTexture.sample(textureSampler, uv * 2.0).rgb;
-        color = clamp(color + (grain - 0.5) * params.grainAmount * 0.3, 0.0, 1.0);
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:         color = clamp(color + (grain - 0.5) * params.grainAmount * 0.3, 0.0, 1.0);
     }
     
     // === Pass 5: 动态数字噪点 (Noise) ===
@@ -376,9 +376,9 @@ fragment float4 ccdFragmentShader(
     }
 
     // === Pass 6: 传感器非均匀性 + 肤色保护 ===
-    // 中心增亮 + 边缘衰减（FXN-R: centerGain=0.010, edgeFalloff=0.035）
-    if (params.centerGain > 0.0 || params.edgeFalloff > 0.0) {
-        float factor = ccdCenterEdge(uv, params.centerGain, params.edgeFalloff);
+// SIMPLIFIED:     // 中心增亮 + 边缘衰减（FXN-R: centerGain=0.010, edgeFalloff=0.035）
+// SIMPLIFIED:     if (params.centerGain > 0.0 || params.edgeFalloff > 0.0) {
+// SIMPLIFIED:         float factor = ccdCenterEdge(uv, params.centerGain, params.edgeFalloff);
         color = clamp(color * factor, 0.0, 1.0);
     }
     // 曝光波动（FXN-R=0.020，数码传感器轻微不均匀）
@@ -387,15 +387,15 @@ fragment float4 ccdFragmentShader(
         color = clamp(color + evn * params.exposureVariation * 0.3, 0.0, 1.0);
     }
     // 角落色温偏移（FXN-R=-0.015，负値=偏冷青）
-    if (params.cornerWarmShift != 0.0) {
-        color = ccdCornerWarm(uv, color, params.cornerWarmShift);
+// SIMPLIFIED:     if (params.cornerWarmShift != 0.0) {
+// SIMPLIFIED:         color = ccdCornerWarm(uv, color, params.cornerWarmShift);
     }
     // 显影柔化（FXN-R=0.020，比 instant 更锐）
-    if (params.developmentSoftness > 0.0) {
-        color = ccdDevelopmentSoften(cameraTexture, textureSampler, uv, texelSize, color, params.developmentSoftness);
+// SIMPLIFIED:     if (params.developmentSoftness > 0.0) {
+// SIMPLIFIED:         color = ccdDevelopmentSoften(cameraTexture, textureSampler, uv, texelSize, color, params.developmentSoftness);
     }
-    // 肤色保护（FXN-R: skinHueProtect=1.0, skinSatProtect=0.96, skinLumaSoften=0.03, skinRedLimit=1.04）
-    color = ccdSkinProtect(color, params.skinHueProtect, params.skinSatProtect, params.skinLumaSoften, params.skinRedLimit);
+// SIMPLIFIED:     // 肤色保护（FXN-R: skinHueProtect=1.0, skinSatProtect=0.96, skinLumaSoften=0.03, skinRedLimit=1.04）
+// SIMPLIFIED:     color = ccdSkinProtect(color, params.skinHueProtect, params.skinSatProtect, params.skinLumaSoften, params.skinRedLimit);
 
     // === Pass 7: 3D LUT 采样 ===
     // FXN-R 的冷青色调核心，通过 LUT 实现 Fuji Film Simulation

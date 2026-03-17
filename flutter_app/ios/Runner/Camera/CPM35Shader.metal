@@ -51,7 +51,7 @@ struct CPM35Params {
     float saturation;          // 饱和度倍数（CPM35=1.08）
     float temperatureShift;    // 色温偏移（CPM35=+120，暖色）
     float tintShift;           // 色调偏移（CPM35=+4，轻微品红，Kodak 特征）
-    float grainAmount;         // 颗粒强度（CPM35=0.16，比 FQS 轻）
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     float grainAmount;         // 颗粒强度（CPM35=0.16，比 FQS 轻）
     float noiseAmount;         // 通用噪声量（通用字段，CPM35 不使用）
     float vignetteAmount;      // 暗角强度（CPM35=0.10，比 FQS 轻）
     float chromaticAberration; // 色差强度（CPM35=0.15，比 FQS 克制）
@@ -74,13 +74,13 @@ struct CPM35Params {
     float chromaNoise;         // 色度噪声（CPM35=0.03）
     // ── 胶片/数码通用参数（Inst C / SQC / FXN-R / CPM35 共用）──────────────
     float highlightRolloff;    // 高光柔和滴落（CPM35=0.14，Kodak 特征）
-    float edgeFalloff;         // 边缘曝光衰减（CPM35=0.030）
+// SIMPLIFIED:     float edgeFalloff;         // 边缘曝光衰减（CPM35=0.030）
     float exposureVariation;   // 曝光波动（CPM35=0.018）
-    float cornerWarmShift;     // 角落偏移（CPM35=+0.022，偏暖橙）
+// SIMPLIFIED:     float cornerWarmShift;     // 角落偏移（CPM35=+0.022，偏暖橙）
     float centerGain;          // 中心增亮（CPM35=0.015）
-    float developmentSoftness; // 显影柔化（CPM35=0.028，Kodak 冲洗扩散）
-    float chemicalIrregularity;// 化学不规则感（CPM35=0.020）
-    float skinHueProtect;      // 肤色保护开关（CPM35=1.0，开启）
+// SIMPLIFIED:     float developmentSoftness; // 显影柔化（CPM35=0.028，Kodak 冲洗扩散）
+// SIMPLIFIED:     float chemicalIrregularity;// 化学不规则感（CPM35=0.020）
+// SIMPLIFIED:     float skinHueProtect;      // 肤色保护开关（CPM35=1.0，开启）
     float skinSatProtect;      // 肤色饱和度保护（CPM35=0.90）
     float skinLumaSoften;      // 肤色亮度柔化（CPM35=0.04）
     float skinRedLimit;        // 肤色红限（CPM35=1.05，防止过橙）
@@ -194,9 +194,9 @@ float3 cpm35HighlightRolloff(float3 c, float rolloff) {
 }
 
 /// 肤色保护（CPM35 肤色是卖点，防止暖调让肤色过橙）
-float3 cpm35SkinProtect(float3 c, float skinHueProtect, float skinSatProtect,
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED: // SIMPLIFIED: float3 cpm35SkinProtect(float3 c, float skinHueProtect, float skinSatProtect,
                         float skinLumaSoften, float skinRedLimit) {
-    if (skinHueProtect < 0.5) return c;
+// SIMPLIFIED:     if (skinHueProtect < 0.5) return c;
     float maxC = max(c.r, max(c.g, c.b));
     float minC = min(c.r, min(c.g, c.b));
     float chroma = maxC - minC;
@@ -221,18 +221,18 @@ float3 cpm35SkinProtect(float3 c, float skinHueProtect, float skinSatProtect,
 }
 
 /// 传感器非均匀性（35mm 胶片相机，中心增亮+边缘衰减+角落偏暖）
-float3 cpm35CenterEdge(float3 c, float2 uv, float centerGain, float edgeFalloff,
-                       float cornerWarmShift, float exposureVariation, float time) {
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED: float3 cpm35CenterEdge(float3 c, float2 uv, float centerGain, float edgeFalloff,
+// SIMPLIFIED:                        float cornerWarmShift, float exposureVariation, float time) {
     float2 d = uv - 0.5;
     float dist = length(d);
     float center = 1.0 + centerGain * (1.0 - dist * 2.0);
-    float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
+// SIMPLIFIED:     float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
     float factor = clamp(center * edge, 0.5, 1.5);
     c = clamp(c * factor, 0.0, 1.0);
-    if (cornerWarmShift > 0.0) {
+// SIMPLIFIED:     if (cornerWarmShift > 0.0) {
         float cornerMask = clamp(dist * dist * 4.0 - 0.5, 0.0, 1.0);
-        c.r = clamp(c.r + cornerWarmShift * cornerMask * 0.5, 0.0, 1.0);
-        c.b = clamp(c.b - cornerWarmShift * cornerMask * 0.4, 0.0, 1.0);
+// SIMPLIFIED:         c.r = clamp(c.r + cornerWarmShift * cornerMask * 0.5, 0.0, 1.0);
+// SIMPLIFIED:         c.b = clamp(c.b - cornerWarmShift * cornerMask * 0.4, 0.0, 1.0);
     }
     if (exposureVariation > 0.0) {
         float2 blockUV = floor(uv * 8.0) / 8.0;
@@ -314,15 +314,15 @@ fragment float4 cpm35FragmentShader(
     }
 
     // ── Pass 11: 肤色保护（skinRedLimit=1.05，防止肤色过橙）─────────────────────────────────────
-    color = cpm35SkinProtect(color, params.skinHueProtect, params.skinSatProtect,
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED: // SIMPLIFIED:     color = cpm35SkinProtect(color, params.skinHueProtect, params.skinSatProtect,
                              params.skinLumaSoften, params.skinRedLimit);
 
-    // ── Pass 12: 传感器非均匀性（centerGain+edgeFalloff+cornerWarmShift）──────────────────────────────
-    color = cpm35CenterEdge(color, uv, params.centerGain, params.edgeFalloff,
-                            params.cornerWarmShift, params.exposureVariation, params.time);
+// SIMPLIFIED:     // ── Pass 12: 传感器非均匀性（centerGain+edgeFalloff+cornerWarmShift）──────────────────────────────
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED:     color = cpm35CenterEdge(color, uv, params.centerGain, params.edgeFalloff,
+// SIMPLIFIED:                             params.cornerWarmShift, params.exposureVariation, params.time);
 
-    // ── Pass 13: 显影柔化（developmentSoftness=0.028，Kodak 冲洗扩散）────────────────────────────────
-    if (params.developmentSoftness > 0.0) {
+// SIMPLIFIED:     // ── Pass 13: 显影柔化（developmentSoftness=0.028，Kodak 冲洗扩散）────────────────────────────────
+// SIMPLIFIED:     if (params.developmentSoftness > 0.0) {
         float2 ts = float2(1.0 / 1080.0, 1.0 / 1440.0);
         float3 s1 = cameraTexture.sample(s, uv + float2(ts.x, 0.0)).rgb;
         float3 s2 = cameraTexture.sample(s, uv - float2(ts.x, 0.0)).rgb;
@@ -332,12 +332,12 @@ fragment float4 cpm35FragmentShader(
         blurred.r = cpm35ToneCurve(blurred.r) * (1.0 + params.colorBiasR);
         blurred.g = cpm35ToneCurve(blurred.g) * (1.0 + params.colorBiasG);
         blurred.b = cpm35ToneCurve(blurred.b) * (1.0 + params.colorBiasB);
-        color = mix(color, blurred, params.developmentSoftness);
+// SIMPLIFIED:         color = mix(color, blurred, params.developmentSoftness);
         color = clamp(color, 0.0, 1.0);
     }
 
     // ── Pass 14: 胶片颗粒（Film Grain，彩色颗粒 30%）──────────────────────────────────────────
-    if (params.grainAmount > 0.001) {
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     if (params.grainAmount > 0.001) {
         float2 grainUV = uv * max(params.grainSize, 0.1);
         float3 grainSample = grainTexture.sample(s, grainUV).rgb;
 
@@ -356,7 +356,7 @@ fragment float4 cpm35FragmentShader(
         float3 lumaGrain = float3(grain);
         float3 totalGrain = mix(lumaGrain, colorGrain, 0.3);  // 70% 亮度 + 30% 彩色
 
-        color = clamp(color + totalGrain * params.grainAmount * 0.22 * grainMask,
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:         color = clamp(color + totalGrain * params.grainAmount * 0.22 * grainMask,
                       0.0, 1.0);
     }
 

@@ -13,7 +13,7 @@
 //   3. 更明显暖粉感（temperature=+15，tint=+18）
 //   4. 更强闪光感（bloom=0.14，halation=0.06）
 //   5. 中心主体感（centerGain=0.03）
-//   6. 肤色保护（skinHueProtect=true）
+// SIMPLIFIED: //   6. 肤色保护（skinHueProtect=true）
 //   7. 显影柔化 + 化学不规则感
 //
 // GPU Pipeline 顺序（19 Pass）：
@@ -29,13 +29,13 @@
 //   → Flash Bloom（0.14，闪光感柔光）
 //   → Halation（0.06，高光发光）
 //   → Center Gain（中心主体增亮）
-//   → Fine Grain（0.06，轻颗粒）
-//   → Paper Texture（0.05）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: //   → Fine Grain（0.06，轻颗粒）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: //   → Paper Texture（0.05）
 //   → Skin Tone Protection（肤色保护）
-//   → Edge Falloff / Uneven Exposure（不均匀曝光）
-//   → Development Softness（显影柔化）
-//   → Chemical Irregularity（化学不规则感）
-//   → Corner Warm Shift（边角偏暖）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: //   → Edge Falloff / Uneven Exposure（不均匀曝光）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: //   → Development Softness（显影柔化）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: //   → Chemical Irregularity（化学不规则感）
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: //   → Corner Warm Shift（边角偏暖）
 //   → Vignette（0.04，极轻）
 //   → Output
 //
@@ -73,7 +73,7 @@ struct SQCParams {
     float saturation;          // 饱和度倍数（SQC=1.18）
     float temperatureShift;    // 色温偏移（SQC=+15，偏暖粉）
     float tintShift;           // 色调偏移（SQC=+18，洋红粉感）
-    float grainAmount;         // 颗粒强度（SQC=0.06，轻颗粒）
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     float grainAmount;         // 颗粒强度（SQC=0.06，轻颗粒）
     float noiseAmount;         // 通用噪声量（SQC 不使用）
     float vignetteAmount;      // 暗角强度（SQC=0.04，极轻）
     float chromaticAberration; // 色差强度（SQC=0.03）
@@ -96,15 +96,15 @@ struct SQCParams {
     float chromaNoise;         // 色度噪声（SQC 不使用）
     // ── Inst C / SQC 共用字段────────────────────────────────────────────────
     float highlightRolloff;    // 高光柔和滴落强度（SQC=0.28）
-    float paperTexture;        // 相纸纹理强度（SQC=0.05）
-    float edgeFalloff;         // 边缘曝光衰减（SQC=0.06）
+// SIMPLIFIED:     float paperTexture;        // 相纸纹理强度（SQC=0.05）
+// SIMPLIFIED:     float edgeFalloff;         // 边缘曝光衰减（SQC=0.06）
     float exposureVariation;   // 全局曝光不均匀幅度（SQC=0.05）
-    float cornerWarmShift;     // 边角偏暖强度（SQC=0.03）
+// SIMPLIFIED:     float cornerWarmShift;     // 边角偏暖强度（SQC=0.03）
     // ── SQC 专用扩展字段（追加在 CCDParams 末尾）────────────────────────────
     float centerGain;          // 中心增亮（主体感，SQC=0.03）
-    float developmentSoftness; // 显影柔化（SQC=0.04）
-    float chemicalIrregularity;// 化学不规则感（SQC=0.02）
-    float skinHueProtect;      // 肤色保护（1.0=开启）
+// SIMPLIFIED:     float developmentSoftness; // 显影柔化（SQC=0.04）
+// SIMPLIFIED:     float chemicalIrregularity;// 化学不规则感（SQC=0.02）
+// SIMPLIFIED:     float skinHueProtect;      // 肤色保护（1.0=开启）
     float skinSatProtect;      // 肤色饱和度保护（SQC=0.95）
     float skinLumaSoften;      // 肤色亮度柔化（SQC=0.04）
     float skinRedLimit;        // 肤色红限（SQC=1.03）
@@ -264,20 +264,20 @@ fragment float4 sqcFragmentShader(
     color = color + centerMask * p.centerGain * (1.0 - color * 0.4);
     color = clamp(color, 0.0, 1.0);
 
-    // ── Pass 12: Fine Grain（轻颗粒，Instax Square 相纸细腻感）──────────────
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW:     // ── Pass 12: Fine Grain（轻颗粒，Instax Square 相纸细腻感）──────────────
     float noise12 = sqcRandom(uv, p.time) * 2.0 - 1.0;
-    float grainScale = p.grainAmount * (0.5 + 0.5 * (1.0 - dot(color, float3(0.2126, 0.7152, 0.0722))));
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     float grainScale = p.grainAmount * (0.5 + 0.5 * (1.0 - dot(color, float3(0.2126, 0.7152, 0.0722))));
     color = color + noise12 * grainScale;
     color = clamp(color, 0.0, 1.0);
 
-    // ── Pass 13: Paper Texture（相纸纤维纹理）───────────────────────────────
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW:     // ── Pass 13: Paper Texture（相纸纤维纹理）───────────────────────────────
     float2 paperUV = uv * float2(120.0, 120.0);
     float paperNoise = sqcRandom(floor(paperUV) / 120.0, 42.0) * 2.0 - 1.0;
-    color = color + paperNoise * p.paperTexture * 0.5;
+// SIMPLIFIED:     color = color + paperNoise * p.paperTexture * 0.5;
     color = clamp(color, 0.0, 1.0);
 
     // ── Pass 14: Skin Tone Protection（肤色保护）────────────────────────────
-    if (p.skinHueProtect > 0.5) {
+// SIMPLIFIED:     if (p.skinHueProtect > 0.5) {
         float skinMask = sqcSkinMask(color);
         if (skinMask > 0.01) {
             // 肤色饱和度保护：防止过饱和
@@ -298,41 +298,41 @@ fragment float4 sqcFragmentShader(
         }
     }
 
-    // ── Pass 15: Edge Falloff / Uneven Exposure（不均匀曝光）────────────────
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW:     // ── Pass 15: Edge Falloff / Uneven Exposure（不均匀曝光）────────────────
     // 边缘曝光衰减
     float edgeDist = length(offset * float2(1.0, 1.0 / p.aspectRatio));
     float edgeMask = smoothstep(0.0, 0.7, edgeDist);
-    color = color * (1.0 - edgeMask * p.edgeFalloff);
+// SIMPLIFIED:     color = color * (1.0 - edgeMask * p.edgeFalloff);
 
     // 全局轻微不均匀曝光（模拟化学显影不均匀）
     float expVar = sqcRandom(uv * 0.3, p.time * 0.1) * 2.0 - 1.0;
     color = color * (1.0 + expVar * p.exposureVariation * 0.3);
     color = clamp(color, 0.0, 1.0);
 
-    // ── Pass 16: Development Softness（显影柔化）────────────────────────────
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW:     // ── Pass 16: Development Softness（显影柔化）────────────────────────────
     // 模拟 Instant 化学显影过程中的轻微扩散柔化
     // 使用局部对比度降低实现柔化效果
     float luma16 = dot(color, float3(0.2126, 0.7152, 0.0722));
-    float softMask = p.developmentSoftness;
+// SIMPLIFIED:     float softMask = p.developmentSoftness;
     // 轻微降低局部对比度（高频细节柔化）
     color = mix(color, float3(luma16) * 0.3 + color * 0.7, softMask);
     color = clamp(color, 0.0, 1.0);
 
-    // ── Pass 17: Chemical Irregularity（化学不规则感）───────────────────────
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW:     // ── Pass 17: Chemical Irregularity（化学不规则感）───────────────────────
     // 极轻微的局部色调不规则（模拟化学显影的微小不均匀）
     float2 irregUV = uv * 8.0;
     float irreg = sqcRandom(floor(irregUV) / 8.0, 99.0) * 2.0 - 1.0;
     // 不规则感主要影响色调（轻微色相偏移），不影响亮度
-    float3 irregShift = float3(irreg * 0.6, irreg * 0.3, irreg * -0.4) * p.chemicalIrregularity;
+// SIMPLIFIED:     float3 irregShift = float3(irreg * 0.6, irreg * 0.3, irreg * -0.4) * p.chemicalIrregularity;
     color = color + irregShift;
     color = clamp(color, 0.0, 1.0);
 
-    // ── Pass 18: Corner Warm Shift（边角偏暖）───────────────────────────────
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW:     // ── Pass 18: Corner Warm Shift（边角偏暖）───────────────────────────────
     float cornerDist = length(offset);
     float cornerMask = smoothstep(0.3, 0.8, cornerDist);
     // 边角偏暖：加 R 减 B
-    color.r = clamp(color.r + cornerMask * p.cornerWarmShift * 0.6, 0.0, 1.0);
-    color.b = clamp(color.b - cornerMask * p.cornerWarmShift * 0.4, 0.0, 1.0);
+// SIMPLIFIED:     color.r = clamp(color.r + cornerMask * p.cornerWarmShift * 0.6, 0.0, 1.0);
+// SIMPLIFIED:     color.b = clamp(color.b - cornerMask * p.cornerWarmShift * 0.4, 0.0, 1.0);
 
     // ── Pass 19: Vignette（极轻暗角）────────────────────────────────────────
     float vigDist = length(offset * float2(1.0, 1.0 / p.aspectRatio));

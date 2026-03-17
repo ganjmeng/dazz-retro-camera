@@ -453,6 +453,14 @@ class CapturePipeline {
         if (renderParams.noiseAmount > 0.001) {
           finalImage = await drawNoise(finalImage, renderParams.noiseAmount);
         }
+        // 7. Paper Texture
+        if (renderParams.paperTexture > 0.001) {
+          finalImage = await drawPaperTexture(finalImage, renderParams.paperTexture);
+        }
+        // 8. Development Softness
+        if (renderParams.developmentSoftness > 0.001) {
+          finalImage = await drawDevelopmentSoftness(finalImage, renderParams.developmentSoftness);
+        }
         debugPrint("[CapturePipeline] Missing effects applied.");
       }
 

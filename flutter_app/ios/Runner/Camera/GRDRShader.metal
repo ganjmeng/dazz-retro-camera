@@ -53,7 +53,7 @@ struct GRDRParams {
     float saturation;          // 饱和度倍数（GRD-R=0.92）
     float temperatureShift;    // 色温偏移（GRD-R=-20）
     float tintShift;           // 色调偏移（GRD-R=-2）
-    float grainAmount;         // 颗粒强度（GRD-R=0.08）
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     float grainAmount;         // 颗粒强度（GRD-R=0.08）
     float noiseAmount;         // 通用噪声量（GRD-R 不使用）
     float vignetteAmount;      // 暗角强度（GRD-R=0.05）
     float chromaticAberration; // 色差强度（GRD-R=0.05）
@@ -76,15 +76,15 @@ struct GRDRParams {
     float chromaNoise;         // 色度噪声（GRD-R=0.00）
     // ── Inst C 扩展字段（GRD-R 使用 highlightRolloff）────────────────────────
     float highlightRolloff;    // 高光柔和滚落（GRD-R=0.10）
-    float paperTexture;        // 相纸纹理（GRD-R 不使用）
-    float edgeFalloff;         // 边缘衰减（GRD-R=0.015）
+// SIMPLIFIED:     float paperTexture;        // 相纸纹理（GRD-R 不使用）
+// SIMPLIFIED:     float edgeFalloff;         // 边缘衰减（GRD-R=0.015）
     float exposureVariation;   // 曝光波动（GRD-R=0.010）
-    float cornerWarmShift;     // 角落色温（GRD-R=-0.005）
+// SIMPLIFIED:     float cornerWarmShift;     // 角落色温（GRD-R=-0.005）
     // ── 拍立得/数码通用扩展字段（GRD-R 使用 centerGain + skin protect）────────
     float centerGain;          // 中心增亮（GRD-R=0.005）
-    float developmentSoftness; // 显影柔化（GRD-R=0.000）
-    float chemicalIrregularity;// 化学不规则（GRD-R=0.000）
-    float skinHueProtect;      // 肤色保护（GRD-R=1.0）
+// SIMPLIFIED:     float developmentSoftness; // 显影柔化（GRD-R=0.000）
+// SIMPLIFIED:     float chemicalIrregularity;// 化学不规则（GRD-R=0.000）
+// SIMPLIFIED:     float skinHueProtect;      // 肤色保护（GRD-R=1.0）
     float skinSatProtect;      // 肤色饱和度保护（GRD-R=0.95）
     float skinLumaSoften;      // 肤色亮度柔化（GRD-R=0.02）
     float skinRedLimit;        // 肤色红限（GRD-R=1.03）
@@ -170,7 +170,7 @@ float3 grdrHighlightRolloff(float3 color, float rolloff) {
 }
 
 /// 肤色保护（GRD-R 低饱和容易让脸发灰）
-float3 grdrSkinProtect(float3 color, float protect, float satProt,
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED: float3 grdrSkinProtect(float3 color, float protect, float satProt,
                        float lumaSoften, float redLimit) {
     if (protect < 0.5) return color;
     // RGB → HSL
@@ -196,11 +196,11 @@ float3 grdrSkinProtect(float3 color, float protect, float satProt,
 }
 
 /// 传感器非均匀性（中心增亮 + 边缘衰减）
-float grdrCenterEdge(float2 uv, float centerGain, float edgeFalloff) {
+// SIMPLIFIED: float grdrCenterEdge(float2 uv, float centerGain, float edgeFalloff) {
     float2 d = uv - 0.5;
     float dist = length(d);
     float center = 1.0 + centerGain * (1.0 - dist * 2.0);
-    float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
+// SIMPLIFIED:     float edge   = 1.0 - edgeFalloff * dist * dist * 4.0;
     return clamp(center * edge, 0.5, 1.5);
 }
 
@@ -299,30 +299,30 @@ fragment float4 grdrFragmentShader(
     color = grdrClarity(color, uv, cameraTexture, texSampler, texelSize, clarityNorm);
 
     // === Pass 8: 肤色保护（防止低饱和让脸发灰）===
-    color = grdrSkinProtect(color,
-        params.skinHueProtect, params.skinSatProtect,
+// PREVIEW_SIMPLIFIED: // SIMPLIFIED_PREVIEW: // SIMPLIFIED:     color = grdrSkinProtect(color,
+// SIMPLIFIED:         params.skinHueProtect, params.skinSatProtect,
         params.skinLumaSoften, params.skinRedLimit);
 
     // === Pass 9: 传感器非均匀性（极低，数码相机）===
-    if (params.centerGain > 0.0 || params.edgeFalloff > 0.0) {
-        float factor = grdrCenterEdge(uv, params.centerGain, params.edgeFalloff);
+// SIMPLIFIED:     if (params.centerGain > 0.0 || params.edgeFalloff > 0.0) {
+// SIMPLIFIED:         float factor = grdrCenterEdge(uv, params.centerGain, params.edgeFalloff);
         color = clamp(color * factor, 0.0, 1.0);
     }
     if (params.exposureVariation > 0.0) {
         float evn = grdrRandom(uv * 0.1, params.time * 0.01) - 0.5;
         color = clamp(color + evn * params.exposureVariation * 0.3, 0.0, 1.0);
     }
-    if (params.cornerWarmShift != 0.0) {
-        color = grdrCornerWarm(uv, color, params.cornerWarmShift);
+// SIMPLIFIED:     if (params.cornerWarmShift != 0.0) {
+// SIMPLIFIED:         color = grdrCornerWarm(uv, color, params.cornerWarmShift);
     }
 
     // === Pass 10: 传感器噪声（luminanceNoise=0.06，无色度噪声）===
     // GRD-R 的颗粒更像传感器噪声，不是胶片颗粒
     // 亮度噪声：细腻、均匀
-    if (params.grainAmount > 0.0) {
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:     if (params.grainAmount > 0.0) {
         float grain = grdrRandom(uv / max(params.grainSize, 0.1),
                                  floor(params.time * 24.0) / 24.0) - 0.5;
-        color = clamp(color + grain * params.grainAmount * 0.2, 0.0, 1.0);
+// SIMPLIFIED_PREVIEW: // SIMPLIFIED:         color = clamp(color + grain * params.grainAmount * 0.2, 0.0, 1.0);
     }
     if (params.luminanceNoise > 0.0) {
         float ln = grdrRandom(uv, params.time + 1.7) - 0.5;
