@@ -17,6 +17,16 @@
 		AA000002 /* CameraSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000012 /* CameraSessionManager.swift */; };
 		AA000003 /* MetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000013 /* MetalRenderer.swift */; };
 		AA000004 /* CameraShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA000014 /* CameraShaders.metal */; };
+		AA000005 /* CaptureProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000015 /* CaptureProcessor.swift */; };
+		AA000006 /* BWClassicShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA000026 /* BWClassicShader.metal */; };
+		AA000007 /* CCDRShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA000027 /* CCDRShader.metal */; };
+		AA000008 /* CPM35Shader.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA000028 /* CPM35Shader.metal */; };
+		AA000009 /* CapturePipeline.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA000029 /* CapturePipeline.metal */; };
+		AA000010 /* FQSShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA000030 /* FQSShader.metal */; };
+		AA000011 /* GRDRShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA000031 /* GRDRShader.metal */; };
+		AA000012 /* InstCShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA000032 /* InstCShader.metal */; };
+		AA000013 /* SQCShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA000033 /* SQCShader.metal */; };
+		AA000014 /* U300Shader.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA000034 /* U300Shader.metal */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -50,6 +60,16 @@
 		AA000012 /* CameraSessionManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CameraSessionManager.swift; sourceTree = "<group>"; };
 		AA000013 /* MetalRenderer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MetalRenderer.swift; sourceTree = "<group>"; };
 		AA000014 /* CameraShaders.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = CameraShaders.metal; sourceTree = "<group>"; };
+		AA000015 /* CaptureProcessor.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CaptureProcessor.swift; sourceTree = "<group>"; };
+		AA000026 /* BWClassicShader.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = BWClassicShader.metal; sourceTree = "<group>"; };
+		AA000027 /* CCDRShader.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = CCDRShader.metal; sourceTree = "<group>"; };
+		AA000028 /* CPM35Shader.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = CPM35Shader.metal; sourceTree = "<group>"; };
+		AA000029 /* CapturePipeline.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = CapturePipeline.metal; sourceTree = "<group>"; };
+		AA000030 /* FQSShader.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = FQSShader.metal; sourceTree = "<group>"; };
+		AA000031 /* GRDRShader.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = GRDRShader.metal; sourceTree = "<group>"; };
+		AA000032 /* InstCShader.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = InstCShader.metal; sourceTree = "<group>"; };
+		AA000033 /* SQCShader.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = SQCShader.metal; sourceTree = "<group>"; };
+		AA000034 /* U300Shader.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = U300Shader.metal; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -114,6 +134,7 @@
 				AA000012 /* CameraSessionManager.swift */,
 				AA000013 /* MetalRenderer.swift */,
 				AA000014 /* CameraShaders.metal */,
+				AA000015 /* CaptureProcessor.swift */,
 			);
 			path = Camera;
 			sourceTree = "<group>";
@@ -232,6 +253,7 @@
 				AA000002 /* CameraSessionManager.swift in Sources */,
 				AA000003 /* MetalRenderer.swift in Sources */,
 				AA000004 /* CameraShaders.metal in Sources */,
+				AA000005 /* CaptureProcessor.swift in Sources */,
 				1498FF2D1A3E1A2400A5A2A5 /* GeneratedPluginRegistrant.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
