@@ -68,7 +68,20 @@
     "skinRedLimit": 1.01,
     "luminanceNoise": 0.08,
     "chromaNoise": 0.05,
-    "toneCurveStrength": 1.0
+    "toneCurveStrength": 1.0,
+    "grainAmount": 0.0,
+    "vignetteAmount": 0.0,
+    "paperTexture": 0.0,
+    "noiseAmount": 0.0,
+    "irregUvScale": 2.5,
+    "irregFreq1": 1.0,
+    "irregFreq2": 1.7,
+    "irregWeight1": 0.6,
+    "irregWeight2": 0.4,
+    "paperUvScale1": 8.0,
+    "paperUvScale2": 32.0,
+    "paperWeight1": 0.7,
+    "paperWeight2": 0.3
   },
   "modules": {
     "filters": [
