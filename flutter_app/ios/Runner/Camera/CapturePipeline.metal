@@ -76,6 +76,8 @@ struct CaptureParams {
 
     // 成片专属参数
     float highlightRolloff;
+    float highlightRolloff2;   // 高光柔和滚落 2（FXN-R 专属）
+    float toneCurveStrength;   // Tone Curve 强度（FXN-R 专属）
     float paperTexture;
     float edgeFalloff;
     float exposureVariation;
@@ -288,14 +290,53 @@ static float3 cp_skinProtect(float3 color, float skinHueProtect, float skinSatPr
     return clamp(mix(color, result, skinMask), 0.0, 1.0);
 }
 
-/// Film Grain（胶片颗粒）
-static float3 cp_grain(float3 color, float2 uv, float amount, float grainSize, float time) {
-    if (amount < 0.001) return color;
-    float grain = cp_random(uv * grainSize, time) * 2.0 - 1.0;
-    return clamp(color + float3(grain * amount), 0.0, 1.0);
+/// Highlight Rolloff 2（FXN-R 专属，二次压缩）
+static float3 cp_highlightRolloff2(float3 color, float rolloff) {
+    if (rolloff < 0.001) return color;
+    float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float threshold = 1.0 - rolloff;
+    float highlight = clamp((luma - threshold) / rolloff, 0.0, 1.0);
+    float compress = 1.0 - highlight * highlight * 0.3;
+    return clamp(color * compress, 0.0, 1.0);
 }
 
-/// Vignette（暗角）
+/// Tone Curve（FXN-R 专属，分段线性插値）
+static float cp_toneCurve(float x) {
+    const float inp[10]  = {0.0, 0.0627, 0.1255, 0.2510, 0.3765, 0.5020, 0.6275, 0.7529, 0.8784, 1.0};
+    const float outV[10] = {0.0, 0.0392, 0.0941, 0.2235, 0.3608, 0.4863, 0.6588, 0.8235, 0.9333, 0.9804};
+    for (int i = 0; i < 9; i++) {
+        if (x <= inp[i + 1]) {
+            float t = (x - inp[i]) / (inp[i + 1] - inp[i]);
+            return mix(outV[i], outV[i + 1], t);
+        }
+    }
+    return outV[9];
+}
+
+/// Development Softness（显影柔化）
+static float3 cp_developmentSoften(float3 color, float2 uv, float softness,
+                                    texture2d<float, access::read> inTex, uint2 gid) {
+    if (softness < 0.001) return color;
+    uint w = inTex.get_width();
+    uint h = inTex.get_height();
+    float3 blurred =
+        inTex.read(uint2(clamp(int(gid.x) - 1, 0, int(w)-1), gid.y)).rgb * 0.25 +
+        inTex.read(uint2(clamp(int(gid.x) + 1, 0, int(w)-1), gid.y)).rgb * 0.25 +
+        inTex.read(uint2(gid.x, clamp(int(gid.y) - 1, 0, int(h)-1))).rgb * 0.25 +
+        inTex.read(uint2(gid.x, clamp(int(gid.y) + 1, 0, int(h)-1))).rgb * 0.25;
+    return mix(color, blurred, softness * 0.5);
+}
+
+/// Film Grain（胶片颗粒，与预览一致：fract(sin) 高频白噪声）
+static float3 cp_grain(float3 color, float2 uv, float amount, float grainSize, float time) {
+    if (amount < 0.001) return color;
+    // 与预览 Shader 一致：使用 fract(sin) 高频白噪声，帧率锁定到 24fps
+    float t24 = floor(time * 24.0) / 24.0;
+    float grain = fract(sin(dot(uv + t24, float2(12.9898, 78.233))) * 43758.5453) - 0.5;
+    return clamp(color + float3(grain * amount * 0.25), 0.0, 1.0);
+}
+
+/// Vignette（暗角，与预览一致：点积二次衰减）
 static float cp_vignette(float2 uv, float amount) {
     float2 d = uv - 0.5;
     return 1.0 - dot(d, d) * amount * 2.5;
@@ -352,33 +393,46 @@ kernel void capturePipeline(
     // ── Pass 9: Bloom（高光光晕）─────────────────────────────────────────
     color = cp_bloom(color, params.bloomAmount);
 
-    // ── Pass 10: Highlight Rolloff（成片专属）────────────────────────────
+    // ── Pass 10: Highlight Rolloff（成片专属）────────────────────────────────────────
     color = cp_highlightRolloff(color, params.highlightRolloff);
 
-    // ── Pass 11: Center Gain（成片专属）──────────────────────────────────
+    // ── Pass 10b: Highlight Rolloff 2（FXN-R 专属）────────────────────────────────
+    if (params.highlightRolloff2 > 0.001) {
+        color = cp_highlightRolloff2(color, params.highlightRolloff2);
+    }
+
+    // ── Pass 10c: Tone Curve（FXN-R 专属）──────────────────────────────────────────
+    if (params.toneCurveStrength > 0.001) {
+        float3 curved = float3(cp_toneCurve(color.r), cp_toneCurve(color.g), cp_toneCurve(color.b));
+        color = mix(color, curved, params.toneCurveStrength);
+    }
+
+    // ── Pass 11: Center Gain（成片专属）──────────────────────────────────────────
     color = cp_centerGain(color, uv, params.centerGain);
 
-    // ── Pass 12: Skin Protection（成片专属）──────────────────────────────
+    // ── Pass 12: Skin Protection（成片专属）──────────────────────────────────────
     color = cp_skinProtect(color, params.skinHueProtect, params.skinSatProtect,
                            params.skinLumaSoften, params.skinRedLimit);
 
-    // ── Pass 13: Edge Falloff + Corner Warm Shift（成片专属）─────────────
+    // ── Pass 13: Edge Falloff + Corner Warm Shift（成片专属）───────────────────────
     color *= cp_edgeFalloff(uv, params.edgeFalloff, params.time);
     color = cp_cornerWarm(color, uv, params.cornerWarmShift);
 
-    // ── Pass 14: Chemical Irregularity（成片专属）────────────────────────
+    // ── Pass 13b: Development Softness（显影柔化）────────────────────────────────────
+    if (params.developmentSoftness > 0.001) {
+        color = cp_developmentSoften(color, uv, params.developmentSoftness, inTexture, gid);
+    }
+
+    // ── Pass 14: Chemical Irregularity（成片专属）──────────────────────────────────
     color = cp_chemicalIrregularity(color, uv, params.chemicalIrregularity, params.time);
 
-    // ── Pass 15: Paper Texture（成片专属）────────────────────────────────
+    // ── Pass 15: Paper Texture（成片专属）──────────────────────────────────────────
     color = cp_paperTexture(color, uv, params.paperTexture, params.time);
 
-    // ── Pass 16: Film Grain（胶片颗粒）───────────────────────────────────
+    // ── Pass 16: Film Grain（胶片颗粒）─────────────────────────────────────────────
     color = cp_grain(color, uv, params.grainAmount, params.grainSize, params.time);
 
-    // ── Pass 17: Vignette（暗角）─────────────────────────────────────────
+    // ── Pass 17: Vignette（暗角）──────────────────────────────────────────────────
     if (params.vignetteAmount > 0.001) {
         color *= cp_vignette(uv, params.vignetteAmount);
     }
-
-    outTexture.write(float4(clamp(color, 0.0, 1.0), 1.0), gid);
-}

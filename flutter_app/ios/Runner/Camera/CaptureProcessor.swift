@@ -48,6 +48,8 @@ struct MetalCaptureParams {
 
     // 成片专属参数（预览中被 SIMPLIFIED 的效果）
     var highlightRolloff: Float = 0
+    var highlightRolloff2: Float = 0   // 高光柔和滚落 2（FXN-R 专属）
+    var toneCurveStrength: Float = 0   // Tone Curve 强度（FXN-R 专属）
     var paperTexture: Float = 0
     var edgeFalloff: Float = 0
     var exposureVariation: Float = 0
@@ -228,6 +230,8 @@ class CaptureProcessor {
 
         // 成片专属参数
         p.highlightRolloff   = getFloat(params, "highlightRolloff", 0)
+        p.highlightRolloff2  = getFloat(params, "highlightRolloff2", 0)
+        p.toneCurveStrength  = getFloat(params, "toneCurveStrength", 0)
         p.paperTexture       = getFloat(params, "paperTexture", 0)
         p.edgeFalloff        = getFloat(params, "edgeFalloff", 0)
         p.exposureVariation  = getFloat(params, "exposureVariation", 0)

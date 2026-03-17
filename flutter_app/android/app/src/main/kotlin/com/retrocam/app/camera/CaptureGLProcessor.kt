@@ -101,6 +101,8 @@ uniform float uTime;
 
 // ── 成片专属参数 ──────────────────────────────────────────────────────
 uniform float uHighlightRolloff;
+uniform float uHighlightRolloff2;   // 高光柔和滚落 2（FXN-R 专属）
+uniform float uToneCurveStrength;   // Tone Curve 强度（FXN-R 专属）
 uniform float uPaperTexture;
 uniform float uEdgeFalloff;
 uniform float uExposureVariation;
@@ -256,7 +258,7 @@ vec3 applyHalation(vec3 c, float amount) {
     return c;
 }
 
-// ── Pass 11: Highlight Rolloff ────────────────────────────────────────
+// ── Pass 11: Highlight Rolloff ────────────────────────────────────
 vec3 applyHighlightRolloff(vec3 c, float rolloff) {
     if (rolloff < 0.001) return c;
     float lum = luminance(c);
@@ -265,7 +267,41 @@ vec3 applyHighlightRolloff(vec3 c, float rolloff) {
     return clamp(c * compress + vec3(mask * rolloff * 0.05), 0.0, 1.0);
 }
 
-// ── Pass 12: Center Gain ──────────────────────────────────────────────
+// ── Pass 11b: Highlight Rolloff 2（FXN-R 专属，二次压缩）────────────────────
+vec3 applyCaptureHighlightRolloff2(vec3 c, float rolloff) {
+    if (rolloff < 0.001) return c;
+    float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    float threshold = 1.0 - rolloff;
+    float highlight = clamp((luma - threshold) / rolloff, 0.0, 1.0);
+    float compress = 1.0 - highlight * highlight * 0.3;
+    return clamp(c * compress, 0.0, 1.0);
+}
+
+// ── Pass 11c: Tone Curve（FXN-R 专属，分段线性插値）────────────────────
+float captureApplyToneCurve(float x) {
+    float[10] inp = float[10](0.0, 0.0627, 0.1255, 0.2510, 0.3765, 0.5020, 0.6275, 0.7529, 0.8784, 1.0);
+    float[10] outVals = float[10](0.0, 0.0392, 0.0941, 0.2235, 0.3608, 0.4863, 0.6588, 0.8235, 0.9333, 0.9804);
+    for (int i = 0; i < 9; i++) {
+        if (x <= inp[i + 1]) {
+            float t = (x - inp[i]) / (inp[i + 1] - inp[i]);
+            return mix(outVals[i], outVals[i + 1], t);
+        }
+    }
+    return outVals[9];
+}
+
+// ── Pass 14b: Development Softness（显影柔化）──────────────────────────
+vec3 applyDevelopmentSoften(vec3 c, vec2 uv, float softness) {
+    if (softness < 0.001) return c;
+    vec3 blurred =
+        texture(uInputTexture, uv + vec2(-uTexelSize.x, 0.0)).rgb * 0.25 +
+        texture(uInputTexture, uv + vec2( uTexelSize.x, 0.0)).rgb * 0.25 +
+        texture(uInputTexture, uv + vec2(0.0, -uTexelSize.y)).rgb * 0.25 +
+        texture(uInputTexture, uv + vec2(0.0,  uTexelSize.y)).rgb * 0.25;
+    return mix(c, blurred, softness * 0.5);
+}
+
+// ── Pass 12: Center Gain ────────────────────────────────────────────
 vec3 applyCenterGain(vec3 c, vec2 uv, float gain) {
     if (gain < 0.001) return c;
     float dist = length(uv - 0.5) * 2.0;
@@ -329,25 +365,28 @@ vec3 applyPaperTexture(vec3 c, vec2 uv, float amount, float time) {
     return clamp(c * paper * (1.0 + amount * 0.1) - vec3(amount * 0.02), 0.0, 1.0);
 }
 
-// ── Pass 17: Film Grain ───────────────────────────────────────────────
+// ── Pass 17: Film Grain（与预览一致：使用 random 函数）───────────────────────────
 vec3 applyGrain(vec3 c, vec2 uv, float amount, float time) {
     if (amount < 0.001) return c;
-    float grain = hash(uv + vec2(time * 0.1, time * 0.13)) * 2.0 - 1.0;
-    return clamp(c + vec3(grain * amount), 0.0, 1.0);
+    // 与预览 Shader 一致：使用 fract(sin) 高频白噪声，帧率锁定到 24fps
+    float grain = fract(sin(dot(uv + floor(time * 24.0) / 24.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+    return clamp(c + grain * amount * 0.25, 0.0, 1.0);
 }
 
-// ── Pass 18: Digital Noise ────────────────────────────────────────────
+// ── Pass 18: Digital Noise（与预览一致：明度+色度独立计算）────────────────────
 vec3 applyNoise(vec3 c, vec2 uv, float amount, float time) {
     if (amount < 0.001) return c;
-    float n = hash(uv * 3.7 + vec2(time * 0.17, time * 0.23)) * 2.0 - 1.0;
-    return clamp(c + vec3(n * amount * 0.5), 0.0, 1.0);
+    float lum   = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    float noise = fract(sin(dot(uv + time, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+    float dark  = 1.0 - lum;
+    return clamp(c + noise * amount * 0.2 * dark, 0.0, 1.0);
 }
 
-// ── Pass 19: Vignette ─────────────────────────────────────────────────
+// ── Pass 19: Vignette（与预览一致：点积二次衰减）─────────────────────────────
 vec3 applyVignette(vec3 c, vec2 uv, float amount) {
     if (amount < 0.001) return c;
-    float dist = length(uv - 0.5) * 1.414;
-    float vignette = 1.0 - smoothstep(0.5, 1.4, dist) * amount;
+    vec2 d = uv - 0.5;
+    float vignette = 1.0 - dot(d, d) * amount * 2.5;
     return clamp(c * vignette, 0.0, 1.0);
 }
 
@@ -390,6 +429,21 @@ void main() {
     // Pass 11: Highlight Rolloff（成片专属）
     color = applyHighlightRolloff(color, uHighlightRolloff);
 
+    // Pass 11b: Highlight Rolloff 2（FXN-R 专属）
+    if (uHighlightRolloff2 > 0.0) {
+        color = applyCaptureHighlightRolloff2(color, uHighlightRolloff2);
+    }
+
+    // Pass 11c: Tone Curve（FXN-R 专属）
+    if (uToneCurveStrength > 0.0) {
+        vec3 curved = vec3(
+            captureApplyToneCurve(color.r),
+            captureApplyToneCurve(color.g),
+            captureApplyToneCurve(color.b)
+        );
+        color = mix(color, curved, uToneCurveStrength);
+    }
+
     // Pass 12: Center Gain（成片专属）
     color = applyCenterGain(color, uv, uCenterGain);
 
@@ -399,6 +453,9 @@ void main() {
     // Pass 14: Edge Falloff + Corner Warm（成片专属）
     color = applyEdgeFalloff(color, uv, uEdgeFalloff);
     color = applyCornerWarm(color, uv, uCornerWarmShift);
+
+    // Pass 14b: Development Softness（显影柔化）
+    color = applyDevelopmentSoften(color, uv, uDevelopmentSoftness);
 
     // Pass 15: Chemical Irregularity（成片专属）
     color = applyChemicalIrregularity(color, uv, uChemicalIrregularity, uTime);
@@ -465,6 +522,8 @@ void main() {
     private var uHalationAmount = -1
     private var uTime = -1
     private var uHighlightRolloff = -1
+    private var uHighlightRolloff2 = -1
+    private var uToneCurveStrength = -1
     private var uPaperTexture = -1
     private var uEdgeFalloff = -1
     private var uExposureVariation = -1
@@ -711,6 +770,8 @@ void main() {
         uHalationAmount = loc("uHalationAmount")
         uTime = loc("uTime")
         uHighlightRolloff = loc("uHighlightRolloff")
+        uHighlightRolloff2 = loc("uHighlightRolloff2")
+        uToneCurveStrength = loc("uToneCurveStrength")
         uPaperTexture = loc("uPaperTexture")
         uEdgeFalloff = loc("uEdgeFalloff")
         uExposureVariation = loc("uExposureVariation")
@@ -754,6 +815,8 @@ void main() {
         GLES30.glUniform1f(uHalationAmount, f("halationAmount"))
         GLES30.glUniform1f(uTime, System.currentTimeMillis().toFloat() / 1000.0f)
         GLES30.glUniform1f(uHighlightRolloff, f("highlightRolloff"))
+        GLES30.glUniform1f(uHighlightRolloff2, f("highlightRolloff2"))
+        GLES30.glUniform1f(uToneCurveStrength, f("toneCurveStrength"))
         GLES30.glUniform1f(uPaperTexture, f("paperTexture"))
         GLES30.glUniform1f(uEdgeFalloff, f("edgeFalloff"))
         GLES30.glUniform1f(uExposureVariation, f("exposureVariation"))
