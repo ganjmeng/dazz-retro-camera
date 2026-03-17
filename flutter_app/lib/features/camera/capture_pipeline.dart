@@ -102,29 +102,30 @@ class CapturePipeline {
       var srcImage = frame.image;
 
       // ── 2c. 应用各相机专属的成片管线（在 Canvas 绘制前，仅作用于照片本身） ─────
+      bool gpuProcessed = false;
       if (useGpu && (Platform.isIOS || Platform.isAndroid)) {
         try {
           debugPrint("[CapturePipeline] Attempting to use native GPU pipeline...");
-          final result = await _channel.invokeMethod("processWithGpu", {
+          final gpuResult = await _channel.invokeMethod<Map>("processWithGpu", {
             "filePath": imagePath,
-            "params": renderParams?.toJson(), // 假设 PreviewRenderParams 有 toJson()
+            "params": renderParams?.toJson() ?? {},
           });
-          final newPath = result["filePath"];
-          final file = File(newPath);
-          final bytes = await file.readAsBytes();
-          final codec = await ui.instantiateImageCodec(bytes);
-          final frame = await codec.getNextFrame();
-          srcImage = frame.image;
-          debugPrint("[CapturePipeline] Native GPU pipeline successful.");
-          // GPU 处理已包含所有效果，直接跳到 Canvas 绘制阶段
-          // ...
+          if (gpuResult != null && gpuResult["filePath"] != null) {
+            final newPath = gpuResult["filePath"] as String;
+            final gpuBytes = await File(newPath).readAsBytes();
+            final gpuCodec = await ui.instantiateImageCodec(gpuBytes);
+            final gpuFrame = await gpuCodec.getNextFrame();
+            srcImage = gpuFrame.image;
+            gpuProcessed = true;
+            debugPrint("[CapturePipeline] Native GPU pipeline successful.");
+            // 尝试删除临时文件
+            try { File(newPath).deleteSync(); } catch (_) {}
+          }
         } catch (e) {
           debugPrint("[CapturePipeline] Native GPU pipeline failed, falling back to Dart: $e");
-          if (renderParams != null) { // Fallback to Dart
-            // ... (existing Dart pipeline logic)
-          }
         }
-      } else if (renderParams != null) {
+      }
+      if (!gpuProcessed && renderParams != null) {
         debugPrint('[CapturePipeline] Applying camera-specific pipeline for: ${camera.id}');
         // 1. 首先应用所有相机共用的基础 Tone Curve
         srcImage = await drawToneCurve(srcImage);

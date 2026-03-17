@@ -29,6 +29,9 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     // takePhoto 的回调（等待 AVCapturePhotoCaptureDelegate）
     private var pendingPhotoResult: FlutterResult?
 
+    // Metal Compute 成片处理器（懒加载，首次使用时初始化）
+    private lazy var captureProcessor: CaptureProcessor? = CaptureProcessor()
+
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(
             name: "com.retrocam.app/camera_control",
@@ -80,6 +83,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleUpdateLensParams(call: call, result: result)
         case "saveToGallery":
             handleSaveToGallery(call: call, result: result)
+        case "processWithGpu":
+            handleProcessWithGpu(call: call, result: result)
         case "dispose":
             handleDispose(result: result)
         default:
@@ -487,6 +492,42 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     }
 
     // ─────────────────────────────────────────────
+    // processWithGpu — Metal Compute 成片处理
+    // ─────────────────────────────────────────────
+    private func handleProcessWithGpu(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let filePath = args["filePath"] as? String,
+              let params = args["params"] as? [String: Any] else {
+            result(FlutterError(code: "INVALID_ARG", message: "filePath and params required", details: nil))
+            return
+        }
+
+        // 在后台线程执行 GPU 处理，避免阻塞主线程
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let processor = self.captureProcessor else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "METAL_UNAVAILABLE",
+                                       message: "Metal not available on this device",
+                                       details: nil))
+                }
+                return
+            }
+
+            let outputPath = processor.processImage(filePath: filePath, params: params)
+
+            DispatchQueue.main.async {
+                if let path = outputPath {
+                    result(["filePath": path])
+                } else {
+                    result(FlutterError(code: "PROCESS_FAILED",
+                                       message: "Metal Compute processing failed",
+                                       details: nil))
+                }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────
     // dispose
     // ─────────────────────────────────────────────
     private func handleDispose(result: @escaping FlutterResult) {
@@ -519,13 +560,23 @@ extension RetroCamPlugin: FlutterStreamHandler {
 
 // ── Metal Compute Pipeline ───────────────────────────────────────────
 
-private func handleProcessWithGpu(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    private lazy var captureProcessor = CaptureProcessor()
+
+    private func handleProcessWithGpu(call: FlutterMethodCall, result: @escaping FlutterResult) {
     guard let args = call.arguments as? [String: Any],
           let filePath = args["filePath"] as? String,
           let params = args["params"] as? [String: Any] else {
         result(FlutterError(code: "INVALID_ARG", message: "filePath and params required", details: nil))
         return
     }
+
+    if let processor = self.captureProcessor {
+        let newPath = processor.processImage(filePath: filePath, params: params)
+        result(["filePath": newPath])
+    } else {
+        result(FlutterError(code: "PROCESSOR_INIT_FAILED", message: "CaptureProcessor failed to initialize", details: nil))
+    }
+    return;
 
     // 1. 加载图像
     guard let image = UIImage(contentsOfFile: filePath),
