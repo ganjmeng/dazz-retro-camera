@@ -122,6 +122,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _showTransition = false;
   Timer? _transitionTimer;
 
+  // 启动加载页：App 进入拍摄页时显示 App Icon，初始化完成后淡出消失
+  bool _showSplash = true;
+
   // Options 弹框控制器
   late AnimationController _optionsAnim;
   late Animation<Offset> _optionsSlide;
@@ -168,20 +171,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       await ref.read(cameraAppProvider.notifier).initialize();
       if (!mounted) return;
 
-      // 检查相册权限（静默检查，不弹窗）
-      await _requestPhotoPermission();
+      // 最佳实践：相机 + 相册权限同时请求，减少用户等待次数
+      final results = await [Permission.camera, Permission.photos, Permission.storage].request();
+      if (!mounted) return;
 
-      // 检查相机权限（不弹窗）
-      final cameraGranted = await Permission.camera.isGranted;
+      final cameraGranted = results[Permission.camera]?.isGranted ?? false;
       if (!cameraGranted) {
-        // 未授权：取景框显示引导 UI
+        // 未授权：取景框显示引导 UI，同时隐藏加载页
         ref.read(cameraAppProvider.notifier).setNeedsPermission(true);
+        setState(() => _showSplash = false);
         return;
       }
 
-      // 已授权：直接初始化相机硬件
+      // 已授权：初始化相机硬件
       await _initCameraHardware();
       _loadLatestThumb();
+
+      // 初始化完成，淡出隐藏加载页
+      if (mounted) setState(() => _showSplash = false);
     });
   }
 
@@ -490,13 +497,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     });
   }
 
-  /// 静默请求相册权限（不弹窗，失败不阻塞流程）
-  Future<void> _requestPhotoPermission() async {
-    await [
-      Permission.photos,   // Android 13+ / iOS
-      Permission.storage,  // Android 12 及以下
-    ].request();
-  }
+  // 注：相册权限已在 initState 中与相机权限同时请求，无需单独方法
 
   /// App 启动时加载最新缩略图（不用于拍照后刷新）
   Future<void> _loadLatestThumb() async {
@@ -891,6 +892,65 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             child: _OptionsSheet(
               onClose: _closeOptions,
               onCameraTransition: _showCameraTransition,
+            ),
+          ),
+          // ── 启动加载页：App Icon + 初始化等待，完成后淡出消失 ──
+          AnimatedOpacity(
+            opacity: _showSplash ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOut,
+            child: IgnorePointer(
+              ignoring: !_showSplash,
+              child: Container(
+                color: Colors.black,
+                alignment: Alignment.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // App Icon 卡片
+                    AnimatedScale(
+                      scale: _showSplash ? 1.0 : 0.9,
+                      duration: const Duration(milliseconds: 500),
+                      curve: Curves.easeOutBack,
+                      child: Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1A1A1A),
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withAlpha(160),
+                              blurRadius: 32,
+                              offset: const Offset(0, 12),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: Image.asset(
+                            'assets/images/app_icon.png',
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Center(
+                              child: Icon(Icons.camera_alt, color: Colors.white, size: 44),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    // 进度指示器
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white.withAlpha(120),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],

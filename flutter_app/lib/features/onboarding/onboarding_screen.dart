@@ -17,79 +17,164 @@ class OnboardingScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 36),
-          child: Column(
-            children: [
-              const Spacer(flex: 3),
-              // ── Logo ──────────────────────────────────────────────────────
-              const Text(
-                'DAZZ',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 52,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 6,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // ── 全屏背景图 ──────────────────────────────────────────────────────
+          Image.asset(
+            'assets/images/onboarding_bg.jpg',
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+          ),
+          // ── 顶部渐变遮罩（让 Logo 文字清晰可读）────────────────────────────
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: MediaQuery.of(context).size.height * 0.55,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withAlpha(220),
+                    Colors.black.withAlpha(160),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.45, 1.0],
                 ),
               ),
-              const SizedBox(height: 16),
-              // ── 副标题 ────────────────────────────────────────────────────
-              Text(
-                s.onboardingTitle,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w400,
-                  letterSpacing: 0.5,
+            ),
+          ),
+          // ── 底部渐变遮罩（让按钮区域清晰可读）─────────────────────────────
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: MediaQuery.of(context).size.height * 0.45,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    Colors.black.withAlpha(230),
+                    Colors.black.withAlpha(160),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
                 ),
               ),
-              const Spacer(flex: 2),
-              // ── 说明文案 ──────────────────────────────────────────────────
-              Text(
-                s.onboardingDesc,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white38,
-                  fontSize: 14,
-                  height: 1.7,
-                ),
-              ),
-              const SizedBox(height: 40),
-              // ── 授权按钮 ──────────────────────────────────────────────────
-              SizedBox(
-                width: double.infinity,
-                child: GestureDetector(
-                  onTap: () => _requestPermissionAndProceed(context),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF9500),
-                      borderRadius: BorderRadius.circular(32),
+            ),
+          ),
+          // ── 内容层 ──────────────────────────────────────────────────────────
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 36),
+              child: Column(
+                children: [
+                  const Spacer(flex: 3),
+                  // ── Logo ───────────────────────────────────────────────────
+                  const Text(
+                    'DAZZ',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 56,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 8,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black54,
+                          blurRadius: 16,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      s.onboardingBtn,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.5,
+                  ),
+                  const SizedBox(height: 14),
+                  // ── 副标题 ─────────────────────────────────────────────────
+                  Text(
+                    s.onboardingTitle,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 0.8,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black45,
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(flex: 4),
+                  // ── 说明文案 ───────────────────────────────────────────────
+                  Text(
+                    s.onboardingDesc,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 14,
+                      height: 1.75,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black87,
+                          blurRadius: 12,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 36),
+                  // ── 授权按钮 ───────────────────────────────────────────────
+                  SizedBox(
+                    width: double.infinity,
+                    child: GestureDetector(
+                      onTap: () => _requestPermissionAndProceed(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 17),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF9500),
+                          borderRadius: BorderRadius.circular(32),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFF9500).withAlpha(100),
+                              blurRadius: 20,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          s.onboardingBtn,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                  const Spacer(flex: 1),
+                ],
               ),
-              const Spacer(flex: 1),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
   Future<void> _requestPermissionAndProceed(BuildContext context) async {
-    final status = await Permission.camera.request();
+    // 最佳实践：相机 + 相册权限同时请求，减少用户等待次数
+    await [
+      Permission.camera,
+      Permission.photos,   // Android 13+ / iOS
+      Permission.storage,  // Android 12 及以下
+    ].request();
     if (!context.mounted) return;
 
     // 无论授权结果如何，标记 onboarding 已完成，进入相机页
