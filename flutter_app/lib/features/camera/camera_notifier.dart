@@ -752,36 +752,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     final next = (state.sharpenLevel + 1) % 3;
     state = state.copyWith(sharpenLevel: next);
     AppPrefsService.instance.setSharpenLevel(next);
-    // 0=低(0.0), 1=中(0.5), 2=高(1.0)
-    const levels = [0.0, 0.5, 1.0];
-    final svc = _ref.read(cameraServiceProvider.notifier);
-
-    // 1. 切换原生分辨率（此操作会重建 CameraGLRenderer，清空所有 shader 参数）
-    await svc.setSharpen(levels[next]);
-
-    // 2. 重新同步相机 shader 参数（与 flipCamera 保持一致）
-    final camera = state.camera;
-    if (camera != null) {
-      await svc.setCamera(camera);
-      // 3. 重新同步镜头参数
-      final lens = camera.lensById(state.activeLensId);
-      await svc.updateLensParams(
-        distortion:            lens?.distortion            ?? 0.0,
-        vignette:              lens?.vignette              ?? 0.0,
-        zoomFactor:            lens?.zoomFactor            ?? 1.0,
-        fisheyeMode:           lens?.fisheyeMode           ?? false,
-        chromaticAberration:   lens?.chromaticAberration   ?? 0.0,
-        bloom:                 lens?.bloom                 ?? 0.0,
-        softFocus:             lens?.softFocus             ?? 0.0,
-        exposure:              lens?.exposure              ?? 0.0,
-        contrast:              lens?.contrast              ?? 0.0,
-        saturation:            lens?.saturation            ?? 0.0,
-        highlightCompression:  lens?.highlightCompression  ?? 0.0,
-      );
-    }
-
-    // 4. 重新推送完整渲染参数（滤镜 + 镜头 + defaultLook 组合值）
-    _applyCurrentRenderParamsToNative();
+     // 重新将全量参数写入新 renderer（syncAllParamsAfterRebuild 内部先 setSharpen 再同步所有参数）
+    await syncAllParamsAfterRebuild();
   }
 
   void cycleFlash() {
@@ -816,33 +788,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     // 4. 重新初始化相机（重建 SurfaceTexture + CameraGLRenderer，等待 renderer 就绪）
     await svc.initCamera();
 
-    // 5. 重新发送当前相机参数到新 renderer
-    final camera = state.camera;
-    if (camera != null) {
-      await svc.setCamera(camera);
-      // 同步镜头参数
-      final lens = camera.lensById(state.activeLensId);
-      await svc.updateLensParams(
-        distortion: lens?.distortion ?? 0.0,
-        vignette: lens?.vignette ?? 0.0,
-        zoomFactor: lens?.zoomFactor ?? 1.0,
-        fisheyeMode: lens?.fisheyeMode ?? false,
-        chromaticAberration: lens?.chromaticAberration ?? 0.0,
-        bloom: lens?.bloom ?? 0.0,
-        softFocus: lens?.softFocus ?? 0.0,
-        exposure: lens?.exposure ?? 0.0,
-        contrast: lens?.contrast ?? 0.0,
-        saturation: lens?.saturation ?? 0.0,
-        highlightCompression: lens?.highlightCompression ?? 0.0,
-      );
-    }
-
-    // 6. 同步清晰度档位
-    const sharpenLevels = [0.0, 0.5, 1.0];
-    await svc.setSharpen(sharpenLevels[state.sharpenLevel]);
-
-    // 7. 同步完整渲染参数（滤镜+镜头+defaultLook 组合值）
-    _applyCurrentRenderParamsToNative();
+    // 5. 重新将全量参数写入新 renderer（syncAllParamsAfterRebuild 内部先 setSharpen 再同步所有参数）
+    await syncAllParamsAfterRebuild();
   }
 
   // ── Take photo ──
@@ -1143,6 +1090,56 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     final json = params.toJson();
     debugPrint('[CameraNotifier] _applyCurrentRenderParamsToNative: sending ${json.length} params to native');
     _ref.read(cameraServiceProvider.notifier).updateRenderParams(json);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // syncAllParamsAfterRebuild
+  // 所有会重建 CameraGLRenderer / MetalRenderer 的操作（initCamera、setSharpen、
+  // flipCamera、switchToCamera等）完成后，必须调用此方法重新将全量参数写入新 renderer。
+  //
+  // 参数同步顺序（顺序很重要，不能打乱）：
+  //   1. setSharpen   — 切换原生分辨率，会再次重建 renderer，必须最先 await
+  //   2. setCamera    — 写入相机 shader / defaultLook
+  //   3. updateLensParams — 写入镜头参数（含 fisheyeMode）
+  //   4. updateRenderParams — 写入滤镜+镜头+defaultLook 组合完整渲染参数
+  //   5. setZoom      — 恢复缩放倍率（initCamera 后原生层重置为 x1）
+  // ─────────────────────────────────────────────────────────────────────────────
+  Future<void> syncAllParamsAfterRebuild() async {
+    final svc = _ref.read(cameraServiceProvider.notifier);
+
+    // Step 1: 切换分辨率（会再次重建 renderer，必须最先 await 等待就绪）
+    const sharpenLevels = [0.0, 0.5, 1.0];
+    await svc.setSharpen(sharpenLevels[state.sharpenLevel]);
+
+    // Step 2: 写入相机 shader / defaultLook
+    final camera = state.camera;
+    if (camera != null) {
+      await svc.setCamera(camera);
+
+      // Step 3: 写入镜头参数（含 fisheyeMode）
+      final lens = camera.lensById(state.activeLensId);
+      await svc.updateLensParams(
+        distortion:           lens?.distortion           ?? 0.0,
+        vignette:             lens?.vignette             ?? 0.0,
+        zoomFactor:           lens?.zoomFactor           ?? 1.0,
+        fisheyeMode:          lens?.fisheyeMode          ?? false,
+        chromaticAberration:  lens?.chromaticAberration  ?? 0.0,
+        bloom:                lens?.bloom                ?? 0.0,
+        softFocus:            lens?.softFocus            ?? 0.0,
+        exposure:             lens?.exposure             ?? 0.0,
+        contrast:             lens?.contrast             ?? 0.0,
+        saturation:           lens?.saturation           ?? 0.0,
+        highlightCompression: lens?.highlightCompression ?? 0.0,
+      );
+    }
+
+    // Step 4: 写入滤镜+镜头+defaultLook 组合完整渲染参数
+    _applyCurrentRenderParamsToNative();
+
+    // Step 5: 恢复缩放倍率（initCamera 重建后原生层重置为 x1）
+    if (state.zoomLevel != 1.0) {
+      await svc.setZoom(state.zoomLevel);
+    }
   }
 }
 
