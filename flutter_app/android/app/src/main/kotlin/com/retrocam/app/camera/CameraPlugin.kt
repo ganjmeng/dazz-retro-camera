@@ -90,6 +90,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private var glRenderer: CameraGLRenderer? = null
     // ── 用于 switchLens 等待新 renderer 就绪 ──
     @Volatile private var rendererReadyLatch: CountDownLatch? = null
+    // ── 内存拍摄缓存：takePhoto 内存模式拿到的字节，供 processWithGpu 直接使用 ──
+    @Volatile private var pendingJpegBytes: ByteArray? = null
+    @Volatile private var pendingRotationDegrees: Int = 0
+    @Volatile private var pendingIsFrontCamera: Boolean = false
+    // 当前镜头朝向（LENS_FACING_BACK / LENS_FACING_FRONT）
+    private var currentLensPosition: Int = CameraSelector.LENS_FACING_BACK
 
     // ─────────────────────────────────────────────
     // FlutterPlugin lifecycle
@@ -182,6 +188,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val lensArg = call.argument<String>("lens") ?: "back"
         lensFacing = if (lensArg == "front") CameraSelector.LENS_FACING_FRONT
                      else CameraSelector.LENS_FACING_BACK
+        currentLensPosition = lensFacing
 
         val context = flutterPluginBinding.applicationContext
         val owner = lifecycleOwner
@@ -510,6 +517,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val lens = call.argument<String>("lens") ?: "back"
         lensFacing = if (lens == "front") CameraSelector.LENS_FACING_FRONT
                      else CameraSelector.LENS_FACING_BACK
+        currentLensPosition = lensFacing // sync for takePhoto isFront detection
 
         val owner = lifecycleOwner
         if (owner == null) {
@@ -544,56 +552,64 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     }
 
     // ─────────────────────────────────────────────
-    // takePhoto — saves to app cache first (so Flutter can read/process it),
-    // then Flutter calls saveToGallery to copy to MediaStore
+    // takePhoto — 内存模式：使用 OnImageCapturedCallback 直接拿到 ImageProxy 字节，
+    // 跳过第一次磁盘写入，减少一次文件 IO 耗时（~100-300ms）。
+    // JPEG 字节缓存到 pendingJpegBytes，processWithGpu 优先使用内存字节而非读文件。
     // ─────────────────────────────────────────────
-
     private fun handleTakePhoto(call: MethodCall, result: MethodChannel.Result) {
         val capture = imageCapture
         if (capture == null) {
             result.error("NOT_INITIALIZED", "Camera not initialized", null)
             return
         }
-
         val context = flutterPluginBinding.applicationContext
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val displayName = "DAZZ_${timestamp}.jpg"
-
-        // Save to app-private cache dir so Flutter Dart code can read/process the file
-        // via dart:io File. After Flutter post-processing, the file is saved to gallery
-        // by the saveToGallery method call from Dart.
-        val cacheDir = File(context.cacheDir, "dazz_captures").apply { mkdirs() }
-        val cacheFile = File(cacheDir, displayName)
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(cacheFile).build()
-
+        // 使用 OnImageCapturedCallback 内存模式，跳过磁盘写入
         capture.takePicture(
-            outputOptions,
             cameraExecutor,
-            object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    val filePath = cacheFile.absolutePath
-                    Log.d(TAG, "Photo saved to cache: $filePath")
-                    // Attach actual capture resolution for debug overlay
-                    val resInfo = capture.resolutionInfo
-                    val captureW = resInfo?.resolution?.width ?: 0
-                    val captureH = resInfo?.resolution?.height ?: 0
-                    Log.d(TAG, "Capture resolution: ${captureW}x${captureH}")
-                    val mainExecutor = ContextCompat.getMainExecutor(context)
-                    mainExecutor.execute {
-                        sendEvent("onPhotoCaptured", mapOf("filePath" to filePath))
-                        result.success(mapOf(
-                            "filePath" to filePath,
-                            "captureWidth" to captureW,
-                            "captureHeight" to captureH
-                        ))
+            object : ImageCapture.OnImageCapturedCallback() {
+                override fun onCaptureSuccess(image: ImageProxy) {
+                    try {
+                        val buffer = image.planes[0].buffer
+                        val jpegBytes = ByteArray(buffer.remaining())
+                        buffer.get(jpegBytes)
+                        val rotationDegrees = image.imageInfo.rotationDegrees
+                        val isFront = currentLensPosition == CameraSelector.LENS_FACING_FRONT
+                        val captureW = image.width
+                        val captureH = image.height
+                        image.close()
+                        Log.d(TAG, "takePhoto(mem): ${captureW}x${captureH} rot=${rotationDegrees} front=${isFront}")
+                        // 异步写入 cache，保持 filePath 接口兼容性
+                        val ts = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
+                        val cacheDir = File(context.cacheDir, "dazz_captures").apply { mkdirs() }
+                        val cacheFile = File(cacheDir, "DAZZ_${ts}.jpg")
+                        bgExecutor.execute {
+                            try { cacheFile.writeBytes(jpegBytes) }
+                            catch (e: Exception) { Log.w(TAG, "cache write failed: ${e.message}") }
+                        }
+                        val mainExecutor = ContextCompat.getMainExecutor(context)
+                        mainExecutor.execute {
+                            // 缓存内存字节，供 processWithGpu 直接使用（跳过文件读取）
+                            pendingJpegBytes = jpegBytes
+                            pendingRotationDegrees = rotationDegrees
+                            pendingIsFrontCamera = isFront
+                            sendEvent("onPhotoCaptured", mapOf("filePath" to cacheFile.absolutePath))
+                            result.success(mapOf(
+                                "filePath" to cacheFile.absolutePath,
+                                "captureWidth" to captureW,
+                                "captureHeight" to captureH
+                            ))
+                        }
+                    } catch (e: Exception) {
+                        image.close()
+                        Log.e(TAG, "takePhoto(mem) failed", e)
+                        val mainExecutor = ContextCompat.getMainExecutor(context)
+                        mainExecutor.execute { result.error("CAPTURE_FAILED", e.message, null) }
                     }
                 }
                 override fun onError(exception: ImageCaptureException) {
                     Log.e(TAG, "takePhoto failed", exception)
                     val mainExecutor = ContextCompat.getMainExecutor(context)
-                    mainExecutor.execute {
-                        result.error("CAPTURE_FAILED", exception.message, null)
-                    }
+                    mainExecutor.execute { result.error("CAPTURE_FAILED", exception.message, null) }
                 }
             }
         )
@@ -1070,16 +1086,35 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     // ── OpenGL ES Compute Pipeline ───────────────────────────────────────
 
     private fun handleProcessWithGpu(call: MethodCall, result: MethodChannel.Result) {
+        // 取出内存字节缓存（消费一次后清空，避免下次误用）
+        val memBytes = pendingJpegBytes
+        val memRotation = pendingRotationDegrees
+        val memIsFront = pendingIsFrontCamera
+        pendingJpegBytes = null
+
         bgExecutor.execute {
             val filePath = call.argument<String>("filePath")
             val params = call.argument<Map<String, Any>>("params")
 
-            if (filePath == null || params == null) {
-                result.error("INVALID_ARG", "filePath and params required", null)
+            if (params == null) {
+                result.error("INVALID_ARG", "params required", null)
                 return@execute
             }
 
-            val newPath = captureProcessor?.processImage(filePath, params)
+            val newPath = if (memBytes != null) {
+                // 优先使用内存字节，跳过文件读取（节省 100-300ms）
+                Log.d(TAG, "processWithGpu: using in-memory JPEG bytes (${memBytes.size} bytes)")
+                captureProcessor?.processImageBytes(memBytes, memRotation, memIsFront, params)
+            } else {
+                // 降级：内存字节不可用时回退到文件读取
+                if (filePath == null) {
+                    result.error("INVALID_ARG", "filePath required when no pending bytes", null)
+                    return@execute
+                }
+                Log.d(TAG, "processWithGpu: fallback to file path $filePath")
+                captureProcessor?.processImage(filePath, params)
+            }
+
             activityBinding?.activity?.runOnUiThread {
                 if (newPath != null) {
                     result.success(mapOf("filePath" to newPath))

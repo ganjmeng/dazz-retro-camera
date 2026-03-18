@@ -830,6 +830,127 @@ void main() {
         }
     }
 
+    /**
+     * 内存模式：直接接受 JPEG 字节数组，跳过磁盘读取，减少一次文件 IO。
+     * @param jpegBytes       原始 JPEG 字节（来自 OnImageCapturedCallback）
+     * @param exifOrientation EXIF 旋转角度（0/90/180/270），由调用方从 ImageInfo 获取
+     * @param isFrontCamera   是否前置摄像头（前置需水平镜像）
+     * @param params          渲染参数（与 processImage 相同）
+     * @return 处理后的 JPEG 文件路径，失败返回 null
+     */
+    fun processImageBytes(
+        jpegBytes: ByteArray,
+        exifOrientation: Int,
+        isFrontCamera: Boolean,
+        params: Map<String, Any>
+    ): String? {
+        return try {
+            // 1. 解码内存 JPEG（跳过磁盘读取）
+            val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+            val rawBitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size, options)
+                ?: return null.also { Log.e(TAG, "Failed to decode JPEG bytes") }
+
+            // 1a. 应用旋转和镜像（直接使用角度，不需要读文件 EXIF）
+            val exifBitmap = applyRotation(rawBitmap, exifOrientation, isFrontCamera)
+            if (exifBitmap !== rawBitmap) rawBitmap.recycle()
+
+            // 1b. 按 maxDimension 缩放
+            val maxDim = (params["maxDimension"] as? Int) ?: 4096
+            val srcMax = maxOf(exifBitmap.width, exifBitmap.height)
+            val inBitmap = if (srcMax > maxDim) {
+                val scale = maxDim.toFloat() / srcMax
+                val newW = (exifBitmap.width * scale).toInt()
+                val newH = (exifBitmap.height * scale).toInt()
+                Bitmap.createScaledBitmap(exifBitmap, newW, newH, true)
+                    .also { exifBitmap.recycle() }
+            } else {
+                exifBitmap
+            }
+            val width = inBitmap.width
+            val height = inBitmap.height
+
+            // 2. 初始化 EGL + GL
+            ensureGL(width, height)
+
+            // 3. 上传输入图像为 GL 纹理
+            val inputTex = uploadBitmapToTexture(inBitmap)
+            inBitmap.recycle()
+
+            // 4. 绑定 FBO，执行渲染
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo)
+            GLES30.glViewport(0, 0, width, height)
+            GLES30.glUseProgram(program)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, inputTex)
+            GLES30.glUniform1i(uInputTexture, 0)
+            GLES30.glUniform2f(uTexelSize, 1.0f / width, 1.0f / height)
+            setUniforms(params)
+            val baseLutPath = params["baseLut"] as? String
+            if (!baseLutPath.isNullOrEmpty()) {
+                val lutTex = loadLutTexture(baseLutPath, context)
+                if (lutTex != 0) {
+                    lutTextureId = lutTex
+                    GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
+                    GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, lutTex)
+                    GLES30.glUniform1i(uLutTexture, 1)
+                    GLES30.glUniform1f(uLutEnabled, 1.0f)
+                }
+            }
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbo)
+            val posLoc = GLES30.glGetAttribLocation(program, "aPosition")
+            val uvLoc  = GLES30.glGetAttribLocation(program, "aTexCoord")
+            GLES30.glEnableVertexAttribArray(posLoc)
+            GLES30.glVertexAttribPointer(posLoc, 2, GLES30.GL_FLOAT, false, 16, 0)
+            GLES30.glEnableVertexAttribArray(uvLoc)
+            GLES30.glVertexAttribPointer(uvLoc, 2, GLES30.GL_FLOAT, false, 16, 8)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+            GLES30.glFinish()
+
+            // 5. 回读像素
+            val pixelBuf = ByteBuffer.allocateDirect(width * height * 4).apply {
+                order(ByteOrder.nativeOrder())
+            }
+            GLES30.glReadPixels(0, 0, width, height, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, pixelBuf)
+            pixelBuf.rewind()
+
+            // 6. 释放临时纹理
+            GLES30.glDeleteTextures(1, intArrayOf(inputTex), 0)
+            if (lutTextureId != 0) {
+                GLES30.glDeleteTextures(1, intArrayOf(lutTextureId), 0)
+                lutTextureId = 0
+            }
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+
+            // 7. 写入 Bitmap
+            val outBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            outBitmap.copyPixelsFromBuffer(pixelBuf)
+
+            // 8. 编码为 JPEG
+            val ts = System.currentTimeMillis()
+            val outputFile = File(context.cacheDir, "gpu_mem_${ts}.jpg")
+            FileOutputStream(outputFile).use { fos ->
+                outBitmap.compress(Bitmap.CompressFormat.JPEG, 88, fos)
+            }
+            outBitmap.recycle()
+            Log.d(TAG, "processImageBytes complete: ${outputFile.absolutePath}")
+            outputFile.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "processImageBytes failed", e)
+            null
+        }
+    }
+
+    /**
+     * 根据旋转角度和镜像标志旋转 Bitmap（替代基于文件 EXIF 的 applyExifRotation）
+     */
+    private fun applyRotation(bitmap: Bitmap, rotationDegrees: Int, mirror: Boolean): Bitmap {
+        val matrix = Matrix()
+        if (rotationDegrees != 0) matrix.postRotate(rotationDegrees.toFloat())
+        if (mirror) matrix.preScale(-1f, 1f)
+        if (rotationDegrees == 0 && !mirror) return bitmap
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
     fun destroy() {
         if (!initialized) return
         if (vbo != 0) GLES30.glDeleteBuffers(1, intArrayOf(vbo), 0)
