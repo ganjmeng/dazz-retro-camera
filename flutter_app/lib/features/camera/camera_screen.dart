@@ -196,11 +196,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           await ref.read(cameraServiceProvider.notifier).initCamera();
         }
 
-        // ── initCamera 返回后 renderer 已就绪，重新发送相机参数确保生效 ──
+        // ── STEP 1: 先同步清晰度档位（setSharpen 会重建 renderer，必须最先执行）──
+        // IMPORTANT: must await — setSharpen on Android triggers unbindAll+rebind which
+        // recreates CameraGLRenderer. All subsequent param calls must happen AFTER this.
+        final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
+        const sharpenLevels = [0.0, 0.5, 1.0];
+        await ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevels[sharpenLevel]);
+
+        // ── STEP 2: renderer 已就绪（setSharpen await 保证），重新发送相机参数 ──
         final cameraAfterInit = ref.read(cameraAppProvider).camera;
         if (cameraAfterInit != null) {
           await ref.read(cameraServiceProvider.notifier).setCamera(cameraAfterInit);
-          // 同步镜头参数
+          // 同步镜头参数（含 fisheyeMode）
           final lensId = ref.read(cameraAppProvider).activeLensId;
           final lens = cameraAfterInit.lensById(lensId);
           ref.read(cameraServiceProvider.notifier).updateLensParams(
@@ -217,12 +224,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             highlightCompression: lens?.highlightCompression ?? 0.0,
           );
         }
-        // 同步清晰度档位对应的原生分辨率（initCamera 默认 1080p，需根据当前档位切换）
-        // IMPORTANT: must await — native camera must finish reconfiguring before
-        // the loading overlay is dismissed and takePhoto is allowed.
-        final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
-        const sharpenLevels = [0.0, 0.5, 1.0];
-        await ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevels[sharpenLevel]);
         _loadLatestThumb();
       }
     });

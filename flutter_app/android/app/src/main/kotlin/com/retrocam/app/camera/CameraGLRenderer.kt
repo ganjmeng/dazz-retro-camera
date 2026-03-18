@@ -1069,7 +1069,12 @@ void main() {
             1f / previewWidth.toFloat(),
             1f / previewHeight.toFloat())
         GLES30.glUniform1f(uFisheyeMode,         fisheyeMode)
-        GLES30.glUniform1f(uAspectRatio,         previewWidth.toFloat() / previewHeight.toFloat())
+        // FIX: use min/max so aspect is always <= 1.0 regardless of frame orientation.
+        // fisheyeUV does p.x *= aspect to compress the horizontal axis to match the vertical,
+        // producing a physically round circle. aspect must be shortEdge/longEdge (<= 1.0).
+        val pw = previewWidth.toFloat()
+        val ph = previewHeight.toFloat()
+        GLES30.glUniform1f(uAspectRatio, minOf(pw, ph) / maxOf(pw, ph))
         GLES30.glUniform1f(uHighlights,          highlights)
         GLES30.glUniform1f(uShadows,             shadows)
         GLES30.glUniform1f(uWhites,              whites)
