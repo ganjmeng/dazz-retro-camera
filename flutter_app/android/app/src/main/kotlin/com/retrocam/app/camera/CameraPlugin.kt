@@ -794,31 +794,36 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val builder = ImageCapture.Builder()
         when {
             level < 0.2f -> {
-                // 低清晰度：输出 1920px（~2MP），输入请求 ≤4MP（2688×2016）
-                // FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER 确保不超过目标，避免解码大图
-                val strategy = ResolutionStrategy(
-                    Size(2688, 2016),
-                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
-                )
+                // 低清晰度：输出 1920px（~2MP），输入精准对齐 ≤4MP（2688×2016）
+                // 用 ResolutionFilter 选"≤400万像素的最大档位"，避免解码超出输出所需的大图
+                val lowFilter = ResolutionFilter { supportedSizes, _ ->
+                    val candidates = supportedSizes.filter {
+                        it.width.toLong() * it.height.toLong() <= 4_000_000L
+                    }
+                    candidates.sortedByDescending { it.width.toLong() * it.height.toLong() }
+                        .ifEmpty {
+                            // 所有档位都超过 400 万像素，回落到最小可用
+                            supportedSizes.sortedBy { it.width.toLong() * it.height.toLong() }
+                        }
+                }
                 builder.setResolutionSelector(
                     ResolutionSelector.Builder()
-                        .setResolutionStrategy(strategy)
+                        .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
+                        .setResolutionFilter(lowFilter)
                         .build()
                 ).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             }
             level < 0.7f -> {
-                // 中清晰度：输出 2688px（~4MP），输入请求 ≤16MP（4096×3072）
-                // 行业标准：不写死固定尺寸，用 ResolutionFilter 选"≤1600万像素的最大档位"
+                // 中清晰度：输出 2688px（~4MP），输入精准对齐 ≤4MP（2688×2016）
+                // 用 ResolutionFilter 选"≤400万像素的最大档位"，与输出分辨率精准匹配
                 // 让 ISP 走 Binning 自然输出（单帧），避免多帧合成（2亿像素手机慢 3-5s 的根因）
                 val midFilter = ResolutionFilter { supportedSizes, _ ->
-                    // 过滤掉超过 1600 万像素的档位（避免 ISP 多帧合成）
                     val candidates = supportedSizes.filter {
-                        it.width.toLong() * it.height.toLong() <= 16_000_000L
+                        it.width.toLong() * it.height.toLong() <= 4_000_000L
                     }
-                    // 从符合条件的里选最大的（保证覆盖 2688px 输出）
                     candidates.sortedByDescending { it.width.toLong() * it.height.toLong() }
                         .ifEmpty {
-                            // 所有档位都超过 1600 万像素（极少数设备），回落到最小可用
+                            // 所有档位都超过 400 万像素（极少数设备），回落到最小可用
                             supportedSizes.sortedBy { it.width.toLong() * it.height.toLong() }
                         }
                 }
