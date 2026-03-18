@@ -9,8 +9,6 @@ import android.opengl.EGLSurface
 import android.opengl.GLES11Ext
 import android.opengl.GLES30
 import android.util.Log
-import android.os.Handler
-import android.os.Looper
 import android.view.Choreographer
 import android.view.Surface
 import java.nio.ByteBuffer
@@ -98,7 +96,6 @@ uniform float uTime;
 uniform vec2  uTexelSize;   // 1/width, 1/height
 uniform float uFisheyeMode; // 1.0=圆形鱼眼模式, 0.0=普通模式
 uniform float uAspectRatio; // 宽/高 比例（用于保持圆形）
-uniform float uFlipHorizontal; // 1.0=水平翻转（前置镜像）, 0.0=不翻转
 // ── 传感器非均匀性（数码相机通用，FXN-R 专项调校）──
 uniform float uCenterGain;          // 中心增亮（FXN-R=0.010）
 uniform float uEdgeFalloff;         // 边缘衰减（FXN-R=0.035）
@@ -453,10 +450,6 @@ vec3 applyLightLeak(vec3 c, vec2 uv, float amount, float seed) {
 // ── 主函数（统一渲染管线，所有相机差异由 uniform 参数驱动）────────────
 void main() {
     vec2 uv = vTexCoord;
-    // 水平翻转（前置摄像头镜像）
-    if (uFlipHorizontal > 0.5) {
-        uv.x = 1.0 - uv.x;
-    }
 
     // 鱼眼模式：重映射 UV 坐标
     if (uFisheyeMode > 0.5) {
@@ -654,7 +647,6 @@ void main() {
     private var uTexelSize: Int = -1
     private var uFisheyeMode: Int = -1
     private var uAspectRatio: Int = -1
-    private var uFlipHorizontal: Int = -1
     private var uHighlights: Int = -1
     private var uShadows: Int = -1
     private var uWhites: Int = -1
@@ -701,12 +693,6 @@ void main() {
     private var vaoInitialized = false
 
     // Choreographer 帧调度
-    // CRITICAL FIX: Choreographer.getInstance() 必须在有 Looper 的线程上调用。
-    // onFrameAvailableListener 默认在调用 setOnFrameAvailableListener 的线程（glExecutor，无 Looper）上回调，
-    // 直接调用 Choreographer.getInstance() 会抛 RuntimeException: Can't create handler inside thread
-    // that has not called Looper.prepare()，导致授权后立即崩溃。
-    // 解决方案：通过 mainHandler 将 postFrameCallback 派发到主线程执行。
-    private val mainHandler = Handler(Looper.getMainLooper())
     private val frameAvailable = AtomicBoolean(false)
     private val choreographerCallback = Choreographer.FrameCallback { _ ->
         if (frameAvailable.compareAndSet(true, false)) {
@@ -741,7 +727,6 @@ void main() {
     @Volatile private var sharpen: Float = 0.0f
     @Volatile private var time: Float = 0.0f
     @Volatile private var fisheyeMode: Float = 0.0f
-    @Volatile private var flipHorizontal: Float = 0.0f
     @Volatile private var highlights: Float = 0.0f
     @Volatile private var shadows: Float = 0.0f
     @Volatile private var whites: Float = 0.0f
@@ -936,12 +921,10 @@ void main() {
         inputSurfaceTexture!!.setDefaultBufferSize(width, height)
         // 最佳实践：onFrameAvailable 只标记「有新帧」，渲染由 Choreographer vsync 驱动
         // 避免相机帧率（30fps）和屏幕刷新率（60fps）不匹配时的重复渲染和帧积压
-        // CRITICAL FIX: 将 listener 绑定到 mainHandler，确保回调在主线程（有 Looper）执行，
-        // 从而可以安全调用 Choreographer.getInstance()。
-        inputSurfaceTexture!!.setOnFrameAvailableListener({
+        inputSurfaceTexture!!.setOnFrameAvailableListener {
             frameAvailable.set(true)
             Choreographer.getInstance().postFrameCallback(choreographerCallback)
-        }, mainHandler)
+        }
         inputSurface = Surface(inputSurfaceTexture)
 
         // ── 10. 获取 Pass 2 uniform 位置 ────────────────────────────────────
@@ -998,7 +981,6 @@ void main() {
         uTexelSize            = GLES30.glGetUniformLocation(programId, "uTexelSize")
         uFisheyeMode          = GLES30.glGetUniformLocation(programId, "uFisheyeMode")
         uAspectRatio          = GLES30.glGetUniformLocation(programId, "uAspectRatio")
-        uFlipHorizontal       = GLES30.glGetUniformLocation(programId, "uFlipHorizontal")
         aPositionLoc          = GLES30.glGetAttribLocation(programId, "aPosition")
         aTexCoordLoc          = GLES30.glGetAttribLocation(programId, "aTexCoord")
         uHighlights           = GLES30.glGetUniformLocation(programId, "uHighlights")
@@ -1139,7 +1121,6 @@ void main() {
             1f / previewWidth.toFloat(),
             1f / previewHeight.toFloat())
         GLES30.glUniform1f(uFisheyeMode,         fisheyeMode)
-        GLES30.glUniform1f(uFlipHorizontal,      flipHorizontal)
         // FIX: use min/max so aspect is always <= 1.0 regardless of frame orientation.
         // fisheyeUV does p.x *= aspect to compress the horizontal axis to match the vertical,
         // producing a physically round circle. aspect must be shortEdge/longEdge (<= 1.0).
@@ -1287,10 +1268,6 @@ void main() {
 
     fun setFisheyeMode(enabled: Boolean) {
         fisheyeMode = if (enabled) 1.0f else 0.0f
-    }
-
-    fun setFlipHorizontal(enabled: Boolean) {
-        flipHorizontal = if (enabled) 1.0f else 0.0f
     }
 
     // ── 获取相机输入 Surface ──────────────────────────────────────────────────

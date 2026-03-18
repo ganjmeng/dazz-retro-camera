@@ -32,16 +32,6 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     // Metal Compute 成片处理器（懒加载，首次使用时初始化）
     private lazy var captureProcessor: CaptureProcessor? = CaptureProcessor()
 
-    // ── 生命周期缓存：保存最近一次 setPreset 的 shaderParams，供 Renderer 重建后恢复 ──
-    private var cachedShaderParams: [String: Any] = [:]
-    // 缓存最近一次 updateLensParams 的参数
-    private var cachedLensFisheyeMode: Bool = false
-    private var cachedLensVignette: Float = 0.0
-    private var cachedLensChromaticAberration: Float = 0.0
-    private var cachedLensBloom: Float = 0.0
-    // 缓存当前镜头位置（前置/后置）
-    private var cachedLensPosition: AVCaptureDevice.Position = .back
-
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(
             name: "com.retrocam.app/camera_control",
@@ -115,13 +105,11 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let lens: AVCaptureDevice.Position = (lensStr == "front") ? .front : .back
 
         // 释放旧资源
-        unregisterSessionNotifications()
         cameraManager?.stopSession()
         if registeredTextureId != -1 {
             textureRegistry?.unregisterTexture(registeredTextureId)
         }
 
-        cachedLensPosition = lens
         cameraManager = CameraSessionManager()
         renderer = MetalRenderer(registry: textureRegistry!)
 
@@ -136,8 +124,6 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cameraManager?.startSession()
         // 最佳实践：相机会话启动后立即启动 CADisplayLink，驱动 vsync 对齐渲染
         renderer?.startDisplayLink()
-        // 注册 AVCaptureSession 中断通知，实现自动恢复
-        registerSessionNotifications()
 
         result(["textureId": textureId])
     }
@@ -149,10 +135,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let args = call.arguments as? [String: Any]
         let lensStr = args?["lens"] as? String ?? "back"
         let position: AVCaptureDevice.Position = (lensStr == "front") ? .front : .back
-        cachedLensPosition = position
         cameraManager?.switchCamera(to: position)
-        // 切换镜头后重新应用缓存的渲染参数，避免新 session 的预览失效
-        reapplyCachedParamsToRenderer()
         result(nil)
     }
 
@@ -253,10 +236,6 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         if let lut = presetJson["lut"] as? String { shaderParams["lut"] = lut }
         if let grain = presetJson["grain"] as? String { shaderParams["grain"] = grain }
         renderer?.updateParams(shaderParams)
-        // 缓存 shaderParams，供 Renderer 重建后恢复
-        if !shaderParams.isEmpty {
-            cachedShaderParams = shaderParams
-        }
         result(["success": true])
     }
 
@@ -362,12 +341,6 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let softFocus             = args?["softFocus"] as? Double ?? 0.0
         let distortion            = args?["distortion"] as? Double ?? 0.0
 
-        // 缓存所有 lens 参数，供 Renderer 重建后完整恢复
-        cachedLensFisheyeMode = fisheyeMode
-        cachedLensVignette = Float(vignette)
-        cachedLensChromaticAberration = Float(chromaticAberration)
-        cachedLensBloom = Float(bloom)
-
         // 将鱼眼模式传递到 Metal 渲染器
         renderer?.setFisheyeMode(fisheyeMode)
 
@@ -377,6 +350,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             p.vignetteAmount = Float(vignette)
             p.chromaticAberration = Float(chromaticAberration)
             p.bloomAmount = Float(bloom)
+            // softFocus 和 distortion 在 Metal shader 中可能没有对应 uniform，
+            // 但通过 renderParams 统一发送时会覆盖
             r.setCCDParams(p)
         }
         result(nil)
@@ -597,7 +572,6 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     // dispose
     // ─────────────────────────────────────────────
     private func handleDispose(result: @escaping FlutterResult) {
-        unregisterSessionNotifications()
         renderer?.stopDisplayLink()
         cameraManager?.stopSession()
         cameraManager = nil
@@ -607,89 +581,6 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         }
         renderer = nil
         result(nil)
-    }
-
-    // ── AVCaptureSession 中断通知监听 ──
-    // iOS 系统在以下情况会中断 AVCaptureSession：
-    //   1. 来电话（相机被系统抢占）
-    //   2. App 进入后台（UIApplicationDidEnterBackground）
-    //   3. 其他 App 使用相机（如扫二维码）
-    //   4. 屏幕锁定
-    // 通过监听 AVCaptureSessionWasInterruptedNotification 和
-    // AVCaptureSessionInterruptionEndedNotification 实现自动恢复。
-    private func registerSessionNotifications() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(sessionWasInterrupted(_:)),
-            name: .AVCaptureSessionWasInterrupted,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(sessionInterruptionEnded(_:)),
-            name: .AVCaptureSessionInterruptionEnded,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(sessionRuntimeError(_:)),
-            name: .AVCaptureSessionRuntimeError,
-            object: nil
-        )
-    }
-
-    private func unregisterSessionNotifications() {
-        NotificationCenter.default.removeObserver(self, name: .AVCaptureSessionWasInterrupted, object: nil)
-        NotificationCenter.default.removeObserver(self, name: .AVCaptureSessionInterruptionEnded, object: nil)
-        NotificationCenter.default.removeObserver(self, name: .AVCaptureSessionRuntimeError, object: nil)
-    }
-
-    @objc private func sessionWasInterrupted(_ notification: Notification) {
-        // 会话被中断：停止 CADisplayLink 节省 GPU
-        renderer?.stopDisplayLink()
-        print("[RetroCamPlugin] AVCaptureSession interrupted")
-    }
-
-    @objc private func sessionInterruptionEnded(_ notification: Notification) {
-        // 中断结束：重新启动 session + CADisplayLink + 恢复参数
-        cameraManager?.startSession()
-        renderer?.startDisplayLink()
-        reapplyCachedParamsToRenderer()
-        print("[RetroCamPlugin] AVCaptureSession interruption ended, session restarted")
-    }
-
-    @objc private func sessionRuntimeError(_ notification: Notification) {
-        // 运行时错误：尝试重启 session
-        guard let error = notification.userInfo?[AVCaptureSessionErrorKey] as? AVError else { return }
-        print("[RetroCamPlugin] AVCaptureSession runtime error: \(error.code)")
-        if error.code == .mediaServicesWereReset {
-            // 媒体服务被重置（最严重的中断）：重新配置并启动
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                guard let self = self else { return }
-                self.cameraManager?.configure(lens: self.cachedLensPosition)
-                self.cameraManager?.startSession()
-                self.renderer?.startDisplayLink()
-                self.reapplyCachedParamsToRenderer()
-                print("[RetroCamPlugin] Session recovered after media services reset")
-            }
-        }
-    }
-
-    /// 将缓存的 shaderParams 和 lens 参数重新应用到当前 Renderer
-    private func reapplyCachedParamsToRenderer() {
-        guard let r = renderer else { return }
-        // 应用 shader 参数（滤镜效果）
-        if !cachedShaderParams.isEmpty {
-            r.updateParams(cachedShaderParams)
-        }
-        // 应用 lens 参数
-        r.setFisheyeMode(cachedLensFisheyeMode)
-        var p = r.getCCDParams()
-        p.vignetteAmount = cachedLensVignette
-        p.chromaticAberration = cachedLensChromaticAberration
-        p.bloomAmount = cachedLensBloom
-        r.setCCDParams(p)
-        print("[RetroCamPlugin] reapplyCachedParamsToRenderer: \(cachedShaderParams.count) shader params, fisheye=\(cachedLensFisheyeMode)")
     }
 }
 

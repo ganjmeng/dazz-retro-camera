@@ -402,12 +402,8 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
     func startDisplayLink() {
         guard displayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(displayLinkFired(_:)))
-        // preferredFrameRateRange 仅 iOS 15+ 支持，低版本回退到 preferredFramesPerSecond
-        if #available(iOS 15.0, *) {
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
-        } else {
-            link.preferredFramesPerSecond = 60
-        }
+        // preferredFramesPerSecond = 0 表示使用屏幕最大刷新率（60/120Hz ProMotion 自适应）
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
         link.add(to: .main, forMode: .common)
         displayLink = link
     }
