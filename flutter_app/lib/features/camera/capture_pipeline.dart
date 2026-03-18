@@ -66,44 +66,22 @@ class CapturePipeline {
     bool fisheyeMode = false,           // 鱼眼圆圈模式：在成片四角绘制默色阒罩
   }) async {
     try {
-          // ── 1. 读取原始图片（解码时限制最大边长，避免 12MP 全量解码）──────────────
-      final bytes = await File(imagePath).readAsBytes();
-      // 通过 JPEG 文件头解析原始尺寸（避免两次全量解码）
-      final rawSize = _readJpegDimensions(bytes);
-      final rawW = rawSize?[0] ?? 0;
-      final rawH = rawSize?[1] ?? 0;
-
-      // 计算解码目标尺寸（限制最大边长为 maxDimension）
-      final maxRaw = math.max(rawW, rawH);
-      int? decodeTargetW;
-      int? decodeTargetH;
-      if (maxRaw > maxDimension && maxRaw > 0) {
-        final scale = maxDimension / maxRaw;
-        decodeTargetW = (rawW * scale).round();
-        decodeTargetH = (rawH * scale).round();
-      }
-
-      final codec = await ui.instantiateImageCodec(
-        bytes,
-        targetWidth: decodeTargetW,
-        targetHeight: decodeTargetH,
-      );
-      final frame = await codec.getNextFrame();
-      var srcImage = frame.image;
-
-      // ── 2c. 应用各相机专属的成片管线（在 Canvas 绘制前，仅作用于照片本身） ─────
+      // ── 1. 先尝试 GPU 快速路径（无相框/水印时完全跳过 Dart 解码）─────────────
       bool gpuProcessed = false;
+      ui.Image? srcImage;
+
       if (useGpu && (Platform.isIOS || Platform.isAndroid)) {
         try {
           debugPrint("[CapturePipeline] Attempting to use native GPU pipeline...");
           final gpuResult = await _channel.invokeMethod<Map>("processWithGpu", {
             "filePath": imagePath,
             "params": renderParams?.toJson() ?? {},
-            "maxDimension": maxDimension, // 传入目标尺寸，让原生 GPU 在处理前先缩放
+            "maxDimension": maxDimension,
           });
           if (gpuResult != null && gpuResult["filePath"] != null) {
             final newPath = gpuResult["filePath"] as String;
-            // ── 快速路径：无相框、无水印、无小窗裁剪时，GPU 输出即最终成片，跳过 Canvas ──
+            // ── 快速路径：无相框、无水印、无小窗裁剪时，GPU 输出即最终成片 ──
+            // 完全跳过 Dart 图像解码、Canvas 绘制、toByteData、JPEG 重编码
             final hasFrame = selectedFrameId.isNotEmpty &&
                 selectedFrameId != 'frame_none' &&
                 selectedFrameId != 'none';
@@ -113,26 +91,47 @@ class CapturePipeline {
             if (!hasFrame && !hasWatermark && !hasMinimap) {
               final gpuBytes = await File(newPath).readAsBytes();
               try { File(newPath).deleteSync(); } catch (_) {}
-              // 解析 GPU 输出尺寸（用于返回 outputWidth/outputHeight）
               final gpuSize = _readJpegDimensions(gpuBytes);
               final gpuW = gpuSize?[0] ?? 0;
               final gpuH = gpuSize?[1] ?? 0;
               debugPrint('[CapturePipeline] Fast path: GPU output returned directly (no frame/watermark), ${gpuW}x${gpuH}');
               return CaptureResult(bytes: gpuBytes, outputWidth: gpuW, outputHeight: gpuH);
             }
-            // 有相框或水印：继续走 Canvas 合成流程
+            // 有相框或水印：解码 GPU 输出，继续走 Canvas 合成流程
             final gpuBytes = await File(newPath).readAsBytes();
             final gpuCodec = await ui.instantiateImageCodec(gpuBytes);
             final gpuFrame = await gpuCodec.getNextFrame();
             srcImage = gpuFrame.image;
             gpuProcessed = true;
-            debugPrint("[CapturePipeline] Native GPU pipeline successful, continuing to Canvas for frame/watermark.");
-            // 尝试删除临时文件
+            debugPrint("[CapturePipeline] GPU pipeline successful, continuing to Canvas for frame/watermark.");
             try { File(newPath).deleteSync(); } catch (_) {}
           }
         } catch (e) {
           debugPrint("[CapturePipeline] Native GPU pipeline failed, falling back to Dart: $e");
         }
+      }
+
+      // ── 1b. GPU 未成功时才解码原始图片（Dart fallback 路径）──────────────────
+      if (!gpuProcessed) {
+        final bytes = await File(imagePath).readAsBytes();
+        final rawSize = _readJpegDimensions(bytes);
+        final rawW = rawSize?[0] ?? 0;
+        final rawH = rawSize?[1] ?? 0;
+        final maxRaw = math.max(rawW, rawH);
+        int? decodeTargetW;
+        int? decodeTargetH;
+        if (maxRaw > maxDimension && maxRaw > 0) {
+          final scale = maxDimension / maxRaw;
+          decodeTargetW = (rawW * scale).round();
+          decodeTargetH = (rawH * scale).round();
+        }
+        final codec = await ui.instantiateImageCodec(
+          bytes,
+          targetWidth: decodeTargetW,
+          targetHeight: decodeTargetH,
+        );
+        final frame = await codec.getNextFrame();
+        srcImage = frame.image;
       }
       if (!gpuProcessed && renderParams != null) {
         debugPrint('[CapturePipeline] Applying universal Dart fallback pipeline for: ${camera.id}');
@@ -142,11 +141,11 @@ class CapturePipeline {
         //   1. Highlight Rolloff → 2. Sensor Non-uniformity → 3. Skin Protection
         //   → 4. Chemical Irregularity → 5. Paper Texture → 6. Development Softness
         if (renderParams.highlightRolloff > 0.001) {
-          srcImage = await drawHighlightRolloff(srcImage, renderParams.highlightRolloff);
+          srcImage = await drawHighlightRolloff(srcImage!, renderParams.highlightRolloff);
         }
         if (renderParams.centerGain > 0.001 || renderParams.edgeFalloff > 0.001) {
           srcImage = await drawSensorNonUniformity(
-            srcImage,
+            srcImage!,
             renderParams.centerGain,
             renderParams.edgeFalloff,
             cornerWarmShift: renderParams.cornerWarmShift,
@@ -154,7 +153,7 @@ class CapturePipeline {
         }
         if (renderParams.skinHueProtect > 0.5) {
           srcImage = await drawSkinHueProtect(
-            srcImage,
+            srcImage!,
             renderParams.skinHueProtect,
             satProtect: renderParams.skinSatProtect,
             lumaSoften: renderParams.skinLumaSoften,
@@ -162,21 +161,22 @@ class CapturePipeline {
           );
         }
         if (renderParams.chemicalIrregularity > 0.001) {
-          srcImage = await drawChemicalIrregularity(srcImage, renderParams.chemicalIrregularity);
+          srcImage = await drawChemicalIrregularity(srcImage!, renderParams.chemicalIrregularity);
         }
         if (renderParams.paperTexture > 0.001) {
-          srcImage = await drawPaperTexture(srcImage, renderParams.paperTexture);
+          srcImage = await drawPaperTexture(srcImage!, renderParams.paperTexture);
         }
         if (renderParams.developmentSoftness > 0.001) {
-          srcImage = await drawDevelopmentSoftness(srcImage, renderParams.developmentSoftness);
+          srcImage = await drawDevelopmentSoftness(srcImage!, renderParams.developmentSoftness);
         }
         debugPrint('[CapturePipeline] Universal fallback pipeline applied.');
       }
 
-      final srcW = srcImage.width.toDouble();
-      final srcH = srcImage.height.toDouble();
+      // srcImage 在到达此处时必定已被赋值（GPU 有相框/水印路径 或 Dart fallback 路径）
+      final srcW = srcImage!.width.toDouble();
+      final srcH = srcImage!.height.toDouble();
 
-      debugPrint('[CapturePipeline] src: ${rawW}x${rawH} → decoded: ${srcW.toInt()}x${srcH.toInt()}, ratio=$selectedRatioId, frame=$selectedFrameId, wm=$selectedWatermarkId');
+      debugPrint('[CapturePipeline] decoded: ${srcW.toInt()}x${srcH.toInt()}, ratio=$selectedRatioId, frame=$selectedFrameId, wm=$selectedWatermarkId');
 
       // ── 2. 计算裁剪区域（保持中心裁剪）────────────────────────────────────────────
       Rect cropRect = _calcCropRect(srcW, srcH, selectedRatioId);
@@ -368,7 +368,7 @@ class CapturePipeline {
       if (gpuProcessed || renderParams == null) {
         // GPU 已处理（或无渲染参数）：直接绘制，不叠加 colorMatrix
         canvas.drawImageRect(
-          srcImage,
+          srcImage!,
           cropRect,
           destRect,
           Paint()..filterQuality = FilterQuality.high,
@@ -377,7 +377,7 @@ class CapturePipeline {
         // Dart 降级管线：通过 colorMatrix 叠加基础色彩效果
         final colorMatrix = buildColorMatrix(renderParams);
         canvas.drawImageRect(
-          srcImage,
+          srcImage!,
           cropRect,
           destRect,
           Paint()
@@ -421,7 +421,7 @@ class CapturePipeline {
           renderParams.policy.enableChromaticAberration &&
           renderParams.effectiveChromaticAberration > 0.001) {
         _drawChromaticAberration(
-          canvas, srcImage, cropRect, destRect,
+          canvas, srcImage!, cropRect, destRect,
           renderParams.effectiveChromaticAberration,
           renderParams,
         );
@@ -434,7 +434,7 @@ class CapturePipeline {
           renderParams.policy.enableBloom &&
           (renderParams.effectiveBloom > 0.01 || renderParams.effectiveSoftFocus > 0.01)) {
         _drawBloom(
-          canvas, srcImage, cropRect, destRect,
+          canvas, srcImage!, cropRect, destRect,
           renderParams.effectiveBloom,
           renderParams.effectiveSoftFocus,
           renderParams,
