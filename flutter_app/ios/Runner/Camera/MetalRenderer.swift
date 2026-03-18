@@ -518,10 +518,18 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
     }
 
     /// 更新宽高比（每帧渲染时自动设置）
+    /// fisheyeUV 中 p.x *= aspect 用于将 UV 空间的横轴压缩到与纵轴等长，从而得到物理像素意义上的正圆。
+    /// iOS 相机传感器输出的帧是横向的（如 1920x1080），显示时是竖向的。
+    /// 正确的 aspect = min(w,h)/max(w,h)（短边/长边），始终 <= 1.0，压缩横轴使圆形不变形。
     func updateAspectRatio(width: Int, height: Int) {
-        guard height > 0 else { return }
+        guard width > 0, height > 0 else { return }
         paramsLock.lock()
-        ccdParams.aspectRatio = Float(width) / Float(height)
+        let w = Float(width)
+        let h = Float(height)
+        // FIX: use min/max so aspect is always <= 1.0 regardless of frame orientation.
+        // iOS camera frames are landscape (w > h), but displayed portrait.
+        // Using w/h directly gives aspect > 1.0 which stretches the circle horizontally.
+        ccdParams.aspectRatio = min(w, h) / max(w, h)
         paramsLock.unlock()
     }
 

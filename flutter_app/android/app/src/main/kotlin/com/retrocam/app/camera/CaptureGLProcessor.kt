@@ -984,10 +984,13 @@ void main() {
         GLES30.glUniform1f(uLightLeakSeed, f("lightLeakSeed", System.currentTimeMillis().toFloat() / 1000.0f))
         GLES30.glUniform1f(uExposureOffset, f("exposureOffset"))
         GLES30.glUniform1f(uFisheyeMode, f("fisheyeMode"))
-        // aspectRatio = width / height，由调用方在 params 中传入，如果没有则用 currentWidth/currentHeight 计算
-        val ar = if (f("aspectRatio") > 0.001f) f("aspectRatio")
-                 else if (currentHeight > 0) currentWidth.toFloat() / currentHeight.toFloat()
-                 else 1.0f
+        // FIX: aspect must be min(w,h)/max(w,h) (<= 1.0) so fisheyeUV produces a round circle.
+        // Capture images on Android are portrait (height > width), so w/h < 1.0 is already
+        // correct, but we use min/max for safety (matches CameraGLRenderer and iOS MetalRenderer).
+        val rawAr = if (f("aspectRatio") > 0.001f) f("aspectRatio")
+                    else if (currentHeight > 0) currentWidth.toFloat() / currentHeight.toFloat()
+                    else 1.0f
+        val ar = if (rawAr > 1.0f) 1.0f / rawAr else rawAr  // ensure <= 1.0
         GLES30.glUniform1f(uAspectRatio, ar)
     }
 
