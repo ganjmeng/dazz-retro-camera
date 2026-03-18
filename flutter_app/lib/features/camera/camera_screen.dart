@@ -193,7 +193,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           await Future.delayed(const Duration(milliseconds: 800));
           if (!mounted) return;
           // 重新初始化相机（相当于跳转设置再返回的效果）
-          await ref.read(cameraServiceProvider.notifier).initCamera();
+          // silent=true: 不显示 loading 圈，避免首次授权后转两次圈
+          await ref.read(cameraServiceProvider.notifier).initCamera(silent: true);
         }
 
         // ── STEP 1: 先同步清晰度档位（setSharpen 会重建 renderer，必须最先执行）──

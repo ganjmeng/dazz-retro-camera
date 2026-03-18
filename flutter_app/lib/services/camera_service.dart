@@ -67,8 +67,9 @@ class CameraService extends StateNotifier<CameraState> {
   StreamSubscription? _eventSubscription;
 
   /// 初始化相机，获取 Texture ID 并开始预览
-  Future<void> initCamera() async {
-    state = state.copyWith(isLoading: true, error: null);
+  /// [silent] 为 true 时不设置 isLoading=true（用于首次授权后的静默重建，避免转两次圈）
+  Future<void> initCamera({bool silent = false}) async {
+    if (!silent) state = state.copyWith(isLoading: true, error: null);
     
     // 相机权限已在 CameraScreen._requestPermissions() 中一次性请求
     // 这里只检查相机权限是否已授予，不再重复弹出权限对话框
