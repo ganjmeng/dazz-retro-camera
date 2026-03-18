@@ -734,12 +734,21 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   /// setSharpen 在原生层会重新配置相机分辨率（重建 CameraGLRenderer），
   /// 导致之前设置的所有 GPU shader 参数丢失。
   /// 参考 flipCamera 的处理方式：setSharpen 完成后重新同步完整渲染参数。
+  /// setSharpen 会触发 Android unbindAll+rebind 重建 CameraGLRenderer，
+  /// 因此与 flipCamera / switchToCamera 相同，需要先显示加载遮罩再同步。
   Future<void> cycleSharpen() async {
     final next = (state.sharpenLevel + 1) % 3;
-    state = state.copyWith(sharpenLevel: next);
+    // 1. 更新档位 + 显示加载遮罩（与 _loadCamera / flipCamera 一致）
+    state = state.copyWith(sharpenLevel: next, isLoading: true);
     AppPrefsService.instance.setSharpenLevel(next);
-     // 重新将全量参数写入新 renderer（syncAllParamsAfterRebuild 内部先 setSharpen 再同步所有参数）
-    await syncAllParamsAfterRebuild();
+    try {
+      // 2. 重新将全量参数写入新 renderer
+      //    （syncAllParamsAfterRebuild 内部先 setSharpen 触发 renderer 重建，再依次同步所有参数）
+      await syncAllParamsAfterRebuild();
+    } finally {
+      // 3. 隐藏加载遮罩（无论成功/失败都要恢复）
+      state = state.copyWith(isLoading: false);
+    }
   }
 
   void cycleFlash() {
