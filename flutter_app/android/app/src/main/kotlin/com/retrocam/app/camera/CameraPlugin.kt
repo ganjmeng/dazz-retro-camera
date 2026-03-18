@@ -83,9 +83,17 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     // Filter state
     private var currentPresetJson: Map<*, *>? = null
     private var currentSharpenLevel: Float = 0.5f
-    // ── 缓存 lens 参数，供 switchLens 后重新应用 ──
+    // ── 缓存所有 lens 参数，供 Renderer 重建后完整恢复 ──
     private var cachedLensFisheyeMode: Boolean = false
     private var cachedLensVignette: Double = 0.0
+    private var cachedLensChromaticAberration: Double = 0.0
+    private var cachedLensBloom: Double = 0.0
+    private var cachedLensSoftFocus: Double = 0.0
+    private var cachedLensDistortion: Double = 0.0
+    // 缓存完整渲染参数（滤镜+defaultLook 组合值），供 Renderer 重建后恢复
+    @Volatile private var cachedRenderParams: Map<String, Any>? = null
+    // 缓存镜像设置
+    private var cachedMirrorFrontCamera: Boolean = true
     // GL Renderer
     private var glRenderer: CameraGLRenderer? = null
     // ── 用于 switchLens 等待新 renderer 就绪 ──
@@ -492,6 +500,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
             if (params.isNotEmpty()) {
                 glRenderer?.updateParams(params)
+                // 缓存完整渲染参数，供 Renderer 重建后在 reapplyPresetToRenderer 中恢复
+                @Suppress("UNCHECKED_CAST")
+                cachedRenderParams = params.toMap() as Map<String, Any>
             }
             // 2. 先 updateParams 设置参数，再 setCameraId 切换 Shader
             // 顺序很重要：setCameraId 在 GL 线程异步执行，如果先调用它会导致竞态条件（参数被重置）
@@ -936,9 +947,13 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val highlightCompression  = call.argument<Double>("highlightCompression") ?: 0.0
         val zoomFactor            = call.argument<Double>("zoomFactor") ?: 1.0
 
-        // ── 缓存 lens 参数，供 switchLens 后重新应用 ──
+        // ── 缓存所有 lens 参数，供 Renderer 重建后完整恢复 ──
         cachedLensFisheyeMode = fisheyeMode
         cachedLensVignette = vignette
+        cachedLensChromaticAberration = chromaticAberration
+        cachedLensBloom = bloom
+        cachedLensSoftFocus = softFocus
+        cachedLensDistortion = distortion
 
         // 将鱼眼模式传递到 GL 渲染器
         glRenderer?.setFisheyeMode(fisheyeMode)
@@ -1150,14 +1165,25 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             renderer.setCameraId(cameraId)
         }
 
-        // ── FIX: 恢复缓存的 lens 参数（fisheyeMode / vignette）──────────────
-        // switchLens 后 Dart 层的 setCamera + updateLensParams 可能在
-        // SurfaceProvider 回调（新 renderer 创建）之前就已经执行完毕，
-        // 此时 glRenderer 仍为 null，导致 lens 参数丢失。
-        // 因此必须在此处从缓存中恢复 lens 参数。
+          // ── 优先使用 cachedRenderParams（已经是 Shader uniform 名称，无需再映射）──
+        val rp = cachedRenderParams
+        if (rp != null) {
+            renderer.updateParams(rp)
+            Log.d(TAG, "reapplyPresetToRenderer: restored cachedRenderParams (${rp.size} keys)")
+        }
+        // ── 完整恢复所有 lens 参数 ──
+        // switchLens/initCamera 后 Dart 层的 updateLensParams 可能在 SurfaceProvider 回调之前执行，
+        // 此时 glRenderer 为 null 导致参数丢失。必须在此处从缓存中完整恢复。
         renderer.setFisheyeMode(cachedLensFisheyeMode)
-        renderer.updateParams(mapOf("vignette" to cachedLensVignette))
-        Log.d(TAG, "reapplyPresetToRenderer: restored lens params fisheyeMode=$cachedLensFisheyeMode, vignette=$cachedLensVignette")
+        val lensParams = mutableMapOf<String, Any>(
+            "vignette"            to cachedLensVignette,
+            "chromaticAberration" to cachedLensChromaticAberration,
+            "bloomAmount"         to cachedLensBloom,
+            "softFocus"           to cachedLensSoftFocus,
+            "distortion"          to cachedLensDistortion,
+        )
+        renderer.updateParams(lensParams)
+        Log.d(TAG, "reapplyPresetToRenderer: restored lens params fisheyeMode=$cachedLensFisheyeMode, vignette=$cachedLensVignette, chromaticAberration=$cachedLensChromaticAberration")
     }
 
     private fun sendEvent(type: String, payload: Map<String, Any>) {

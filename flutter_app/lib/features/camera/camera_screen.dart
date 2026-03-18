@@ -207,35 +207,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   /// 统一的相机硬件初始化（只调一次）
+  /// initCamera 完成后调用 replayParamsToNative() 统一重放所有参数，
+  /// 消除散落在各处的重复参数同步代码，从根本上解决 Renderer 重建后参数丢失问题。
   Future<void> _initCameraHardware() async {
     await ref.read(cameraServiceProvider.notifier).initCamera();
-    // ── STEP 1: 先同步清晰度档位（setSharpen 会重建 renderer，必须最先执行）──
-    // IMPORTANT: must await — setSharpen on Android triggers unbindAll+rebind which
-    // recreates CameraGLRenderer. All subsequent param calls must happen AFTER this.
-    final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
-    const sharpenLevels = [0.0, 0.5, 1.0];
-    await ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevels[sharpenLevel]);
-    // ── STEP 2: renderer 已就绪（setSharpen await 保证），重新发送相机参数 ──
-    final cameraAfterInit = ref.read(cameraAppProvider).camera;
-    if (cameraAfterInit != null) {
-      await ref.read(cameraServiceProvider.notifier).setCamera(cameraAfterInit);
-      // 同步镜头参数（含 fisheyeMode）
-      final lensId = ref.read(cameraAppProvider).activeLensId;
-      final lens = cameraAfterInit.lensById(lensId);
-      ref.read(cameraServiceProvider.notifier).updateLensParams(
-        distortion: lens?.distortion ?? 0.0,
-        vignette: lens?.vignette ?? 0.0,
-        zoomFactor: lens?.zoomFactor ?? 1.0,
-        fisheyeMode: lens?.fisheyeMode ?? false,
-        chromaticAberration: lens?.chromaticAberration ?? 0.0,
-        bloom: lens?.bloom ?? 0.0,
-        softFocus: lens?.softFocus ?? 0.0,
-        exposure: lens?.exposure ?? 0.0,
-        contrast: lens?.contrast ?? 0.0,
-        saturation: lens?.saturation ?? 0.0,
-        highlightCompression: lens?.highlightCompression ?? 0.0,
-      );
-    }
+    // 统一参数重放：setSharpen → setCamera → updateLensParams → updateRenderParams → setZoom → setMirrorFrontCamera
+    await ref.read(cameraAppProvider.notifier).replayParamsToNative();
   }
 
   @override
@@ -317,15 +294,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
-      // App 从后台切回前台：黑屏 + App Icon 淡入淡出
-      _transitionTimer?.cancel();
-      setState(() => _showTransition = true);
-      _transitionTimer = Timer(const Duration(milliseconds: 600), () {
-        if (mounted) setState(() => _showTransition = false);
-      });
-    } else if (state == AppLifecycleState.paused ||
-               state == AppLifecycleState.inactive) {
-      // App 进入后台或切到其他 App：保存当前相机快照，确保下次打开能恢复设定
+      // App 从后台切回前台：重新初始化相机 + 重放参数，确保预览恢复正常
+      // 使用 _showCameraTransition 包裹：黑屏期间执行 initCamera + replayParams，完成后淡出
+      _showCameraTransition(() async {
+        await ref.read(cameraServiceProvider.notifier).initCamera();
+        if (!mounted) return;
+        await ref.read(cameraAppProvider.notifier).replayParamsToNative();
+      }, duration: const Duration(milliseconds: 300));
+    } else if (state == AppLifecycleState.paused) {
+      // App 进入后台：停止预览（释放 GPU/CPU 资源）+ 保存快照
+      ref.read(cameraAppProvider.notifier).saveCurrentSnapshot();
+      ref.read(cameraServiceProvider.notifier).stopPreview();
+    } else if (state == AppLifecycleState.inactive) {
+      // 切到其他 App（控制中心、通知等）：仅保存快照，不停止预览
       ref.read(cameraAppProvider.notifier).saveCurrentSnapshot();
     }
   }
@@ -348,45 +329,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // Flutter 的 Texture widget 会冻结在最后一帧。必须重新 initCamera 才能恢复实时预览。
     if (!mounted) return;
     await ref.read(cameraServiceProvider.notifier).initCamera();
-    // initCamera 会创建新的 CameraGLRenderer，必须重新设置当前相机的 shader
-    // 否则新 renderer 会使用错误的默认 shader
-    final cameraBack = ref.read(cameraAppProvider).camera;
-    if (cameraBack != null) {
-      await ref.read(cameraServiceProvider.notifier).setCamera(cameraBack);
-      // 同步镜头参数（所有字段）
-      final lensIdBack = ref.read(cameraAppProvider).activeLensId;
-      final lensBack = cameraBack.lensById(lensIdBack);
-      await ref.read(cameraServiceProvider.notifier).updateLensParams(
-        distortion: lensBack?.distortion ?? 0.0,
-        vignette: lensBack?.vignette ?? 0.0,
-        zoomFactor: lensBack?.zoomFactor ?? 1.0,
-        fisheyeMode: lensBack?.fisheyeMode ?? false,
-        chromaticAberration: lensBack?.chromaticAberration ?? 0.0,
-        bloom: lensBack?.bloom ?? 0.0,
-        softFocus: lensBack?.softFocus ?? 0.0,
-        exposure: lensBack?.exposure ?? 0.0,
-        contrast: lensBack?.contrast ?? 0.0,
-        saturation: lensBack?.saturation ?? 0.0,
-        highlightCompression: lensBack?.highlightCompression ?? 0.0,
-      );
-      // 同步完整渲染参数（滤镜+镜头+defaultLook 组合值）
-      final renderParams = ref.read(cameraAppProvider).renderParams;
-      if (renderParams != null) {
-        ref.read(cameraServiceProvider.notifier).updateRenderParams(renderParams.toJson());
-      }
-    }
-    // FIX: 恢复缩放倍率（initCamera 重建后原生层缩放被重置为 x1）
-    final zoomBack = ref.read(cameraAppProvider).zoomLevel;
-    if (zoomBack != 1.0) {
-      await ref.read(cameraServiceProvider.notifier).setZoom(zoomBack);
-    }
-    // 同步清晰度档位对应的原生分辨率
-    // IMPORTANT: must await so the transition overlay stays visible until the
-    // native camera is fully reconfigured at the correct resolution.
-    final sharpenLevelBack = ref.read(cameraAppProvider).sharpenLevel;
-    const sharpenLevelsBack = [0.0, 0.5, 1.0];
-    await ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevelsBack[sharpenLevelBack]);
-    // 5. 淡出过渡动画（setSharpen 完成后再淡出，确保分辨率已切换）
+    // 统一参数重放：清晰度 → 相机配置 → 镜头 → 渲染参数 → 缩放 → 镜像
+    // IMPORTANT: replayParamsToNative 内部先 await setSharpen，确保分辨率切换后再淡出黑屏
+    await ref.read(cameraAppProvider.notifier).replayParamsToNative();
+    // 5. 淡出过渡动画（replayParamsToNative 完成后再淡出，确保分辨率已切换）
     _transitionTimer = Timer(const Duration(milliseconds: 300), () {
       if (mounted) setState(() => _showTransition = false);
     });
