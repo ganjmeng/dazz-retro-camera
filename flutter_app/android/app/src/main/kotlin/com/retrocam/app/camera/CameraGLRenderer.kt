@@ -153,11 +153,9 @@ uniform float     uLutSize;           // LUT 边长（通常 33.0）
 // ── 工具函数 ──────────────────────────────────────────────────────────────────
 // #1 LUT 采样（2D 纹理模拟 3D LUT，B-fastest 排列）
 vec3 previewSampleLUT(vec3 color, sampler2D lut, float lutSize) {
-    float scale = (lutSize - 1.0) / lutSize;
-    float offset = 0.5 / lutSize;
     float bIdx = floor(color.b * (lutSize - 1.0) + 0.5);
-    float u = (color.r * scale + offset + bIdx) / lutSize;
-    float v = color.g * scale + offset;
+    float u = (bIdx * lutSize + color.r * (lutSize - 1.0) + 0.5) / (lutSize * lutSize);
+    float v = (color.g * (lutSize - 1.0) + 0.5) / lutSize;
     return texture(lut, vec2(u, v)).rgb;
 }
 // 高光柔和滚落
@@ -621,7 +619,7 @@ void main() {
         color = mix(color, lutColor, uLutStrength);
     }
     fragColor = vec4(color, 1.0);
-}""""
+}"""
 
         // 全屏四边形顶点（位置 + UV）
         private val QUAD_VERTICES = floatArrayOf(
