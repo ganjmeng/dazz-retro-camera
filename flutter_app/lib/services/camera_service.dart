@@ -5,6 +5,9 @@ import 'package:permission_handler/permission_handler.dart';
 import '../models/preset.dart';
 import '../models/camera_definition.dart';
 import '../core/constants.dart';
+import '../core/app_logger.dart';
+
+const _tag = 'CameraService';
 
 /// 相机状态模型
 class CameraState {
@@ -68,12 +71,14 @@ class CameraService extends StateNotifier<CameraState> {
 
   /// 初始化相机，获取 Texture ID 并开始预览
   Future<void> initCamera() async {
+    AppLogger.i(_tag, 'initCamera() start, lens=${state.currentLens}');
     state = state.copyWith(isLoading: true, error: null);
-    
+
     // 相机权限已在 CameraScreen._onRequestCameraPermission() 中确认授予
     // 这里只做二次检查作为安全层
     final cameraGranted = await Permission.camera.isGranted;
     if (!cameraGranted) {
+      AppLogger.w(_tag, 'initCamera: camera permission denied');
       state = state.copyWith(
         isLoading: false,
         error: 'Camera permission denied. Please grant permission in settings.',
@@ -86,6 +91,7 @@ class CameraService extends StateNotifier<CameraState> {
       await _eventSubscription?.cancel();
       _eventSubscription = _eventChannel.receiveBroadcastStream().listen(_onNativeEvent);
 
+      AppLogger.d(_tag, 'invoking native initCamera...');
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('initCamera', {
         'resolution': '1080p',
         'lens': state.currentLens,
@@ -96,26 +102,30 @@ class CameraService extends StateNotifier<CameraState> {
       }
 
       final textureId = result['textureId'] as int;
+      AppLogger.i(_tag, 'initCamera success, textureId=$textureId');
       state = state.copyWith(isLoading: false, isReady: true, textureId: textureId);
       await startPreview();
-    } catch (e) {
+    } catch (e, st) {
+      AppLogger.e(_tag, 'initCamera failed', error: e, stackTrace: st);
       state = state.copyWith(isLoading: false, error: 'Failed to init camera: $e');
     }
   }
 
   Future<void> startPreview() async {
     try {
+      AppLogger.d(_tag, 'startPreview()');
       await _channel.invokeMethod('startPreview');
-    } catch (e) {
-      print('Error starting preview: $e');
+    } catch (e, st) {
+      AppLogger.w(_tag, 'startPreview failed', error: e, stackTrace: st);
     }
   }
 
   Future<void> stopPreview() async {
     try {
+      AppLogger.d(_tag, 'stopPreview()');
       await _channel.invokeMethod('stopPreview');
-    } catch (e) {
-      print('Error stopping preview: $e');
+    } catch (e, st) {
+      AppLogger.w(_tag, 'stopPreview failed', error: e, stackTrace: st);
     }
   }
 
@@ -124,8 +134,8 @@ class CameraService extends StateNotifier<CameraState> {
     try {
       await _channel.invokeMethod('setPreset', {'preset': preset.toJson()});
       state = state.copyWith(currentPreset: preset);
-    } catch (e) {
-      print('Error setting preset: $e');
+    } catch (e, st) {
+      AppLogger.e(_tag, 'setPreset failed', error: e, stackTrace: st);
     }
   }
 
@@ -139,8 +149,8 @@ class CameraService extends StateNotifier<CameraState> {
         'defaultLook': camera.defaultLook.toJson(),
       };
       await _channel.invokeMethod('setPreset', {'preset': presetPayload});
-    } catch (e) {
-      print('Error setting camera: \$e');
+    } catch (e, st) {
+      AppLogger.e(_tag, 'setCamera failed', error: e, stackTrace: st);
     }
   }
 
@@ -148,8 +158,8 @@ class CameraService extends StateNotifier<CameraState> {
   Future<void> setFlash(String mode) async {
     try {
       await _channel.invokeMethod('setFlash', {'mode': mode});
-    } catch (e) {
-      print('Error setting flash: $e');
+    } catch (e, st) {
+      AppLogger.w(_tag, 'setFlash failed', error: e, stackTrace: st);
     }
   }
 
@@ -157,8 +167,8 @@ class CameraService extends StateNotifier<CameraState> {
   Future<void> setWhiteBalance(String mode) async {
     try {
       await _channel.invokeMethod('setWhiteBalance', {'mode': mode});
-    } catch (e) {
-      print('Error setting white balance: \$e');
+    } catch (e, st) {
+      AppLogger.w(_tag, 'setWhiteBalance failed', error: e, stackTrace: st);
     }
   }
 
@@ -166,8 +176,8 @@ class CameraService extends StateNotifier<CameraState> {
   Future<void> setZoom(double zoom) async {
     try {
       await _channel.invokeMethod('setZoom', {'zoom': zoom});
-    } catch (e) {
-      print('Error setting zoom: $e');
+    } catch (e, st) {
+      AppLogger.w(_tag, 'setZoom failed', error: e, stackTrace: st);
     }
   }
 
@@ -176,8 +186,8 @@ class CameraService extends StateNotifier<CameraState> {
   Future<void> setFocus(double x, double y) async {
     try {
       await _channel.invokeMethod('setFocus', {'x': x, 'y': y});
-    } catch (e) {
-      print('Error setting focus: $e');
+    } catch (e, st) {
+      AppLogger.w(_tag, 'setFocus failed', error: e, stackTrace: st);
     }
   }
 
@@ -186,8 +196,8 @@ class CameraService extends StateNotifier<CameraState> {
   Future<void> setSharpen(double level) async {
     try {
       await _channel.invokeMethod('setSharpen', {'level': level});
-    } catch (e) {
-      print('Error setting sharpen: $e');
+    } catch (e, st) {
+      AppLogger.w(_tag, 'setSharpen failed', error: e, stackTrace: st);
     }
   }
 
@@ -220,8 +230,8 @@ class CameraService extends StateNotifier<CameraState> {
         'saturation': saturation,
         'highlightCompression': highlightCompression,
       });
-    } catch (e) {
-      print('Error updating lens params: $e');
+    } catch (e, st) {
+      AppLogger.e(_tag, 'updateLensParams failed', error: e, stackTrace: st);
     }
   }
 
@@ -238,8 +248,8 @@ class CameraService extends StateNotifier<CameraState> {
           'defaultLook': params,
         },
       });
-    } catch (e) {
-      print('Error updating render params: $e');
+    } catch (e, st) {
+      AppLogger.e(_tag, 'updateRenderParams failed', error: e, stackTrace: st);
     }
   }
 
@@ -247,8 +257,8 @@ class CameraService extends StateNotifier<CameraState> {
   Future<void> setMirrorFrontCamera(bool enabled) async {
     try {
       await _channel.invokeMethod('setMirrorFrontCamera', {'enabled': enabled});
-    } catch (e) {
-      print('Error setting mirror front camera: \$e');
+    } catch (e, st) {
+      AppLogger.w(_tag, 'setMirrorFrontCamera failed', error: e, stackTrace: st);
     }
   }
 
@@ -261,8 +271,8 @@ class CameraService extends StateNotifier<CameraState> {
     try {
       await _channel.invokeMethod('switchLens', {'lens': newLens});
       state = state.copyWith(currentLens: newLens);
-    } catch (e) {
-      print('Error switching lens: $e');
+    } catch (e, st) {
+      AppLogger.e(_tag, 'switchLens failed', error: e, stackTrace: st);
     }
   }
 
@@ -285,8 +295,8 @@ class CameraService extends StateNotifier<CameraState> {
         'captureWidth': (result['captureWidth'] as num?)?.toInt() ?? 0,
         'captureHeight': (result['captureHeight'] as num?)?.toInt() ?? 0,
       };
-    } catch (e) {
-      print('Error taking photo: $e');
+    } catch (e, st) {
+      AppLogger.e(_tag, 'takePhoto failed', error: e, stackTrace: st);
       return null;
     }
   }
@@ -302,8 +312,8 @@ class CameraService extends StateNotifier<CameraState> {
         return true;
       }
       return false;
-    } catch (e) {
-      print('Failed to start recording: $e');
+    } catch (e, st) {
+      AppLogger.e(_tag, 'startRecording failed', error: e, stackTrace: st);
       return false;
     }
   }
@@ -316,8 +326,8 @@ class CameraService extends StateNotifier<CameraState> {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('stopRecording');
       state = state.copyWith(isRecording: false);
       return result?['filePath'] as String?;
-    } catch (e) {
-      print('Failed to stop recording: $e');
+    } catch (e, st) {
+      AppLogger.e(_tag, 'stopRecording failed', error: e, stackTrace: st);
       state = state.copyWith(isRecording: false);
       return null;
     }
@@ -333,8 +343,8 @@ class CameraService extends StateNotifier<CameraState> {
         if (cameraId.isNotEmpty) 'cameraId': cameraId,
       });
       return result?['uri'] as String?;
-    } catch (e) {
-      print('Error saving to gallery: $e');
+    } catch (e, st) {
+      AppLogger.e(_tag, 'saveToGallery failed', error: e, stackTrace: st);
       return null;
     }
   }
@@ -343,8 +353,8 @@ class CameraService extends StateNotifier<CameraState> {
   Future<void> disposeCamera() async {
     try {
       await _channel.invokeMethod('dispose');
-    } catch (e) {
-      print('Error disposing camera: $e');
+    } catch (e, st) {
+      AppLogger.w(_tag, 'disposeCamera failed', error: e, stackTrace: st);
     }
   }
 
@@ -368,6 +378,7 @@ class CameraService extends StateNotifier<CameraState> {
         break;
       case AppConstants.eventError:
         final message = payload?['message'] as String? ?? 'Unknown error';
+        AppLogger.e(_tag, 'Native error event: $message');
         state = state.copyWith(error: message);
         break;
       case AppConstants.eventRecordingStateChanged:

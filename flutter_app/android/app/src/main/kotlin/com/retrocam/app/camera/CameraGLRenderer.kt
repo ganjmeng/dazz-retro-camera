@@ -9,6 +9,8 @@ import android.opengl.EGLSurface
 import android.opengl.GLES11Ext
 import android.opengl.GLES30
 import android.util.Log
+import android.os.Handler
+import android.os.Looper
 import android.view.Choreographer
 import android.view.Surface
 import java.nio.ByteBuffer
@@ -693,6 +695,12 @@ void main() {
     private var vaoInitialized = false
 
     // Choreographer 帧调度
+    // CRITICAL FIX: Choreographer.getInstance() 必须在有 Looper 的线程上调用。
+    // onFrameAvailableListener 默认在调用 setOnFrameAvailableListener 的线程（glExecutor，无 Looper）上回调，
+    // 直接调用 Choreographer.getInstance() 会抛 RuntimeException: Can't create handler inside thread
+    // that has not called Looper.prepare()，导致授权后立即崩溃。
+    // 解决方案：通过 mainHandler 将 postFrameCallback 派发到主线程执行。
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val frameAvailable = AtomicBoolean(false)
     private val choreographerCallback = Choreographer.FrameCallback { _ ->
         if (frameAvailable.compareAndSet(true, false)) {
@@ -921,10 +929,12 @@ void main() {
         inputSurfaceTexture!!.setDefaultBufferSize(width, height)
         // 最佳实践：onFrameAvailable 只标记「有新帧」，渲染由 Choreographer vsync 驱动
         // 避免相机帧率（30fps）和屏幕刷新率（60fps）不匹配时的重复渲染和帧积压
-        inputSurfaceTexture!!.setOnFrameAvailableListener {
+        // CRITICAL FIX: 将 listener 绑定到 mainHandler，确保回调在主线程（有 Looper）执行，
+        // 从而可以安全调用 Choreographer.getInstance()。
+        inputSurfaceTexture!!.setOnFrameAvailableListener({
             frameAvailable.set(true)
             Choreographer.getInstance().postFrameCallback(choreographerCallback)
-        }
+        }, mainHandler)
         inputSurface = Surface(inputSurfaceTexture)
 
         // ── 10. 获取 Pass 2 uniform 位置 ────────────────────────────────────
