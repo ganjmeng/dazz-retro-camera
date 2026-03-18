@@ -767,14 +767,14 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     final svc = _ref.read(cameraServiceProvider.notifier);
 
     try {
-      // 1. 切换原生分辨率（此操作会重建 CameraGLRenderer，清空所有 shader 参数）
-      await svc.setSharpen(levels[next]);
+      // 1. 重新初始化相机（重新获取 textureId，重建 renderer）
+      await svc.initCamera();
 
-      // 2. 重新同步相机 shader 参数（与 flipCamera 保持一致）
+      // 2. 同步相机 shader 参数
       final camera = state.camera;
       if (camera != null) {
         await svc.setCamera(camera);
-        // 3. 重新同步镜头参数
+        // 3. 同步镜头参数
         final lens = camera.lensById(state.activeLensId);
         await svc.updateLensParams(
           distortion:            lens?.distortion            ?? 0.0,
@@ -791,7 +791,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         );
       }
 
-      // 4. 同步完整渲染参数（滤镜 + 镜头 + defaultLook 组合値）
+      // 4. 设置目标分辨率（initCamera 默认用中档，这里覆盖为用户选择的档位）
+      await svc.setSharpen(levels[next]);
+
+      // 5. 同步完整渲染参数（滤镜 + defaultLook）
       _applyCurrentRenderParamsToNative();
     } finally {
       // 隐藏加载遇罩（无论成功还是失败）
