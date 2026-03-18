@@ -84,6 +84,8 @@ class CameraAppState {
   // Debug: 最近一次拍照的分辨率信息
   final String lastCaptureRaw;    // e.g. "4032×3024" 原始分辨率
   final String lastCaptureOutput; // e.g. "3024×3024" 输出分辨率
+  // 权限状态
+  final bool needsPermission; // true = 相机权限未授予，取景框显示引导 UI
 
   const CameraAppState({
     this.activeCameraId = 'grd_r',
@@ -133,6 +135,7 @@ class CameraAppState {
     this.isBursting = false,
     this.lastCaptureRaw = '',
     this.lastCaptureOutput = '',
+    this.needsPermission = false,
   });
   CameraAppState copyWith({
     String? activeCameraId,
@@ -184,6 +187,7 @@ class CameraAppState {
     bool? isBursting,
     String? lastCaptureRaw,
     String? lastCaptureOutput,
+    bool? needsPermission,
     bool clearPanel = false,
     bool clearError = false,
     bool clearFrameId = false, // 用于将 activeFrameId 清空为 null
@@ -236,6 +240,7 @@ class CameraAppState {
       isBursting: isBursting ?? this.isBursting,
       lastCaptureRaw: lastCaptureRaw ?? this.lastCaptureRaw,
       lastCaptureOutput: lastCaptureOutput ?? this.lastCaptureOutput,
+      needsPermission: needsPermission ?? this.needsPermission,
     );
   }
 
@@ -300,7 +305,11 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     await _loadCamera(prefs.lastCameraId);
   }
 
-  /// Switch to a different camera by id
+  /// 设置相机权限状态
+  void setNeedsPermission(bool value) {
+    state = state.copyWith(needsPermission: value);
+  }
+
   Future<void> switchToCamera(String cameraId) async {
     // 持久化最后选择的相机
     await AppPrefsService.instance.setLastCameraId(cameraId);
