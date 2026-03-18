@@ -628,6 +628,9 @@ class FrameDefinition {
     this.supportsBackground = false,
   });
 
+  /// 是否为空相框（id == 'none'）
+  bool get isNone => id == 'none';
+
   /// 根据 ratioId 获取实际使用的 asset 路径（优先 ratioAssets，回退 asset）
   String? assetForRatio(String? ratioId) {
     if (ratioId != null && ratioAssets.containsKey(ratioId)) {
