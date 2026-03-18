@@ -356,7 +356,7 @@ class CapturePipeline {
         );
       } else {
         // Dart 降级管线：通过 colorMatrix 叠加基础色彩效果
-        final colorMatrix = _buildColorMatrix(renderParams);
+        final colorMatrix = buildColorMatrix(renderParams);
         canvas.drawImageRect(
           srcImage,
           cropRect,
@@ -557,7 +557,7 @@ class CapturePipeline {
 
   // ── 颜色矩阵（与预览一致）────────────────────────────────────────────────────
 
-  List<double> _buildColorMatrix(PreviewRenderParams params) {
+  static List<double> buildColorMatrix(PreviewRenderParams params) {
     var m = _identity();
 
     // 1. 曝光
@@ -613,21 +613,21 @@ class CapturePipeline {
     return m;
   }
 
-  List<double> _identity() => [
+  static List<double> _identity() => [
     1, 0, 0, 0, 0,
     0, 1, 0, 0, 0,
     0, 0, 1, 0, 0,
     0, 0, 0, 1, 0,
   ];
 
-  List<double> _exposureMatrix(double mul) => [
+  static List<double> _exposureMatrix(double mul) => [
     mul, 0, 0, 0, 0,
     0, mul, 0, 0, 0,
     0, 0, mul, 0, 0,
     0, 0, 0, 1, 0,
   ];
 
-  List<double> _temperatureMatrix(double temp) {
+  static List<double> _temperatureMatrix(double temp) {
     final t = temp / 100.0;
     final rShift = t * 0.20;
     final bShift = -t * 0.20;
@@ -639,7 +639,7 @@ class CapturePipeline {
     ];
   }
 
-  List<double> _contrastMatrix(double contrast) {
+  static List<double> _contrastMatrix(double contrast) {
     final offset = 0.5 * (1 - contrast);
     return [
       contrast, 0, 0, 0, offset * 255,
@@ -649,7 +649,7 @@ class CapturePipeline {
     ];
   }
 
-  List<double> _saturationMatrix(double sat) {
+  static List<double> _saturationMatrix(double sat) {
     const lr = 0.2126;
     const lg = 0.7152;
     const lb = 0.0722;
@@ -664,7 +664,7 @@ class CapturePipeline {
     ];
   }
 
-  List<double> _multiply(List<double> a, List<double> b) {
+  static List<double> _multiply(List<double> a, List<double> b) {
     final result = List<double>.filled(20, 0);
     for (int row = 0; row < 4; row++) {
       for (int col = 0; col < 5; col++) {
@@ -681,7 +681,7 @@ class CapturePipeline {
     return result;
   }
 
-  List<double> _tintMatrix(double tint) {
+  static List<double> _tintMatrix(double tint) {
     final t = tint / 100.0;
     final gShift = -t * 0.12;
     final rbShift = t * 0.06;
@@ -693,7 +693,7 @@ class CapturePipeline {
     ];
   }
 
-  List<double> _blacksWhitesMatrix(double blacks, double whites) {
+  static List<double> _blacksWhitesMatrix(double blacks, double whites) {
     final blacksOffset = blacks / 100.0 * 20.0;
     final whitesScale = 1.0 + whites / 100.0 * 0.15;
     return [
@@ -704,7 +704,7 @@ class CapturePipeline {
     ];
   }
 
-  List<double> _highlightsShadowsMatrix(double highlights, double shadows) {
+  static List<double> _highlightsShadowsMatrix(double highlights, double shadows) {
     final hScale = 1.0 + highlights / 100.0 * 0.12;
     final hOffset = -highlights / 100.0 * 0.12 * 191.0;
     final sScale = 1.0 - shadows / 100.0 * 0.08;
@@ -719,7 +719,7 @@ class CapturePipeline {
     ];
   }
 
-  List<double> _clarityMatrix(double clarity) {
+  static List<double> _clarityMatrix(double clarity) {
     final c = clarity / 100.0;
     final boost = 1.0 + c * 0.15;
     final offset = -c * 0.15 * 0.5 * 255;
@@ -731,7 +731,7 @@ class CapturePipeline {
     ];
   }
 
-  List<double> _vibranceMatrix(double vibrance) {
+  static List<double> _vibranceMatrix(double vibrance) {
     final v = vibrance / 100.0 * 0.6;
     final sat = 1.0 + v;
     const lr = 0.2126;
@@ -748,7 +748,7 @@ class CapturePipeline {
     ];
   }
 
-  List<double> _colorBiasMatrix(double r, double g, double b) {
+  static List<double> _colorBiasMatrix(double r, double g, double b) {
     return [
       1, 0, 0, 0, r * 30.0,
       0, 1, 0, 0, g * 30.0,
@@ -909,9 +909,8 @@ class CapturePipeline {
   ) {
     final offset = strength * 6.0; // 与预览层一致：6px per unit
     final alpha = (strength / 0.1 * 0.25).clamp(0.0, 0.25); // 与预览层一致
-    final colorMatrix = _buildColorMatrix(renderParams);
-
-    // 红通道向左偏移
+    final colorMatrix = buildColorMatrix(renderParams);
+    // 红通道向左偏移移
     final redRect = Rect.fromLTWH(
       destRect.left - offset,
       destRect.top,

@@ -125,13 +125,13 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
 
-  // ── GPU 预览 ─────────────────────────────────────────────────────────────
+  // ── GPU 预览（已改为 Flutter 纯渲染，以下变量仅保留供 _save 使用）────────────
   static const MethodChannel _gpuChannel = MethodChannel('com.retrocam.app/camera_control');
-  String? _gpuPreviewPath;       // GPU 处理后的预览图临时文件路径
-  bool _gpuProcessing = false;   // 是否正在 GPU 处理中
-  int _gpuRequestId = 0;         // 用于取消过期的 GPU 请求
-  // FIX: 记录上一次成功触发 GPU 的 renderParams 签名，避免重复处理
-  String? _lastGpuParamsSignature;
+  // 预览不再使用 GPU，以下变量仅供 _save 时保存高质量成片
+  // String? _gpuPreviewPath;    // 已废弃：预览不再走 GPU
+  // bool _gpuProcessing = false;
+  // int _gpuRequestId = 0;
+  // String? _lastGpuParamsSignature;
 
   // ── 高清图片缩小后的预览源路径（避免 OOM）──────────────────────────────────
   String? _resizedPreviewPath;   // 缩小到 ≤4096px 的预览源
@@ -149,7 +149,8 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     _initPreview();
   }
 
-  /// 初始化预览：先缩小高清图片到安全尺寸（在 isolate 中执行，避免卡 UI），再生成 GPU 预览
+  /// 初始化预览：先缩小高清图片到安全尺寸（在 isolate 中执行，避免卡 UI）
+  /// 预览已改为 Flutter 纯渲染（ColorFiltered），无需 GPU 预处理
   Future<void> _initPreview() async {
     try {
       // 1. 读取原图并检查尺寸
@@ -182,111 +183,24 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       }
 
       if (!mounted) return;
+      // 预览直接显示（Flutter ColorFiltered 渲染，无需等待 GPU）
       setState(() => _isLoading = false);
-
-      // 3. 等待 camera 就绪后再触发 GPU 预览
-      //    renderParams 依赖 camera != null，camera 由持久化异步加载，
-      //    此处轮询最多 3 秒，就绪后立即刷新；超时则降级显示原图。
-      await _waitForCameraAndRefresh();
     } catch (e) {
       debugPrint('[ImageEditScreen] _initPreview error: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  /// 等待 camera 就绪（最多 3 秒），就绪后触发 GPU 预览
-  Future<void> _waitForCameraAndRefresh() async {
-    // 先尝试直接刷新（camera 可能已经就绪）
-    if (ref.read(cameraAppProvider).renderParams != null) {
-      _refreshGpuPreview();
-      return;
-    }
-    // camera 尚未就绪，监听状态变化，最多等待 3 秒
-    const maxWait = Duration(seconds: 3);
-    const pollInterval = Duration(milliseconds: 100);
-    final deadline = DateTime.now().add(maxWait);
-    while (mounted && DateTime.now().isBefore(deadline)) {
-      await Future.delayed(pollInterval);
-      if (!mounted) return;
-      if (ref.read(cameraAppProvider).renderParams != null) {
-        _refreshGpuPreview();
-        return;
-      }
-    }
-    // 超时：camera 未就绪，降级显示原图（_gpuPreviewPath 为 null 时 _buildTransformedImage 显示原图）
-    debugPrint('[ImageEditScreen] Camera not ready after 3s, showing original image');
-  }
-
-  /// GPU 预览使用的源路径（缩小后的 or 原图）
+  /// 预览使用的源路径（缩小后的 or 原图）
   String get _previewSourcePath => _resizedPreviewPath ?? widget.imagePath;
 
-  /// 调用 Native GPU Shader 生成带滤镜效果的预览图
-  /// FIX: 重写并发控制逻辑——
-  ///   - 不再用 _gpuProcessing 标志直接丢弃新请求，改为记录"待处理"标志
-  ///   - 处理完成后若有新请求排队，立即处理最新的请求（保证切换相机后效果刷新）
-  Future<void> _refreshGpuPreview() async {
-    final st = ref.read(cameraAppProvider);
-    final renderParams = st.renderParams;
-    if (renderParams == null) return;
-
-    // FIX: 用参数签名做去重，避免相同参数重复触发 GPU（但不阻塞不同参数的请求）
-    final paramsSignature = renderParams.toJson().toString();
-
-    // 如果正在处理中，只递增 requestId（作为"有新请求"信号），让 finally 补偿处理
-    final requestId = ++_gpuRequestId;
-    if (_gpuProcessing) {
-      // 有新请求已排队（requestId 已递增），finally 块会处理
-      return;
-    }
-
-    // FIX: 去重——相同参数且已有预览图时跳过（但 _gpuPreviewPath 为 null 时必须处理）
-    if (_gpuPreviewPath != null && paramsSignature == _lastGpuParamsSignature) {
-      return;
-    }
-
-    _gpuProcessing = true;
-
-    try {
-      final result = await _gpuChannel.invokeMethod<Map>('processWithGpu', {
-        'filePath': _previewSourcePath,
-        'params': renderParams.toJson(),
-      });
-      // 检查请求是否过期（用户可能已经切换了相机/滤镜）
-      if (!mounted) return;
-      if (result != null && result['filePath'] != null) {
-        // 删除旧的预览临时文件
-        if (_gpuPreviewPath != null) {
-          try { File(_gpuPreviewPath!).deleteSync(); } catch (_) {}
-        }
-        if (mounted) {
-          setState(() {
-            _gpuPreviewPath = result['filePath'] as String;
-            _lastGpuParamsSignature = paramsSignature;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('[ImageEditScreen] GPU preview failed: $e');
-      // FIX: GPU 失败时清空签名，下次可以重试
-      _lastGpuParamsSignature = null;
-    } finally {
-      _gpuProcessing = false;
-      // FIX: 如果有新的请求排队（requestId 已递增），立即处理最新请求
-      // 注意：此处 _gpuProcessing 已经是 false，不会被拦截
-      if (mounted && requestId != _gpuRequestId) {
-        // 有更新的请求，递归处理（使用最新的 renderParams）
-        _refreshGpuPreview();
-      }
-    }
-  }
+  // ── 以下 GPU 预览方法已废弃（预览改为 Flutter 纯渲染），仅保留注释供参考 ──────
+  // Future<void> _waitForCameraAndRefresh() async { ... }
+  // Future<void> _refreshGpuPreview() async { ... }
 
   @override
   void dispose() {
-    // 清理 GPU 预览临时文件
-    if (_gpuPreviewPath != null) {
-      try { File(_gpuPreviewPath!).deleteSync(); } catch (_) {}
-    }
-    // 清理缩小后的预览源
+    // 清理缩小后的预览源临时文件
     if (_resizedPreviewPath != null) {
       try { File(_resizedPreviewPath!).deleteSync(); } catch (_) {}
     }
@@ -328,15 +242,15 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
             gpuSourceForSave = result['filePath'] as String;
           }
         } catch (e) {
-          debugPrint('[ImageEditScreen] GPU save processing failed, using preview: $e');
-          // 降级：使用预览图
-          gpuSourceForSave = _gpuPreviewPath ?? widget.imagePath;
+          debugPrint('[ImageEditScreen] GPU save processing failed, using original: $e');
+          // 降级：使用原始高清图
+          gpuSourceForSave = widget.imagePath;
         }
       }
 
       final transformedBytes = await _applyTransforms(sourcePath: gpuSourceForSave);
       // 清理保存用的 GPU 临时文件
-      if (gpuSourceForSave != widget.imagePath && gpuSourceForSave != _gpuPreviewPath) {
+      if (gpuSourceForSave != widget.imagePath) {
         try { File(gpuSourceForSave).deleteSync(); } catch (_) {}
       }
 
@@ -403,7 +317,7 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   /// 使用 image_lib 在后台 isolate 中处理，避免 rawRgba 大内存导致 OOM 崩溃
   Future<Uint8List?> _applyTransforms({String? sourcePath}) async {
     try {
-      final path = sourcePath ?? _gpuPreviewPath ?? _previewSourcePath;
+      final path = sourcePath ?? _previewSourcePath;
       final bytes = await File(path).readAsBytes();
 
       // 捕获当前变换参数（不能在 isolate 中访问 'this'）
@@ -470,23 +384,8 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
     final st = ref.watch(cameraAppProvider);
     final camera = st.camera;
 
-    // FIX: 监听相机/滤镜/参数变化，实时刷新 GPU 预览
-    // 修复：切换相机时 _loadCamera 会先设置 isLoading=true，等 isLoading 变回 false
-    // 且 renderParams 非 null 时才触发 GPU 刷新，避免在相机加载中途触发导致崩溃
-    ref.listen<CameraAppState>(cameraAppProvider, (prev, next) {
-      // 仅在相机加载完成后（isLoading=false）且 renderParams 有变化时刷新
-      if (next.isLoading) return;
-      if (next.renderParams == null) return;
-      final prevSig = prev?.renderParams?.toJson().toString();
-      final nextSig = next.renderParams?.toJson().toString();
-      if (prevSig != nextSig) {
-        // FIX: 切换相机时重置签名缓存，强制重新生成预览（即使参数碰巧相同也要刷新）
-        if (prev?.camera?.id != next.camera?.id) {
-          _lastGpuParamsSignature = null;
-        }
-        _refreshGpuPreview();
-      }
-    });
+    // 预览已改为 Flutter 纯渲染（ColorFiltered），无需监听参数变化触发 GPU
+    // ref.watch(cameraAppProvider) 已经保证参数变化时自动重建 Widget
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -652,8 +551,11 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
                         ClipRect(
                           child: _buildTransformedImage(st, constraints),
                         ),
-                        // 相框预览
-                        if (st.activeFrame != null)
+                        // 相框预览：仅当相框功能开启、当前比例支持相框、且选中了非 none 相框时显示
+                        if (camera != null &&
+                            camera.isFrameEnabled(st.activeRatioId) &&
+                            st.activeFrame != null &&
+                            !st.activeFrame!.isNone)
                           IgnorePointer(
                             child: _FramePreviewOverlay(
                               frame: st.activeFrame!,
@@ -829,23 +731,31 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   }
 
   Widget _buildTransformedImage(CameraAppState st, BoxConstraints constraints) {
-    // 显示 GPU Shader 处理后的预览图（带滤镜效果），降级时显示缩小后的预览源
-    final previewFile = _gpuPreviewPath != null
-        ? File(_gpuPreviewPath!)
-        : File(_previewSourcePath);
+    // Flutter 纯渲染预览：ColorFiltered + buildColorMatrix，不走原生 GPU 管线
+    // 优先使用缩小后的预览源（避免高清图 OOM），无缩小版时使用原图
+    final previewFile = File(_previewSourcePath);
+    final renderParams = st.renderParams;
+    Widget imageWidget = Image.file(
+      previewFile,
+      fit: BoxFit.cover,
+      width: constraints.maxWidth,
+      height: constraints.maxHeight,
+      key: ValueKey(_previewSourcePath),
+    );
+    // 叠加颜色矩阵滤镜（与拍立得成片管线 Dart 降级路径保持一致）
+    if (renderParams != null) {
+      final colorMatrix = CapturePipeline.buildColorMatrix(renderParams);
+      imageWidget = ColorFiltered(
+        colorFilter: ColorFilter.matrix(colorMatrix),
+        child: imageWidget,
+      );
+    }
     return Transform(
       alignment: Alignment.center,
       transform: Matrix4.identity()
         ..rotateZ(_totalRotation * math.pi / 180.0)
         ..scale(_flipH ? -1.0 : 1.0, 1.0),
-      child: Image.file(
-        previewFile,
-        fit: BoxFit.cover,
-        width: constraints.maxWidth,
-        height: constraints.maxHeight,
-        // 当 GPU 预览更新时强制刷新（避免 Flutter 缓存旧图片）
-        key: ValueKey(_gpuPreviewPath ?? _previewSourcePath),
-      ),
+      child: imageWidget,
     );
   }
 
@@ -1751,7 +1661,7 @@ enum _CropHandle { topLeft, topRight, bottomLeft, bottomRight, move }
 // 相框预览 Overlay（在编辑页预览区叠加相框效果）
 // FIX: 新增此 Widget，修复编辑页预览区相框不显示的问题
 // ─────────────────────────────────────────────────────────────────────────────
-class _FramePreviewOverlay extends StatelessWidget {
+class _FramePreviewOverlay extends StatefulWidget {
   final FrameDefinition frame;
   final String ratioId;
   final String? backgroundColorOverride;
@@ -1763,8 +1673,49 @@ class _FramePreviewOverlay extends StatelessWidget {
   });
 
   @override
+  State<_FramePreviewOverlay> createState() => _FramePreviewOverlayState();
+}
+
+class _FramePreviewOverlayState extends State<_FramePreviewOverlay> {
+  ui.Image? _pngImage;
+  String? _loadedAsset;
+
+  @override
+  void didUpdateWidget(_FramePreviewOverlay old) {
+    super.didUpdateWidget(old);
+    final newAsset = widget.frame.assetForRatio(widget.ratioId);
+    if (newAsset != _loadedAsset) {
+      _pngImage = null;
+      _loadedAsset = null;
+      if (newAsset != null && newAsset.isNotEmpty) _loadPng(newAsset);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final asset = widget.frame.assetForRatio(widget.ratioId);
+    if (asset != null && asset.isNotEmpty) _loadPng(asset);
+  }
+
+  Future<void> _loadPng(String assetPath) async {
+    try {
+      final data = await rootBundle.load(assetPath);
+      final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      final frame = await codec.getNextFrame();
+      if (mounted) setState(() { _pngImage = frame.image; _loadedAsset = assetPath; });
+    } catch (e) {
+      debugPrint('[FramePreviewOverlay] asset load error: $e');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // 解析背景色
+    final frame = widget.frame;
+    final ratioId = widget.ratioId;
+    final backgroundColorOverride = widget.backgroundColorOverride;
+
+    // 解析相框背景色（与 capture_pipeline 一致）
     Color bgColor = const Color(0xFFF5F2EA);
     final bgHexSrc = (backgroundColorOverride != null && backgroundColorOverride!.isNotEmpty)
         ? backgroundColorOverride!
@@ -1787,43 +1738,162 @@ class _FramePreviewOverlay extends StatelessWidget {
 
         // 获取当前比例对应的 inset
         final activeInset = frame.insetForRatio(ratioId);
-        final topFrac   = (activeInset.top   * scale) / h;
-        final bottomFrac = (activeInset.bottom * scale) / h;
-        final leftFrac  = (activeInset.left  * scale) / w;
-        final rightFrac = (activeInset.right * scale) / w;
+        final topPx    = activeInset.top    * scale;
+        final bottomPx = activeInset.bottom * scale;
+        final leftPx   = activeInset.left   * scale;
+        final rightPx  = activeInset.right  * scale;
 
-        // 用四个矩形条模拟相框边距（上/下/左/右）
-        return Stack(
-          children: [
-            if (topFrac > 0)
-              Positioned(
-                top: 0, left: 0, right: 0,
-                height: topFrac * h,
-                child: ColoredBox(color: bgColor),
-              ),
-            if (bottomFrac > 0)
-              Positioned(
-                bottom: 0, left: 0, right: 0,
-                height: bottomFrac * h,
-                child: ColoredBox(color: bgColor),
-              ),
-            if (leftFrac > 0)
-              Positioned(
-                top: topFrac * h, bottom: bottomFrac * h, left: 0,
-                width: leftFrac * w,
-                child: ColoredBox(color: bgColor),
-              ),
-            if (rightFrac > 0)
-              Positioned(
-                top: topFrac * h, bottom: bottomFrac * h, right: 0,
-                width: rightFrac * w,
-                child: ColoredBox(color: bgColor),
-              ),
-          ],
+        // outerPadding：在相框外周加白边（拍立得风格）
+        final outerPad = frame.outerPadding > 0 ? frame.outerPadding * scale : 0.0;
+
+        // cornerRadius
+        final cornerRad = frame.cornerRadius > 0 ? frame.cornerRadius * scale : 0.0;
+
+        // 判断是否有 PNG 资源
+        final resolvedAsset = frame.assetForRatio(ratioId);
+        final hasPng = resolvedAsset != null && resolvedAsset.isNotEmpty;
+
+        return CustomPaint(
+          painter: _FrameOverlayPainter(
+            bgColor: bgColor,
+            topPx: topPx,
+            bottomPx: bottomPx,
+            leftPx: leftPx,
+            rightPx: rightPx,
+            outerPad: outerPad,
+            cornerRad: cornerRad,
+            innerShadow: frame.innerShadow,
+            hasPng: hasPng,
+            pngImage: _pngImage,
+          ),
         );
       },
     );
   }
+}
+
+/// CustomPainter 实现相框预览（与 capture_pipeline Dart 降级路径保持一致）
+class _FrameOverlayPainter extends CustomPainter {
+  final Color bgColor;
+  final double topPx, bottomPx, leftPx, rightPx;
+  final double outerPad;
+  final double cornerRad;
+  final bool innerShadow;
+  final bool hasPng;
+  final ui.Image? pngImage;
+
+  const _FrameOverlayPainter({
+    required this.bgColor,
+    required this.topPx,
+    required this.bottomPx,
+    required this.leftPx,
+    required this.rightPx,
+    required this.outerPad,
+    required this.cornerRad,
+    required this.innerShadow,
+    required this.hasPng,
+    this.pngImage,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    if (hasPng) {
+      // PNG 资源模式：只画四边相框色块（PNG 层由 Image.asset 在上方另行叠加）
+      // 上
+      if (topPx > 0 && bgColor != Colors.transparent) {
+        canvas.drawRect(Rect.fromLTWH(0, 0, w, topPx), Paint()..color = bgColor);
+      }
+      // 下
+      if (bottomPx > 0 && bgColor != Colors.transparent) {
+        canvas.drawRect(Rect.fromLTWH(0, h - bottomPx, w, bottomPx), Paint()..color = bgColor);
+      }
+      // 左
+      if (leftPx > 0 && bgColor != Colors.transparent) {
+        canvas.drawRect(Rect.fromLTWH(0, topPx, leftPx, h - topPx - bottomPx), Paint()..color = bgColor);
+      }
+      // 右
+      if (rightPx > 0 && bgColor != Colors.transparent) {
+        canvas.drawRect(Rect.fromLTWH(w - rightPx, topPx, rightPx, h - topPx - bottomPx), Paint()..color = bgColor);
+      }
+      // 叠加 PNG 纹理
+      if (pngImage != null) {
+        canvas.drawImageRect(
+          pngImage!,
+          Rect.fromLTWH(0, 0, pngImage!.width.toDouble(), pngImage!.height.toDouble()),
+          Rect.fromLTWH(0, 0, w, h),
+          Paint()..filterQuality = FilterQuality.medium,
+        );
+      }
+    } else {
+      // 纯色块模式：四边 + outerPadding + cornerRadius
+      if (bgColor == Colors.transparent) return;
+      // outerPad 外层背景
+      if (outerPad > 0) {
+        canvas.drawRect(Rect.fromLTWH(0, 0, w, h), Paint()..color = bgColor);
+      }
+      // 四边色块
+      final paint = Paint()..color = bgColor;
+      if (topPx > 0) canvas.drawRect(Rect.fromLTWH(outerPad, outerPad, w - outerPad * 2, topPx), paint);
+      if (bottomPx > 0) canvas.drawRect(Rect.fromLTWH(outerPad, h - outerPad - bottomPx, w - outerPad * 2, bottomPx), paint);
+      if (leftPx > 0) canvas.drawRect(Rect.fromLTWH(outerPad, outerPad + topPx, leftPx, h - outerPad * 2 - topPx - bottomPx), paint);
+      if (rightPx > 0) canvas.drawRect(Rect.fromLTWH(w - outerPad - rightPx, outerPad + topPx, rightPx, h - outerPad * 2 - topPx - bottomPx), paint);
+    }
+
+    // innerShadow：在图片区域边缘画渐变阴影
+    if (innerShadow) {
+      const shadowColor = Color(0x55000000);
+      const shadowWidthFraction = 0.06;
+      final imgX = (hasPng ? 0.0 : outerPad) + leftPx;
+      final imgY = (hasPng ? 0.0 : outerPad) + topPx;
+      final imgW = w - (hasPng ? 0.0 : outerPad * 2) - leftPx - rightPx;
+      final imgH = h - (hasPng ? 0.0 : outerPad * 2) - topPx - bottomPx;
+      final sw = math.min(imgW, imgH) * shadowWidthFraction;
+      // 上
+      canvas.drawRect(
+        Rect.fromLTWH(imgX, imgY, imgW, sw),
+        Paint()..shader = LinearGradient(
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+          colors: [shadowColor, Colors.transparent],
+        ).createShader(Rect.fromLTWH(imgX, imgY, imgW, sw)),
+      );
+      // 下
+      canvas.drawRect(
+        Rect.fromLTWH(imgX, imgY + imgH - sw, imgW, sw),
+        Paint()..shader = LinearGradient(
+          begin: Alignment.bottomCenter, end: Alignment.topCenter,
+          colors: [shadowColor, Colors.transparent],
+        ).createShader(Rect.fromLTWH(imgX, imgY + imgH - sw, imgW, sw)),
+      );
+      // 左
+      canvas.drawRect(
+        Rect.fromLTWH(imgX, imgY, sw, imgH),
+        Paint()..shader = LinearGradient(
+          begin: Alignment.centerLeft, end: Alignment.centerRight,
+          colors: [shadowColor, Colors.transparent],
+        ).createShader(Rect.fromLTWH(imgX, imgY, sw, imgH)),
+      );
+      // 右
+      canvas.drawRect(
+        Rect.fromLTWH(imgX + imgW - sw, imgY, sw, imgH),
+        Paint()..shader = LinearGradient(
+          begin: Alignment.centerRight, end: Alignment.centerLeft,
+          colors: [shadowColor, Colors.transparent],
+        ).createShader(Rect.fromLTWH(imgX + imgW - sw, imgY, sw, imgH)),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FrameOverlayPainter old) =>
+      old.bgColor != bgColor ||
+      old.topPx != topPx || old.bottomPx != bottomPx ||
+      old.leftPx != leftPx || old.rightPx != rightPx ||
+      old.outerPad != outerPad || old.cornerRad != cornerRad ||
+      old.innerShadow != innerShadow || old.hasPng != hasPng ||
+      old.pngImage != pngImage;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
