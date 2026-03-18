@@ -34,7 +34,7 @@ class CapturePipeline {
   /// 输出图像最大边长（像素）。超过此値时等比缩小画布。
   /// 各清晰度档位的输出最大边长（像素）
   static const int kMaxDimLow    = 1920; // 低画质：1920p 长边，~2MP
-  static const int kMaxDimMid    = 2688; // 中画质：2688p 长边，~4MP
+  static const int kMaxDimMid    = 1920; // 中画质：1920p 长边，与低档对齐（减少 glReadPixels 回读量 ~50%）
   static const int kMaxDimHigh   = 4096; // 高画质：4K 长边，~12MP
   /// 各清晰度档位的 JPEG 编码质量
   static const int kJpegQualityLow  = 72; // 对齐竞品低画质 ~385 KB
