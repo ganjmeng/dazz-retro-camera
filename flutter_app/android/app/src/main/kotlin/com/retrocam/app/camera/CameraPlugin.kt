@@ -167,8 +167,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "setFlash"        -> handleSetFlash(call, result)
             "setWhiteBalance" -> handleSetWhiteBalance(call, result)
             "setSharpen"         -> handleSetSharpen(call, result)
-            "updateLensParams"   -> handleUpdateLensParams(call, result)
-            "startRecording"     -> handleStartRecording(result)
+            "updateLensParams"      -> handleUpdateLensParams(call, result)
+            "setMirrorFrontCamera" -> handleSetMirrorFrontCamera(call, result)
+            "startRecording"       -> handleStartRecording(result)
             "stopRecording"      -> handleStopRecording(result)
             "saveToGallery"      -> handleSaveToGallery(call, result)
             "dispose"            -> handleDispose(result)
@@ -319,8 +320,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
                 // ── FIX: 切换摄像头后重新应用缓存的 preset 参数 ──────────
                 // switchLens 会重建 renderer，但不会重新调用 setPreset，
-                // 导致新 renderer 的所有 uniform 参数为默认值（无效果）。
+                // 导致新 renderer 的所有 uniform 参数为默认値（无效果）。
                 reapplyPresetToRenderer(renderer)
+                // ── 应用缓存的 mirror 设置 ──────────────────────────────
+                val shouldFlip = cachedMirrorFrontCamera && lensFacing == CameraSelector.LENS_FACING_FRONT
+                renderer.setFlipHorizontal(shouldFlip)
 
                 // ── 通知 handleSwitchLens：新 renderer 已就绪 ──
                 latch.countDown()
@@ -1184,6 +1188,19 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         )
         renderer.updateParams(lensParams)
         Log.d(TAG, "reapplyPresetToRenderer: restored lens params fisheyeMode=$cachedLensFisheyeMode, vignette=$cachedLensVignette, chromaticAberration=$cachedLensChromaticAberration")
+    }
+
+    // ─────────────────────────────────────────────
+    // setMirrorFrontCamera
+    // ─────────────────────────────────────────────
+    private fun handleSetMirrorFrontCamera(call: MethodCall, result: MethodChannel.Result) {
+        val mirror = call.argument<Boolean>("mirror") ?: true
+        cachedMirrorFrontCamera = mirror
+        Log.d(TAG, "setMirrorFrontCamera: mirror=$mirror")
+        // 仅前置摄像头时应用水平翻转
+        val shouldFlip = mirror && lensFacing == CameraSelector.LENS_FACING_FRONT
+        glRenderer?.setFlipHorizontal(shouldFlip)
+        result.success(null)
     }
 
     private fun sendEvent(type: String, payload: Map<String, Any>) {
