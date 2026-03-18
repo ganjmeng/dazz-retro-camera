@@ -90,17 +90,36 @@ Each camera is a **self-contained JSON entity** (`CameraDefinition`). All option
   "id": "ccd_r",
   "name": "CCD R",
   "category": "ccd",
-  "modules": {
-    "filters": [],
-    "lenses": [{ "id": "std", "name": "Standard", "isDefault": true }],
-    "ratios": [{ "id": "ratio_4_3", "value": "4:3", "isDefault": true }],
-    "frames": [{ "id": "instant_default", "name": "Default", "isDefault": false }]
+  "defaultLook": {
+    "baseLut": "assets/lut/cameras/ccd_r.cube",
+    "exposure": 0.0,
+    "contrast": 1.12,
+    "saturation": 1.14,
+    "temperature": -22,
+    "tint": -5.0,
+    "highlights": -4.0,
+    "shadows": 6.0,
+    "whites": 10.0,
+    "blacks": -8.0,
+    "clarity": 2.0,
+    "vibrance": 6.0
+  },
+  "defaultSelection": {
+    "filterId": null,
+    "lensId": "std",
+    "ratioId": "ratio_3_4",
+    "frameId": null,
+    "watermarkPresetId": "none",
+    "extraId": null
   },
   "uiCapabilities": {
-    "showFilterSelector": false,
-    "showLensSelector": true,
-    "showFrameSelector": true,
-    "showRatioSelector": true
+    "enableFilter": false,
+    "enableLens": true,
+    "enableRatio": true,
+    "enableFrame": true,
+    "enableWatermark": true,
+    "enableExtra": false,
+    "enableFilmRoll": false
   }
 }
 ```
@@ -130,6 +149,8 @@ Each camera is a **self-contained JSON entity** (`CameraDefinition`). All option
 The preview pipeline targets 60fps real-time rendering. Parameter aggregation happens in Flutter (`PreviewRenderParams`), which serializes 40+ key-value pairs via MethodChannel to the native layer. On Android, `CameraGLRenderer.kt` processes CameraX OES textures in a GLSL Fragment Shader; on iOS, `MetalRenderer.swift` processes AVCapture `CVPixelBuffer` via `CameraShaders.metal`.
 
 预览管线目标是 60fps 实时渲染。Flutter 层的 `PreviewRenderParams` 将相机 JSON 的 `defaultLook`、当前滤镜、镜头及用户实时调节进行合并，通过 MethodChannel 将 40+ 个键值对传至 Native 层。Android 端 `CameraGLRenderer.kt` 在 EGL 线程的 GLSL Fragment Shader 中处理 CameraX 的 OES 纹理；iOS 端 `MetalRenderer.swift` 通过 `CameraShaders.metal` 处理 AVCapture 的 `CVPixelBuffer`。
+
+![Preview Pipeline](docs/preview_pipeline.png)
 
 The Android preview shader executes **20 passes** in strict optical order:
 
@@ -164,6 +185,8 @@ Android 预览 Shader 按严格的光学与色彩逻辑顺序执行 **20 个 Pas
 The capture pipeline is triggered on shutter press and applies the highest-quality processing to the full-resolution JPEG, including advanced effects not enabled in the preview for performance reasons.
 
 成片管线在用户按下快门后触发，对全分辨率 JPEG 进行最高质量处理，包含部分因性能原因未在预览中启用的高级特效。
+
+![Capture Pipeline](docs/capture_pipeline.png)
 
 1. **Decode / 原始解码**: Read JPEG with resolution limit to prevent OOM. / 读取 JPEG 并限制最大边长，防止 OOM。
 2. **GPU Processing / GPU 加速处理**: Android `CaptureGLProcessor.kt` creates an EGL PBuffer offscreen context, uploads JPEG as GL texture, runs the full 19-pass pipeline, and reads back via `glReadPixels`. iOS `CaptureProcessor.swift` calls `CapturePipeline.metal` Compute Shader (17 kernel passes). / Android 创建 EGL PBuffer 离屏上下文执行完整 19 Pass 管线；iOS 调用 Metal Compute Shader 执行 17 个 Kernel Pass。
