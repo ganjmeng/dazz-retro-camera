@@ -784,15 +784,20 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
     // ─────────────────────────────────────────────
     // buildImageCapture — 根据清晰度级别构建 ImageCapture
-    // level: 0.0=低(2MP), 0.5=中(8MP), 1.0=高(全分辨率)
+    // 输入分辨率与 capture_pipeline.dart 的输出档位对齐，避免 ISP 多帧合成浪费时间：
+    //   低档  输出 1920px → 输入请求 ≤4MP（2688×2016），单帧快速出图
+    //   中档  输出 2688px → 输入请求 ≤16MP（4096×3072），覆盖输出所需，跳过多帧合成
+    //   高档  输出 4096px → 输入请求 ≤16MP（4096×3072），覆盖输出所需，跳过多帧合成
+    // 行业标准：输入分辨率只需略大于输出分辨率即可，不需要传感器全像素。
     // ─────────────────────────────────────────────
     private fun buildImageCapture(level: Float): ImageCapture {
         val builder = ImageCapture.Builder()
         when {
             level < 0.2f -> {
-                // 低清晰度：目标 2MP（1600×1200），最小延迟模式
+                // 低清晰度：输出 1920px（~2MP），输入请求 ≤4MP（2688×2016）
+                // FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER 确保不超过目标，避免解码大图
                 val strategy = ResolutionStrategy(
-                    Size(1600, 1200),
+                    Size(2688, 2016),
                     ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
                 )
                 builder.setResolutionSelector(
@@ -802,38 +807,65 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 ).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             }
             level < 0.7f -> {
-                // 中清晰度：目标 8MP（3264×2448），最小延迟模式
-                val strategy = ResolutionStrategy(
-                    Size(3264, 2448),
-                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
-                )
+                // 中清晰度：输出 2688px（~4MP），输入请求 ≤16MP（4096×3072）
+                // 行业标准：不写死固定尺寸，用 ResolutionFilter 选"≤1600万像素的最大档位"
+                // 让 ISP 走 Binning 自然输出（单帧），避免多帧合成（2亿像素手机慢 3-5s 的根因）
+                val midFilter = ResolutionFilter { supportedSizes, _ ->
+                    // 过滤掉超过 1600 万像素的档位（避免 ISP 多帧合成）
+                    val candidates = supportedSizes.filter {
+                        it.width.toLong() * it.height.toLong() <= 16_000_000L
+                    }
+                    // 从符合条件的里选最大的（保证覆盖 2688px 输出）
+                    candidates.sortedByDescending { it.width.toLong() * it.height.toLong() }
+                        .ifEmpty {
+                            // 所有档位都超过 1600 万像素（极少数设备），回落到最小可用
+                            supportedSizes.sortedBy { it.width.toLong() * it.height.toLong() }
+                        }
+                }
                 builder.setResolutionSelector(
                     ResolutionSelector.Builder()
-                        .setResolutionStrategy(strategy)
+                        .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
+                        .setResolutionFilter(midFilter)
                         .build()
                 ).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             }
             else -> {
-                // 高清晰度：设备全像素（最高分辨率）
-                // 使用 ResolutionFilter 优先选择 ≥4096 的分辨率，如果设备不支持则回落到最大可用
-                val highResFilter = ResolutionFilter { supportedSizes, _ ->
-                    // 按像素数降序排列，优先选择 ≥4096 的尺寸
-                    val sorted = supportedSizes.sortedByDescending { it.width * it.height }
-                    val preferred = sorted.filter { it.width >= 4096 || it.height >= 4096 }
-                    if (preferred.isNotEmpty()) preferred else sorted
+                // 高清晰度：输出 4096px（~12MP），输入请求 ≤16MP（4096×3072）
+                // 行业标准：不追求传感器全像素，只需覆盖 4096px 输出即可
+                // 2亿像素手机全像素输出需要多帧合成（3-5s），限制 ≤1600万像素走单帧快速出图
+                val highFilter = ResolutionFilter { supportedSizes, _ ->
+                    // 优先选"≥4096px 且 ≤1600万像素"的档位（Binning 自然输出）
+                    val candidates = supportedSizes.filter {
+                        val px = it.width.toLong() * it.height.toLong()
+                        px <= 16_000_000L && (it.width >= 4096 || it.height >= 4096)
+                    }
+                    if (candidates.isNotEmpty()) {
+                        // 有符合条件的档位，选最大的
+                        candidates.sortedByDescending { it.width.toLong() * it.height.toLong() }
+                    } else {
+                        // 没有同时满足"≥4096px 且 ≤1600万像素"的档位（低端设备）
+                        // 回落到 ≤1600万像素的最大档位
+                        val fallback = supportedSizes.filter {
+                            it.width.toLong() * it.height.toLong() <= 16_000_000L
+                        }.sortedByDescending { it.width.toLong() * it.height.toLong() }
+                        fallback.ifEmpty {
+                            // 所有档位都超过 1600 万像素，选最小的（极端情况）
+                            supportedSizes.sortedBy { it.width.toLong() * it.height.toLong() }
+                        }
+                    }
                 }
-                // 通过 Camera2Interop 设置 JPEG 硬件编码质量为 95
+                // 通过 Camera2Interop 设置 JPEG 硬件编码质量为 92（行业标准：兼顾速度与质量）
                 val extender = Camera2Interop.Extender(builder)
                 extender.setCaptureRequestOption(
                     CaptureRequest.JPEG_QUALITY,
-                    95.toByte()
+                    92.toByte()
                 )
                 builder.setResolutionSelector(
                     ResolutionSelector.Builder()
                         .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
-                        .setResolutionFilter(highResFilter)
+                        .setResolutionFilter(highFilter)
                         .build()
-                ).setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                ).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             }
         }
         return builder.build()
