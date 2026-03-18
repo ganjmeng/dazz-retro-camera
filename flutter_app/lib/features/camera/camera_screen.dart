@@ -163,69 +163,78 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 启动加速度计监听
     _startOrientationListener();
 
+    // ── 启动画面：第一帧渲染后立即显示 App Icon 过渡覆盖层 ──
+    // 与切换相机时的覆盖层完全相同，用户看到 App Icon 而非空白黑屏
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _showTransition = true);
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // 一次性请求所有权限（相机 + 相册），再初始化
-      // 记录请求前相机权限是否已授予（用于判断是否首次授权）
+      // 请求权限（App Icon 画面遮住，用户不会看到黑屏）
       final wasGrantedBefore = await Permission.camera.isGranted;
       final cameraGranted = await _requestPermissions();
-      if (mounted) {
-        // 加载相机 JSON 配置（必须 await，确保 _loadCamera → setCamera 在 initCamera 之前完成，
-        // 这样 currentPresetJson 已赋值，reapplyPresetToRenderer 能正确恢复参数）
-        await ref.read(cameraAppProvider.notifier).initialize();
+      if (!mounted) return;
 
-        if (!cameraGranted) {
-          // 权限被拒绝，不初始化相机
-          return;
-        }
+      // 加载相机 JSON 配置（必须 await，确保 _loadCamera → setCamera 在 initCamera 之前完成，
+      // 这样 currentPresetJson 已赋值，reapplyPresetToRenderer 能正确恢复参数）
+      await ref.read(cameraAppProvider.notifier).initialize();
+      if (!mounted) return;
 
-        // 初始化原生相机硬件（获取 textureId，开始预览）
-        await ref.read(cameraServiceProvider.notifier).initCamera();
-
-        // ── FIX: 首次授权 bug 修复 ──
-        // 场景：首次启动 → 权限弹窗 → 用户同意。此时 iOS/Android 系统层才真正将相机权限授予进程。
-        // 问题：.request() 返回 granted 后，相机设备层可能尚未完全就绪，导致 initCamera 的
-        //         MethodChannel 调用在系统层还没就绪时就到达，原生相机无预览输出。
-        // 修复：检测到「本次是首次授权」时，延迟 800ms 等待系统层相机就绪，再重新执行一次完整的
-        //         initCamera 流程（与「跳转设置再返回」所触发的 _pushWithCameraPause 恢复流程完全一致）。
-        final isFirstTimeGrant = !wasGrantedBefore && cameraGranted;
-        if (isFirstTimeGrant) {
-          // 延迟等待系统层相机就绪（iOS 授权后内核需要时间初始化相机设备）
-          await Future.delayed(const Duration(milliseconds: 800));
-          if (!mounted) return;
-          // 重新初始化相机（相当于跳转设置再返回的效果）
-          await ref.read(cameraServiceProvider.notifier).initCamera();
-        }
-
-        // ── STEP 1: 先同步清晰度档位（setSharpen 会重建 renderer，必须最先执行）──
-        // IMPORTANT: must await — setSharpen on Android triggers unbindAll+rebind which
-        // recreates CameraGLRenderer. All subsequent param calls must happen AFTER this.
-        final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
-        const sharpenLevels = [0.0, 0.5, 1.0];
-        await ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevels[sharpenLevel]);
-
-        // ── STEP 2: renderer 已就绪（setSharpen await 保证），重新发送相机参数 ──
-        final cameraAfterInit = ref.read(cameraAppProvider).camera;
-        if (cameraAfterInit != null) {
-          await ref.read(cameraServiceProvider.notifier).setCamera(cameraAfterInit);
-          // 同步镜头参数（含 fisheyeMode）
-          final lensId = ref.read(cameraAppProvider).activeLensId;
-          final lens = cameraAfterInit.lensById(lensId);
-          ref.read(cameraServiceProvider.notifier).updateLensParams(
-            distortion: lens?.distortion ?? 0.0,
-            vignette: lens?.vignette ?? 0.0,
-            zoomFactor: lens?.zoomFactor ?? 1.0,
-            fisheyeMode: lens?.fisheyeMode ?? false,
-            chromaticAberration: lens?.chromaticAberration ?? 0.0,
-            bloom: lens?.bloom ?? 0.0,
-            softFocus: lens?.softFocus ?? 0.0,
-            exposure: lens?.exposure ?? 0.0,
-            contrast: lens?.contrast ?? 0.0,
-            saturation: lens?.saturation ?? 0.0,
-            highlightCompression: lens?.highlightCompression ?? 0.0,
-          );
-        }
-        _loadLatestThumb();
+      if (!cameraGranted) {
+        // 权限被拒绝：隐藏启动画面，不初始化相机
+        setState(() => _showTransition = false);
+        return;
       }
+
+      // 权限已授予：等 200ms 后初始化相机
+      await Future.delayed(const Duration(milliseconds: 200));
+      if (!mounted) return;
+      await ref.read(cameraServiceProvider.notifier).initCamera();
+
+      // ── FIX: 首次授权 bug 修复 ──
+      // 场景：首次启动 → 权限弹窗 → 用户同意。此时 iOS/Android 系统层才真正将相机权限授予进程。
+      // 问题：.request() 返回 granted 后，相机设备层可能尚未完全就绪，导致 initCamera 的
+      //         MethodChannel 调用在系统层还没就绪时就到达，原生相机无预览输出。
+      // 修复：检测到「本次是首次授权」时，再执行一次 initCamera 确保预览正常输出。
+      final isFirstTimeGrant = !wasGrantedBefore && cameraGranted;
+      if (isFirstTimeGrant) {
+        if (!mounted) return;
+        await ref.read(cameraServiceProvider.notifier).initCamera();
+      }
+
+      // ── STEP 1: 先同步清晰度档位（setSharpen 会重建 renderer，必须最先执行）──
+      // IMPORTANT: must await — setSharpen on Android triggers unbindAll+rebind which
+      // recreates CameraGLRenderer. All subsequent param calls must happen AFTER this.
+      final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
+      const sharpenLevels = [0.0, 0.5, 1.0];
+      await ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevels[sharpenLevel]);
+
+      // ── STEP 2: renderer 已就绪（setSharpen await 保证），重新发送相机参数 ──
+      final cameraAfterInit = ref.read(cameraAppProvider).camera;
+      if (cameraAfterInit != null) {
+        await ref.read(cameraServiceProvider.notifier).setCamera(cameraAfterInit);
+        // 同步镜头参数（含 fisheyeMode）
+        final lensId = ref.read(cameraAppProvider).activeLensId;
+        final lens = cameraAfterInit.lensById(lensId);
+        ref.read(cameraServiceProvider.notifier).updateLensParams(
+          distortion: lens?.distortion ?? 0.0,
+          vignette: lens?.vignette ?? 0.0,
+          zoomFactor: lens?.zoomFactor ?? 1.0,
+          fisheyeMode: lens?.fisheyeMode ?? false,
+          chromaticAberration: lens?.chromaticAberration ?? 0.0,
+          bloom: lens?.bloom ?? 0.0,
+          softFocus: lens?.softFocus ?? 0.0,
+          exposure: lens?.exposure ?? 0.0,
+          contrast: lens?.contrast ?? 0.0,
+          saturation: lens?.saturation ?? 0.0,
+          highlightCompression: lens?.highlightCompression ?? 0.0,
+        );
+      }
+      _loadLatestThumb();
+
+      // ── 启动画面收尾：等 500ms 后隐藏 App Icon 覆盖层，进入正常拍摄界面 ──
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) setState(() => _showTransition = false);
     });
   }
 
