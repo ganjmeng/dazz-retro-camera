@@ -395,24 +395,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         fisheyeMode: camera.lensById(defaults.lensId)?.fisheyeMode ?? false,
         clearPanel: true,
       );
-      // 关键修复：加载相机后立即将 defaultLook 色彩参数同步到原生 GPU shader
-      // 修复 FQS 紫色偏色问题：确保 colorBiasR/G/B、grainSize、sharpness 等专用字段正确传递
-      await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
-      // 同步默认镜头参数到原生 GPU shader
-      final defaultLens = camera.lensById(defaults.lensId);
-      _ref.read(cameraServiceProvider.notifier).updateLensParams(
-        distortion: defaultLens?.distortion ?? 0.0,
-        vignette: defaultLens?.vignette ?? 0.0,
-        zoomFactor: defaultLens?.zoomFactor ?? 1.0,
-        fisheyeMode: defaultLens?.fisheyeMode ?? false,
-        chromaticAberration: defaultLens?.chromaticAberration ?? 0.0,
-        bloom: defaultLens?.bloom ?? 0.0,
-        softFocus: defaultLens?.softFocus ?? 0.0,
-        exposure: defaultLens?.exposure ?? 0.0,
-        contrast: defaultLens?.contrast ?? 0.0,
-        saturation: defaultLens?.saturation ?? 0.0,
-        highlightCompression: defaultLens?.highlightCompression ?? 0.0,
-      );
+      // 重新将全量参数写入 renderer
+      // syncAllParamsAfterRebuild 内部先 setSharpen（再次重建 renderer，必须最先 await）
+      // 再依次写入 setCamera / updateLensParams / updateRenderParams / setZoom
+      await syncAllParamsAfterRebuild();
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'Failed to load camera: $e');
     }

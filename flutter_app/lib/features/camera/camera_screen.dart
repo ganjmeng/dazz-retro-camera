@@ -289,11 +289,21 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
-      // App 从后台切回前台：黑屏 + App Icon 淡入淡出
+      // App 从后台切回前台：重建相机并同步全量参数
+      // iOS/Android 在 App 进入后台时会强制释放相机资源（renderer 被销毁），
+      // 返回前台时必须重建 renderer 并重新写入全量 shader 参数。
       _transitionTimer?.cancel();
       setState(() => _showTransition = true);
-      _transitionTimer = Timer(const Duration(milliseconds: 600), () {
-        if (mounted) setState(() => _showTransition = false);
+      // 异步执行，不阻塞生命周期回调
+      Future(() async {
+        if (!mounted) return;
+        await ref.read(cameraServiceProvider.notifier).initCamera();
+        if (!mounted) return;
+        await ref.read(cameraAppProvider.notifier).syncAllParamsAfterRebuild();
+        // 全量参数就绪后淡出过渡动画
+        _transitionTimer = Timer(const Duration(milliseconds: 300), () {
+          if (mounted) setState(() => _showTransition = false);
+        });
       });
     } else if (state == AppLifecycleState.paused ||
                state == AppLifecycleState.inactive) {
