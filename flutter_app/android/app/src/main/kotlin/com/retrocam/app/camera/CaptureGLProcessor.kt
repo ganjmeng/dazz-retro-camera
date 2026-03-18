@@ -747,7 +747,7 @@ void main() {
 
             // 7. Map PBO 读取像素（此时 GPU 传输已完成）
             val mappedBuf = GLES30.glMapBufferRange(
-                GLES30.GL_PIXEL_PACK_BUFFER, 0, pixelBytes.toLong(),
+                GLES30.GL_PIXEL_PACK_BUFFER, 0, pixelBytes,
                 GLES30.GL_MAP_READ_BIT
             ) as? java.nio.ByteBuffer
 
