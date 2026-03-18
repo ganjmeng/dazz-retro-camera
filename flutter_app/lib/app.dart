@@ -10,8 +10,7 @@ import 'core/app_logger.dart';
 // and breaking showModalBottomSheet / Navigator calls in child pages.
 // Each page watches languageProvider locally so only that page rebuilds.
 class RetroCamApp extends ConsumerWidget {
-  final GlobalKey<NavigatorState>? navigatorKey;
-  const RetroCamApp({super.key, this.navigatorKey});
+  const RetroCamApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -21,8 +20,10 @@ class RetroCamApp extends ConsumerWidget {
       theme: AppTheme.darkTheme,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
-      // AppLogOverlay：debug 模式下右下角悬浮日志按钮
-      // 点击可查看最近 500 条日志，支持一键复制
+      // AppLogOverlay：
+      // - debug 模式下右下角悬浮日志按钮（有 error 时变红色显示数量）
+      // - 监听 AppLogger.pendingError，崩溃时直接在 Stack 最高层弹出弹框
+      // - 完全不依赖 Navigator/GoRouter，即使路由层崩溃也能显示
       builder: (context, child) => AppLogOverlay(child: child ?? const SizedBox()),
     );
   }
