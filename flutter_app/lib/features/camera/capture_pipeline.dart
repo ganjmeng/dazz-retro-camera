@@ -99,15 +99,34 @@ class CapturePipeline {
           final gpuResult = await _channel.invokeMethod<Map>("processWithGpu", {
             "filePath": imagePath,
             "params": renderParams?.toJson() ?? {},
+            "maxDimension": maxDimension, // 传入目标尺寸，让原生 GPU 在处理前先缩放
           });
           if (gpuResult != null && gpuResult["filePath"] != null) {
             final newPath = gpuResult["filePath"] as String;
+            // ── 快速路径：无相框、无水印、无小窗裁剪时，GPU 输出即最终成片，跳过 Canvas ──
+            final hasFrame = selectedFrameId.isNotEmpty &&
+                selectedFrameId != 'frame_none' &&
+                selectedFrameId != 'none';
+            final hasWatermark = selectedWatermarkId.isNotEmpty &&
+                selectedWatermarkId != 'none';
+            final hasMinimap = minimapNormalizedRect != null;
+            if (!hasFrame && !hasWatermark && !hasMinimap) {
+              final gpuBytes = await File(newPath).readAsBytes();
+              try { File(newPath).deleteSync(); } catch (_) {}
+              // 解析 GPU 输出尺寸（用于返回 outputWidth/outputHeight）
+              final gpuSize = _readJpegDimensions(gpuBytes);
+              final gpuW = gpuSize?[0] ?? 0;
+              final gpuH = gpuSize?[1] ?? 0;
+              debugPrint('[CapturePipeline] Fast path: GPU output returned directly (no frame/watermark), ${gpuW}x${gpuH}');
+              return CaptureResult(bytes: gpuBytes, outputWidth: gpuW, outputHeight: gpuH);
+            }
+            // 有相框或水印：继续走 Canvas 合成流程
             final gpuBytes = await File(newPath).readAsBytes();
             final gpuCodec = await ui.instantiateImageCodec(gpuBytes);
             final gpuFrame = await gpuCodec.getNextFrame();
             srcImage = gpuFrame.image;
             gpuProcessed = true;
-            debugPrint("[CapturePipeline] Native GPU pipeline successful.");
+            debugPrint("[CapturePipeline] Native GPU pipeline successful, continuing to Canvas for frame/watermark.");
             // 尝试删除临时文件
             try { File(newPath).deleteSync(); } catch (_) {}
           }

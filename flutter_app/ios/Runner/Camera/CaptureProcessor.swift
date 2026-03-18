@@ -109,9 +109,30 @@ class CaptureProcessor {
      */
     func processImage(filePath: String, params: [String: Any]) -> String? {
         guard let image = UIImage(contentsOfFile: filePath),
-              let cgImage = image.cgImage else {
+              var cgImage = image.cgImage else {
             print("[CaptureProcessor] Failed to load image: \(filePath)")
             return nil
+        }
+
+        // 0. 按 maxDimension 缩放（避免 GPU 处理全像素原图）
+        let maxDim = params["maxDimension"] as? Int ?? 4096
+        let srcMax = max(cgImage.width, cgImage.height)
+        if srcMax > maxDim {
+            let scale = CGFloat(maxDim) / CGFloat(srcMax)
+            let newW = Int((CGFloat(cgImage.width) * scale).rounded())
+            let newH = Int((CGFloat(cgImage.height) * scale).rounded())
+            let colorSpace = cgImage.colorSpace ?? CGColorSpaceCreateDeviceRGB()
+            let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+            if let ctx = CGContext(data: nil, width: newW, height: newH,
+                                   bitsPerComponent: 8, bytesPerRow: 0,
+                                   space: colorSpace, bitmapInfo: bitmapInfo.rawValue) {
+                ctx.interpolationQuality = .high
+                ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: newW, height: newH))
+                if let scaled = ctx.makeImage() {
+                    cgImage = scaled
+                    print("[CaptureProcessor] Scaled \(srcMax)px → \(maxDim)px (\(newW)x\(newH))")
+                }
+            }
         }
 
         // 1. 将图像加载为 Metal 纹理

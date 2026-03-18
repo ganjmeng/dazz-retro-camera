@@ -692,8 +692,22 @@ void main() {
             // deviceQuarter 只能表达 4 种旋转，无法处理前置摄像头的镜像翻转。
             // 因此必须在此处通过 EXIF 完整修正方向，Dart 层在 GPU 处理成功后
             // 跳过 deviceQuarter 旋转，避免双重旋转。
-            val inBitmap = applyExifRotation(rawBitmap, filePath)
-            if (inBitmap !== rawBitmap) rawBitmap.recycle()
+            val exifBitmap = applyExifRotation(rawBitmap, filePath)
+            if (exifBitmap !== rawBitmap) rawBitmap.recycle()
+
+            // 1b. 按 maxDimension 缩放（避免 GPU 处理全像素原图）
+            val maxDim = (params["maxDimension"] as? Int) ?: 4096
+            val srcMax = maxOf(exifBitmap.width, exifBitmap.height)
+            val inBitmap = if (srcMax > maxDim) {
+                val scale = maxDim.toFloat() / srcMax
+                val newW = (exifBitmap.width * scale).toInt()
+                val newH = (exifBitmap.height * scale).toInt()
+                Log.d(TAG, "Scaled ${srcMax}px → ${maxDim}px (${newW}x${newH})")
+                Bitmap.createScaledBitmap(exifBitmap, newW, newH, true)
+                    .also { exifBitmap.recycle() }
+            } else {
+                exifBitmap
+            }
 
             val width = inBitmap.width
             val height = inBitmap.height
