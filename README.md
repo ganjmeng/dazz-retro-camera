@@ -1,8 +1,28 @@
-# DAZZ Retro Camera
+<p align="center">
+  <img src="docs/app_icon.png" width="120" alt="DAZZ Retro Camera" />
+</p>
 
-> A production-grade retro / CCD camera simulator app for iOS and Android, built with Flutter + Swift/Metal + Kotlin/OpenGL ES.
->
-> 一款基于 Flutter + Swift/Metal + Kotlin/OpenGL ES 构建的专业级复古相机模拟器，支持 iOS 与 Android 双平台。
+<h1 align="center">DAZZ Retro Camera</h1>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.0.3-blue?style=flat-square" alt="version" />
+  <img src="https://img.shields.io/badge/Flutter-3.19+-54C5F8?style=flat-square&logo=flutter&logoColor=white" alt="Flutter" />
+  <img src="https://img.shields.io/badge/iOS-Swift%20%2B%20Metal-black?style=flat-square&logo=apple&logoColor=white" alt="iOS" />
+  <img src="https://img.shields.io/badge/Android-Kotlin%20%2B%20OpenGL%20ES-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android" />
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/cameras-11-orange?style=flat-square" alt="cameras" />
+  <img src="https://img.shields.io/badge/GPU%20passes-20-purple?style=flat-square" alt="GPU passes" />
+  <img src="https://img.shields.io/badge/realtime-60fps-red?style=flat-square" alt="realtime" />
+  <img src="https://img.shields.io/badge/platform-iOS%20%7C%20Android-lightgrey?style=flat-square" alt="platform" />
+</p>
+
+<p align="center">
+  A production-grade retro / CCD camera simulator for iOS and Android, built with Flutter + Swift/Metal + Kotlin/OpenGL ES.<br/>
+  基于 Flutter + Swift/Metal + Kotlin/OpenGL ES 构建的专业级复古相机模拟器，支持 iOS 与 Android 双平台。
+</p>
 
 ---
 
