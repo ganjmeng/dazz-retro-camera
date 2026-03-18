@@ -47,64 +47,46 @@ dazz-retro-camera/
 │   │       ├── settings/           # Settings screen
 │   │       └── subscription/       # Subscription / paywall screen
 │   ├── assets/
-│   │   └── presets/                # Camera definition JSON files
+│   │   └── cameras/                # Camera definition JSON files
 │   └── pubspec.yaml
 │
-├── native_plugin/                  # Flutter plugin (iOS + Android)
-│   ├── lib/                        # Dart plugin interface
-│   ├── ios/
-│   │   ├── Classes/
-│   │   │   ├── RetroCamPlugin.swift
-│   │   │   ├── Managers/CameraSessionManager.swift
-│   │   │   ├── Models/CameraDefinition.swift
-│   │   │   └── Shaders/CameraShaders.metal
-│   │   └── retro_cam_plugin.podspec
-│   ├── android/
-│   │   ├── src/main/kotlin/com/retrocam/app/
-│   │   │   ├── RetroCamPlugin.kt
-│   │   │   ├── managers/CameraManager.kt
-│   │   │   ├── models/CameraDefinition.kt
-│   │   │   └── shaders/fragment_ccd.glsl
-│   │   └── build.gradle
-│   └── pubspec.yaml
-│
-└── docs/                           # Engineering documentation
-    ├── FULL_ENGINEERING_SPEC.md
-    ├── v3_camera_system_architecture.md
-    ├── v3_camera_definitions.md
-    ├── v3_tri_platform_models_and_api.md
-    ├── v2_gpu_rendering_pipeline.md
-    ├── bridge-api.md
-    └── roadmap.md
+├── docs/                           # Engineering documentation
+│   ├── FULL_ENGINEERING_SPEC.md
+│   ├── v3_camera_system_architecture.md
+│   ├── v3_camera_definitions.md
+│   ├── v3_tri_platform_models_and_api.md
+│   ├── v2_gpu_rendering_pipeline.md
+│   ├── bridge-api.md
+│   └── roadmap.md
 ```
 
 ---
 
 ## Camera System Design
 
-Each camera is a **self-contained JSON entity** (`CameraDefinition`). All options (films, lenses, papers, ratios, watermarks) are **private to that camera** and never shared across cameras.
+Each camera is a **self-contained JSON entity** (`CameraDefinition`). All options (filters, lenses, frames, ratios, watermarks) are **private to that camera** and never shared across cameras.
 
 ```json
 {
-  "id": "ccd_2005",
-  "name": "CCD-2005",
-  "category": "digital_ccd",
+  "id": "ccd_r",
+  "name": "CCD R",
+  "category": "ccd",
   "outputType": "photo",
   "baseModel": {
     "sensor": { "type": "ccd", "dynamic_range": 7.0, "noise": 0.32 },
     "color": { "contrast": 1.1, "saturation": 1.1 }
   },
-  "optionGroups": {
-    "films": [
-      { "id": "ccd_default", "name": "Standard CCD", "isDefault": true,
-        "rendering": { "lut": "ccd_standard.cube", "grain": 0.25 } }
+  "modules": {
+    "filters": [],
+    "lenses": [
+      { "id": "std", "name": "Standard", "isDefault": true }
     ],
     "ratios": [{ "id": "ratio_4_3", "value": "4:3", "isDefault": true }],
-    "watermarks": [{ "id": "ccd_date", "type": "digital_date", "position": "bottom_right", "isDefault": true }]
+    "frames": [{ "id": "instant_default", "name": "Default", "isDefault": false }]
   },
   "uiCapabilities": {
-    "showFilmSelector": true, "showLensSelector": false,
-    "showPaperSelector": false, "showRatioSelector": true, "showWatermarkSelector": true
+    "showFilterSelector": false, "showLensSelector": true,
+    "showFrameSelector": true, "showRatioSelector": true
   }
 }
 ```
@@ -115,52 +97,47 @@ The `uiCapabilities` field drives the Flutter UI dynamically — selectors are o
 
 ## GPU Rendering Pipeline
 
-```
-Camera Frame (YUV to RGB)
-  |
-  v
-PASS 1: Sensor & Base Color   <- baseModel (sensor noise, base LUT, white balance)
-  |
-  v
-PASS 2: Film Simulation       <- active FilmOption (film LUT, grain)
-  |
-  v
-PASS 3: Lens Optics           <- active LensOption (vignette, distortion, chromatic aberration)
-  |
-  v
-PASS 4: Bloom & Halation      <- active LensOption (highlight bloom, separate downsample pass)
-  |
-  v
-PASS 5: Scan Artifacts        <- special cameras (VHS scanlines, DV noise)
-  |
-  v
-PASS 6: Paper & Frame         <- active PaperOption (instant border texture, ratio crop)
-  |
-  v
-PASS 7: Watermark             <- active WatermarkOption (date stamp, REC overlay, logo)
-  |
-  v
-FlutterTexture (preview 60fps) / JPEG export (full resolution)
-```
+The rendering pipeline is implemented natively on both iOS (Metal) and Android (OpenGL ES 3.0) to ensure maximum performance. The pipeline consists of 19 distinct passes:
+
+1. **Chromatic Aberration** (色差)
+2. **Temperature & Tint** (色温 + Tint)
+3. **Blacks & Whites** (黑场/白场)
+4. **Highlights & Shadows** (高光/阴影压缩)
+5. **Contrast** (对比度)
+6. **Clarity** (中间调微对比度)
+7. **Saturation & Vibrance** (饱和度 + Vibrance)
+8. **Color Bias** (RGB 通道偏移)
+9. **Bloom** (高光光晕)
+10. **Halation** (高光辉光)
+11. **Highlight Rolloff** (高光柔和滚落)
+12. **Center Gain** (中心增亮)
+13. **Skin Protection** (肤色保护)
+14. **Edge Falloff & Corner Warm Shift** (边缘衰减 + 角落暖色偏移)
+15. **Chemical Irregularity** (化学不规则感)
+16. **Paper Texture** (相纸纹理)
+17. **Film Grain** (胶片颗粒)
+18. **Digital Noise** (数字噪点)
+19. **Vignette** (暗角)
 
 > Paper and frame effects are rendered **directly into the exported photo** at the moment of capture — no post-processing step is required after shooting.
 
 ---
 
-## Included Cameras (10 Production Presets)
+## Included Cameras (11 Production Presets)
 
-| # | ID | Name | Category | Films | Lenses | Papers |
+| ID | Name | Category | Filters | Lenses | Frames | Ratios |
 |---|---|---|---|---|---|---|
-| 1 | `ccd_2005` | CCD-2005 | digital_ccd | 2 | — | — |
-| 2 | `film_gold200` | Gold 200 | film | 2 | — | — |
-| 3 | `fuji_superia` | Superia | film | 2 | — | — |
-| 4 | `disposable_flash` | Disposable Flash | disposable | 1 | — | — |
-| 5 | `polaroid_classic` | Polaroid Classic | instant | 1 | 2 | 2 |
-| 6 | `ccd_night` | Night CCD | digital_ccd | 1 | — | — |
-| 7 | `vhs_cam` | VHS Camcorder | video | — | — | — |
-| 8 | `dv2003` | DV-2003 | video | — | — | — |
-| 9 | `portrait_soft` | Soft Portrait | film | 1 | 1 | — |
-| 10 | `film_scan` | Film Scan | scanner | 2 | — | — |
+| `bw_classic` | 黑白经典 | film | 2 | 5 | 0 | 3 |
+| `ccd_r` | CCD R | ccd | 0 | 5 | 6 | 4 |
+| `cpm35` | CPM35 | film | 3 | 3 | 6 | 3 |
+| `d_classic` | D Classic | digital | 0 | 4 | 6 | 4 |
+| `fisheye` | FISHEYE | creative | 0 | 3 | 0 | 1 |
+| `fqs` | FQS | film | 2 | 4 | 6 | 3 |
+| `fxn_r` | FXN-R | film | 3 | 4 | 6 | 3 |
+| `grd_r` | GRD R | digital | 0 | 4 | 0 | 4 |
+| `inst_c` | INST C | instant | 0 | 3 | 6 | 2 |
+| `inst_sqc` | INST SQC | instant | 0 | 3 | 6 | 2 |
+| `u300` | U300 | film | 3 | 3 | 6 | 3 |
 
 ---
 
@@ -183,17 +160,27 @@ flutter run -d <device_id>
 
 ---
 
+## CI/CD & Release
+
+The project uses GitHub Actions for continuous integration and deployment:
+
+- **Flutter CI**: Runs tests and lints on every push to `main`.
+- **Android/iOS Build Check**: Verifies debug builds on every push.
+- **Release Workflows**: Triggered automatically when a tag matching `v*.*.*` is pushed. Builds release APK/AAB and creates a GitHub Release draft.
+
+---
+
 ## Documentation
 
 | Document | Description |
 |---|---|
 | [`docs/FULL_ENGINEERING_SPEC.md`](docs/FULL_ENGINEERING_SPEC.md) | Complete engineering specification (10 chapters) |
 | [`docs/v3_camera_system_architecture.md`](docs/v3_camera_system_architecture.md) | V3 JSON Schema and design principles |
-| [`docs/v3_camera_definitions.md`](docs/v3_camera_definitions.md) | 10 production camera preset definitions |
+| [`docs/v3_camera_definitions.md`](docs/v3_camera_definitions.md) | Production camera preset definitions |
 | [`docs/v3_tri_platform_models_and_api.md`](docs/v3_tri_platform_models_and_api.md) | Dart / Swift / Kotlin models + Bridge API |
 | [`docs/v2_gpu_rendering_pipeline.md`](docs/v2_gpu_rendering_pipeline.md) | GPU rendering pipeline design |
 | [`docs/bridge-api.md`](docs/bridge-api.md) | MethodChannel / EventChannel API reference |
-| [`docs/roadmap.md`](docs/roadmap.md) | Development roadmap (Phase 0-3) |
+| [`docs/roadmap.md`](docs/roadmap.md) | Development roadmap |
 
 ---
 
