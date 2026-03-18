@@ -58,7 +58,9 @@ in vec2 aTexCoord;
 out vec2 vTexCoord;
 void main() {
     gl_Position = aPosition;
-    vTexCoord = aTexCoord;
+    // OpenGL 坐标系 Y 轴与图像坐标系相反，在 vertex shader 中翻转
+    // 避免 glReadPixels 后的 CPU flipVertically 操作（节省 200~400ms）
+    vTexCoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y);
 }"""
 
         // ── 片段着色器（成片完整管线）──────────────────────────────────────
@@ -127,9 +129,33 @@ uniform float uLightLeakSeed;
 uniform float uExposureOffset;        // 用户曝光补偿（-2.0~+2.0）
 uniform float uFisheyeMode;           // 1.0=圆形鱼眼模式, 0.0=普通模式
 uniform float uAspectRatio;           // 宽/高，用于鱼眼圆形不变形
-// ── 工具函数 ──────────────────────────────────────────────────────────────
+// ── LUT 参数 ────────────────────────────────────────────────────────────────────────────────
+uniform sampler2D uLutTexture;        // LUT 2D 纹理（宽=N*N，高=N）
+uniform float uLutEnabled;            // 1.0 = 启用 LUT
+uniform float uLutStrength;           // LUT 混合强度（0.0~1.0）
+uniform float uLutSize;               // LUT 边长（通常 33）
+// ── 工具函数 ────────────────────────────────────────────────────────────────────────────────
 float luminance(vec3 c) {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+// ── LUT 采样函数（与 iOS CameraShaders.metal sampleLUT 完全一致）
+vec3 sampleLUT(sampler2D lut, vec3 color, float lutN) {
+    float scale  = (lutN - 1.0) / lutN;
+    float offset = 0.5 / lutN;
+    vec3 lutCoord = color * scale + offset;
+    float bSlice = lutCoord.b * (lutN - 1.0);
+    float bLow   = floor(bSlice);
+    float bHigh  = min(bLow + 1.0, lutN - 1.0);
+    float bFrac  = bSlice - bLow;
+    float texW   = lutN * lutN;
+    float texH   = lutN;
+    vec2 uvLow  = vec2((bLow  * lutN + lutCoord.r * (lutN - 1.0) + 0.5) / texW,
+                       (lutCoord.g * (lutN - 1.0) + 0.5) / texH);
+    vec2 uvHigh = vec2((bHigh * lutN + lutCoord.r * (lutN - 1.0) + 0.5) / texW,
+                       (lutCoord.g * (lutN - 1.0) + 0.5) / texH);
+    vec3 colLow  = texture(lut, uvLow).rgb;
+    vec3 colHigh = texture(lut, uvHigh).rgb;
+    return mix(colLow, colHigh, bFrac);
 }
 
 vec3 rgb2hsv(vec3 c) {
@@ -587,6 +613,11 @@ void main() {
         color = applyVignette(color, uv, vigTotal);
     }
 
+    // Pass 24: LUT 色彩映射（成片专属）
+    if (uLutEnabled > 0.5) {
+        vec3 lutColor = sampleLUT(uLutTexture, color, uLutSize);
+        color = mix(color, lutColor, uLutStrength);
+    }
     fragColor = vec4(color, 1.0);
 }"""
 
@@ -664,6 +695,13 @@ void main() {
     private var uExposureOffset = -1
     private var uFisheyeMode = -1
     private var uAspectRatio = -1
+    // LUT uniform 位置缓存
+    private var uLutTexture = -1
+    private var uLutEnabled = -1
+    private var uLutStrength = -1
+    private var uLutSize = -1
+    // LUT 纹理 ID（每次拍照时加载，处理完成后释放）
+    private var lutTextureId: Int = 0
 
     private var currentWidth = 0
     private var currentHeight = 0
@@ -732,8 +770,21 @@ void main() {
 
             // 设置所有 uniform 参数
             setUniforms(params)
-
-            // 绑定 VBO 并绘制全屏四边形
+            // 加载 LUT 纹理（若有 baseLut 参数）
+            val baseLutPath = params["baseLut"] as? String
+            if (!baseLutPath.isNullOrEmpty()) {
+                val lutTex = loadLutTexture(baseLutPath, context)
+                if (lutTex != 0) {
+                    lutTextureId = lutTex
+                    GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
+                    GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, lutTex)
+                    GLES30.glUniform1i(uLutTexture, 1)
+                    GLES30.glUniform1f(uLutEnabled, 1.0f)
+                } else {
+                    Log.w(TAG, "LUT not found: $baseLutPath, skipping LUT pass")
+                }
+            }
+            // 绑定 VBO 并绘制全屏四边形形
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbo)
             val posLoc = GLES30.glGetAttribLocation(program, "aPosition")
             val uvLoc  = GLES30.glGetAttribLocation(program, "aTexCoord")
@@ -753,12 +804,15 @@ void main() {
 
             // 6. 释放临时纹理
             GLES30.glDeleteTextures(1, intArrayOf(inputTex), 0)
+            if (lutTextureId != 0) {
+                GLES30.glDeleteTextures(1, intArrayOf(lutTextureId), 0)
+                lutTextureId = 0
+            }
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
 
-            // 7. 将像素写入 Bitmap（注意 GL 坐标系 Y 轴翻转）
+            // 7. 将像素写入 Bitmap（Y 轴翻转已在 vertex shader 中处理，无需 CPU 翻转）
             val outBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            val flipped = flipVertically(pixelBuf, width, height)
-            outBitmap.copyPixelsFromBuffer(flipped)
+            outBitmap.copyPixelsFromBuffer(pixelBuf)
 
             // 8. 编码为 JPEG
             val outputFile = File(context.cacheDir, "gpu_${File(filePath).name}")
@@ -942,6 +996,10 @@ void main() {
         uExposureOffset = loc("uExposureOffset")
         uFisheyeMode = loc("uFisheyeMode")
         uAspectRatio = loc("uAspectRatio")
+        uLutTexture  = loc("uLutTexture")
+        uLutEnabled  = loc("uLutEnabled")
+        uLutStrength = loc("uLutStrength")
+        uLutSize     = loc("uLutSize")
     }
 
     private fun setUniforms(params: Map<String, Any>) {
@@ -1006,6 +1064,71 @@ void main() {
                     else 1.0f
         val ar = if (rawAr > 1.0f) 1.0f / rawAr else rawAr  // ensure <= 1.0
         GLES30.glUniform1f(uAspectRatio, ar)
+        // LUT uniform（纹理绑定在 processImage 中单独处理）
+        GLES30.glUniform1f(uLutEnabled, 0.0f)  // 默认关闭，由 processImage 覆盖
+        GLES30.glUniform1f(uLutStrength, f("lutStrength", 1.0f))
+        GLES30.glUniform1f(uLutSize, 33.0f)
+    }
+
+    /**
+     * 从 Flutter assets 中加载 .cube LUT 文件并上传为 GL 2D 纹理
+     * LUT 布局：宽 = N*N，高 = N（与 iOS CaptureProcessor 完全一致）
+     */
+    private fun loadLutTexture(assetPath: String, context: android.content.Context): Int {
+        return try {
+            val inputStream = context.assets.open(assetPath.removePrefix("assets/"))
+            val content = inputStream.bufferedReader().readText()
+            inputStream.close()
+            var lutSize = 33
+            val dataValues = ArrayList<Float>(33 * 33 * 33 * 3)
+            for (line in content.lines()) {
+                val trimmed = line.trim()
+                if (trimmed.startsWith("#") || trimmed.isEmpty()) continue
+                if (trimmed.startsWith("LUT_3D_SIZE")) {
+                    lutSize = trimmed.split("\\s+".toRegex()).lastOrNull()?.toIntOrNull() ?: 33
+                    continue
+                }
+                if (trimmed.startsWith("TITLE") || trimmed.startsWith("DOMAIN")) continue
+                val parts = trimmed.split("\\s+".toRegex())
+                if (parts.size == 3) {
+                    val r = parts[0].toFloatOrNull() ?: continue
+                    val g = parts[1].toFloatOrNull() ?: continue
+                    val b = parts[2].toFloatOrNull() ?: continue
+                    dataValues.add(r); dataValues.add(g); dataValues.add(b)
+                }
+            }
+            val expectedCount = lutSize * lutSize * lutSize
+            if (dataValues.size != expectedCount * 3) {
+                Log.e(TAG, "LUT data count mismatch: ${dataValues.size / 3} vs $expectedCount")
+                return 0
+            }
+            // 将 3D LUT 转换为 2D 纹理（宽 = N*N，高 = N）
+            val texW = lutSize * lutSize
+            val texH = lutSize
+            val rgba = ByteArray(texW * texH * 4)
+            for (i in 0 until (lutSize * lutSize * lutSize)) {
+                rgba[i * 4 + 0] = (dataValues[i * 3 + 0].coerceIn(0f, 1f) * 255f + 0.5f).toInt().toByte()
+                rgba[i * 4 + 1] = (dataValues[i * 3 + 1].coerceIn(0f, 1f) * 255f + 0.5f).toInt().toByte()
+                rgba[i * 4 + 2] = (dataValues[i * 3 + 2].coerceIn(0f, 1f) * 255f + 0.5f).toInt().toByte()
+                rgba[i * 4 + 3] = 255.toByte()
+            }
+            val texArr = IntArray(1)
+            GLES30.glGenTextures(1, texArr, 0)
+            val tex = texArr[0]
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+            val buf = java.nio.ByteBuffer.wrap(rgba)
+            GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA, texW, texH, 0,
+                                GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, buf)
+            Log.d(TAG, "LUT loaded: $assetPath (${lutSize}^3)")
+            tex
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load LUT: $assetPath", e)
+            0
+        }
     }
 
     private fun uploadBitmapToTexture(bitmap: Bitmap): Int {

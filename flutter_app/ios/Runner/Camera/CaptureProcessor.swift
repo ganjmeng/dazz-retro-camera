@@ -62,6 +62,10 @@ struct MetalCaptureParams {
     var skinLumaSoften: Float = 0
     var skinRedLimit: Float = 1.0
     var exposureOffset: Float = 0     // 用户曝光补偿（-2.0~+2.0）
+    // LUT 参数（成片 GPU 管线）
+    var lutEnabled: Float = 0          // 1.0 = 启用 LUT
+    var lutStrength: Float = 1.0       // LUT 混合强度（0.0~1.0）
+    var lutSize: Float = 33.0          // LUT 边长（通常 33）
 }
 
 /**
@@ -164,7 +168,20 @@ class CaptureProcessor {
                                                width: inTexture.width,
                                                height: inTexture.height)
 
-        // 4. 编码 Compute 命令
+        // 4. 加载 LUT 纹理（若有 baseLut 参数）
+        var lutTexture: MTLTexture? = nil
+        if let baseLutPath = params["baseLut"] as? String, !baseLutPath.isEmpty {
+            lutTexture = loadLutTexture(assetPath: baseLutPath)
+            if lutTexture != nil {
+                captureParams.lutEnabled = 1.0
+                captureParams.lutStrength = getFloat(params, "lutStrength", 1.0)
+                captureParams.lutSize = 33.0
+            } else {
+                print("[CaptureProcessor] LUT not found: \(baseLutPath), skipping LUT pass")
+            }
+        }
+
+        // 5. 编码 Compute 命令
         guard let commandBuffer = commandQueue.makeCommandBuffer(),
               let encoder = commandBuffer.makeComputeCommandEncoder() else { return nil }
 
@@ -172,8 +189,12 @@ class CaptureProcessor {
         encoder.setTexture(inTexture, index: 0)
         encoder.setTexture(outTexture, index: 1)
         encoder.setBytes(&captureParams, length: MemoryLayout<MetalCaptureParams>.size, index: 0)
+        // LUT 纹理绑定到 index 2（无 LUT 时不传， shader 通过 lutEnabled 判断）
+        if let lut = lutTexture {
+            encoder.setTexture(lut, index: 2)
+        }
 
-        // 5. 计算线程组大小（16×16 是 Metal 的最优线程组大小）
+        // 6. 计算线程组大小（16×16 是 Metal 的最优线程组大小）
         let threadgroupSize = MTLSize(width: 16, height: 16, depth: 1)
         let threadgroupCount = MTLSize(
             width: (inTexture.width  + threadgroupSize.width  - 1) / threadgroupSize.width,
@@ -292,6 +313,76 @@ class CaptureProcessor {
         if let v = params[key] as? Float  { return v }
         if let v = params[key] as? Int    { return Float(v) }
         return defaultVal
+    }
+
+    // ── 加载 .cube LUT 文件为 Metal 2D 纹理（与预览 MetalRenderer 的 loadAssetTexture 逻辑一致）──
+    private func loadLutTexture(assetPath: String) -> MTLTexture? {
+        // assetPath 格式如 "assets/lut/cameras/inst_c.cube"
+        // 在 Flutter app bundle 中对应 Frameworks/App.framework/flutter_assets/
+        let bundlePath = Bundle.main.bundlePath
+        let flutterAssetsPath = bundlePath + "/Frameworks/App.framework/flutter_assets/" + assetPath
+        guard FileManager.default.fileExists(atPath: flutterAssetsPath) else {
+            print("[CaptureProcessor] LUT file not found at: \(flutterAssetsPath)")
+            return nil
+        }
+        guard let content = try? String(contentsOfFile: flutterAssetsPath, encoding: .utf8) else {
+            return nil
+        }
+        // 解析 .cube 文件
+        var lutSize = 33
+        var dataValues: [Float] = []
+        dataValues.reserveCapacity(33 * 33 * 33 * 3)
+        for line in content.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("#") || trimmed.isEmpty { continue }
+            if trimmed.hasPrefix("LUT_3D_SIZE") {
+                if let sizeStr = trimmed.components(separatedBy: .whitespaces).last,
+                   let size = Int(sizeStr) {
+                    lutSize = size
+                }
+                continue
+            }
+            if trimmed.hasPrefix("TITLE") || trimmed.hasPrefix("DOMAIN") { continue }
+            let parts = trimmed.components(separatedBy: .whitespaces)
+            if parts.count == 3,
+               let r = Float(parts[0]), let g = Float(parts[1]), let b = Float(parts[2]) {
+                dataValues.append(r)
+                dataValues.append(g)
+                dataValues.append(b)
+            }
+        }
+        let expectedCount = lutSize * lutSize * lutSize
+        guard dataValues.count == expectedCount * 3 else {
+            print("[CaptureProcessor] LUT data count mismatch: \(dataValues.count/3) vs \(expectedCount)")
+            return nil
+        }
+        // 将 3D LUT 转换为 2D 纹理（宽 = N*N，高 = N）
+        let texW = lutSize * lutSize
+        let texH = lutSize
+        var rgba: [UInt8] = [UInt8](repeating: 255, count: texW * texH * 4)
+        for i in 0..<(lutSize * lutSize * lutSize) {
+            let r = UInt8(min(max(dataValues[i * 3 + 0] * 255.0, 0), 255))
+            let g = UInt8(min(max(dataValues[i * 3 + 1] * 255.0, 0), 255))
+            let b = UInt8(min(max(dataValues[i * 3 + 2] * 255.0, 0), 255))
+            rgba[i * 4 + 0] = r
+            rgba[i * 4 + 1] = g
+            rgba[i * 4 + 2] = b
+            rgba[i * 4 + 3] = 255
+        }
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba8Unorm,
+            width: texW,
+            height: texH,
+            mipmapped: false)
+        descriptor.usage = .shaderRead
+        descriptor.storageMode = .shared
+        guard let texture = device.makeTexture(descriptor: descriptor) else { return nil }
+        texture.replace(region: MTLRegionMake2D(0, 0, texW, texH),
+                        mipmapLevel: 0,
+                        withBytes: &rgba,
+                        bytesPerRow: texW * 4)
+        print("[CaptureProcessor] LUT loaded: \(assetPath) (\(lutSize)^3)")
+        return texture
     }
 
     // ── 从 Metal 纹理读取像素并转换为 UIImage ──────────────────────────────

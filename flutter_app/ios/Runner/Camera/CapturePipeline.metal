@@ -90,6 +90,10 @@ struct CaptureParams {
     float skinLumaSoften;
     float skinRedLimit;
     float exposureOffset;    // 用户曝光补偿（-2.0~+2.0）
+    // LUT 参数（成片 GPU 管线）
+    float lutEnabled;        // 1.0 = 启用 LUT
+    float lutStrength;       // LUT 混合强度（0.0~1.0）
+    float lutSize;           // LUT 边长（通常 33）
 };
 
 // ── 工具函数 ─────────────────────────────────────────────────────────────
@@ -357,13 +361,33 @@ static float cp_vignette(float2 uv, float amount) {
     float dist = length(d) * 2.0;
     return 1.0 - smoothstep(1.0 - amount, 1.5, dist) * amount;
 }
+// ── LUT 采样函数（与 CameraShaders.metal sampleLUT 完全一致）────────────────────────────────────────────────────────────────────
+/// 3D LUT 采样（将 3D LUT 布局在 2D 纹理中：宽 = N*N，高 = N）
+static float3 cp_sampleLUT(texture2d<float> lut, sampler s, float3 color, float lutN) {
+    float scale  = (lutN - 1.0) / lutN;
+    float offset = 0.5 / lutN;
+    float3 lutCoord = color * scale + offset;
+    float bSlice = lutCoord.b * (lutN - 1.0);
+    float bLow   = floor(bSlice);
+    float bHigh  = min(bLow + 1.0, lutN - 1.0);
+    float bFrac  = bSlice - bLow;
+    float texW   = lutN * lutN;
+    float texH   = lutN;
+    float2 uvLow  = float2((bLow  * lutN + lutCoord.r * (lutN - 1.0) + 0.5) / texW,
+                           (lutCoord.g * (lutN - 1.0) + 0.5) / texH);
+    float2 uvHigh = float2((bHigh * lutN + lutCoord.r * (lutN - 1.0) + 0.5) / texW,
+                           (lutCoord.g * (lutN - 1.0) + 0.5) / texH);
+    float3 colLow  = lut.sample(s, uvLow).rgb;
+    float3 colHigh = lut.sample(s, uvHigh).rgb;
+    return mix(colLow, colHigh, bFrac);
+}
 
-// ── 主内核函数 ────────────────────────────────────────────────────────────
-
+// ── 主内核函数 ────────────────────────────────────────────────────────────────────
 kernel void capturePipeline(
     texture2d<float, access::read>   inTexture  [[texture(0)]],
     texture2d<float, access::write>  outTexture [[texture(1)]],
     constant CaptureParams&          params     [[buffer(0)]],
+    texture2d<float>                 lutTexture [[texture(2)]],
     uint2                            gid        [[thread_position_in_grid]])
 {
     if (gid.x >= outTexture.get_width() || gid.y >= outTexture.get_height()) return;
@@ -473,6 +497,11 @@ kernel void capturePipeline(
         color *= cp_vignette(uv, params.vignetteAmount);
     }
 
-    // ── 写入输出纹理 ──────────────────────────────────────────────────────────────
+    // ── Pass 18: LUT 色彩映射（成片专属）───────────────────────────────────────────────
+    if (params.lutEnabled > 0.5) {
+        float3 lutColor = cp_sampleLUT(lutTexture, s, color, params.lutSize);
+        color = mix(color, lutColor, params.lutStrength);
+    }
+    // ── 写入输出纹理 ────────────────────────────────────────────────────────────────────
     outTexture.write(float4(color, 1.0), gid);
 }
