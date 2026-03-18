@@ -90,6 +90,16 @@ Each camera is a **self-contained JSON entity** (`CameraDefinition`). All option
   "id": "ccd_r",
   "name": "CCD R",
   "category": "ccd",
+  "mode": "photo",
+  "supportsPhoto": true,
+  "supportsVideo": false,
+  "focalLengthLabel": "35mm",
+  "sensor": {
+    "type": "ccd",
+    "dynamicRange": 7,
+    "baseNoise": 0.28,
+    "colorDepth": 8
+  },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/ccd_r.cube",
     "exposure": 0.0,
@@ -102,7 +112,205 @@ Each camera is a **self-contained JSON entity** (`CameraDefinition`). All option
     "whites": 10.0,
     "blacks": -8.0,
     "clarity": 2.0,
-    "vibrance": 6.0
+    "vibrance": 6.0,
+    "colorBiasR": -0.04,
+    "colorBiasG": 0.022,
+    "colorBiasB": 0.058,
+    "distortion": 0.0,
+    "chromaticAberration": 0.14,
+    "sharpen": 0.04,
+    "sharpness": 1.06,
+    "flare": 0.0,
+    "vignette": 0.12,
+    "highlightRolloff": 0.05,
+    "bloom": 0.06,
+    "halation": 0.04,
+    "grain": 0.15,
+    "grainSize": 1.3,
+    "luminanceNoise": 0.06,
+    "chromaNoise": 0.06,
+    "toneCurveStrength": 1.0,
+    "centerGain": 0.02,
+    "edgeFalloff": 0.04,
+    "exposureVariation": 0.025,
+    "cornerWarmShift": -0.01,
+    "topBottomBias": 0.0,
+    "leftRightBias": 0.0,
+    "developmentSoftness": 0.0,
+    "chemicalIrregularity": 0.008,
+    "skinHueProtect": true,
+    "skinSatProtect": 0.94,
+    "skinLumaSoften": 0.03,
+    "skinRedLimit": 1.02,
+    "grainAmount": 0.0,
+    "vignetteAmount": 0.0,
+    "paperTexture": 0.0,
+    "noiseAmount": 0.0,
+    "irregUvScale": 2.5,
+    "irregFreq1": 1.0,
+    "irregFreq2": 1.7,
+    "irregWeight1": 0.6,
+    "irregWeight2": 0.4,
+    "paperUvScale1": 8.0,
+    "paperUvScale2": 32.0,
+    "paperWeight1": 0.7,
+    "paperWeight2": 0.3,
+    "fadeAmount": 0.03,
+    "shadowTintR": 0.0,
+    "shadowTintG": 0.008,
+    "shadowTintB": 0.015,
+    "highlightTintR": 0.01,
+    "highlightTintG": 0.008,
+    "highlightTintB": 0.01,
+    "splitToneBalance": 0.5,
+    "lightLeakAmount": 0.0
+  },
+  "modules": {
+    "filters": [],
+    "lenses": [
+      {
+        "id": "std",
+        "name": "标准",
+        "nameEn": "Standard",
+        "zoomFactor": 1.0,
+        "distortion": 0.0,
+        "vignette": 0.02,
+        "chromaticAberration": 0.0,
+        "edgeBlur": 0.0,
+        "exposure": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "highlightCompression": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_std.png"
+      },
+      {
+        "id": "wide",
+        "name": "广角",
+        "nameEn": "Wide",
+        "zoomFactor": 0.8,
+        "distortion": 0.06,
+        "vignette": 0.08,
+        "chromaticAberration": 0.01,
+        "edgeBlur": 0.0,
+        "exposure": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "highlightCompression": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_wide.png"
+      },
+      {
+        "id": "tele",
+        "name": "长焦",
+        "nameEn": "Tele",
+        "zoomFactor": 2.0,
+        "distortion": -0.01,
+        "vignette": 0.03,
+        "chromaticAberration": 0.0,
+        "edgeBlur": 0.0,
+        "exposure": 0.0,
+        "contrast": 0.02,
+        "saturation": 0.0,
+        "highlightCompression": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_tele.png"
+      },
+      {
+        "id": "vintage",
+        "name": "复古",
+        "nameEn": "Vintage",
+        "zoomFactor": 1.0,
+        "distortion": 0.02,
+        "vignette": 0.12,
+        "chromaticAberration": 0.03,
+        "edgeBlur": 0.04,
+        "exposure": -0.02,
+        "contrast": -0.04,
+        "saturation": -0.02,
+        "highlightCompression": 0.0,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_vintage.png"
+      },
+      {
+        "id": "nd",
+        "name": "ND滤镜",
+        "nameEn": "ND",
+        "zoomFactor": 1.0,
+        "distortion": 0.0,
+        "vignette": 0.03,
+        "chromaticAberration": 0.0,
+        "edgeBlur": 0.0,
+        "exposure": -0.55,
+        "contrast": -0.05,
+        "saturation": -0.02,
+        "highlightCompression": 0.2,
+        "bloom": 0.0,
+        "flare": 0.0,
+        "softFocus": 0.0,
+        "refraction": 0.0,
+        "iconPath": "assets/lenses/lens_nd.png"
+      }
+    ],
+    "ratios": [
+      { "id": "ratio_1_1", "label": "1:1", "width": 1, "height": 1, "supportsFrame": true },
+      { "id": "ratio_2_3", "label": "2:3", "width": 2, "height": 3, "supportsFrame": false },
+      { "id": "ratio_3_4", "label": "3:4", "width": 3, "height": 4, "supportsFrame": true },
+      { "id": "ratio_9_16", "label": "9:16", "width": 9, "height": 16, "supportsFrame": false }
+    ],
+    "frames": [
+      {
+        "id": "instant_default",
+        "name": "冷白",
+        "nameEn": "Default",
+        "ratioAssets": {
+          "ratio_1_1": "assets/frames/polaroid_default_1x1.png",
+          "ratio_3_4": "assets/frames/polaroid_default_3x4.png"
+        },
+        "backgroundColor": "#F5F6FA",
+        "cornerRadius": 0,
+        "innerShadow": true,
+        "inset": { "top": 151, "right": 137, "bottom": 344, "left": 134 },
+        "ratioInsets": {
+          "ratio_1_1": { "top": 159, "right": 139, "bottom": 340, "left": 137 },
+          "ratio_3_4": { "top": 151, "right": 137, "bottom": 344, "left": 134 }
+        },
+        "supportedRatios": ["ratio_1_1", "ratio_3_4"],
+        "thumbnail": "assets/thumbnails/frames/instant_default.jpg",
+        "lightLeak": 0.2,
+        "shake": 0.15,
+        "outerPadding": 0,
+        "outerBackgroundColor": "#F5F6FA",
+        "supportsBackground": true
+      }
+      // ... 5 more frame variants (ice blue, matcha, tangerine, blossom, rose)
+    ],
+    "watermarks": {
+      "presets": [
+        { "id": "date_blue", "name": "蓝色日期", "color": "#5B9BD5", "position": "bottom_right", "fontSize": 18, "fontFamily": "DigitalMono" },
+        { "id": "date_white", "name": "橙色日期", "color": "#FF8A3D", "position": "bottom_right", "fontSize": 18, "fontFamily": "DigitalMono" },
+        { "id": "none", "name": "无水印" }
+      ],
+      "editor": {
+        "allowColorChange": true,
+        "allowPositionChange": true,
+        "allowSizeChange": true,
+        "allowOrientationChange": true
+      }
+    },
+    "extras": []
   },
   "defaultSelection": {
     "filterId": null,
@@ -120,7 +328,56 @@ Each camera is a **self-contained JSON entity** (`CameraDefinition`). All option
     "enableWatermark": true,
     "enableExtra": false,
     "enableFilmRoll": false
-  }
+  },
+  "previewCapabilities": {
+    "allowSmallViewport": true,
+    "allowGridOverlay": true,
+    "allowZoom": true,
+    "allowImportImage": true,
+    "allowTimer": true,
+    "allowFlash": true
+  },
+  "previewPolicy": {
+    "enableLut": true,
+    "enableTemperature": true,
+    "enableContrast": true,
+    "enableSaturation": true,
+    "enableVignette": true,
+    "enableLightLensEffect": true,
+    "enableGrain": true,
+    "enableBloom": false,
+    "enableChromaticAberration": true,
+    "enableFrameComposite": false,
+    "enableWatermarkComposite": true,
+    "enableHalation": true
+  },
+  "exportPolicy": {
+    "jpegQuality": 0.92,
+    "applyRatioCrop": true,
+    "applyFrameOnExport": true,
+    "applyWatermarkOnExport": true,
+    "preserveMetadata": true
+  },
+  "videoConfig": {
+    "enabled": false,
+    "fpsOptions": [24, 30],
+    "resolutionOptions": ["HD"],
+    "defaultFps": 30,
+    "defaultResolution": "HD",
+    "supportsAudio": false,
+    "videoBitrate": 8000000
+  },
+  "assets": {
+    "thumbnail": "assets/thumbnails/cameras/ccd_r.jpg",
+    "icon": "assets/icons/cameras/ccd_r.png"
+  },
+  "meta": {
+    "version": "final",
+    "premium": false,
+    "sortOrder": 4,
+    "tags": ["ccd", "digital", "cool", "blue-green", "noise", "chromatic-aberration", "2003", "2006", "early-ccd"]
+  },
+  "defaults": {}
 }
 ```
 
