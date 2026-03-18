@@ -1940,12 +1940,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             ),
                             label: _s().sharpness,
                             btnW: btnW,
-                            onTap: () {
-                              ref.read(cameraAppProvider.notifier).cycleSharpen();
-                              final nextLevel = ref.read(cameraAppProvider).sharpenLevel;
-                              final labels = [_s().low, _s().medium, _s().high];
-                              _showViewfinderHint('${_s().sharpness}: ${labels[nextLevel]}');
-                            },
+                            onTap: () => _showCameraTransition(
+                              () => ref.read(cameraAppProvider.notifier).cycleSharpen(),
+                              duration: const Duration(milliseconds: 350),
+                            ),
                           ),
                           // 3. 小框模式
                           _TopMenuBtn(

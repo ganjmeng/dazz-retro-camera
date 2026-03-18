@@ -745,41 +745,43 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   /// 循环切换清晰度档位（低/中/高）。
   ///
-  /// 清晰度只影响成片分辨率，不影响预览渲染，因此这里只更新 Dart state。
-  /// setSharpen 原生调用已移至 takePhoto 前执行，避免切换时重建 renderer 导致卡顿。
-  void cycleSharpen() {
+  /// setSharpen 在原生层会重新配置相机分辨率（重建 CameraGLRenderer），
+  /// 导致之前设置的所有 GPU shader 参数丢失。
+  /// 参考 flipCamera 的处理方式：setSharpen 完成后重新同步完整渲染参数。
+  Future<void> cycleSharpen() async {
     final next = (state.sharpenLevel + 1) % 3;
     state = state.copyWith(sharpenLevel: next);
     AppPrefsService.instance.setSharpenLevel(next);
+    // 0=低(0.0), 1=中(0.5), 2=高(1.0)
+    const levels = [0.0, 0.5, 1.0];
+    final svc = _ref.read(cameraServiceProvider.notifier);
 
-    // ── 以下为旧实现（在切换时立即调用原生，会重建 CameraGLRenderer 导致卡顿）──
-    // // 0=低(0.0), 1=中(0.5), 2=高(1.0)
-    // const levels = [0.0, 0.5, 1.0];
-    // final svc = _ref.read(cameraServiceProvider.notifier);
-    // // 1. 切换原生分辨率（此操作会重建 CameraGLRenderer，清空所有 shader 参数）
-    // await svc.setSharpen(levels[next]);
-    // // 2. 重新同步相机 shader 参数（与 flipCamera 保持一致）
-    // final camera = state.camera;
-    // if (camera != null) {
-    //   await svc.setCamera(camera);
-    //   // 3. 重新同步镜头参数
-    //   final lens = camera.lensById(state.activeLensId);
-    //   await svc.updateLensParams(
-    //     distortion:            lens?.distortion            ?? 0.0,
-    //     vignette:              lens?.vignette              ?? 0.0,
-    //     zoomFactor:            lens?.zoomFactor            ?? 1.0,
-    //     fisheyeMode:           lens?.fisheyeMode           ?? false,
-    //     chromaticAberration:   lens?.chromaticAberration   ?? 0.0,
-    //     bloom:                 lens?.bloom                 ?? 0.0,
-    //     softFocus:             lens?.softFocus             ?? 0.0,
-    //     exposure:              lens?.exposure              ?? 0.0,
-    //     contrast:              lens?.contrast              ?? 0.0,
-    //     saturation:            lens?.saturation            ?? 0.0,
-    //     highlightCompression:  lens?.highlightCompression  ?? 0.0,
-    //   );
-    // }
-    // // 4. 重新推送完整渲染参数（滤镜 + 镜头 + defaultLook 组合值）
-    // _applyCurrentRenderParamsToNative();
+    // 1. 切换原生分辨率（此操作会重建 CameraGLRenderer，清空所有 shader 参数）
+    await svc.setSharpen(levels[next]);
+
+    // 2. 重新同步相机 shader 参数（与 flipCamera 保持一致）
+    final camera = state.camera;
+    if (camera != null) {
+      await svc.setCamera(camera);
+      // 3. 重新同步镜头参数
+      final lens = camera.lensById(state.activeLensId);
+      await svc.updateLensParams(
+        distortion:            lens?.distortion            ?? 0.0,
+        vignette:              lens?.vignette              ?? 0.0,
+        zoomFactor:            lens?.zoomFactor            ?? 1.0,
+        fisheyeMode:           lens?.fisheyeMode           ?? false,
+        chromaticAberration:   lens?.chromaticAberration   ?? 0.0,
+        bloom:                 lens?.bloom                 ?? 0.0,
+        softFocus:             lens?.softFocus             ?? 0.0,
+        exposure:              lens?.exposure              ?? 0.0,
+        contrast:              lens?.contrast              ?? 0.0,
+        saturation:            lens?.saturation            ?? 0.0,
+        highlightCompression:  lens?.highlightCompression  ?? 0.0,
+      );
+    }
+
+    // 4. 重新推送完整渲染参数（滤镜 + 镜头 + defaultLook 组合值）
+    _applyCurrentRenderParamsToNative();
   }
 
   void cycleFlash() {
@@ -855,11 +857,6 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     HapticFeedback.mediumImpact();
 
     try {
-      // 将当前清晰度档位同步到原生层（切换成片分辨率）。
-      // 此调用从 cycleSharpen 移至此处，避免切换时重建 renderer 导致预览卡顿。
-      const sharpenLevels = [0.0, 0.5, 1.0];
-      await _ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevels[state.sharpenLevel]);
-
       final photoResult = await _ref.read(cameraServiceProvider.notifier).takePhoto();
       final path = photoResult?['filePath'] as String?;
       final captureW = photoResult?['captureWidth'] as int? ?? 0;
