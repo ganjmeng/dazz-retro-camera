@@ -735,7 +735,7 @@ void main() {
             val pboArr = IntArray(1)
             GLES30.glGenBuffers(1, pboArr, 0)
             val pbo = pboArr[0]
-            val pixelBytes = width * height * 4L
+            val pixelBytes = width * height * 4
             GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pbo)
             GLES30.glBufferData(GLES30.GL_PIXEL_PACK_BUFFER, pixelBytes, null, GLES30.GL_STREAM_READ)
             // 异步发起回读请求（GPU 继续执行其他工作）
@@ -747,7 +747,7 @@ void main() {
 
             // 7. Map PBO 读取像素（此时 GPU 传输已完成）
             val mappedBuf = GLES30.glMapBufferRange(
-                GLES30.GL_PIXEL_PACK_BUFFER, 0, pixelBytes,
+                GLES30.GL_PIXEL_PACK_BUFFER, 0, pixelBytes.toLong(),
                 GLES30.GL_MAP_READ_BIT
             ) as? java.nio.ByteBuffer
 
