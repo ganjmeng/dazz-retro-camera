@@ -169,6 +169,9 @@ class S {
   String get goToSettings        => get('goToSettings');
   String get cameraPerm          => get('cameraPerm');
   String get cameraPermDesc      => get('cameraPermDesc');
+  String get onboardingTitle     => get('onboardingTitle');
+  String get onboardingDesc      => get('onboardingDesc');
+  String get onboardingBtn       => get('onboardingBtn');
   String get wbAuto              => get('wbAuto');
   String get wbDaylight          => get('wbDaylight');
   String get wbIncandescent      => get('wbIncandescent');
@@ -1245,6 +1248,30 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.ms: 'Ini akan memulihkan susunan lalai dan mengosongkan kegemaran. Sahkan set semula?',
     AppLanguage.ja: '初期順序に戻し、お気に入りとカスタム順序がリセットされます。確認しますか？',
     AppLanguage.ko: '기본 순서로 복원되며 즐겨찾기와 사용자 지정 순서가 삭제됩니다. 재설정하시겠습니까?',
+  },
+  'onboardingTitle': {
+    AppLanguage.zhHans: '欢迎使用 DAZZ', AppLanguage.zhHant: '歡迎使用 DAZZ',
+    AppLanguage.en: 'Welcome to DAZZ', AppLanguage.ms: 'Selamat datang ke DAZZ',
+    AppLanguage.ja: 'DAZZへようこそ', AppLanguage.ko: 'DAZZ에 오신 것을 환영합니다',
+  },
+  'onboardingDesc': {
+    AppLanguage.zhHans: '拍立得风格的胶片相机体验
+需要相机权限才能开始拍摄',
+    AppLanguage.zhHant: '拍立得风格的軟片相機體驗
+需要相機權限才能開始拍攝',
+    AppLanguage.en: 'A retro instant camera experience.
+Camera access is needed to get started.',
+    AppLanguage.ms: 'Pengalaman kamera segera retro.
+Akses kamera diperlukan untuk bermula.',
+    AppLanguage.ja: 'レトロなインスタントカメラ体験。
+開始するにはカメラのアクセスが必要です。',
+    AppLanguage.ko: '레트로 인스턴트 카메라 경험.
+시작하려면 카메라 접근이 필요합니다.',
+  },
+  'onboardingBtn': {
+    AppLanguage.zhHans: '开始拍摄', AppLanguage.zhHant: '開始拍攝',
+    AppLanguage.en: 'Start Shooting', AppLanguage.ms: 'Mula Mengambil Gambar',
+    AppLanguage.ja: '撮影を始める', AppLanguage.ko: '쳙영 시작',
   },
 };
 

@@ -13,6 +13,7 @@ const _kShutterSound        = 'pref_shutter_sound';
 const _kShutterVibration    = 'pref_shutter_vibration';
 const _kLastCameraId        = 'pref_last_camera_id';
 const _kMirrorFrontCamera   = 'pref_mirror_front_camera';
+const _kOnboardingDone      = 'pref_onboarding_done';
 
 class AppPrefs {
   final int    sharpenLevel;        // 0=低 1=中 2=高，默认1
@@ -77,4 +78,10 @@ class AppPrefsService {
 
   Future<void> setMirrorFrontCamera(bool v) async =>
       (await SharedPreferences.getInstance()).setBool(_kMirrorFrontCamera, v);
+
+  Future<bool> isOnboardingDone() async =>
+      (await SharedPreferences.getInstance()).getBool(_kOnboardingDone) ?? false;
+
+  Future<void> setOnboardingDone() async =>
+      (await SharedPreferences.getInstance()).setBool(_kOnboardingDone, true);
 }
