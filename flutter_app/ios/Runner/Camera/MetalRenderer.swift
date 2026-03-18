@@ -83,6 +83,15 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
     // 使用 3 而非 2 是为了在 60fps 场景下保持流畅（每帧 ~16ms，GPU 处理 ~8ms）
     private let inflightSemaphore = DispatchSemaphore(value: 3)
 
+    // MARK: - CADisplayLink 帧调度（最佳实践：解耦采集线程和渲染线程）
+    // 原来在 captureOutput 中直接调用 renderFrame，会在 AVFoundation 采集线程上执行 Metal 渲染
+    // 改为：captureOutput 只保存最新 PixelBuffer，CADisplayLink 在 vsync 时机触发渲染
+    // 好处：1) 渲染与屏幕刷新率对齐；2) 采集线程不被 GPU 工作阻塞；3) 自动丢弃多余帧
+    private var latestPixelBuffer: CVPixelBuffer?
+    private let latestPixelBufferLock = NSLock()
+    private var displayLink: CADisplayLink?
+    private var frameCount: Int = 0  // 用于定期 CVMetalTextureCacheFlush
+
     // MARK: - Metal
 
     private let device: MTLDevice
@@ -387,13 +396,55 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         return Unmanaged.passRetained(buffer)
     }
 
+    // MARK: - CADisplayLink 控制
+
+    /// 启动 CADisplayLink（由 CameraPlugin 在相机会话启动后调用）
+    func startDisplayLink() {
+        guard displayLink == nil else { return }
+        let link = CADisplayLink(target: self, selector: #selector(displayLinkFired(_:)))
+        // preferredFramesPerSecond = 0 表示使用屏幕最大刷新率（60/120Hz ProMotion 自适应）
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+    }
+
+    /// 停止 CADisplayLink（由 CameraPlugin 在相机会话停止后调用）
+    func stopDisplayLink() {
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+
+    @objc private func displayLinkFired(_ link: CADisplayLink) {
+        // 取出最新帧（非阻塞，如果没有新帧则跳过本 vsync）
+        latestPixelBufferLock.lock()
+        let pixelBuffer = latestPixelBuffer
+        latestPixelBuffer = nil  // 消费后清空，避免重复渲染同一帧
+        latestPixelBufferLock.unlock()
+
+        guard let buffer = pixelBuffer else { return }
+
+        // 每 60 帧清理一次 CVMetalTextureCache，防止缓存无限增长导致内存压力
+        // 最佳实践来自 Apple WWDC 2018 "Metal for OpenGL Developers" Session
+        frameCount += 1
+        if frameCount % 60 == 0, let cache = textureCache {
+            CVMetalTextureCacheFlush(cache, 0)
+        }
+
+        renderFrame(from: buffer)
+    }
+
     // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
 
     func captureOutput(_ output: AVCaptureOutput,
                        didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        renderFrame(from: pixelBuffer)
+        // 最佳实践：captureOutput 只保存最新帧，不直接渲染
+        // 渲染由 CADisplayLink 在 vsync 时机触发，确保与屏幕刷新率对齐
+        // 当相机帧率（30fps）< 屏幕刷新率（60fps）时，CADisplayLink 自动跳过无新帧的 vsync
+        latestPixelBufferLock.lock()
+        latestPixelBuffer = pixelBuffer
+        latestPixelBufferLock.unlock()
     }
 
     // MARK: - Render

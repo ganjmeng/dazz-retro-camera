@@ -55,8 +55,10 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleInitCamera(call: call, result: result)
         case "startPreview":
             cameraManager?.startSession()
+            renderer?.startDisplayLink()
             result(nil)
         case "stopPreview":
+            renderer?.stopDisplayLink()
             cameraManager?.stopSession()
             result(nil)
         case "setPreset":
@@ -120,6 +122,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cameraManager?.sampleBufferDelegate = renderer!
         cameraManager?.configure(lens: lens)
         cameraManager?.startSession()
+        // 最佳实践：相机会话启动后立即启动 CADisplayLink，驱动 vsync 对齐渲染
+        renderer?.startDisplayLink()
 
         result(["textureId": textureId])
     }
@@ -568,6 +572,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     // dispose
     // ─────────────────────────────────────────────
     private func handleDispose(result: @escaping FlutterResult) {
+        renderer?.stopDisplayLink()
         cameraManager?.stopSession()
         cameraManager = nil
         if registeredTextureId != -1 {
