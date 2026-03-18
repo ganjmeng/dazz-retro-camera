@@ -19,6 +19,7 @@ import 'preview_renderer.dart';
 import 'capture_pipeline.dart';
 import '../../services/retain_settings_service.dart';
 import '../../services/app_prefs_service.dart';
+import '../../services/camera_lifecycle_manager.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CameraAppState — full UI state for the camera screen
@@ -1161,6 +1162,65 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     final json = params.toJson();
     debugPrint('[CameraNotifier] _applyCurrentRenderParamsToNative: sending ${json.length} params to native');
     _ref.read(cameraServiceProvider.notifier).updateRenderParams(json);
+    // 同步更新 lifecycle manager 的参数快照（供下次 Renderer 重建时重放）
+    _syncLifecycleSnapshot();
+  }
+
+  /// 将当前完整状态同步到 CameraLifecycleManager 快照
+  /// 在每次关键参数变化后调用，确保 Renderer 重建后能完整恢复
+  void _syncLifecycleSnapshot() {
+    try {
+      final mgr = _ref.read(cameraLifecycleProvider);
+      mgr.updateSnapshot(
+        camera: state.camera,
+        lensId: state.activeLensId,
+        sharpenLevel: [0.0, 0.5, 1.0][state.sharpenLevel.clamp(0, 2).toInt()],
+        zoomLevel: state.zoomLevel,
+        mirrorFrontCamera: state.mirrorFrontCamera,
+        renderParams: state.renderParams?.toJson(),
+      );
+    } catch (_) {
+      // lifecycle provider 可能未初始化（测试环境），静默忽略
+    }
+  }
+
+  /// 统一参数重放：initCamera 完成后调用，将当前快照完整发送到新 Renderer
+  /// 替代散落在 _initCameraHardware、_pushWithCameraPause、flipCamera、cycleSharpen 中的重复代码
+  Future<void> replayParamsToNative() async {
+    final svc = _ref.read(cameraServiceProvider.notifier);
+    final camera = state.camera;
+    const sharpenLevels = [0.0, 0.5, 1.0];
+    // STEP 1: 清晰度档位（会触发 Android rebind，必须最先执行）
+    await svc.setSharpen(sharpenLevels[state.sharpenLevel.clamp(0, 2).toInt()]);
+    // STEP 2: 相机基础配置（defaultLook、cameraId 等）
+    if (camera != null) {
+      await svc.setCamera(camera);
+    }
+    // STEP 3: 镜头参数
+    if (camera != null) {
+      final lens = camera.lensById(state.activeLensId);
+      await svc.updateLensParams(
+        distortion:           lens?.distortion           ?? 0.0,
+        vignette:             lens?.vignette             ?? 0.0,
+        zoomFactor:           lens?.zoomFactor           ?? 1.0,
+        fisheyeMode:          lens?.fisheyeMode          ?? false,
+        chromaticAberration:  lens?.chromaticAberration  ?? 0.0,
+        bloom:                lens?.bloom                ?? 0.0,
+        softFocus:            lens?.softFocus            ?? 0.0,
+        exposure:             lens?.exposure             ?? 0.0,
+        contrast:             lens?.contrast             ?? 0.0,
+        saturation:           lens?.saturation           ?? 0.0,
+        highlightCompression: lens?.highlightCompression ?? 0.0,
+      );
+    }
+    // STEP 4: 完整渲染参数（滤镜 + defaultLook 组合值）
+    _applyCurrentRenderParamsToNative();
+    // STEP 5: 缩放
+    if (state.zoomLevel != 1.0) {
+      await svc.setZoom(state.zoomLevel);
+    }
+    // STEP 6: 镜像设置
+    await svc.setMirrorFrontCamera(state.mirrorFrontCamera);
   }
 }
 
