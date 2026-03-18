@@ -18,9 +18,9 @@
     "contrast": 1.1,
     "saturation": 1.2,
     "temperature": 28,
-    "tint": 6.0,
+    "tint": 1.0,
     "highlights": -6.0,
-    "shadows": -3.0,
+    "shadows": -2.0,
     "whites": 8.0,
     "blacks": -4.0,
     "clarity": 4.0,
@@ -75,7 +75,7 @@
     "highlightTintG": 0.03,
     "highlightTintB": 0.0,
     "splitToneBalance": 0.42,
-    "lightLeakAmount": 0.08
+    "lightLeakAmount": 0.05
   },
   "modules": {
     "filters": [
