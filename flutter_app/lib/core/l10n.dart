@@ -1255,18 +1255,12 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.ja: 'DAZZへようこそ', AppLanguage.ko: 'DAZZ에 오신 것을 환영합니다',
   },
   'onboardingDesc': {
-    AppLanguage.zhHans: '拍立得风格的胶片相机体验
-需要相机权限才能开始拍摄',
-    AppLanguage.zhHant: '拍立得风格的軟片相機體驗
-需要相機權限才能開始拍攝',
-    AppLanguage.en: 'A retro instant camera experience.
-Camera access is needed to get started.',
-    AppLanguage.ms: 'Pengalaman kamera segera retro.
-Akses kamera diperlukan untuk bermula.',
-    AppLanguage.ja: 'レトロなインスタントカメラ体験。
-開始するにはカメラのアクセスが必要です。',
-    AppLanguage.ko: '레트로 인스턴트 카메라 경험.
-시작하려면 카메라 접근이 필요합니다.',
+    AppLanguage.zhHans: '拍立得风格的胶片相机体验\n需要相机权限才能开始拍摄',
+    AppLanguage.zhHant: '拍立得风格的軟片相機體驗\n需要相機權限才能開始拍攝',
+    AppLanguage.en: 'A retro instant camera experience.\nCamera access is needed to get started.',
+    AppLanguage.ms: 'Pengalaman kamera segera retro.\nAkses kamera diperlukan untuk bermula.',
+    AppLanguage.ja: 'レトロなインスタントカメラ体験。\n開始するにはカメラのアクセスが必要です。',
+    AppLanguage.ko: '레트로 인스턴트 카메라 경험.\n시작하려면 카메라 접근이 필요합니다.',
   },
   'onboardingBtn': {
     AppLanguage.zhHans: '开始拍摄', AppLanguage.zhHant: '開始拍攝',
