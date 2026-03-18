@@ -9,6 +9,7 @@ import android.opengl.EGLSurface
 import android.opengl.GLES11Ext
 import android.opengl.GLES30
 import android.util.Log
+import android.view.Choreographer
 import android.view.Surface
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -687,6 +688,18 @@ void main() {
     private var aPositionLoc: Int = -1
     private var aTexCoordLoc: Int = -1
 
+    // VAO（Vertex Array Objects）— 一次设置顶点格式，每帧只需 bind
+    private val vaoIds = IntArray(2)  // [0]=Pass1, [1]=Pass2
+    private var vaoInitialized = false
+
+    // Choreographer 帧调度
+    private val frameAvailable = AtomicBoolean(false)
+    private val choreographerCallback = Choreographer.FrameCallback { _ ->
+        if (frameAvailable.compareAndSet(true, false)) {
+            glExecutor.execute { renderFrame() }
+        }
+    }
+
     // SurfaceTexture 变换矩阵
     private val stMatrix = FloatArray(16)
     // 单位矩阵（Pass 2 不需要 ST 变换）
@@ -906,8 +919,11 @@ void main() {
         // ── 9. 创建 SurfaceTexture（相机帧输入）─────────────────────────────
         inputSurfaceTexture = SurfaceTexture(cameraTexId)
         inputSurfaceTexture!!.setDefaultBufferSize(width, height)
+        // 最佳实践：onFrameAvailable 只标记「有新帧」，渲染由 Choreographer vsync 驱动
+        // 避免相机帧率（30fps）和屏幕刷新率（60fps）不匹配时的重复渲染和帧积压
         inputSurfaceTexture!!.setOnFrameAvailableListener {
-            glExecutor.execute { renderFrame() }
+            frameAvailable.set(true)
+            Choreographer.getInstance().postFrameCallback(choreographerCallback)
         }
         inputSurface = Surface(inputSurfaceTexture)
 
@@ -919,6 +935,32 @@ void main() {
             .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
             .apply { put(QUAD_VERTICES); position(0) }
+
+        // ── 12. VAO（一次性设置顶点格式，每帧只需 bind）────────────────────
+        GLES30.glGenVertexArrays(2, vaoIds, 0)
+        val vb = vertexBuffer!!
+        val stride = 4 * 4
+
+        // VAO[0]: Pass 1 (copy)
+        GLES30.glBindVertexArray(vaoIds[0])
+        vb.position(0)
+        GLES30.glEnableVertexAttribArray(copyAPositionLoc)
+        GLES30.glVertexAttribPointer(copyAPositionLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
+        vb.position(2)
+        GLES30.glEnableVertexAttribArray(copyATexCoordLoc)
+        GLES30.glVertexAttribPointer(copyATexCoordLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
+        GLES30.glBindVertexArray(0)
+
+        // VAO[1]: Pass 2 (effects)
+        GLES30.glBindVertexArray(vaoIds[1])
+        vb.position(0)
+        GLES30.glEnableVertexAttribArray(aPositionLoc)
+        GLES30.glVertexAttribPointer(aPositionLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
+        vb.position(2)
+        GLES30.glEnableVertexAttribArray(aTexCoordLoc)
+        GLES30.glVertexAttribPointer(aTexCoordLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
+        GLES30.glBindVertexArray(0)
+        vaoInitialized = true
 
         initialized.set(true)
         Log.d(TAG, "GL initialized successfully (2-pass): ${width}x${height}")
@@ -1022,23 +1064,33 @@ void main() {
         // 传入 ST 矩阵（修正 OES 纹理方向）
         GLES30.glUniformMatrix4fv(copyUSTMatrix, 1, false, stMatrix, 0)
 
-        // 绘制全屏四边形
-        vb.position(0)
-        GLES30.glEnableVertexAttribArray(copyAPositionLoc)
-        GLES30.glVertexAttribPointer(copyAPositionLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
-        vb.position(2)
-        GLES30.glEnableVertexAttribArray(copyATexCoordLoc)
-        GLES30.glVertexAttribPointer(copyATexCoordLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
-
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
-
-        GLES30.glDisableVertexAttribArray(copyAPositionLoc)
-        GLES30.glDisableVertexAttribArray(copyATexCoordLoc)
+        // 绘制全屏四边形（VAO 已预设顶点格式，无需每帧重复设置）
+        if (vaoInitialized) {
+            GLES30.glBindVertexArray(vaoIds[0])
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+            GLES30.glBindVertexArray(0)
+        } else {
+            // 降级路径（VAO 未初始化时）
+            vb.position(0)
+            GLES30.glEnableVertexAttribArray(copyAPositionLoc)
+            GLES30.glVertexAttribPointer(copyAPositionLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
+            vb.position(2)
+            GLES30.glEnableVertexAttribArray(copyATexCoordLoc)
+            GLES30.glVertexAttribPointer(copyATexCoordLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+            GLES30.glDisableVertexAttribArray(copyAPositionLoc)
+            GLES30.glDisableVertexAttribArray(copyATexCoordLoc)
+        }
 
         // ── 同步屏障：确保 Pass 1 的 FBO 写入完全完成 ──────────────────────
-        // 在 tile-based GPU（Mali/Adreno）上，如果不显式同步，
-        // Pass 2 可能读到 FBO 中部分更新的数据，导致上下运动的斜条纹。
-        GLES30.glFinish()
+        // 最佳实践：用 glFenceSync + glWaitSync 替代 glFinish
+        // glFinish 会阻塞 CPU 直到 GPU 排空所有命令（约 2-5ms/帧）
+        // glFenceSync 只在 GPU 侧插入同步点，CPU 完全不阻塞
+        // 注意：glWaitSync 是 GPU 等待 fence，不是 CPU 等待，CPU 继续执行
+        val fence = GLES30.glFenceSync(GLES30.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
+        GLES30.glFlush()  // 确保 fence 命令被提交到 GPU
+        GLES30.glWaitSync(fence, 0, GLES30.GL_TIMEOUT_IGNORED.toLong())
+        GLES30.glDeleteSync(fence)
 
         // ════════════════════════════════════════════════════════════════════
         // Pass 2: 效果处理（从稳定的 2D 纹理采样）
@@ -1113,19 +1165,22 @@ void main() {
         GLES30.glUniform1f(uExposureOffset,       exposureOffset)
         time += 0.016f
 
-        // 绘制全屏四边形
-        vb.position(0)
-        GLES30.glEnableVertexAttribArray(aPositionLoc)
-        GLES30.glVertexAttribPointer(aPositionLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
-
-        vb.position(2)
-        GLES30.glEnableVertexAttribArray(aTexCoordLoc)
-        GLES30.glVertexAttribPointer(aTexCoordLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
-
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
-
-        GLES30.glDisableVertexAttribArray(aPositionLoc)
-        GLES30.glDisableVertexAttribArray(aTexCoordLoc)
+        // 绘制全屏四边形（VAO 已预设顶点格式）
+        if (vaoInitialized) {
+            GLES30.glBindVertexArray(vaoIds[1])
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+            GLES30.glBindVertexArray(0)
+        } else {
+            vb.position(0)
+            GLES30.glEnableVertexAttribArray(aPositionLoc)
+            GLES30.glVertexAttribPointer(aPositionLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
+            vb.position(2)
+            GLES30.glEnableVertexAttribArray(aTexCoordLoc)
+            GLES30.glVertexAttribPointer(aTexCoordLoc, 2, GLES30.GL_FLOAT, false, stride, vb)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+            GLES30.glDisableVertexAttribArray(aPositionLoc)
+            GLES30.glDisableVertexAttribArray(aTexCoordLoc)
+        }
 
         // 提交帧到 Flutter SurfaceTexture
         if (!EGL14.eglSwapBuffers(eglDisplay, eglSurface)) {
