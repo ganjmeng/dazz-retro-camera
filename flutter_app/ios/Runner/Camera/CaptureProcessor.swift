@@ -80,6 +80,8 @@ class CaptureProcessor {
     private let commandQueue: MTLCommandQueue
     private let pipelineState: MTLComputePipelineState
     private let textureLoader: MTKTextureLoader
+    // #7 LUT 纹理缓存：同一路径的 LUT 只加载一次，每次拍照节省 50~200ms
+    private var lutCache: [String: MTLTexture] = [:]
 
     init?() {
         guard let device = MTLCreateSystemDefaultDevice() else {
@@ -168,10 +170,15 @@ class CaptureProcessor {
                                                width: inTexture.width,
                                                height: inTexture.height)
 
-        // 4. 加载 LUT 纹理（若有 baseLut 参数）
+        // 4. 加载 LUT 纹理（#7 缓存：相同路径只加载一次）
         var lutTexture: MTLTexture? = nil
         if let baseLutPath = params["baseLut"] as? String, !baseLutPath.isEmpty {
-            lutTexture = loadLutTexture(assetPath: baseLutPath)
+            if let cached = lutCache[baseLutPath] {
+                lutTexture = cached
+            } else {
+                lutTexture = loadLutTexture(assetPath: baseLutPath)
+                if let tex = lutTexture { lutCache[baseLutPath] = tex }
+            }
             if lutTexture != nil {
                 captureParams.lutEnabled = 1.0
                 captureParams.lutStrength = getFloat(params, "lutStrength", 1.0)

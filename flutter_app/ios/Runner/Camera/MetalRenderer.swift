@@ -128,6 +128,9 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
     private var lutTexture: MTLTexture?
     private var grainTexture: MTLTexture?
     private var textureLoader: MTKTextureLoader?
+    // #2 路径缓存：路径不变时跳过重新加载，消除 EV 滑动时的重复 I/O 和预览闪烁
+    private var cachedLutPath: String = ""
+    private var cachedGrainPath: String = ""
 
     // MARK: - Asset Bundle
 
@@ -315,15 +318,28 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         // 曝光补偿
         if let v = params["exposureOffset"] as? Float { ccdParams.exposureOffset = v }
 
-        // ── 纹理加载 ─────────────────────────────────────────────────────────────────
-        if let lutAsset = params["lut"] as? String, !lutAsset.isEmpty {
-            loadAssetTexture(assetPath: lutAsset) { [weak self] texture in
-                self?.lutTexture = texture
+        // ── 纹理加载（#2 路径缓存：相同路径不重复加载）────────────────────────────────
+        if let lutAsset = params["lut"] as? String {
+            if !lutAsset.isEmpty {
+                if lutAsset != cachedLutPath {
+                    cachedLutPath = lutAsset
+                    loadAssetTexture(assetPath: lutAsset) { [weak self] texture in
+                        self?.lutTexture = texture
+                    }
+                }
+                // 路径相同：lutTexture 保持不变，跳过加载
+            } else {
+                // lut 键存在但为空字符串：清除 LUT
+                cachedLutPath = ""
+                lutTexture = nil
             }
         }
         if let grainAsset = params["grain"] as? String, !grainAsset.isEmpty {
-            loadAssetTexture(assetPath: grainAsset) { [weak self] texture in
-                self?.grainTexture = texture
+            if grainAsset != cachedGrainPath {
+                cachedGrainPath = grainAsset
+                loadAssetTexture(assetPath: grainAsset) { [weak self] texture in
+                    self?.grainTexture = texture
+                }
             }
         }
     }

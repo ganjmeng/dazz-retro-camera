@@ -817,7 +817,7 @@ void main() {
             // 8. 编码为 JPEG
             val outputFile = File(context.cacheDir, "gpu_${File(filePath).name}")
             FileOutputStream(outputFile).use { fos ->
-                outBitmap.compress(Bitmap.CompressFormat.JPEG, 92, fos)
+                outBitmap.compress(Bitmap.CompressFormat.JPEG, 88, fos)
             }
             outBitmap.recycle()
 

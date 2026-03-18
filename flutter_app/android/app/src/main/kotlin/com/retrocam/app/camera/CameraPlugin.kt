@@ -305,7 +305,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
                 // 在 cameraExecutor 上初始化 GL（initialize 内部用 glExecutor 异步完成，
                 // 并通过 CountDownLatch 同步等待，cameraExecutor 上阻塞是安全的）
-                val renderer = CameraGLRenderer(st)
+                val renderer = CameraGLRenderer(st, flutterPluginBinding.applicationContext)
                 renderer.initialize(w, h)
                 glRenderer = renderer
 

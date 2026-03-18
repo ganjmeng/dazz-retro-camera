@@ -13,6 +13,8 @@ import android.view.Surface
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import android.content.Context
+import java.lang.ref.WeakReference
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -33,8 +35,10 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 解决方案：先将 OES 拷贝到普通 2D 纹理，再从 2D 纹理做所有效果处理。
  */
 class CameraGLRenderer(
-    private val flutterSurfaceTexture: SurfaceTexture
+    private val flutterSurfaceTexture: SurfaceTexture,
+    context: Context? = null
 ) {
+    private val contextRef: WeakReference<Context>? = context?.let { WeakReference(it) }
     companion object {
         private const val TAG = "CameraGLRenderer"
 
@@ -140,8 +144,22 @@ uniform float uSplitToneBalance;     // 分离色调平衡（0.0=偏阴影，1.0
 uniform float uLightLeakAmount;      // 漏光强度（0.0~1.0）
 uniform float uLightLeakSeed;        // 漏光随机种子（每次拍照随机变化）
 uniform float uExposureOffset;        // 用户曝光补偿（-2.0~+2.0）
+// ── #1 LUT Pass（预览与成片色彩一致）──
+uniform sampler2D uLutTexture;        // LUT 2D 纹理（N*N × N，B-fastest 排列）
+uniform float     uLutEnabled;        // 1.0 = 启用 LUT
+uniform float     uLutStrength;       // LUT 混合强度（0.0~1.0）
+uniform float     uLutSize;           // LUT 边长（通常 33.0）
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────────
+// #1 LUT 采样（2D 纹理模拟 3D LUT，B-fastest 排列）
+vec3 previewSampleLUT(vec3 color, sampler2D lut, float lutSize) {
+    float scale = (lutSize - 1.0) / lutSize;
+    float offset = 0.5 / lutSize;
+    float bIdx = floor(color.b * (lutSize - 1.0) + 0.5);
+    float u = (color.r * scale + offset + bIdx) / lutSize;
+    float v = color.g * scale + offset;
+    return texture(lut, vec2(u, v)).rgb;
+}
 // 高光柔和滚落
 vec3 ccdHighlightRolloff(vec3 color, float rolloff) {
     if (rolloff <= 0.0) return color;
@@ -597,9 +615,13 @@ void main() {
         float vignette = vignetteEffect(uv, uVignetteAmount);
         color *= vignette;
     }
-
+    // Pass 24: #1 LUT 色彩映射（与成片管线一致）
+    if (uLutEnabled > 0.5) {
+        vec3 lutColor = previewSampleLUT(clamp(color, 0.0, 1.0), uLutTexture, uLutSize);
+        color = mix(color, lutColor, uLutStrength);
+    }
     fragColor = vec4(color, 1.0);
-}"""
+}""""
 
         // 全屏四边形顶点（位置 + UV）
         private val QUAD_VERTICES = floatArrayOf(
@@ -681,8 +703,12 @@ void main() {
     private var uSplitToneBalance: Int = -1
     private var uLightLeakAmount: Int = -1
     private var uLightLeakSeed: Int = -1
-    private var uExposureOffset: Int = -1
-
+     private var uExposureOffset: Int = -1
+    // #1 LUT uniform 位置
+    private var uLutTexture: Int = -1
+    private var uLutEnabled: Int = -1
+    private var uLutStrength: Int = -1
+    private var uLutSize: Int = -1
     // Pass 2 Attrib 位置
     private var aPositionLoc: Int = -1
     private var aTexCoordLoc: Int = -1
@@ -754,6 +780,14 @@ void main() {
     @Volatile private var splitToneBalance: Float = 0.5f
     @Volatile private var lightLeakAmount: Float = 0.0f
     @Volatile private var lightLeakSeed: Float = 0.0f
+    // #1 LUT 渲染参数
+    @Volatile private var lutEnabled: Float = 0.0f
+    @Volatile private var lutStrength: Float = 1.0f
+    @Volatile private var lutSize: Float = 33.0f
+    @Volatile private var lutPath: String = ""
+    // #1 LUT 纹理缓存（与预览 LUT 路径缓存相同思路）
+    private var lutTextureId: Int = 0
+    private var cachedLutPath: String = ""
     @Volatile private var previewWidth: Int = 1280
     @Volatile private var previewHeight: Int = 720
 
@@ -977,6 +1011,11 @@ void main() {
         uLightLeakAmount      = GLES30.glGetUniformLocation(programId, "uLightLeakAmount")
         uLightLeakSeed        = GLES30.glGetUniformLocation(programId, "uLightLeakSeed")
         uExposureOffset       = GLES30.glGetUniformLocation(programId, "uExposureOffset")
+        // #1 LUT uniform 位置
+        uLutTexture           = GLES30.glGetUniformLocation(programId, "uLutTexture")
+        uLutEnabled           = GLES30.glGetUniformLocation(programId, "uLutEnabled")
+        uLutStrength          = GLES30.glGetUniformLocation(programId, "uLutStrength")
+        uLutSize              = GLES30.glGetUniformLocation(programId, "uLutSize")
     }
 
     // ── 渲染（两步架构）─────────────────────────────────────────────────────
@@ -1108,11 +1147,19 @@ void main() {
         GLES30.glUniform3f(uShadowTint,           shadowTintR, shadowTintG, shadowTintB)
         GLES30.glUniform3f(uHighlightTint,        highlightTintR, highlightTintG, highlightTintB)
         GLES30.glUniform1f(uSplitToneBalance,     splitToneBalance)
-        GLES30.glUniform1f(uLightLeakAmount,      lightLeakAmount)
+         GLES30.glUniform1f(uLightLeakAmount,      lightLeakAmount)
         GLES30.glUniform1f(uLightLeakSeed,        lightLeakSeed)
         GLES30.glUniform1f(uExposureOffset,       exposureOffset)
+        // #1 LUT uniform 设置
+        GLES30.glUniform1f(uLutEnabled,  lutEnabled)
+        GLES30.glUniform1f(uLutStrength, lutStrength)
+        GLES30.glUniform1f(uLutSize,     lutSize)
+        if (lutEnabled > 0.5f && lutTextureId != 0) {
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE2)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, lutTextureId)
+            GLES30.glUniform1i(uLutTexture, 2)
+        }
         time += 0.016f
-
         // 绘制全屏四边形
         vb.position(0)
         GLES30.glEnableVertexAttribArray(aPositionLoc)
@@ -1192,6 +1239,29 @@ void main() {
         (params["splitToneBalance"]     as? Number)?.let { splitToneBalance    = it.toFloat() }
         (params["lightLeakAmount"]      as? Number)?.let { lightLeakAmount     = it.toFloat() }
         (params["lightLeakSeed"]        as? Number)?.let { lightLeakSeed       = it.toFloat() }
+        // #1 LUT 参数处理（路径缓存：相同路径不重复加载）
+        val newLutPath = (params["baseLut"] as? String) ?: ""
+        if (newLutPath != lutPath) {
+            lutPath = newLutPath
+            if (newLutPath.isNotEmpty()) {
+                glExecutor.execute {
+                    val context = contextRef?.get() ?: return@execute
+                    if (newLutPath != cachedLutPath) {
+                        val texId = loadLutTextureGL(context, newLutPath)
+                        if (texId != 0) {
+                            if (lutTextureId != 0) GLES30.glDeleteTextures(1, intArrayOf(lutTextureId), 0)
+                            lutTextureId = texId
+                            cachedLutPath = newLutPath
+                        }
+                    }
+                    lutEnabled = if (lutTextureId != 0) 1.0f else 0.0f
+                    lutStrength = (params["lutStrength"] as? Number)?.toFloat() ?: 1.0f
+                    lutSize = 33.0f
+                }
+            } else {
+                lutEnabled = 0.0f
+            }
+        }
     }
 
     fun setCameraId(cameraId: String) {
@@ -1287,6 +1357,53 @@ void main() {
         return shader
     }
 
+    // #1 LUT 纹理加载（在 GL 线程中调用）
+    private fun loadLutTextureGL(context: Context, assetPath: String): Int {
+        return try {
+            val inputStream = context.assets.open(assetPath.removePrefix("assets/"))
+            val lines = inputStream.bufferedReader().readLines()
+            inputStream.close()
+            var lutSize = 33
+            val data = mutableListOf<Float>()
+            for (line in lines) {
+                val trimmed = line.trim()
+                if (trimmed.startsWith("LUT_3D_SIZE")) {
+                    lutSize = trimmed.split("\\s+".toRegex()).getOrNull(1)?.toIntOrNull() ?: 33
+                    continue
+                }
+                if (trimmed.isEmpty() || trimmed.startsWith("#") || trimmed.startsWith("TITLE")
+                    || trimmed.startsWith("DOMAIN") || trimmed.startsWith("LUT")) continue
+                val parts = trimmed.split("\\s+".toRegex())
+                if (parts.size >= 3) {
+                    data.add(parts[0].toFloatOrNull() ?: continue)
+                    data.add(parts[1].toFloatOrNull() ?: continue)
+                    data.add(parts[2].toFloatOrNull() ?: continue)
+                }
+            }
+            // 将 3D LUT 平铺为 2D 纹理（N*N × N，B-fastest 排列）
+            val n = lutSize
+            val pixels = ByteBuffer.allocateDirect(n * n * n * 4).order(ByteOrder.nativeOrder())
+            for (i in 0 until n * n * n) {
+                val r = (data.getOrElse(i * 3) { 0f } * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val g = (data.getOrElse(i * 3 + 1) { 0f } * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val b = (data.getOrElse(i * 3 + 2) { 0f } * 255f + 0.5f).toInt().coerceIn(0, 255)
+                pixels.put(r.toByte()); pixels.put(g.toByte()); pixels.put(b.toByte()); pixels.put(255.toByte())
+            }
+            pixels.rewind()
+            val texIds = IntArray(1)
+            GLES30.glGenTextures(1, texIds, 0)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texIds[0])
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+            GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA, n * n, n, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, pixels)
+            texIds[0]
+        } catch (e: Exception) {
+            Log.e(TAG, "loadLutTextureGL failed: $assetPath", e)
+            0
+        }
+    }
     private fun createProgram(vertSrc: String, fragSrc: String): Int {
         val vert = compileShader(GLES30.GL_VERTEX_SHADER, vertSrc)
         val frag = compileShader(GLES30.GL_FRAGMENT_SHADER, fragSrc)
