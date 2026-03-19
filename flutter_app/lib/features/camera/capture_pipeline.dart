@@ -301,6 +301,8 @@ class CapturePipeline {
       }
       double outW = cropRect.width;
       double outH = cropRect.height;
+      final ratioCropOnlyNeeded = (cropRect.width - srcW).abs() > 1.0 ||
+          (cropRect.height - srcH).abs() > 1.0;
 
       debugPrint('[CapturePipeline] crop: ${outW}x${outH}');
 
@@ -454,7 +456,8 @@ class CapturePipeline {
       // 非 GPU 场景仅在 renderParams==null 且未解码缩放时启用，避免坐标与源图不一致。
       final hasNativeOverlayNeed = frameOpt != null ||
           watermarkText.isNotEmpty ||
-          minimapNormalizedRect != null;
+          minimapNormalizedRect != null ||
+          ratioCropOnlyNeeded;
       final nativeComposeSourcePath = gpuProcessed
           ? gpuOutputPath
           : ((!decodedWithScale && renderParams == null) ? imagePath : null);
