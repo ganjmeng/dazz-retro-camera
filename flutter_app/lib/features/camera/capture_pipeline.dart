@@ -452,8 +452,8 @@ class CapturePipeline {
         } catch (_) {}
       }
 
-      // 原生叠加：优先在 native 侧完成相框+水印合成，失败再回退 Dart Canvas。
-      // 非 GPU 场景仅在 renderParams==null 且未解码缩放时启用，避免坐标与源图不一致。
+      // 原生叠加：移动端 GPU 成片强制走原生 compose（含仅比例裁剪），避免 Dart Canvas
+      // 引入色调/曝光漂移。非 GPU 场景仅在 renderParams==null 且未解码缩放时启用。
       final hasNativeOverlayNeed = frameOpt != null ||
           watermarkText.isNotEmpty ||
           minimapNormalizedRect != null ||
@@ -461,7 +461,7 @@ class CapturePipeline {
       final nativeComposeSourcePath = gpuProcessed
           ? gpuOutputPath
           : ((!decodedWithScale && renderParams == null) ? imagePath : null);
-      if (hasNativeOverlayNeed &&
+      if ((gpuProcessed || hasNativeOverlayNeed) &&
           nativeComposeSourcePath != null &&
           (Platform.isAndroid || Platform.isIOS)) {
         try {
@@ -514,9 +514,33 @@ class CapturePipeline {
               outputHeight: canvasH.toInt(),
             );
           }
+          // GPU 路径下 compose 未返回文件时，不再回退 Dart Canvas，直接回退到原生 GPU 输出。
+          if (gpuProcessed) {
+            final fallbackBytes = gpuOutputBytes ??
+                await File(nativeComposeSourcePath).readAsBytes();
+            final fallbackSize = _readJpegDimensions(fallbackBytes);
+            final fw = fallbackSize?[0] ?? 0;
+            final fh = fallbackSize?[1] ?? 0;
+            return CaptureResult(
+              bytes: fallbackBytes,
+              outputWidth: fw,
+              outputHeight: fh,
+            );
+          }
         } catch (e) {
-          debugPrint(
-              '[CapturePipeline] native compose failed, fallback to Dart: $e');
+          debugPrint('[CapturePipeline] native compose failed: $e');
+          if (gpuProcessed) {
+            final fallbackBytes = gpuOutputBytes ??
+                await File(nativeComposeSourcePath).readAsBytes();
+            final fallbackSize = _readJpegDimensions(fallbackBytes);
+            final fw = fallbackSize?[0] ?? 0;
+            final fh = fallbackSize?[1] ?? 0;
+            return CaptureResult(
+              bytes: fallbackBytes,
+              outputWidth: fw,
+              outputHeight: fh,
+            );
+          }
         }
       }
 
