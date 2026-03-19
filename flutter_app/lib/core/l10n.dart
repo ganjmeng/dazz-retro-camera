@@ -255,6 +255,16 @@ class S {
   String get low                 => get('low');
   String get medium              => get('medium');
   String get high                => get('high');
+  // 场景提示
+  String get sceneHintBalanced   => get('sceneHintBalanced');
+  String get sceneHintLowLight   => get('sceneHintLowLight');
+  String get sceneHintBacklit    => get('sceneHintBacklit');
+  String get sceneHintIndoor     => get('sceneHintIndoor');
+  String get sceneHintOutdoor    => get('sceneHintOutdoor');
+  String get sceneHintPortrait   => get('sceneHintPortrait');
+  String get sceneHintMacro      => get('sceneHintMacro');
+  String get sceneHintFisheye    => get('sceneHintFisheye');
+  String get sceneHintHighRes    => get('sceneHintHighRes');
 
   // ── 别名：水印位置（posXxx → 复用 topLeft 等已有翻译）──
   String get posTopLeft          => get('topLeft');
@@ -1148,6 +1158,52 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.zhHans: '高', AppLanguage.zhHant: '高',
     AppLanguage.en: 'High', AppLanguage.ms: 'Tinggi',
     AppLanguage.ja: '高', AppLanguage.ko: '높음',
+  },
+  // 拍摄界面场景提示
+  'sceneHintBalanced': {
+    AppLanguage.zhHans: '均衡场景', AppLanguage.zhHant: '均衡場景',
+    AppLanguage.en: 'Balanced Scene', AppLanguage.ms: 'Adegan Seimbang',
+    AppLanguage.ja: 'バランスシーン', AppLanguage.ko: '균형 장면',
+  },
+  'sceneHintLowLight': {
+    AppLanguage.zhHans: '低光场景', AppLanguage.zhHant: '低光場景',
+    AppLanguage.en: 'Low Light Scene', AppLanguage.ms: 'Adegan Cahaya Rendah',
+    AppLanguage.ja: '低照度シーン', AppLanguage.ko: '저조도 장면',
+  },
+  'sceneHintBacklit': {
+    AppLanguage.zhHans: '强光逆光', AppLanguage.zhHant: '強光逆光',
+    AppLanguage.en: 'Backlit Scene', AppLanguage.ms: 'Adegan Cahaya Latar',
+    AppLanguage.ja: '逆光シーン', AppLanguage.ko: '역광 장면',
+  },
+  'sceneHintIndoor': {
+    AppLanguage.zhHans: '室内暖光', AppLanguage.zhHant: '室內暖光',
+    AppLanguage.en: 'Indoor Warm Light', AppLanguage.ms: 'Cahaya Dalaman Hangat',
+    AppLanguage.ja: '室内暖色光', AppLanguage.ko: '실내 난색광',
+  },
+  'sceneHintOutdoor': {
+    AppLanguage.zhHans: '户外日光', AppLanguage.zhHant: '戶外日光',
+    AppLanguage.en: 'Outdoor Daylight', AppLanguage.ms: 'Cahaya Siang Luar',
+    AppLanguage.ja: '屋外日中光', AppLanguage.ko: '야외 주광',
+  },
+  'sceneHintPortrait': {
+    AppLanguage.zhHans: '人像场景', AppLanguage.zhHant: '人像場景',
+    AppLanguage.en: 'Portrait Scene', AppLanguage.ms: 'Adegan Potret',
+    AppLanguage.ja: 'ポートレート', AppLanguage.ko: '인물 장면',
+  },
+  'sceneHintMacro': {
+    AppLanguage.zhHans: '近摄场景', AppLanguage.zhHant: '近攝場景',
+    AppLanguage.en: 'Macro Scene', AppLanguage.ms: 'Adegan Makro',
+    AppLanguage.ja: 'マクロシーン', AppLanguage.ko: '접사 장면',
+  },
+  'sceneHintFisheye': {
+    AppLanguage.zhHans: '鱼眼场景', AppLanguage.zhHant: '魚眼場景',
+    AppLanguage.en: 'Fisheye Scene', AppLanguage.ms: 'Adegan Fisheye',
+    AppLanguage.ja: '魚眼シーン', AppLanguage.ko: '어안 장면',
+  },
+  'sceneHintHighRes': {
+    AppLanguage.zhHans: '高像素场景', AppLanguage.zhHant: '高像素場景',
+    AppLanguage.en: 'High Resolution Scene', AppLanguage.ms: 'Adegan Resolusi Tinggi',
+    AppLanguage.ja: '高解像度シーン', AppLanguage.ko: '고해상도 장면',
   },
   // ── 水印/相框配置面板 Tab 标签 ──
   'wmColor': {
