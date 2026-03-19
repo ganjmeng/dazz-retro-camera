@@ -344,11 +344,13 @@ class CameraSessionManager: NSObject {
     private static func videoOrientation(from quarter: Int) -> AVCaptureVideoOrientation {
         switch quarter {
         case 1:
-            return .landscapeLeft
+            // quarter 定义：1=左横屏(逆时针), 3=右横屏(顺时针)
+            // AVCaptureVideoOrientation 与设备姿态在横屏上左右相反，需对调。
+            return .landscapeRight
         case 2:
             return .portraitUpsideDown
         case 3:
-            return .landscapeRight
+            return .landscapeLeft
         default:
             return .portrait
         }

@@ -774,7 +774,14 @@ class CapturePipeline {
       final effectiveQuarter = gpuProcessed ? 0 : deviceQuarter;
       ui.Image finalImage = outputImage;
       if (effectiveQuarter != 0) {
-        final rotAngle = effectiveQuarter * math.pi / 2;
+        // quarter 定义：1=左横屏(逆时针), 3=右横屏(顺时针)。
+        // 这里需要把图像旋回“自然正向”，横屏角度不能直接用 quarter*pi/2。
+        final rotAngle = switch (effectiveQuarter) {
+          1 => -math.pi / 2,
+          2 => math.pi,
+          3 => math.pi / 2,
+          _ => 0.0,
+        };
         final isLandscape = effectiveQuarter == 1 || effectiveQuarter == 3;
         final rotW = isLandscape ? canvasH : canvasW;
         final rotH = isLandscape ? canvasW : canvasH;

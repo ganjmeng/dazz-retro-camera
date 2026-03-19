@@ -672,9 +672,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
     private fun quarterToSurfaceRotation(quarter: Int): Int {
         return when (quarter) {
-            1 -> Surface.ROTATION_90
+            // quarter 定义：1=左横屏(逆时针), 3=右横屏(顺时针)
+            // Surface rotation 语义与设备旋转方向相反，左右需对调映射。
+            1 -> Surface.ROTATION_270
             2 -> Surface.ROTATION_180
-            3 -> Surface.ROTATION_270
+            3 -> Surface.ROTATION_90
             else -> Surface.ROTATION_0
         }
     }
