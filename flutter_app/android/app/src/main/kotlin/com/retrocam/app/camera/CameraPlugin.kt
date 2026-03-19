@@ -872,25 +872,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         level: Float,
     ) {
         val extender = Camera2Interop.Extender(builder)
-        // 速度优先：尽量降低厂商 ISP 的高质量慢路径概率（不支持时会被 HAL 忽略）
-        extender.setCaptureRequestOption(
-            CaptureRequest.CONTROL_CAPTURE_INTENT,
-            CaptureRequest.CONTROL_CAPTURE_INTENT_STILL_CAPTURE
-        )
+        // 只保留保守且稳定的参数，避免在部分机型触发欠曝/偏暗。
         extender.setCaptureRequestOption(
             CaptureRequest.CONTROL_AF_MODE,
             CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
         )
-        val noiseMode = when {
-            level < 0.7f -> CaptureRequest.NOISE_REDUCTION_MODE_FAST
-            else -> CaptureRequest.NOISE_REDUCTION_MODE_HIGH_QUALITY
-        }
-        val edgeMode = when {
-            level < 0.7f -> CaptureRequest.EDGE_MODE_FAST
-            else -> CaptureRequest.EDGE_MODE_HIGH_QUALITY
-        }
-        extender.setCaptureRequestOption(CaptureRequest.NOISE_REDUCTION_MODE, noiseMode)
-        extender.setCaptureRequestOption(CaptureRequest.EDGE_MODE, edgeMode)
         // 中低档画质进一步降低 JPEG 硬件编码质量，减少编码耗时
         val jpegQ: Byte = when {
             level < 0.2f -> 84
@@ -898,10 +884,6 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             else -> 92
         }
         extender.setCaptureRequestOption(CaptureRequest.JPEG_QUALITY, jpegQ)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            extender.setCaptureRequestOption(CaptureRequest.CONTROL_ENABLE_ZSL, true)
-        }
     }
 
     private fun pickMidSpeedSizes(supportedSizes: List<Size>): List<Size> {
