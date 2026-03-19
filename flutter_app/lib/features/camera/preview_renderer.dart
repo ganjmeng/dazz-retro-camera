@@ -18,6 +18,7 @@ enum SceneClass {
 }
 
 class DeviceColorProfile {
+  static const String calibrationVersion = 'v3.2';
   final String id;
   final double temperatureOffset;
   final double tintOffset;
@@ -26,6 +27,13 @@ class DeviceColorProfile {
   final double colorBiasROffset;
   final double colorBiasGOffset;
   final double colorBiasBOffset;
+  // Device-level calibration core (for native/dart unified pipeline).
+  // Row-major 3x3 CCM: [m00,m01,m02,m10,m11,m12,m20,m21,m22]
+  final List<double> ccm;
+  final double whiteScaleR;
+  final double whiteScaleG;
+  final double whiteScaleB;
+  final double gamma;
 
   const DeviceColorProfile({
     required this.id,
@@ -36,6 +44,11 @@ class DeviceColorProfile {
     this.colorBiasROffset = 0.0,
     this.colorBiasGOffset = 0.0,
     this.colorBiasBOffset = 0.0,
+    this.ccm = const [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    this.whiteScaleR = 1.0,
+    this.whiteScaleG = 1.0,
+    this.whiteScaleB = 1.0,
+    this.gamma = 2.2,
   });
 
   static const neutral = DeviceColorProfile(id: 'neutral');
@@ -57,6 +70,21 @@ class DeviceColorProfile {
         colorBiasROffset: -0.008,
         colorBiasGOffset: 0.003,
         colorBiasBOffset: 0.006,
+        ccm: const [
+          1.018,
+          -0.014,
+          -0.004,
+          -0.008,
+          1.012,
+          -0.004,
+          -0.010,
+          -0.006,
+          1.016
+        ],
+        whiteScaleR: 1.012,
+        whiteScaleG: 1.000,
+        whiteScaleB: 0.992,
+        gamma: 2.24,
       );
     }
     if (b.contains('samsung')) {
@@ -69,6 +97,21 @@ class DeviceColorProfile {
         colorBiasROffset: -0.003,
         colorBiasGOffset: 0.001,
         colorBiasBOffset: 0.002,
+        ccm: const [
+          1.010,
+          -0.007,
+          -0.003,
+          -0.006,
+          1.008,
+          -0.002,
+          -0.004,
+          -0.004,
+          1.012
+        ],
+        whiteScaleR: 1.006,
+        whiteScaleG: 1.000,
+        whiteScaleB: 0.996,
+        gamma: 2.20,
       );
     }
     if (b.contains('vivo') || b.contains('oppo') || b.contains('oneplus')) {
@@ -81,6 +124,21 @@ class DeviceColorProfile {
         colorBiasROffset: -0.004,
         colorBiasGOffset: 0.001,
         colorBiasBOffset: 0.002,
+        ccm: const [
+          1.012,
+          -0.009,
+          -0.003,
+          -0.007,
+          1.010,
+          -0.003,
+          -0.006,
+          -0.003,
+          1.012
+        ],
+        whiteScaleR: 1.008,
+        whiteScaleG: 1.000,
+        whiteScaleB: 0.995,
+        gamma: 2.22,
       );
     }
     if (b.contains('huawei') || b.contains('honor')) {
@@ -90,6 +148,21 @@ class DeviceColorProfile {
         tintOffset: -0.6,
         contrastScale: 0.99,
         saturationScale: 0.99,
+        ccm: const [
+          1.008,
+          -0.006,
+          -0.002,
+          -0.004,
+          1.006,
+          -0.002,
+          -0.004,
+          -0.002,
+          1.009
+        ],
+        whiteScaleR: 1.004,
+        whiteScaleG: 1.000,
+        whiteScaleB: 0.998,
+        gamma: 2.20,
       );
     }
     if (b.contains('apple') || m.contains('iphone')) {
@@ -99,6 +172,21 @@ class DeviceColorProfile {
         tintOffset: 0.2,
         contrastScale: 1.0,
         saturationScale: 1.0,
+        ccm: const [
+          1.004,
+          -0.003,
+          -0.001,
+          -0.002,
+          1.003,
+          -0.001,
+          -0.002,
+          -0.001,
+          1.004
+        ],
+        whiteScaleR: 1.002,
+        whiteScaleG: 1.000,
+        whiteScaleB: 0.999,
+        gamma: 2.18,
       );
     }
     if (sensorMp >= 150.0) {
@@ -110,6 +198,21 @@ class DeviceColorProfile {
         saturationScale: 0.98,
         colorBiasROffset: -0.004,
         colorBiasBOffset: 0.003,
+        ccm: const [
+          1.014,
+          -0.010,
+          -0.004,
+          -0.007,
+          1.010,
+          -0.003,
+          -0.008,
+          -0.004,
+          1.014
+        ],
+        whiteScaleR: 1.009,
+        whiteScaleG: 1.000,
+        whiteScaleB: 0.994,
+        gamma: 2.24,
       );
     }
     return neutral;
@@ -238,7 +341,12 @@ class PreviewRenderParams {
     final lens =
         activeLens?.contrast ?? 0.0; // lens.contrast is additive offset
     final adapted = _sceneContrastScale(sceneClass);
-    return ((base * filter + lens) * _deviceProfile.contrastScale * adapted)
+    final gammaComp =
+        ((2.2 / _deviceProfile.gamma) * 0.06 + 1.0).clamp(0.96, 1.04);
+    return ((base * filter + lens) *
+            _deviceProfile.contrastScale *
+            adapted *
+            gammaComp)
         .clamp(0.5, 2.0);
   }
 
@@ -280,15 +388,36 @@ class PreviewRenderParams {
   double get effectiveClarity => defaultLook.clarity.clamp(-100.0, 100.0);
   double get effectiveVibrance => defaultLook.vibrance.clamp(-100.0, 100.0);
   double get effectiveGrain => defaultLook.grain.clamp(0.0, 1.0);
-  double get effectiveColorBiasR =>
-      (defaultLook.colorBiasR + _deviceProfile.colorBiasROffset)
-          .clamp(-1.0, 1.0);
-  double get effectiveColorBiasG =>
-      (defaultLook.colorBiasG + _deviceProfile.colorBiasGOffset)
-          .clamp(-1.0, 1.0);
-  double get effectiveColorBiasB =>
-      (defaultLook.colorBiasB + _deviceProfile.colorBiasBOffset)
-          .clamp(-1.0, 1.0);
+  double get effectiveColorBiasR => (defaultLook.colorBiasR +
+          _deviceProfile.colorBiasROffset +
+          _ccmBiasR() +
+          (_deviceProfile.whiteScaleR - 1.0) * 0.40)
+      .clamp(-1.0, 1.0);
+  double get effectiveColorBiasG => (defaultLook.colorBiasG +
+          _deviceProfile.colorBiasGOffset +
+          _ccmBiasG() +
+          (_deviceProfile.whiteScaleG - 1.0) * 0.40)
+      .clamp(-1.0, 1.0);
+  double get effectiveColorBiasB => (defaultLook.colorBiasB +
+          _deviceProfile.colorBiasBOffset +
+          _ccmBiasB() +
+          (_deviceProfile.whiteScaleB - 1.0) * 0.40)
+      .clamp(-1.0, 1.0);
+
+  double _ccmBiasR() {
+    final c = _deviceProfile.ccm;
+    return ((c[0] - 1.0) * 0.25 + (c[1] + c[2]) * 0.5).clamp(-0.05, 0.05);
+  }
+
+  double _ccmBiasG() {
+    final c = _deviceProfile.ccm;
+    return ((c[4] - 1.0) * 0.25 + (c[3] + c[5]) * 0.5).clamp(-0.05, 0.05);
+  }
+
+  double _ccmBiasB() {
+    final c = _deviceProfile.ccm;
+    return ((c[8] - 1.0) * 0.25 + (c[6] + c[7]) * 0.5).clamp(-0.05, 0.05);
+  }
 
   // ── 拍立得即时成像专属参数 getter ──────────────────────────────────────────────
   double get highlightRolloff =>
@@ -519,6 +648,20 @@ class PreviewRenderParams {
         'deviceProfileId': _deviceProfile.id,
         'runtimeCameraId': runtimeCameraId,
         'runtimeSensorMp': runtimeSensorMp,
+        'calibrationVersion': DeviceColorProfile.calibrationVersion,
+        'deviceGamma': _deviceProfile.gamma,
+        'deviceWhiteScaleR': _deviceProfile.whiteScaleR,
+        'deviceWhiteScaleG': _deviceProfile.whiteScaleG,
+        'deviceWhiteScaleB': _deviceProfile.whiteScaleB,
+        'deviceCcm00': _deviceProfile.ccm[0],
+        'deviceCcm01': _deviceProfile.ccm[1],
+        'deviceCcm02': _deviceProfile.ccm[2],
+        'deviceCcm10': _deviceProfile.ccm[3],
+        'deviceCcm11': _deviceProfile.ccm[4],
+        'deviceCcm12': _deviceProfile.ccm[5],
+        'deviceCcm20': _deviceProfile.ccm[6],
+        'deviceCcm21': _deviceProfile.ccm[7],
+        'deviceCcm22': _deviceProfile.ccm[8],
       };
 }
 

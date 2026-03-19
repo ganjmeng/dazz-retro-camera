@@ -29,8 +29,12 @@ void main() {
       );
       final json = params.toJson();
       expect(json['deviceProfileId'], equals('xiaomi_family'));
+      expect(json['calibrationVersion'], equals('v3.2'));
       expect((json['colorBiasR'] as num).toDouble(), lessThan(0.0));
-      expect((json['colorBiasB'] as num).toDouble(), greaterThan(0.0));
+      expect((json['colorBiasB'] as num).toDouble(), isNot(closeTo(0.0, 1e-8)));
+      expect((json['deviceGamma'] as num).toDouble(), closeTo(2.24, 1e-6));
+      expect((json['deviceCcm00'] as num).toDouble(), greaterThan(1.0));
+      expect((json['deviceCcm11'] as num).toDouble(), greaterThan(1.0));
     });
 
     test('scene adaptation should modify highlight/shadows/whites coherently',
