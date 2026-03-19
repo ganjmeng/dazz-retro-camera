@@ -78,6 +78,7 @@ struct CCDParams {
     float lutStrength;       // LUT 混合强度（0.0~1.0）
     float toneCurveStrength; // Tone Curve 强度（0.0~1.0）
     float exposureOffset;    // 用户曝光补偿（-2.0~+2.0）
+    float lensDistortion;    // 轻量桶形畸变（非圆形鱼眼）
 };
 
 // MARK: - 工具函数
@@ -166,6 +167,16 @@ float2 fisheyeUV(float2 uv, float aspect) {
         sinTheta * sin(phi)
     );
     return texCoord * 0.5 + 0.5;
+}
+
+float2 barrelDistortUV(float2 uv, float strength, float aspect) {
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+    float r2 = dot(p, p);
+    float k = 1.0 + strength * 0.35 * r2;
+    p *= k;
+    p.x /= max(aspect, 0.0001);
+    return p * 0.5 + 0.5;
 }
 
 // MARK: - 传感器非均匀性工具函数
@@ -395,6 +406,8 @@ fragment float4 ccdFragmentShader(
             return float4(0.0, 0.0, 0.0, 1.0);
         }
         uv = fUV;
+    } else if (fabs(params.lensDistortion) > 0.0001) {
+        uv = clamp(barrelDistortUV(uv, params.lensDistortion, params.aspectRatio), float2(0.0), float2(1.0));
     }
 
     // 计算单像素大小（用于锐化卷积）

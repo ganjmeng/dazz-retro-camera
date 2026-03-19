@@ -355,8 +355,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             p.vignetteAmount = Float(vignette)
             p.chromaticAberration = Float(chromaticAberration)
             p.bloomAmount = Float(bloom)
-            // softFocus 和 distortion 在 Metal shader 中可能没有对应 uniform，
-            // 但通过 renderParams 统一发送时会覆盖
+            p.lensDistortion = Float(distortion)
+            // softFocus 暂未下沉到 Metal uniform（由统一 renderParams 管线兜底）
             r.setCCDParams(p)
         }
         result(nil)

@@ -64,6 +64,7 @@ struct CCDParams {
     var lutStrength: Float = 1.0       // LUT 混合强度（0.0~1.0）
     var toneCurveStrength: Float = 0.0 // Tone Curve 强度（0.0~1.0）
     var exposureOffset: Float = 0.0    // 用户曝光补偿（-2.0~+2.0）
+    var lensDistortion: Float = 0.0    // 轻量桶形畸变（非圆形鱼眼）
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -317,6 +318,8 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = params["noiseAmount"] as? Float { ccdParams.noiseAmount = v }
         // 曝光补偿
         if let v = params["exposureOffset"] as? Float { ccdParams.exposureOffset = v }
+        if let v = params["distortion"] as? Float { ccdParams.lensDistortion = v }
+        if let v = params["distortion"] as? Double { ccdParams.lensDistortion = Float(v) }
 
         // ── 纹理加载（#2 路径缓存：相同路径不重复加载）────────────────────────────────
         if let lutAsset = params["lut"] as? String {

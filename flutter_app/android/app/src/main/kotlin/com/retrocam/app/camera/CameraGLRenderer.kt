@@ -99,6 +99,7 @@ uniform float uTime;
 uniform vec2  uTexelSize;   // 1/width, 1/height
 uniform float uFisheyeMode; // 1.0=圆形鱼眼模式, 0.0=普通模式
 uniform float uAspectRatio; // 宽/高 比例（用于保持圆形）
+uniform float uLensDistortion; // 轻量桶形畸变（非圆形鱼眼）
 // ── 传感器非均匀性（数码相机通用，FXN-R 专项调校）──
 uniform float uCenterGain;          // 中心增亮（FXN-R=0.010）
 uniform float uEdgeFalloff;         // 边缘衰减（FXN-R=0.035）
@@ -296,6 +297,16 @@ vec2 fisheyeUV(vec2 uv, float aspect) {
     return texCoord;
 }
 
+vec2 barrelDistortUV(vec2 uv, float strength, float aspect) {
+    vec2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+    float r2 = dot(p, p);
+    float k = 1.0 + strength * 0.35 * r2;
+    p *= k;
+    p.x /= max(aspect, 0.0001);
+    return p * 0.5 + 0.5;
+}
+
 // ── Phase 2 下沉工具函数：Blacks/Whites、Highlights/Shadows、Clarity、Vibrance、
 //    ColorBias、Tint、Bloom、Halation、PaperTexture、HighlightRolloff ──
 vec3 applyBlacksWhites(vec3 c, float blacks, float whites) {
@@ -474,6 +485,8 @@ void main() {
             return;
         }
         uv = fUV;
+    } else if (abs(uLensDistortion) > 0.0001) {
+        uv = clamp(barrelDistortUV(uv, uLensDistortion, uAspectRatio), vec2(0.0), vec2(1.0));
     }
 
     // Pass 0: 锐化 (Unsharp Mask)
@@ -666,6 +679,7 @@ void main() {
     private var uTexelSize: Int = -1
     private var uFisheyeMode: Int = -1
     private var uAspectRatio: Int = -1
+    private var uLensDistortion: Int = -1
     private var uHighlights: Int = -1
     private var uShadows: Int = -1
     private var uWhites: Int = -1
@@ -738,6 +752,7 @@ void main() {
     @Volatile private var sharpen: Float = 0.0f
     @Volatile private var time: Float = 0.0f
     @Volatile private var fisheyeMode: Float = 0.0f
+    @Volatile private var lensDistortion: Float = 0.0f
     @Volatile private var highlights: Float = 0.0f
     @Volatile private var shadows: Float = 0.0f
     @Volatile private var whites: Float = 0.0f
@@ -971,6 +986,7 @@ void main() {
         uTexelSize            = GLES30.glGetUniformLocation(programId, "uTexelSize")
         uFisheyeMode          = GLES30.glGetUniformLocation(programId, "uFisheyeMode")
         uAspectRatio          = GLES30.glGetUniformLocation(programId, "uAspectRatio")
+        uLensDistortion       = GLES30.glGetUniformLocation(programId, "uLensDistortion")
         aPositionLoc          = GLES30.glGetAttribLocation(programId, "aPosition")
         aTexCoordLoc          = GLES30.glGetAttribLocation(programId, "aTexCoord")
         uHighlights           = GLES30.glGetUniformLocation(programId, "uHighlights")
@@ -1112,6 +1128,7 @@ void main() {
         val pw = previewWidth.toFloat()
         val ph = previewHeight.toFloat()
         GLES30.glUniform1f(uAspectRatio, minOf(pw, ph) / maxOf(pw, ph))
+        GLES30.glUniform1f(uLensDistortion,      lensDistortion)
         GLES30.glUniform1f(uHighlights,          highlights)
         GLES30.glUniform1f(uShadows,             shadows)
         GLES30.glUniform1f(uWhites,              whites)
@@ -1224,7 +1241,7 @@ void main() {
         (params["lensVignette"]         as? Number)?.let { vignetteAmount      = it.toFloat() }
         (params["exposureOffset"]       as? Number)?.let { exposureOffset       = it.toFloat() }
         (params["softFocus"]            as? Number)?.let { /* TODO: 添加 softFocus uniform */ }
-        (params["distortion"]           as? Number)?.let { fisheyeMode         = it.toFloat() }
+        (params["distortion"]           as? Number)?.let { lensDistortion      = it.toFloat() }
         // ── 新增：Fade / Split Toning / Light Leak ──
         (params["fadeAmount"]           as? Number)?.let { fadeAmount          = it.toFloat() }
         (params["fade"]                 as? Number)?.let { fadeAmount          = it.toFloat() }

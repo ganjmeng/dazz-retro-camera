@@ -129,6 +129,7 @@ uniform float uLightLeakSeed;
 uniform float uExposureOffset;        // 用户曝光补偿（-2.0~+2.0）
 uniform float uFisheyeMode;           // 1.0=圆形鱼眼模式, 0.0=普通模式
 uniform float uAspectRatio;           // 宽/高，用于鱼眼圆形不变形
+uniform float uLensDistortion;        // 轻量桶形畸变（非圆形鱼眼）
 // ── LUT 参数 ────────────────────────────────────────────────────────────────────────────────
 uniform sampler2D uLutTexture;        // LUT 2D 纹理（宽=N*N，高=N）
 uniform float uLutEnabled;            // 1.0 = 启用 LUT
@@ -189,6 +190,16 @@ vec2 fisheyeUV(vec2 uv, float aspect) {
     float sinTheta = sin(theta);
     vec2 texCoord = vec2(sinTheta * cos(phi), sinTheta * sin(phi));
     return texCoord * 0.5 + 0.5;
+}
+
+vec2 barrelDistortUV(vec2 uv, float strength, float aspect) {
+    vec2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+    float r2 = dot(p, p);
+    float k = 1.0 + strength * 0.35 * r2;
+    p *= k;
+    p.x /= max(aspect, 0.0001);
+    return p * 0.5 + 0.5;
 }
 // ── Pass 1: 色差 ──────────────────────────────────────────────────────────────
 vec3 applyChromaticAberration(sampler2D tex, vec2 uv, float amount) {
@@ -483,6 +494,8 @@ void main() {
             return;
         }
         uv = fUV;
+    } else if (abs(uLensDistortion) > 0.0001) {
+        uv = clamp(barrelDistortUV(uv, uLensDistortion, uAspectRatio), vec2(0.0), vec2(1.0));
     }
 
     // Pass 1: 色差
@@ -696,6 +709,7 @@ void main() {
     private var uExposureOffset = -1
     private var uFisheyeMode = -1
     private var uAspectRatio = -1
+    private var uLensDistortion = -1
     // LUT uniform 位置缓存
     private var uLutTexture = -1
     private var uLutEnabled = -1
@@ -1161,6 +1175,7 @@ void main() {
         uExposureOffset = loc("uExposureOffset")
         uFisheyeMode = loc("uFisheyeMode")
         uAspectRatio = loc("uAspectRatio")
+        uLensDistortion = loc("uLensDistortion")
         uLutTexture  = loc("uLutTexture")
         uLutEnabled  = loc("uLutEnabled")
         uLutStrength = loc("uLutStrength")
@@ -1221,6 +1236,8 @@ void main() {
         GLES30.glUniform1f(uLightLeakSeed, f("lightLeakSeed", System.currentTimeMillis().toFloat() / 1000.0f))
         GLES30.glUniform1f(uExposureOffset, f("exposureOffset"))
         GLES30.glUniform1f(uFisheyeMode, f("fisheyeMode"))
+        val lensDistortion = f("lensDistortion", f("distortion"))
+        GLES30.glUniform1f(uLensDistortion, lensDistortion)
         // FIX: aspect must be min(w,h)/max(w,h) (<= 1.0) so fisheyeUV produces a round circle.
         // Capture images on Android are portrait (height > width), so w/h < 1.0 is already
         // correct, but we use min/max for safety (matches CameraGLRenderer and iOS MetalRenderer).

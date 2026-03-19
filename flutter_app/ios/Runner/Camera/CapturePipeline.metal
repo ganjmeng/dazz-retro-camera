@@ -94,6 +94,7 @@ struct CaptureParams {
     float lutEnabled;        // 1.0 = 启用 LUT
     float lutStrength;       // LUT 混合强度（0.0~1.0）
     float lutSize;           // LUT 边长（通常 33）
+    float lensDistortion;    // 轻量桶形畸变（非圆形鱼眼）
 };
 
 // ── 工具函数 ─────────────────────────────────────────────────────────────
@@ -110,6 +111,16 @@ static float2 cp_fisheyeUV(float2 uv, float aspect) {
     float sinTheta = sin(theta);
     float2 texCoord = float2(sinTheta * cos(phi), sinTheta * sin(phi));
     return texCoord * 0.5 + 0.5;
+}
+
+static float2 cp_barrelDistortUV(float2 uv, float strength, float aspect) {
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+    float r2 = dot(p, p);
+    float k = 1.0 + strength * 0.35 * r2;
+    p *= k;
+    p.x /= max(aspect, 0.0001);
+    return p * 0.5 + 0.5;
 }
 
 /// 伪随机数生成（与所有预览 Shader 完全一致）
@@ -406,6 +417,8 @@ kernel void capturePipeline(
             return;
         }
         uv = fUV;
+    } else if (fabs(params.lensDistortion) > 0.0001) {
+        uv = clamp(cp_barrelDistortUV(uv, params.lensDistortion, params.aspectRatio), float2(0.0), float2(1.0));
     }
 
     float3 color = inTexture.read(uint2(uv * float2(inTexture.get_width(), inTexture.get_height()))).rgb;

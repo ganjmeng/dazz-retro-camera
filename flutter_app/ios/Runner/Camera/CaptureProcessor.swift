@@ -66,6 +66,7 @@ struct MetalCaptureParams {
     var lutEnabled: Float = 0          // 1.0 = 启用 LUT
     var lutStrength: Float = 1.0       // LUT 混合强度（0.0~1.0）
     var lutSize: Float = 33.0          // LUT 边长（通常 33）
+    var lensDistortion: Float = 0      // 轻量桶形畸变（非圆形鱼眼）
 }
 
 /**
@@ -295,6 +296,7 @@ class CaptureProcessor {
         p.skinRedLimit       = getFloat(params, "skinRedLimit", 1.0)
         p.exposureOffset     = getFloat(params, "exposureOffset", 0)
         p.fisheyeMode        = getFloat(params, "fisheyeMode", 0)
+        p.lensDistortion     = getFloat(params, "distortion", 0)
 
         return p
     }
