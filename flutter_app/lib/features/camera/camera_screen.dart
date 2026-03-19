@@ -121,8 +121,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   String? _pendingSceneHintKey;
   String _sceneHintSignal = '';
   String _runtimeColorSignal = '';
+  bool _sceneHintBootstrapped = false;
+  bool _showSceneHint = false;
   DateTime _sceneHintLastSwitchAt = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _sceneHintCommitTimer;
+  Timer? _sceneHintHideTimer;
   // 曝光水平滑动条是否展开（点击胶囊触发）
   bool _showExposureSlider = false;
   // 色温面板是否展开（点击色温胶囊触发）
@@ -238,6 +241,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _focusFadeTimer?.cancel();
     _hintTimer?.cancel();
     _sceneHintCommitTimer?.cancel();
+    _sceneHintHideTimer?.cancel();
     _transitionTimer?.cancel();
     _optionsAnim.dispose();
     _rotateAnim.dispose();
@@ -535,14 +539,21 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
     if (st.isFrontCamera) return 'sceneHintPortrait';
 
-    final isLowLight = st.exposureValue > 0.85 ||
-        (st.colorTempK < 4300 && st.exposureValue > 0.45);
+    // 说明：
+    // exposureValue 是用户曝光补偿，不是实时环境测光值；仅在极端补偿时作为弱信号参考。
+    // 为减少“暗场仍显示户外日光”的误判，自动白平衡下提高 outdoor 阈值。
+    final isLowLight = st.exposureValue > 1.15 ||
+        (st.wbMode == 'auto' &&
+            st.colorTempK < 3800 &&
+            st.exposureValue > 0.65);
     if (isLowLight) return 'sceneHintLowLight';
-    if (st.exposureValue < -0.75) return 'sceneHintBacklit';
-    if (st.wbMode == 'incandescent' || st.colorTempK < 4300) {
+    if (st.exposureValue < -1.15) return 'sceneHintBacklit';
+    if (st.wbMode == 'incandescent' ||
+        (st.wbMode == 'auto' && st.colorTempK < 3900)) {
       return 'sceneHintIndoor';
     }
-    if (st.wbMode == 'daylight' || st.colorTempK > 6200) {
+    if (st.wbMode == 'daylight' ||
+        (st.wbMode == 'auto' && st.colorTempK >= 7000)) {
       return 'sceneHintOutdoor';
     }
     if (sensorMp >= 90) return 'sceneHintHighRes';
@@ -550,6 +561,20 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   void _enqueueSceneHint(String nextKey) {
+    if (!_sceneHintBootstrapped) {
+      // 首次只建立基线，不弹提示，避免顶部常驻“第一条提示”。
+      _sceneHintBootstrapped = true;
+      _pendingSceneHintKey = null;
+      _sceneHintCommitTimer?.cancel();
+      if (nextKey != _sceneHintKey) {
+        setState(() {
+          _sceneHintKey = nextKey;
+          _showSceneHint = false;
+        });
+      }
+      return;
+    }
+
     if (nextKey == _sceneHintKey) {
       _pendingSceneHintKey = null;
       _sceneHintCommitTimer?.cancel();
@@ -570,6 +595,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _sceneHintKey = nextKey;
         _pendingSceneHintKey = null;
         _sceneHintLastSwitchAt = DateTime.now();
+        _showSceneHint = true;
+      });
+      _sceneHintHideTimer?.cancel();
+      _sceneHintHideTimer = Timer(_kSceneHintMinVisible, () {
+        if (!mounted) return;
+        setState(() => _showSceneHint = false);
       });
     });
   }
@@ -1175,8 +1206,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   // ── 取景框区域（上段）──────────────────────────────────────────────────────────────
   // 布局：圆角取景框，内部只有预览画面和网格线（控制胶囊已移到取景框外部）
-  Widget _buildViewfinderArea(CameraAppState st, CameraState camSvc,
-      double areaH, double screenW, S s,
+  Widget _buildViewfinderArea(
+      CameraAppState st, CameraState camSvc, double areaH, double screenW, S s,
       {required int overlayCacheWidth}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -1205,44 +1236,45 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     CircularProgressIndicator(color: _kWhite, strokeWidth: 2),
               ),
             ),
-          Positioned(
-            top: 10,
-            left: 0,
-            right: 0,
-            child: IgnorePointer(
-              child: Center(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  child: Container(
-                    key: ValueKey(_sceneHintKey),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withAlpha(130),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: Colors.white.withAlpha(45),
-                        width: 0.8,
+          if (_showSceneHint)
+            Positioned(
+              top: 10,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Center(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    child: Container(
+                      key: ValueKey(_sceneHintKey),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
                       ),
-                    ),
-                    child: Text(
-                      _sceneHintLabel(s),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.2,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withAlpha(130),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.white.withAlpha(45),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Text(
+                        _sceneHintLabel(s),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
           // ── 色温滤色叠加层（根据 colorTempK 叠加半透明暖/冷色调）──
           if (st.wbMode != 'auto') _WbColorOverlay(colorTempK: st.colorTempK),
           // ── 取景框手势：对焦 + 曝光 + 捩合缩放（完全分离）──
