@@ -825,10 +825,11 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
 
   S _s() => sOf(ProviderScope.containerOf(context).read(languageProvider));
 
-  // 每页的图片数据缓存（key: assetId）
-  // 优先显示原图，如果原图未加载则显示缩略图占位（避免闪烁）
-  final Map<String, Uint8List> _fullDataCache = {}; // 原图数据
-  final Map<String, Uint8List> _thumbDataCache = {}; // 缩略图占位数据
+  // 每页图片缓存（key: assetId）
+  // 业界最佳实践：先加载预览图（屏幕分辨率级别）保证秒开，仅当前页再加载原图。
+  final Map<String, Uint8List> _fullDataCache = {}; // 当前页原图
+  final Map<String, Uint8List> _previewDataCache = {}; // 相邻页预览图（约 2K）
+  final Map<String, Uint8List> _thumbDataCache = {}; // 缩略图占位
 
   // 滑动返回相关
   double _dragOffset = 0.0;
@@ -868,34 +869,63 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
 
   /// 预加载当前页及相邻 ±1 页
   void _preloadPages(int index) {
-    final indices = [index - 1, index, index + 1]
-        .where((i) => i >= 0 && i < widget.allAssets.length)
-        .toList();
+    final indices = [index - 1, index, index + 1].where((i) {
+      return i >= 0 && i < widget.allAssets.length;
+    }).toList();
     for (final i in indices) {
       final asset = widget.allAssets[i];
-      if (!_fullDataCache.containsKey(asset.id)) {
-        _loadAsset(asset);
+      // 相邻页预览图优先（快速滑动更稳）
+      _loadAssetPreview(asset);
+      if (i == index) {
+        // 当前页加载原图，保证放大细节
+        _loadAssetFull(asset);
       }
     }
+    _evictFarPageCaches(index);
   }
 
-  Future<void> _loadAsset(AssetEntity asset) async {
-    if (_fullDataCache.containsKey(asset.id)) return;
-    // 先用缩略图占位（如果缓存中有）——不触发 setState，避免闪烁
+  Future<void> _loadAssetPreview(AssetEntity asset) async {
+    if (_previewDataCache.containsKey(asset.id) ||
+        _fullDataCache.containsKey(asset.id)) {
+      return;
+    }
     final thumb = _ThumbCache.get(asset.id);
     if (thumb != null) {
       _thumbDataCache[asset.id] = thumb;
     }
-    // 加载原图（只更新 _fullDataCache，不替换占位图）
+    // 预览图按 2K 级别加载，明显降低大图 IO/解码抖动。
+    final data =
+        await asset.thumbnailDataWithSize(const ThumbnailSize(2048, 2048));
+    if (data != null && mounted) {
+      setState(() => _previewDataCache[asset.id] = data);
+    }
+  }
+
+  Future<void> _loadAssetFull(AssetEntity asset) async {
+    if (_fullDataCache.containsKey(asset.id)) return;
     final data = await asset.originBytes;
     if (data != null && mounted) {
       setState(() => _fullDataCache[asset.id] = data);
     }
   }
 
+  void _evictFarPageCaches(int centerIndex) {
+    final keepIds = <String>{};
+    for (int i = centerIndex - 2; i <= centerIndex + 2; i++) {
+      if (i >= 0 && i < widget.allAssets.length) {
+        keepIds.add(widget.allAssets[i].id);
+      }
+    }
+    _previewDataCache.removeWhere((k, _) => !keepIds.contains(k));
+    _fullDataCache.removeWhere((k, _) => !keepIds.contains(k));
+    _thumbDataCache.removeWhere((k, _) => !keepIds.contains(k));
+  }
+
   /// 获取某页应显示的图片数据：原图优先，其次缩略图，最后 null
   Uint8List? _getDisplayData(String assetId) {
-    return _fullDataCache[assetId] ?? _thumbDataCache[assetId];
+    return _fullDataCache[assetId] ??
+        _previewDataCache[assetId] ??
+        _thumbDataCache[assetId];
   }
 
   Future<void> _shareAsset() async {
