@@ -62,7 +62,8 @@ class _AlbumEntry {
   final String name;
   final IconData? icon;
   final String? iconPath;
-  const _AlbumEntry({required this.id, required this.name, this.icon, this.iconPath});
+  const _AlbumEntry(
+      {required this.id, required this.name, this.icon, this.iconPath});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,6 +84,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   List<AssetEntity> _assets = [];
   bool _isLoading = true;
   bool _isSelectionMode = false;
+  bool _isDeletingSelection = false;
   Set<String> _selectedIds = {};
   bool _showAlbumDropdown = false;
   String _currentAlbumId = 'all';
@@ -152,7 +154,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
       hasAll: true,
       onlyAll: false,
       filterOption: FilterOptionGroup(
-        orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
+        orders: [
+          const OrderOption(type: OrderOptionType.createDate, asc: false)
+        ],
       ),
     );
 
@@ -165,7 +169,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
     AssetPathEntity? dazzPath;
     for (final p in allPaths) {
       final upper = p.name.toUpperCase();
-      if (upper == 'DAZZ' || upper.endsWith('/DAZZ') || upper.contains('DAZZ')) {
+      if (upper == 'DAZZ' ||
+          upper.endsWith('/DAZZ') ||
+          upper.contains('DAZZ')) {
         dazzPath = p;
         break;
       }
@@ -175,16 +181,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
     if (dazzPath == null) {
       // 从根相册过滤文件名包含 dazz 的照片
-      final rootPath = allPaths.firstWhere((p) => p.isAll, orElse: () => allPaths.first);
+      final rootPath =
+          allPaths.firstWhere((p) => p.isAll, orElse: () => allPaths.first);
       final rootCount = await rootPath.assetCountAsync;
-      final rootAssets = await rootPath.getAssetListRange(start: 0, end: rootCount.clamp(0, 5000));
+      final rootAssets = await rootPath.getAssetListRange(
+          start: 0, end: rootCount.clamp(0, 5000));
       assets = rootAssets.where((a) {
         final title = (a.title ?? '').toLowerCase();
         return title.startsWith('dazz_') || title.contains('dazz');
       }).toList();
     } else {
       final count = await dazzPath.assetCountAsync;
-      assets = await dazzPath.getAssetListRange(start: 0, end: count.clamp(0, 5000));
+      assets =
+          await dazzPath.getAssetListRange(start: 0, end: count.clamp(0, 5000));
     }
 
     _GalleryCache.set(assets);
@@ -202,13 +211,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
     for (int i = 0; i < toLoad.length; i += batchSize) {
       final batch = toLoad.skip(i).take(batchSize).toList();
       await Future.wait(batch.map((asset) async {
-        final data = await asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
+        final data =
+            await asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
         if (data != null) _ThumbCache.set(asset.id, data);
       }));
     }
   }
 
-  void _rebuildFromAssets(List<AssetEntity> assets, {required bool showLoading}) {
+  void _rebuildFromAssets(List<AssetEntity> assets,
+      {required bool showLoading}) {
     final counts = <String, int>{'all': assets.length};
     final cameraIdsFound = <String>{};
     for (final asset in assets) {
@@ -223,11 +234,16 @@ class _GalleryScreenState extends State<GalleryScreen> {
     }
     final s = sOf(ProviderScope.containerOf(context).read(languageProvider));
     final entries = <_AlbumEntry>[
-      _AlbumEntry(id: 'all', name: s.allPhotos, icon: Icons.photo_library_outlined),
+      _AlbumEntry(
+          id: 'all', name: s.allPhotos, icon: Icons.photo_library_outlined),
     ];
     for (final cam in kAllCameras) {
       if (cameraIdsFound.contains(cam.id)) {
-        entries.add(_AlbumEntry(id: cam.id, name: cam.name, icon: Icons.camera_alt_outlined, iconPath: cam.iconPath));
+        entries.add(_AlbumEntry(
+            id: cam.id,
+            name: cam.name,
+            icon: Icons.camera_alt_outlined,
+            iconPath: cam.iconPath));
       }
     }
     if (mounted) {
@@ -291,19 +307,47 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   Future<void> _deleteSelected() async {
-    if (_selectedIds.isEmpty) return;
-    final toDelete = _assets.where((a) => _selectedIds.contains(a.id)).map((a) => a.id).toList();
-    await PhotoManager.editor.deleteWithIds(toDelete);
-    // 清除被删除照片的缩略图缓存
-    for (final id in toDelete) {
-      _ThumbCache.remove(id);
+    if (_selectedIds.isEmpty || _isDeletingSelection) return;
+    final toDelete = List<String>.from(_selectedIds);
+    setState(() => _isDeletingSelection = true);
+    try {
+      // 大批量删除分段执行，避免一次性传超大列表导致 UI 卡顿。
+      const batchSize = 200;
+      for (int i = 0; i < toDelete.length; i += batchSize) {
+        final end =
+            (i + batchSize < toDelete.length) ? i + batchSize : toDelete.length;
+        await PhotoManager.editor.deleteWithIds(toDelete.sublist(i, end));
+      }
+      for (final id in toDelete) {
+        _ThumbCache.remove(id);
+      }
+      _GalleryCache.invalidate();
+      if (!mounted) return;
+      setState(() {
+        final deleted = toDelete.toSet();
+        _assets.removeWhere((a) => deleted.contains(a.id));
+        _allDazzAssets.removeWhere((a) => deleted.contains(a.id));
+        _selectedIds.clear();
+        _isSelectionMode = false;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isDeletingSelection = false);
+      }
     }
-    _GalleryCache.invalidate();
+  }
+
+  bool get _isAllSelected =>
+      _assets.isNotEmpty && _selectedIds.length == _assets.length;
+
+  void _toggleSelectAll() {
+    if (_isDeletingSelection) return;
     setState(() {
-      _assets.removeWhere((a) => _selectedIds.contains(a.id));
-      _allDazzAssets.removeWhere((a) => _selectedIds.contains(a.id));
-      _selectedIds.clear();
-      _isSelectionMode = false;
+      if (_isAllSelected) {
+        _selectedIds.clear();
+      } else {
+        _selectedIds = _assets.map((a) => a.id).toSet();
+      }
     });
   }
 
@@ -320,7 +364,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
               _buildAppBar(),
               Expanded(
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
                     : _buildGrid(),
               ),
             ],
@@ -337,7 +383,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   color: Color(0xFF3A3A3C),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.photo_camera_outlined, color: Colors.white, size: 28),
+                child: const Icon(Icons.photo_camera_outlined,
+                    color: Colors.white, size: 28),
               ),
             ),
           ),
@@ -355,13 +402,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
         child: Row(
           children: [
             IconButton(
-              icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+              icon: const Icon(Icons.arrow_back_ios,
+                  color: Colors.white, size: 20),
               onPressed: () => Navigator.of(context).pop(),
             ),
             Expanded(
               child: GestureDetector(
                 onTap: _cameraAlbumEntries.length > 1
-                    ? () => setState(() => _showAlbumDropdown = !_showAlbumDropdown)
+                    ? () =>
+                        setState(() => _showAlbumDropdown = !_showAlbumDropdown)
                     : null,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -370,14 +419,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     Flexible(
                       child: Text(
                         _currentAlbumName,
-                        style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     if (_cameraAlbumEntries.length > 1) ...[
                       const SizedBox(width: 4),
                       Icon(
-                        _showAlbumDropdown ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                        _showAlbumDropdown
+                            ? Icons.keyboard_arrow_up
+                            : Icons.keyboard_arrow_down,
                         color: Colors.white,
                         size: 20,
                       ),
@@ -390,23 +444,52 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 ? Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      Text(
+                        '${_selectedIds.length}/${_assets.length}',
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 13),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          _isAllSelected
+                              ? Icons.check_box
+                              : Icons.check_box_outline_blank,
+                          color: Colors.white,
+                        ),
+                        onPressed: _toggleSelectAll,
+                      ),
                       if (_selectedIds.isNotEmpty)
                         IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.white),
-                          onPressed: _deleteSelected,
+                          icon: _isDeletingSelection
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.delete_outline,
+                                  color: Colors.white),
+                          onPressed:
+                              _isDeletingSelection ? null : _deleteSelected,
                         ),
                       TextButton(
-                        onPressed: () => setState(() {
-                          _isSelectionMode = false;
-                          _selectedIds.clear();
-                        }),
-                        child: Text(_s().cancel, style: const TextStyle(color: Colors.white, fontSize: 15)),
+                        onPressed: _isDeletingSelection
+                            ? null
+                            : () => setState(() {
+                                  _isSelectionMode = false;
+                                  _selectedIds.clear();
+                                }),
+                        child: Text(_s().cancel,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 15)),
                       ),
                     ],
                   )
                 : TextButton(
                     onPressed: () => setState(() => _isSelectionMode = true),
-                    child: Text(_s().select, style: const TextStyle(color: Colors.white, fontSize: 15)),
+                    child: Text(_s().select,
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 15)),
                   ),
           ],
         ),
@@ -427,12 +510,18 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 color: const Color(0xFF2C2C2E),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Icon(Icons.camera_alt_outlined, color: Color(0xFFFF8C00), size: 40),
+              child: const Icon(Icons.camera_alt_outlined,
+                  color: Color(0xFFFF8C00), size: 40),
             ),
             const SizedBox(height: 16),
-            Text(_s().noPhotos, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+            Text(_s().noPhotos,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            Text(_s().noPhotosHint, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+            Text(_s().noPhotosHint,
+                style: const TextStyle(color: Colors.grey, fontSize: 14)),
           ],
         ),
       );
@@ -447,6 +536,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         mainAxisSpacing: 0,
       ),
       itemCount: itemCount,
+      cacheExtent: 1600,
       // 关键优化：addRepaintBoundaries=true 让每个 cell 独立重绘，避免全局重绘
       addRepaintBoundaries: true,
       itemBuilder: (ctx, index) {
@@ -465,10 +555,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       color: const Color(0xFF2C2C2E),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.add_photo_alternate_outlined, color: Color(0xFFFF8C00), size: 28),
+                    child: const Icon(Icons.add_photo_alternate_outlined,
+                        color: Color(0xFFFF8C00), size: 28),
                   ),
                   const SizedBox(height: 8),
-                  Text(_s().importPhoto, style: const TextStyle(color: Color(0xFFFF8C00), fontSize: 12)),
+                  Text(_s().importPhoto,
+                      style: const TextStyle(
+                          color: Color(0xFFFF8C00), fontSize: 12)),
                 ],
               ),
             ),
@@ -570,13 +663,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Icon(
                         entry.icon ?? Icons.camera_alt_outlined,
-                        color: isActive ? const Color(0xFFFF8C00) : Colors.white54,
+                        color:
+                            isActive ? const Color(0xFFFF8C00) : Colors.white54,
                         size: 32,
                       ),
                     )
                   : Icon(
                       entry.icon ?? Icons.photo_library_outlined,
-                      color: isActive ? const Color(0xFFFF8C00) : Colors.white54,
+                      color:
+                          isActive ? const Color(0xFFFF8C00) : Colors.white54,
                       size: 32,
                     ),
             ),
@@ -642,7 +737,8 @@ class _RetroPhotoCellState extends State<_RetroPhotoCell> {
   }
 
   Future<void> _loadThumb() async {
-    final data = await widget.asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
+    final data =
+        await widget.asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
     if (data != null) {
       _ThumbCache.set(widget.asset.id, data);
       if (mounted) setState(() => _thumb = data);
@@ -682,7 +778,9 @@ class _RetroPhotoCellState extends State<_RetroPhotoCell> {
               height: 24,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: widget.isSelected ? Colors.blue : Colors.black.withAlpha(100),
+                color: widget.isSelected
+                    ? Colors.blue
+                    : Colors.black.withAlpha(100),
                 border: Border.all(color: Colors.white, width: 1.5),
               ),
               child: widget.isSelected
@@ -729,13 +827,14 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
 
   // 每页的图片数据缓存（key: assetId）
   // 优先显示原图，如果原图未加载则显示缩略图占位（避免闪烁）
-  final Map<String, Uint8List> _fullDataCache = {};  // 原图数据
+  final Map<String, Uint8List> _fullDataCache = {}; // 原图数据
   final Map<String, Uint8List> _thumbDataCache = {}; // 缩略图占位数据
 
   // 滑动返回相关
   double _dragOffset = 0.0;
   bool _isDragging = false;
   bool _isZoomed = false; // 当前页是否已缩放（缩放时禁用滑动返回）
+  bool _isPhotoInteracting = false; // 图片正处于手势交互中
 
   @override
   void initState() {
@@ -801,17 +900,22 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
 
   Future<void> _shareAsset() async {
     try {
-      final asset = widget.allAssets.isEmpty ? widget.asset : widget.allAssets[_currentIndex];
+      final asset = widget.allAssets.isEmpty
+          ? widget.asset
+          : widget.allAssets[_currentIndex];
       final file = await asset.originFile;
       if (file == null) return;
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: 'Shot with DAZZ${_cameraName.isNotEmpty ? " · $_cameraName" : ""}',
+        text:
+            'Shot with DAZZ${_cameraName.isNotEmpty ? " · $_cameraName" : ""}',
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_s().shareFailed), backgroundColor: const Color(0xFF2C2C2E)),
+        SnackBar(
+            content: Text(_s().shareFailed),
+            backgroundColor: const Color(0xFF2C2C2E)),
       );
     }
   }
@@ -833,12 +937,15 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF2C2C2E),
-        title: Text(_s().deletePhoto, style: const TextStyle(color: Colors.white)),
-        content: Text(_s().deletePhotoConfirm, style: const TextStyle(color: Colors.white70)),
+        title:
+            Text(_s().deletePhoto, style: const TextStyle(color: Colors.white)),
+        content: Text(_s().deletePhotoConfirm,
+            style: const TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(_s().cancel, style: const TextStyle(color: Colors.white54)),
+            child: Text(_s().cancel,
+                style: const TextStyle(color: Colors.white54)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -858,50 +965,65 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
+    final canDismissByDrag = !_isZoomed && !_isPhotoInteracting;
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         // 滑动返回：向下拖动超过 120px 时返回
-        onVerticalDragStart: _isZoomed ? null : (details) {
-          setState(() {
-            _isDragging = true;
-            _dragOffset = 0.0;
-          });
-        },
-        onVerticalDragUpdate: _isZoomed ? null : (details) {
-          if (details.delta.dy > 0 || _dragOffset > 0) {
-            setState(() => _dragOffset += details.delta.dy);
-          }
-        },
-        onVerticalDragEnd: _isZoomed ? null : (details) {
-          if (_dragOffset > 120 || details.primaryVelocity! > 800) {
-            Navigator.of(context).pop();
-          } else {
-            setState(() {
-              _isDragging = false;
-              _dragOffset = 0.0;
-            });
-          }
-        },
-        onVerticalDragCancel: _isZoomed ? null : () {
-          setState(() {
-            _isDragging = false;
-            _dragOffset = 0.0;
-          });
-        },
+        onVerticalDragStart: canDismissByDrag
+            ? (details) {
+                setState(() {
+                  _isDragging = true;
+                  _dragOffset = 0.0;
+                });
+              }
+            : null,
+        onVerticalDragUpdate: canDismissByDrag
+            ? (details) {
+                if (details.delta.dy > 0 || _dragOffset > 0) {
+                  setState(() => _dragOffset += details.delta.dy);
+                }
+              }
+            : null,
+        onVerticalDragEnd: canDismissByDrag
+            ? (details) {
+                if (_dragOffset > 120 || details.primaryVelocity! > 800) {
+                  Navigator.of(context).pop();
+                } else {
+                  setState(() {
+                    _isDragging = false;
+                    _dragOffset = 0.0;
+                  });
+                }
+              }
+            : null,
+        onVerticalDragCancel: canDismissByDrag
+            ? () {
+                setState(() {
+                  _isDragging = false;
+                  _dragOffset = 0.0;
+                });
+              }
+            : null,
         child: AnimatedContainer(
-          duration: _isDragging ? Duration.zero : const Duration(milliseconds: 200),
+          duration:
+              _isDragging ? Duration.zero : const Duration(milliseconds: 200),
           curve: Curves.easeOut,
-          transform: Matrix4.translationValues(0, _dragOffset.clamp(0.0, double.infinity), 0),
+          transform: Matrix4.translationValues(
+              0, _dragOffset.clamp(0.0, double.infinity), 0),
           child: Stack(
             children: [
               // ── 照片内容（可左右滑动）──
               PageView.builder(
                 controller: _pageController,
-                itemCount: widget.allAssets.isEmpty ? 1 : widget.allAssets.length,
+                itemCount:
+                    widget.allAssets.isEmpty ? 1 : widget.allAssets.length,
                 // 缩放时禁用 PageView 的水平滑动（避免与 PhotoView 的手势冲突）
-                physics: _isZoomed ? const NeverScrollableScrollPhysics() : const PageScrollPhysics(),
+                physics: _isZoomed
+                    ? const NeverScrollableScrollPhysics()
+                    : const PageScrollPhysics(),
                 onPageChanged: (i) {
                   setState(() {
                     _currentIndex = i;
@@ -911,7 +1033,9 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
                   _preloadPages(i);
                 },
                 itemBuilder: (ctx, i) {
-                  final pageAsset = widget.allAssets.isEmpty ? widget.asset : widget.allAssets[i];
+                  final pageAsset = widget.allAssets.isEmpty
+                      ? widget.asset
+                      : widget.allAssets[i];
                   final data = _getDisplayData(pageAsset.id);
 
                   return _PhotoViewPage(
@@ -920,6 +1044,12 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
                     onScaleChanged: (isZoomed) {
                       if (i == _currentIndex) {
                         setState(() => _isZoomed = isZoomed);
+                      }
+                    },
+                    onInteractionChanged: (interacting) {
+                      if (i == _currentIndex &&
+                          interacting != _isPhotoInteracting) {
+                        setState(() => _isPhotoInteracting = interacting);
                       }
                     },
                   );
@@ -955,7 +1085,8 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.camera_alt_outlined, color: Colors.white54, size: 14),
+                            const Icon(Icons.camera_alt_outlined,
+                                color: Colors.white54, size: 14),
                             const SizedBox(width: 5),
                             Text(
                               _cameraName,
@@ -972,11 +1103,16 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
                         const SizedBox(),
                       Row(
                         children: [
-                          _ActionBtn(icon: Icons.ios_share_outlined, onTap: _shareAsset),
+                          _ActionBtn(
+                              icon: Icons.ios_share_outlined,
+                              onTap: _shareAsset),
                           const SizedBox(width: 12),
-                          _ActionBtn(icon: Icons.download_outlined, onTap: _saveToGallery),
+                          _ActionBtn(
+                              icon: Icons.download_outlined,
+                              onTap: _saveToGallery),
                           const SizedBox(width: 12),
-                          _ActionBtn(icon: Icons.delete_outline, onTap: _deleteAsset),
+                          _ActionBtn(
+                              icon: Icons.delete_outline, onTap: _deleteAsset),
                         ],
                       ),
                     ],
@@ -1002,18 +1138,21 @@ class _PhotoViewPage extends StatefulWidget {
   final AssetEntity asset;
   final Uint8List? data;
   final void Function(bool isZoomed) onScaleChanged;
+  final void Function(bool interacting)? onInteractionChanged;
 
   const _PhotoViewPage({
     required this.asset,
     required this.data,
     required this.onScaleChanged,
+    this.onInteractionChanged,
   });
 
   @override
   State<_PhotoViewPage> createState() => _PhotoViewPageState();
 }
 
-class _PhotoViewPageState extends State<_PhotoViewPage> with TickerProviderStateMixin {
+class _PhotoViewPageState extends State<_PhotoViewPage>
+    with TickerProviderStateMixin {
   final TransformationController _transformCtrl = TransformationController();
   bool _isZoomed = false;
 
@@ -1106,10 +1245,16 @@ class _PhotoViewPageState extends State<_PhotoViewPage> with TickerProviderState
               onDoubleTap: () {}, // 必须声明 onDoubleTap 才能让 onDoubleTapDown 生效
               child: InteractiveViewer(
                 transformationController: _transformCtrl,
+                onInteractionStart: (_) =>
+                    widget.onInteractionChanged?.call(true),
+                onInteractionEnd: (_) =>
+                    widget.onInteractionChanged?.call(false),
                 // 最小缩放：1.0（不允许缩小到比原始更小）
                 minScale: 1.0,
                 // 最大缩放：5.0
                 maxScale: 5.0,
+                boundaryMargin: const EdgeInsets.all(80),
+                panAxis: PanAxis.free,
                 // 关键：clipBehavior=none 允许图片在缩放时超出边界（配合 panEnabled 的边界限制）
                 clipBehavior: Clip.none,
                 // 缩放 > 1 时允许拖动，= 1 时禁止拖动（避免与 PageView 横滑冲突）
