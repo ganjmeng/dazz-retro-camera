@@ -339,6 +339,23 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
+  /// 用新文件覆盖已保存的相册资产内容（Android content:// URI）。
+  Future<bool> replaceGalleryImage(String uri, String filePath) async {
+    try {
+      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        'replaceGalleryImage',
+        {
+          'uri': uri,
+          'filePath': filePath,
+        },
+      );
+      return result?['success'] == true;
+    } catch (e) {
+      print('Error replacing gallery image: $e');
+      return false;
+    }
+  }
+
   /// 释放所有资源
   Future<void> disposeCamera() async {
     try {

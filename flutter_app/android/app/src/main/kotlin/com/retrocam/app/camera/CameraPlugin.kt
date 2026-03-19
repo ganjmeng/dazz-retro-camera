@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.SurfaceTexture
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -179,6 +180,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "startRecording"     -> handleStartRecording(result)
             "stopRecording"      -> handleStopRecording(result)
             "saveToGallery"      -> handleSaveToGallery(call, result)
+            "replaceGalleryImage"-> handleReplaceGalleryImage(call, result)
             "dispose"            -> handleDispose(result)
             "processWithGpu"   -> {
                 if (captureProcessor == null) {
@@ -716,6 +718,50 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
     }
 
+    /// 使用处理后的文件覆盖已存在的 MediaStore 资产内容（同一 URI）。
+    private fun handleReplaceGalleryImage(call: MethodCall, result: MethodChannel.Result) {
+        val uriStr = call.argument<String>("uri")
+        val filePath = call.argument<String>("filePath")
+        if (uriStr.isNullOrEmpty() || filePath.isNullOrEmpty()) {
+            result.error("INVALID_ARG", "uri and filePath are required", null)
+            return
+        }
+        if (!uriStr.startsWith("content://")) {
+            result.error("INVALID_URI", "replaceGalleryImage only supports content:// uri", null)
+            return
+        }
+        val sourceFile = File(filePath)
+        if (!sourceFile.exists()) {
+            result.error("FILE_NOT_FOUND", "File not found: $filePath", null)
+            return
+        }
+
+        val context = flutterPluginBinding.applicationContext
+        bgExecutor.execute {
+            try {
+                val uri = Uri.parse(uriStr)
+                context.contentResolver.openOutputStream(uri, "w")?.use { os ->
+                    sourceFile.inputStream().use { it.copyTo(os) }
+                } ?: run {
+                    throw IllegalStateException("openOutputStream returned null")
+                }
+                context.contentResolver.notifyChange(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    null
+                )
+                Log.d(TAG, "[replaceGalleryImage] success uri=$uriStr")
+                val mainExecutor = ContextCompat.getMainExecutor(context)
+                mainExecutor.execute { result.success(mapOf("success" to true)) }
+            } catch (e: Exception) {
+                Log.e(TAG, "replaceGalleryImage failed", e)
+                val mainExecutor = ContextCompat.getMainExecutor(context)
+                mainExecutor.execute {
+                    result.error("GALLERY_REPLACE_FAILED", e.message, null)
+                }
+            }
+        }
+    }
+
     // ─────────────────────────────────────────────
     // setZoom / setExposure / setFlash
     // ─────────────────────────────────────────────
@@ -1211,16 +1257,22 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         bgExecutor.execute {
             val filePath = call.argument<String>("filePath")
             val params = call.argument<Map<String, Any>>("params")
+            val maxDimension = call.argument<Int>("maxDimension") ?: 4096
+            val jpegQuality = (call.argument<Int>("jpegQuality") ?: 88).coerceIn(60, 95)
 
             if (params == null) {
                 result.error("INVALID_ARG", "params required", null)
                 return@execute
             }
+            val paramsForGpu = params.toMutableMap().apply {
+                this["maxDimension"] = maxDimension
+                this["jpegQuality"] = jpegQuality
+            }
 
             val newPath = if (memBytes != null) {
                 // 优先使用内存字节，跳过文件读取（节省 100-300ms）
                 Log.d(TAG, "processWithGpu: using in-memory JPEG bytes (${memBytes.size} bytes)")
-                captureProcessor?.processImageBytes(memBytes, memRotation, memIsFront, params)
+                captureProcessor?.processImageBytes(memBytes, memRotation, memIsFront, paramsForGpu)
             } else {
                 // 降级：内存字节不可用时回退到文件读取
                 if (filePath == null) {
@@ -1228,7 +1280,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                     return@execute
                 }
                 Log.d(TAG, "processWithGpu: fallback to file path $filePath")
-                captureProcessor?.processImage(filePath, params)
+                captureProcessor?.processImage(filePath, paramsForGpu)
             }
 
             activityBinding?.activity?.runOnUiThread {

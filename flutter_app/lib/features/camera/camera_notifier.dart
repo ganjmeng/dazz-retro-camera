@@ -912,6 +912,21 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     int exifMs = 0;
     int galleryMs = 0;
     bool postApplied = false;
+    String? enhanceSourcePath;
+    CameraDefinition? enhanceCamera;
+    String enhanceRatioId = '';
+    String enhanceFrameId = '';
+    String enhanceWatermarkId = '';
+    String? enhanceFrameBackgroundColor;
+    String? enhanceWatermarkColorOverride;
+    String? enhanceWatermarkPositionOverride;
+    String? enhanceWatermarkSizeOverride;
+    String? enhanceWatermarkDirectionOverride;
+    String? enhanceWatermarkStyleOverride;
+    PreviewRenderParams? enhanceRenderParams;
+    bool enhanceFisheyeMode = false;
+    int enhanceDeviceQuarter = 0;
+    Rect? enhanceMinimapRect;
 
     try {
       final captureSw = Stopwatch()..start();
@@ -941,6 +956,40 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         Future<Position?>? locationFuture;
         if (state.locationEnabled) {
           locationFuture = LocationService.instance.getCurrentPosition();
+        }
+
+        // PR2: 中画质先快拍，再后台增强替换同一相册资产（仅 Android 普通单拍）。
+        final enableBgEnhance = Platform.isAndroid &&
+            !state.doubleExpEnabled &&
+            state.sharpenLevel == 1 &&
+            minimapNormalizedRect == null &&
+            state.camera != null;
+        if (enableBgEnhance) {
+          try {
+            final tmpDir = Directory.systemTemp;
+            final sourcePath =
+                '${tmpDir.path}/dazz_bg_enh_src_${DateTime.now().millisecondsSinceEpoch}.jpg';
+            await File(path).copy(sourcePath);
+            enhanceSourcePath = sourcePath;
+            enhanceCamera = state.camera;
+            enhanceRatioId = state.activeRatioId ?? '';
+            enhanceFrameId = state.activeFrameId ?? '';
+            enhanceWatermarkId = state.activeWatermarkId ?? '';
+            enhanceFrameBackgroundColor = state.frameBackgroundColor;
+            enhanceWatermarkColorOverride = state.watermarkColor;
+            enhanceWatermarkPositionOverride = state.watermarkPosition;
+            enhanceWatermarkSizeOverride = state.watermarkSize;
+            enhanceWatermarkDirectionOverride = state.watermarkDirection;
+            enhanceWatermarkStyleOverride = state.watermarkStyle;
+            enhanceRenderParams = state.renderParams;
+            enhanceFisheyeMode = state.fisheyeMode;
+            enhanceDeviceQuarter = deviceQuarter;
+            enhanceMinimapRect = minimapNormalizedRect;
+            debugPrint(
+                '[CameraNotifier] BG enhance source prepared: $sourcePath');
+          } catch (e) {
+            debugPrint('[CameraNotifier] BG enhance source copy failed: $e');
+          }
         }
 
         // Post-process: color effects + ratio crop + frame + watermark
@@ -1134,6 +1183,26 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                   path,
                   cameraId: state.activeCameraId,
                 );
+        if (enhanceSourcePath != null && enhanceCamera != null) {
+          unawaited(_runBackgroundEnhanceAndReplace(
+            sourcePath: enhanceSourcePath,
+            galleryUriFuture: saveFuture,
+            camera: enhanceCamera,
+            selectedRatioId: enhanceRatioId,
+            selectedFrameId: enhanceFrameId,
+            selectedWatermarkId: enhanceWatermarkId,
+            frameBackgroundColor: enhanceFrameBackgroundColor,
+            watermarkColorOverride: enhanceWatermarkColorOverride,
+            watermarkPositionOverride: enhanceWatermarkPositionOverride,
+            watermarkSizeOverride: enhanceWatermarkSizeOverride,
+            watermarkDirectionOverride: enhanceWatermarkDirectionOverride,
+            watermarkStyleOverride: enhanceWatermarkStyleOverride,
+            renderParams: enhanceRenderParams,
+            minimapNormalizedRect: enhanceMinimapRect,
+            deviceQuarter: enhanceDeviceQuarter,
+            fisheyeMode: enhanceFisheyeMode,
+          ));
+        }
         try {
           const fastReturnBudget = Duration(milliseconds: 120);
           final galleryUri = await saveFuture.timeout(fastReturnBudget);
@@ -1183,6 +1252,82 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             '[Perf][takePhoto] total=${totalSw.elapsedMilliseconds} ms (finally)');
       }
       state = state.copyWith(isTakingPhoto: false);
+    }
+  }
+
+  Future<void> _runBackgroundEnhanceAndReplace({
+    required String sourcePath,
+    required Future<String?> galleryUriFuture,
+    required CameraDefinition camera,
+    required String selectedRatioId,
+    required String selectedFrameId,
+    required String selectedWatermarkId,
+    required String? frameBackgroundColor,
+    required String? watermarkColorOverride,
+    required String? watermarkPositionOverride,
+    required String? watermarkSizeOverride,
+    required String? watermarkDirectionOverride,
+    required String? watermarkStyleOverride,
+    required PreviewRenderParams? renderParams,
+    required Rect? minimapNormalizedRect,
+    required int deviceQuarter,
+    required bool fisheyeMode,
+  }) async {
+    String? enhancedPath;
+    try {
+      final galleryUri = await galleryUriFuture;
+      if (galleryUri == null || !galleryUri.startsWith('content://')) {
+        debugPrint(
+            '[CameraNotifier] BG enhance skipped: gallery uri unavailable ($galleryUri)');
+        return;
+      }
+
+      final pipeline = CapturePipeline(camera: camera);
+      // 后台增强档位：比中画质更高，但仍控制在可接受耗时。
+      const enhanceMaxDim = 3072;
+      const enhanceJpegQ = 88;
+      final processed = await pipeline.process(
+        imagePath: sourcePath,
+        selectedRatioId: selectedRatioId,
+        selectedFrameId: selectedFrameId,
+        selectedWatermarkId: selectedWatermarkId,
+        frameBackgroundColor: frameBackgroundColor,
+        watermarkColorOverride: watermarkColorOverride,
+        watermarkPositionOverride: watermarkPositionOverride,
+        watermarkSizeOverride: watermarkSizeOverride,
+        watermarkDirectionOverride: watermarkDirectionOverride,
+        watermarkStyleOverride: watermarkStyleOverride,
+        renderParams: renderParams,
+        minimapNormalizedRect: minimapNormalizedRect,
+        deviceQuarter: deviceQuarter,
+        maxDimension: enhanceMaxDim,
+        jpegQuality: enhanceJpegQ,
+        fisheyeMode: fisheyeMode,
+      );
+      if (processed == null) {
+        debugPrint('[CameraNotifier] BG enhance returned null');
+        return;
+      }
+
+      enhancedPath =
+          '${Directory.systemTemp.path}/dazz_bg_enh_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      await File(enhancedPath).writeAsBytes(processed.bytes);
+      final replaced = await _ref
+          .read(cameraServiceProvider.notifier)
+          .replaceGalleryImage(galleryUri, enhancedPath);
+      debugPrint(
+          '[CameraNotifier] BG enhance replace ${replaced ? "ok" : "failed"} uri=$galleryUri size=${processed.outputWidth}x${processed.outputHeight}');
+    } catch (e, st) {
+      debugPrint('[CameraNotifier] BG enhance error: $e\n$st');
+    } finally {
+      try {
+        if (File(sourcePath).existsSync()) File(sourcePath).deleteSync();
+      } catch (_) {}
+      try {
+        if (enhancedPath != null && File(enhancedPath).existsSync()) {
+          File(enhancedPath).deleteSync();
+        }
+      } catch (_) {}
     }
   }
 

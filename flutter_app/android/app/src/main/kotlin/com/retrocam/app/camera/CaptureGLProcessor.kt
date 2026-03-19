@@ -834,8 +834,9 @@ void main() {
 
             // 8. 编码为 JPEG
             val outputFile = File(context.cacheDir, "gpu_${File(filePath).name}")
+            val jpegQuality = ((params["jpegQuality"] as? Number)?.toInt() ?: 88).coerceIn(60, 95)
             FileOutputStream(outputFile).use { fos ->
-                outBitmap.compress(Bitmap.CompressFormat.JPEG, 88, fos)
+                outBitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, fos)
             }
             outBitmap.recycle()
 
@@ -960,8 +961,9 @@ void main() {
             // 8. 编码为 JPEG
             val ts = System.currentTimeMillis()
             val outputFile = File(context.cacheDir, "gpu_mem_${ts}.jpg")
+            val jpegQuality = ((params["jpegQuality"] as? Number)?.toInt() ?: 88).coerceIn(60, 95)
             FileOutputStream(outputFile).use { fos ->
-                outBitmap.compress(Bitmap.CompressFormat.JPEG, 88, fos)
+                outBitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, fos)
             }
             outBitmap.recycle()
             Log.d(TAG, "processImageBytes complete (PBO): ${outputFile.absolutePath}")

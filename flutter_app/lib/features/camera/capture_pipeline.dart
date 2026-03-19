@@ -77,6 +77,7 @@ class CapturePipeline {
             "filePath": imagePath,
             "params": renderParams?.toJson() ?? {},
             "maxDimension": maxDimension,
+            "jpegQuality": jpegQuality,
           });
           if (gpuResult != null && gpuResult["filePath"] != null) {
             final newPath = gpuResult["filePath"] as String;
