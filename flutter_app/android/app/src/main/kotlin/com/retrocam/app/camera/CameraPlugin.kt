@@ -112,6 +112,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     @Volatile private var pendingIsFrontCamera: Boolean = false
     // 当前镜头朝向（LENS_FACING_BACK / LENS_FACING_FRONT）
     private var currentLensPosition: Int = CameraSelector.LENS_FACING_BACK
+    // 持久化闪光灯状态，避免重建 ImageCapture 后丢失
+    private var currentFlashMode: Int = ImageCapture.FLASH_MODE_OFF
     private val perfPrefs: SharedPreferences by lazy {
         flutterPluginBinding.applicationContext.getSharedPreferences(
             "dazz_capture_perf",
@@ -374,6 +376,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
 
         imageCapture = buildImageCapture(currentSharpenLevel)
+        imageCapture?.flashMode = currentFlashMode
 
         val recorder = Recorder.Builder()
             .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
@@ -593,6 +596,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }.onFailure {
             Log.w(TAG, "set targetRotation failed: ${it.message}")
         }
+        // 某些机型会在拍照后内部重置 flashMode，这里每次拍照前强制重设一次。
+        runCatching { capture.flashMode = currentFlashMode }
+            .onFailure { Log.w(TAG, "reapply flashMode failed: ${it.message}") }
         pendingShotStartNs = System.nanoTime()
         pendingShotLevel = currentSharpenLevel
         val context = flutterPluginBinding.applicationContext
@@ -851,11 +857,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private fun handleSetFlash(call: MethodCall, result: MethodChannel.Result) {
         val mode = call.argument<String>("mode") ?: "off"
         try {
-            imageCapture?.flashMode = when (mode) {
+            currentFlashMode = when (mode) {
                 "on"   -> ImageCapture.FLASH_MODE_ON
                 "auto" -> ImageCapture.FLASH_MODE_AUTO
                 else   -> ImageCapture.FLASH_MODE_OFF
             }
+            imageCapture?.flashMode = currentFlashMode
             result.success(null)
         } catch (e: Exception) {
             result.error("FLASH_FAILED", e.message, null)
@@ -1099,6 +1106,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                             // even when HIGHEST_AVAILABLE_STRATEGY is set.
                             provider.unbindAll()
                             imageCapture = newImageCapture
+                            imageCapture?.flashMode = currentFlashMode
                             camera = provider.bindToLifecycle(
                                 owner,
                                 cameraSelector,
