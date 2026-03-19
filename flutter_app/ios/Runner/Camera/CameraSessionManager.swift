@@ -293,7 +293,12 @@ class CameraSessionManager: NSObject {
     // MARK: - Capture Photo
 
     /// 高分辨率拍照（使用 AVCapturePhotoOutput，与 Android CameraX takePicture 对等）
-    func capturePhoto(flashMode: AVCaptureDevice.FlashMode, completion: @escaping (Data?) -> Void) {
+    /// deviceQuarter: 0=竖屏, 1=左横屏, 2=倒竖, 3=右横屏
+    func capturePhoto(
+        flashMode: AVCaptureDevice.FlashMode,
+        deviceQuarter: Int = 0,
+        completion: @escaping (Data?) -> Void
+    ) {
         guard let photoOutput = photoOutput else {
             completion(nil)
             return
@@ -318,6 +323,10 @@ class CameraSessionManager: NSObject {
             if photoOutput.supportedFlashModes.contains(flashMode) {
                 settings.flashMode = flashMode
             }
+            if let connection = photoOutput.connection(with: .video),
+               connection.isVideoOrientationSupported {
+                connection.videoOrientation = Self.videoOrientation(from: deviceQuarter)
+            }
             photoOutput.capturePhoto(with: settings, delegate: self)
         }
     }
@@ -330,6 +339,19 @@ class CameraSessionManager: NSObject {
             return device
         }
         return AVCaptureDevice.default(for: .video)
+    }
+
+    private static func videoOrientation(from quarter: Int) -> AVCaptureVideoOrientation {
+        switch quarter {
+        case 1:
+            return .landscapeLeft
+        case 2:
+            return .portraitUpsideDown
+        case 3:
+            return .landscapeRight
+        default:
+            return .portrait
+        }
     }
 }
 

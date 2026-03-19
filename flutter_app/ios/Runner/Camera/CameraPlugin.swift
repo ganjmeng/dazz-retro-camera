@@ -362,6 +362,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             result(FlutterError(code: "NOT_READY", message: "Camera not initialized", details: nil))
             return
         }
+        let args = call.arguments as? [String: Any]
+        let deviceQuarter = (args?["deviceQuarter"] as? Int) ?? 0
 
         let timestamp = Int(Date().timeIntervalSince1970 * 1000)
         let fileName = "DAZZ_\(timestamp).jpg"
@@ -370,7 +372,10 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
         let fileURL = cacheDir.appendingPathComponent(fileName)
 
-        cameraManager.capturePhoto(flashMode: currentFlashMode) { [weak self] imageData in
+        cameraManager.capturePhoto(
+            flashMode: currentFlashMode,
+            deviceQuarter: deviceQuarter
+        ) { [weak self] imageData in
             guard let data = imageData else {
                 DispatchQueue.main.async {
                     result(FlutterError(code: "CAPTURE_FAILED", message: "Failed to capture photo", details: nil))
