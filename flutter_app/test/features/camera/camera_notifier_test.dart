@@ -1,9 +1,10 @@
 // ignore_for_file: prefer_const_constructors
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_cam/features/camera/camera_notifier.dart';
-import 'package:retro_cam/models/camera_definition.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CameraAppNotifier 状态机单元测试
@@ -53,6 +54,18 @@ void main() {
         return null;
       },
     );
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMessageHandler('flutter/assets', (message) async {
+      final key = const StringCodec().decodeMessage(message);
+      if (key == 'assets/cameras/inst_c.json' ||
+          key == 'assets/cameras/d_classic.json') {
+        final file = File(key!);
+        final bytes = await file.readAsBytes();
+        return ByteData.sublistView(Uint8List.fromList(bytes));
+      }
+      return null;
+    });
   });
 
   tearDown(() {
@@ -64,6 +77,8 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(MethodChannel(ch), null);
     }
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMessageHandler('flutter/assets', null);
   });
 
   ProviderContainer makeContainer() => ProviderContainer();
@@ -427,6 +442,25 @@ void main() {
       c.read(cameraAppProvider.notifier).setColorTempK(5000);
       expect(c.read(cameraAppProvider).wbMode, 'manual');
       expect(c.read(cameraAppProvider).colorTempK, 5000);
+    });
+  });
+
+  group('相机切换时相框状态', () {
+    test('从 INST C 切到 D Classic 时，应恢复为该相机默认关闭的相框状态', () async {
+      final c = makeContainer();
+      addTearDown(c.dispose);
+      final n = c.read(cameraAppProvider.notifier);
+
+      await n.switchToCamera('inst_c');
+      expect(c.read(cameraAppProvider).activeFrameId, isNotNull);
+
+      await n.switchToCamera('d_classic');
+      expect(c.read(cameraAppProvider).activeCameraId, 'd_classic');
+      expect(
+        c.read(cameraAppProvider).activeFrameId,
+        isNull,
+        reason: 'D Classic 默认 frameId 为 null，不应沿用 INST C 的 instant_default',
+      );
     });
   });
 }

@@ -386,6 +386,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         activeLensId: defaults.lensId,
         activeRatioId: defaults.ratioId,
         activeFrameId: frameId,
+        // copyWith 的 nullable 语义会在传入 null 时保留旧值，
+        // 切机到默认关闭相框的相机时必须显式清空，避免沿用上一台相机的 frameId。
+        clearFrameId: frameId == null,
         activeWatermarkId: defaults.watermarkPresetId,
         temperatureOffset: tempOffset,
         exposureValue: exposure,
