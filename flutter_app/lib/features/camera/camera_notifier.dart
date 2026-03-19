@@ -300,6 +300,11 @@ class CameraAppState {
 
 class CameraAppNotifier extends StateNotifier<CameraAppState> {
   final Ref _ref;
+  static const Duration _kRenderParamsPushInterval = Duration(milliseconds: 33);
+  static const Duration _kZoomPushInterval = Duration(milliseconds: 16);
+  Timer? _renderParamsPushTimer;
+  Timer? _zoomPushTimer;
+  double? _pendingZoomToNative;
 
   CameraAppNotifier(this._ref) : super(const CameraAppState());
 
@@ -615,6 +620,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   @override
   void dispose() {
+    _renderParamsPushTimer?.cancel();
+    _zoomPushTimer?.cancel();
     // Notifier 销毁时尝试保存快照（App 退出 / Provider 被释放时触发）
     // 注意：dispose 被调用时 ProviderContainer 可能已在销毁过程中，
     // _ref.read 会抛出 "Bad state: Tried to read a provider from a ProviderContainer that was already disposed"
@@ -655,7 +662,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   void setExposure(double value) {
     state = state.copyWith(exposureValue: value);
     // FIX: 通知原生 GPU shader 更新曝光（预览由原生渲染，必须同步）
-    _applyCurrentRenderParamsToNative();
+    _applyCurrentRenderParamsToNative(throttled: true);
   }
 
   // 设置白平衡预设模式
@@ -709,8 +716,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   /// 设置缩放倍率（x0.6 ~ x20）并通知原生层
   void setZoom(double zoom) {
     final clamped = zoom.clamp(0.6, 20.0);
+    if ((clamped - state.zoomLevel).abs() < 0.001) return;
     state = state.copyWith(zoomLevel: clamped);
-    _ref.read(cameraServiceProvider.notifier).setZoom(clamped);
+    _pushZoomToNative(clamped);
   }
 
   /// 切换缩放滑动条显示/隐藏
@@ -732,7 +740,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       showZoomSlider: false,
     );
     AppPrefsService.instance.setMinimapEnabled(next);
-    _ref.read(cameraServiceProvider.notifier).setZoom(1.0);
+    _pushZoomToNative(1.0, immediate: true);
   }
 
   /// 切换位置信息开关
@@ -1022,7 +1030,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                     state.activeWatermarkId != 'none');
             final rawPixels = captureW * captureH;
             // 自适应策略：当原始输入非常大且有相框/水印时，适度下调输出档位以提升稳定速度。
-            if (hasOverlay && rawPixels >= 24 * 1000 * 1000 && state.sharpenLevel >= 1) {
+            if (hasOverlay &&
+                rawPixels >= 24 * 1000 * 1000 &&
+                state.sharpenLevel >= 1) {
               maxDim = maxDim.clamp(0, 3072).toInt();
               jpegQ = (jpegQ - 2).clamp(70, 95).toInt();
               debugPrint(
@@ -1420,13 +1430,49 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   // ── FIX: 将当前完整渲染参数（滤镜+镜头+defaultLook 组合后）发送到原生预览 Shader ──
   /// 切换滤镜或镜头后调用，确保原生层实时预览与 Dart 状态同步。
-  void _applyCurrentRenderParamsToNative() {
+  void _applyCurrentRenderParamsToNative({bool throttled = false}) {
+    if (!throttled) {
+      _renderParamsPushTimer?.cancel();
+      _sendRenderParamsNow();
+      return;
+    }
+    if (_renderParamsPushTimer != null) return;
+    _renderParamsPushTimer = Timer(_kRenderParamsPushInterval, () {
+      _renderParamsPushTimer = null;
+      _sendRenderParamsNow();
+    });
+  }
+
+  void _sendRenderParamsNow() {
     final params = state.renderParams;
     if (params == null) return;
     final json = params.toJson();
     debugPrint(
         '[CameraNotifier] _applyCurrentRenderParamsToNative: sending ${json.length} params to native');
     _ref.read(cameraServiceProvider.notifier).updateRenderParams(json);
+  }
+
+  void _pushZoomToNative(double zoom, {bool immediate = false}) {
+    _pendingZoomToNative = zoom;
+    if (immediate) {
+      _zoomPushTimer?.cancel();
+      _zoomPushTimer = null;
+      final target = _pendingZoomToNative;
+      if (target != null) {
+        _pendingZoomToNative = null;
+        _ref.read(cameraServiceProvider.notifier).setZoom(target);
+      }
+      return;
+    }
+    if (_zoomPushTimer != null) return;
+    _zoomPushTimer = Timer(_kZoomPushInterval, () {
+      _zoomPushTimer = null;
+      final target = _pendingZoomToNative;
+      if (target != null) {
+        _pendingZoomToNative = null;
+        _ref.read(cameraServiceProvider.notifier).setZoom(target);
+      }
+    });
   }
 }
 
