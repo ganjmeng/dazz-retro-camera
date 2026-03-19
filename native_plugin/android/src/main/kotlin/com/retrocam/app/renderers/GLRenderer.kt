@@ -148,17 +148,31 @@ class GLRenderer(private val flutterSurfaceTexture: SurfaceTexture) {
         (params["blacks"] as? Number)?.let { blacks = it.toFloat() }
         (params["clarity"] as? Number)?.let { clarity = it.toFloat() }
         (params["vibrance"] as? Number)?.let { vibrance = it.toFloat() }
+
+        // ── FIX: Dart sends flat keys (colorBiasR/G/B), Kotlin also accepts nested map ──
+        (params["colorBiasR"] as? Number)?.let { colorBiasR = it.toFloat() }
+        (params["colorBiasG"] as? Number)?.let { colorBiasG = it.toFloat() }
+        (params["colorBiasB"] as? Number)?.let { colorBiasB = it.toFloat() }
         @Suppress("UNCHECKED_CAST")
         (params["colorBias"] as? Map<String, Any>)?.let {
             (it["r"] as? Number)?.let { colorBiasR = it.toFloat() }
             (it["g"] as? Number)?.let { colorBiasG = it.toFloat() }
             (it["b"] as? Number)?.let { colorBiasB = it.toFloat() }
         }
+
         (params["chromaticAberration"] as? Number)?.let { chromaticAberration = it.toFloat() }
-        (params["noise"] as? Number)?.let { noiseAmount = it.toFloat() }
-        (params["vignette"] as? Number)?.let { vignetteAmount = it.toFloat() }
-        (params["bloom"] as? Number)?.let { bloomAmount = it.toFloat() }
+
+        // ── FIX: Accept both Dart-style (grainAmount/vignetteAmount/bloomAmount/noiseAmount)
+        //         and legacy (grain/vignette/bloom/noise) key names ──
+        (params["grainAmount"] as? Number)?.let { grainAmount = it.toFloat() }
         (params["grain"] as? Number)?.let { grainAmount = it.toFloat() }
+        (params["noiseAmount"] as? Number)?.let { noiseAmount = it.toFloat() }
+        (params["noise"] as? Number)?.let { noiseAmount = it.toFloat() }
+        (params["vignetteAmount"] as? Number)?.let { vignetteAmount = it.toFloat() }
+        (params["vignette"] as? Number)?.let { vignetteAmount = it.toFloat() }
+        (params["bloomAmount"] as? Number)?.let { bloomAmount = it.toFloat() }
+        (params["bloom"] as? Number)?.let { bloomAmount = it.toFloat() }
+
         (params["distortion"] as? Number)?.let { distortion = it.toFloat() }
         (params["zoomFactor"] as? Number)?.let { zoomFactor = it.toFloat() }
         (params["lensVignette"] as? Number)?.let { lensVignette = it.toFloat() }

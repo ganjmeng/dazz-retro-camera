@@ -163,15 +163,16 @@ Future<ui.Image> drawSensorNonUniformity(
 
       // Corner Warm Shift：角落色温偏移（负=偏冷青，正=偏暖橙）
       // 仅在角落区域（dist2 > 0.15）应用，平滑过渡
-      double shiftR = 0.0, shiftB = 0.0;
+      double shiftR = 0.0, shiftG = 0.0, shiftB = 0.0;
       if (cornerWarmShift != 0.0) {
         final double cornerMask = _smoothstep(0.15, 0.45, dist2);
         shiftR = cornerWarmShift * cornerMask;
+        shiftG = cornerWarmShift * cornerMask * 0.3; // G 通道轻微偏移，避免色温偏移过于两极化
         shiftB = -cornerWarmShift * cornerMask;
       }
 
       pixels[idx]     = ((pixels[idx]     / 255.0 * falloff * gainR + shiftR) * 255).round().clamp(0, 255);
-      pixels[idx + 1] = (pixels[idx + 1] / 255.0 * falloff * gainG * 255).round().clamp(0, 255);
+      pixels[idx + 1] = ((pixels[idx + 1] / 255.0 * falloff * gainG + shiftG) * 255).round().clamp(0, 255);
       pixels[idx + 2] = ((pixels[idx + 2] / 255.0 * falloff * gainB + shiftB) * 255).round().clamp(0, 255);
     }
   }

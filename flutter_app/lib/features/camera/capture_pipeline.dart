@@ -343,9 +343,25 @@ class CapturePipeline {
         final ghostAlpha2 = (shakeStrength * 35).clamp(0, 35).toInt();
         final shakeRect1 = Rect.fromLTWH(frameOffsetX + leftPx + dx1, frameOffsetY + topPx + dy1, outW, outH);
         final shakeRect2 = Rect.fromLTWH(frameOffsetX + leftPx + dx2, frameOffsetY + topPx + dy2, outW, outH);
-        // TODO: 使用 shakeRect1/shakeRect2/ghostAlpha1/ghostAlpha2 绘制抑影效果
-        // ignore: unused_local_variable
-        final _unused = [shakeRect1, shakeRect2, ghostAlpha1, ghostAlpha2];
+        // ── FIX: 绘制抖动重影效果（2层半透明位移叠加，模拟手持拍立得的运动模糊）──
+        canvas.drawImageRect(
+          srcImage!,
+          cropRect,
+          shakeRect1,
+          Paint()
+            ..filterQuality = FilterQuality.medium
+            ..color = Color.fromARGB(ghostAlpha1, 255, 255, 255)
+            ..blendMode = BlendMode.modulate,
+        );
+        canvas.drawImageRect(
+          srcImage!,
+          cropRect,
+          shakeRect2,
+          Paint()
+            ..filterQuality = FilterQuality.medium
+            ..color = Color.fromARGB(ghostAlpha2, 255, 255, 255)
+            ..blendMode = BlendMode.modulate,
+        );
       }
 
       // 鱼眼模式：先 save/clipPath 圆形区域，使图片只在圆内绘制（与 GL shader 一致）
@@ -818,7 +834,7 @@ class CapturePipeline {
   /// 优化版：使用两个 Path（亮颗粒 / 暗颗粒）批量绘制，减少 draw call 从 O(N) 降到 O(2)
   void _drawFilmGrain(
       Canvas canvas, double ox, double oy, double w, double h, double strength, {double noiseAmount = 0.0}) {
-    final rng = math.Random(12345);
+    final rng = math.Random(DateTime.now().microsecondsSinceEpoch);
     // 颗粒数量限制在 2000 以内（原来最多 8000），视觉效果几乎无差异
     final count = (w * h * strength * 0.004).clamp(100, 2000).toInt();
     final baseSize = (strength * 2.5).clamp(0.5, 3.0);
