@@ -187,6 +187,7 @@ class CameraAppState {
     bool clearPanel = false,
     bool clearError = false,
     bool clearFrameId = false, // 用于将 activeFrameId 清空为 null
+    bool clearFrameBackgroundColor = false, // 用于清空相框背景色覆盖
   }) {
     return CameraAppState(
       activeCameraId: activeCameraId ?? this.activeCameraId,
@@ -207,7 +208,7 @@ class CameraAppState {
       watermarkSize: clearWatermarkOverrides ? null : (watermarkSize ?? this.watermarkSize),
       watermarkDirection: clearWatermarkOverrides ? null : (watermarkDirection ?? this.watermarkDirection),
       watermarkStyle: clearWatermarkOverrides ? null : (watermarkStyle ?? this.watermarkStyle),
-      frameBackgroundColor: frameBackgroundColor ?? this.frameBackgroundColor,
+      frameBackgroundColor: clearFrameBackgroundColor ? null : (frameBackgroundColor ?? this.frameBackgroundColor),
       activePanel: clearPanel ? null : (activePanel ?? this.activePanel),
       gridEnabled: gridEnabled ?? this.gridEnabled,
       showTopMenu: showTopMenu ?? this.showTopMenu,
@@ -394,6 +395,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         wbMode: wbMode,
         fisheyeMode: camera.lensById(defaults.lensId)?.fisheyeMode ?? false,
         clearPanel: true,
+        clearFrameBackgroundColor: true,
+        clearWatermarkOverrides: true,
       );
       // 关键修复：加载相机后立即将 defaultLook 色彩参数同步到原生 GPU shader
       // 修复 FQS 紫色偏色问题：确保 colorBiasR/G/B、grainSize、sharpness 等专用字段正确传递
