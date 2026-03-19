@@ -119,6 +119,8 @@ class CapturePipeline {
       // ── 1. 先尝试 GPU 快速路径（无相框/水印时完全跳过 Dart 解码）─────────────
       bool gpuProcessed = false;
       ui.Image? srcImage;
+      String? gpuOutputPath;
+      Uint8List? gpuOutputBytes;
 
       if (useGpu && (Platform.isIOS || Platform.isAndroid)) {
         try {
@@ -131,6 +133,7 @@ class CapturePipeline {
           });
           if (gpuResult != null && gpuResult["filePath"] != null) {
             final newPath = gpuResult["filePath"] as String;
+            gpuOutputPath = newPath;
             // ── 快速路径：无相框、无水印、无小窗裁剪时，GPU 输出即最终成片 ──
             // 完全跳过 Dart 图像解码、Canvas 绘制、toByteData、JPEG 重编码
             final hasFrame = selectedFrameId.isNotEmpty &&
@@ -148,14 +151,10 @@ class CapturePipeline {
               debugPrint('[CapturePipeline] Fast path: GPU output returned directly (no frame/watermark), ${gpuW}x${gpuH}');
               return CaptureResult(bytes: gpuBytes, outputWidth: gpuW, outputHeight: gpuH);
             }
-            // 有相框或水印：解码 GPU 输出，继续走 Canvas 合成流程
-            final gpuBytes = await File(newPath).readAsBytes();
-            final gpuCodec = await ui.instantiateImageCodec(gpuBytes);
-            final gpuFrame = await gpuCodec.getNextFrame();
-            srcImage = gpuFrame.image;
+            // 有相框/水印/小窗裁剪：优先尝试原生叠加路径，失败再回退 Dart Canvas
+            gpuOutputBytes = await File(newPath).readAsBytes();
             gpuProcessed = true;
-            debugPrint("[CapturePipeline] GPU pipeline successful, continuing to Canvas for frame/watermark.");
-            try { File(newPath).deleteSync(); } catch (_) {}
+            debugPrint("[CapturePipeline] GPU pipeline successful, preparing native overlay path.");
           }
         } catch (e) {
           debugPrint("[CapturePipeline] Native GPU pipeline failed, falling back to Dart: $e");
@@ -223,9 +222,26 @@ class CapturePipeline {
         debugPrint('[CapturePipeline] Universal fallback pipeline applied.');
       }
 
-      // srcImage 在到达此处时必定已被赋值（GPU 有相框/水印路径 或 Dart fallback 路径）
-      final srcW = srcImage!.width.toDouble();
-      final srcH = srcImage!.height.toDouble();
+      // 计算源图尺寸：GPU 路径优先用 JPEG 头部解析，失败再回退解码。
+      double srcW;
+      double srcH;
+      if (gpuProcessed && gpuOutputBytes != null) {
+        final gpuSize = _readJpegDimensions(gpuOutputBytes);
+        if (gpuSize != null && gpuSize[0] > 0 && gpuSize[1] > 0) {
+          srcW = gpuSize[0].toDouble();
+          srcH = gpuSize[1].toDouble();
+        } else {
+          final gpuCodec = await ui.instantiateImageCodec(gpuOutputBytes);
+          final gpuFrame = await gpuCodec.getNextFrame();
+          srcImage = gpuFrame.image;
+          srcW = srcImage.width.toDouble();
+          srcH = srcImage.height.toDouble();
+        }
+      } else {
+        // srcImage 在非 GPU 路径必定已赋值
+        srcW = srcImage!.width.toDouble();
+        srcH = srcImage.height.toDouble();
+      }
 
       debugPrint('[CapturePipeline] decoded: ${srcW.toInt()}x${srcH.toInt()}, ratio=$selectedRatioId, frame=$selectedFrameId, wm=$selectedWatermarkId');
 
@@ -316,6 +332,131 @@ class CapturePipeline {
 
       final frameOffsetX = hasPngAssetForSize ? 0.0 : outerPadPx;
       final frameOffsetY = hasPngAssetForSize ? 0.0 : outerPadPx;
+      final imageRectLeft = frameOffsetX + leftPx;
+      final imageRectTop = frameOffsetY + topPx;
+
+      String canvasBgHexSrc = '#FFFFFF';
+      if (frameOpt != null) {
+        canvasBgHexSrc = (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
+            ? frameBackgroundColor
+            : frameOpt.outerBackgroundColor;
+      } else if (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty) {
+        canvasBgHexSrc = frameBackgroundColor;
+      }
+      final frameBgHexSrc = frameOpt == null
+          ? '#F5F2EA'
+          : ((frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
+              ? frameBackgroundColor
+              : frameOpt.backgroundColor);
+      final frameCornerRadiusPx = frameOpt == null
+          ? 0.0
+          : frameOpt.cornerRadius * (math.min(outW, outH) / 1080.0);
+
+      String watermarkText = '';
+      String watermarkColorHex = '#FF8C00';
+      String watermarkPosition = 'bottom_right';
+      String watermarkDirection = 'horizontal';
+      double watermarkFontSize = 0.0;
+      String? watermarkFontFamily;
+      int watermarkFontWeight = 400;
+      double watermarkLetterSpacing = 0.0;
+      if (selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none') {
+        final wmPresets = camera.modules.watermarks.presets;
+        try {
+          final wmOpt = wmPresets.firstWhere((wm) => wm.id == selectedWatermarkId);
+          if (!wmOpt.isNone) {
+            final styleDef = getWatermarkStyle(watermarkStyleOverride);
+            watermarkText = styleDef.buildText(DateTime.now());
+            final colorSrc = watermarkColorOverride ?? wmOpt.color;
+            if (colorSrc != null && colorSrc.isNotEmpty) {
+              watermarkColorHex = colorSrc;
+            }
+            double baseFontSize;
+            switch (watermarkSizeOverride) {
+              case 'small':
+                baseFontSize = outW * 0.028;
+                break;
+              case 'medium':
+                baseFontSize = outW * 0.038;
+                break;
+              case 'large':
+                baseFontSize = outW * 0.055;
+                break;
+              default:
+                baseFontSize = outW * 0.038;
+            }
+            watermarkFontSize = baseFontSize.clamp(12.0, 120.0);
+            watermarkPosition = watermarkPositionOverride ?? wmOpt.position ?? 'bottom_right';
+            watermarkDirection = watermarkDirectionOverride ?? 'horizontal';
+            watermarkFontFamily = styleDef.fontFamily ?? wmOpt.fontFamily;
+            watermarkLetterSpacing = styleDef.letterSpacing;
+            watermarkFontWeight = styleDef.fontWeight == FontWeight.bold ? 700 : 400;
+          }
+        } catch (_) {}
+      }
+
+      // 原生叠加：GPU 处理成功后优先在 native 侧完成相框+水印合成，失败再回退 Dart Canvas。
+      if (gpuProcessed &&
+          gpuOutputPath != null &&
+          (frameOpt != null || watermarkText.isNotEmpty || minimapNormalizedRect != null)) {
+        try {
+          final composed = await _channel.invokeMethod<Map>("composeOverlay", {
+            "filePath": gpuOutputPath,
+            "cropLeft": cropRect.left,
+            "cropTop": cropRect.top,
+            "cropWidth": cropRect.width,
+            "cropHeight": cropRect.height,
+            "canvasWidth": canvasW,
+            "canvasHeight": canvasH,
+            "imageLeft": imageRectLeft,
+            "imageTop": imageRectTop,
+            "imageWidth": outW,
+            "imageHeight": outH,
+            "frameOuterLeft": frameOffsetX,
+            "frameOuterTop": frameOffsetY,
+            "frameOuterWidth": outW + leftPx + rightPx,
+            "frameOuterHeight": outH + topPx + bottomPx,
+            "canvasBgColor": canvasBgHexSrc,
+            "drawFrameBg": frameOpt != null && !hasPngAssetForSize,
+            "frameBgColor": frameBgHexSrc,
+            "frameCornerRadius": frameCornerRadiusPx,
+            "frameAssetPath": resolvedAsset ?? "",
+            "watermarkText": watermarkText,
+            "watermarkColor": watermarkColorHex,
+            "watermarkPosition": watermarkPosition,
+            "watermarkDirection": watermarkDirection,
+            "watermarkFontSize": watermarkFontSize,
+            "watermarkFontFamily": watermarkFontFamily ?? "",
+            "watermarkFontWeight": watermarkFontWeight,
+            "watermarkLetterSpacing": watermarkLetterSpacing,
+            "watermarkHasFrame": frameOpt != null,
+            "jpegQuality": jpegQuality,
+          });
+          final composedPath = composed?["filePath"] as String?;
+          if (composedPath != null && composedPath.isNotEmpty) {
+            final outBytes = await File(composedPath).readAsBytes();
+            try { File(composedPath).deleteSync(); } catch (_) {}
+            try {
+              if (gpuOutputPath != composedPath) {
+                File(gpuOutputPath).deleteSync();
+              }
+            } catch (_) {}
+            return CaptureResult(
+              bytes: outBytes,
+              outputWidth: canvasW.toInt(),
+              outputHeight: canvasH.toInt(),
+            );
+          }
+        } catch (e) {
+          debugPrint('[CapturePipeline] native compose failed, fallback to Dart: $e');
+        }
+      }
+
+      if (gpuProcessed && srcImage == null && gpuOutputBytes != null) {
+        final gpuCodec = await ui.instantiateImageCodec(gpuOutputBytes);
+        final gpuFrame = await gpuCodec.getNextFrame();
+        srcImage = gpuFrame.image;
+      }
 
       // ── 4. 创建画布 ──────────────────────────────────────────────────────────
       final recorder = ui.PictureRecorder();
@@ -323,18 +464,10 @@ class CapturePipeline {
 
       // ── 4a. 先填充画布背景色 ────────────────────────────────────────────────────
       {
-        String bgHexSrc = '#FFFFFF';
-        if (frameOpt != null) {
-          bgHexSrc = (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
-              ? frameBackgroundColor
-              : frameOpt.outerBackgroundColor;
-        } else if (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty) {
-          bgHexSrc = frameBackgroundColor;
-        }
-        if (bgHexSrc.toLowerCase() != 'transparent' && bgHexSrc.toLowerCase() != '#00000000') {
+        if (canvasBgHexSrc.toLowerCase() != 'transparent' && canvasBgHexSrc.toLowerCase() != '#00000000') {
           Color bgColor = Colors.white;
           try {
-            final hex = bgHexSrc.replaceAll('#', '');
+            final hex = canvasBgHexSrc.replaceAll('#', '');
             bgColor = Color(int.parse('FF$hex', radix: 16));
           } catch (_) {}
           canvas.drawRect(
@@ -347,26 +480,20 @@ class CapturePipeline {
       // ── 4b. 填充相框背景色（无 PNG 边框时）────────────────────────────────────────
       if (frameOpt != null && !hasPngAssetForSize) {
         Color bgColor = const Color(0xFFF5F2EA);
-        final bgHexSrc = (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
-            ? frameBackgroundColor
-            : frameOpt.backgroundColor;
         try {
-          if (bgHexSrc.toLowerCase() == 'transparent') {
+          if (frameBgHexSrc.toLowerCase() == 'transparent') {
             bgColor = Colors.transparent;
           } else {
-            final hex = bgHexSrc.replaceAll('#', '');
+            final hex = frameBgHexSrc.replaceAll('#', '');
             bgColor = Color(int.parse('FF$hex', radix: 16));
           }
         } catch (_) {}
         if (bgColor != Colors.transparent) {
-          final refSize = math.min(outW, outH);
-          final frameScale = refSize / 1080.0;
-          final cornerRadiusPx = frameOpt.cornerRadius * frameScale;
-          if (cornerRadiusPx > 0) {
+          if (frameCornerRadiusPx > 0) {
             canvas.drawRRect(
               RRect.fromRectAndRadius(
                 Rect.fromLTWH(frameOffsetX, frameOffsetY, outW + leftPx + rightPx, outH + topPx + bottomPx),
-                Radius.circular(cornerRadiusPx),
+                Radius.circular(frameCornerRadiusPx),
               ),
               Paint()..color = bgColor,
             );
@@ -597,6 +724,9 @@ class CapturePipeline {
         finalH,
         quality: jpegQuality,
       );
+      if (gpuOutputPath != null) {
+        try { File(gpuOutputPath).deleteSync(); } catch (_) {}
+      }
       debugPrint('[CapturePipeline] output: ${finalW}x${finalH}, bytes=${jpegBytes.length}');
       return CaptureResult(bytes: jpegBytes, outputWidth: finalW, outputHeight: finalH);
     } catch (e, st) {

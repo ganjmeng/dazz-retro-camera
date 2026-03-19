@@ -3,7 +3,15 @@ package com.retrocam.app.camera
 import android.content.ContentValues
 import android.content.Context
 import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.SurfaceTexture
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -181,6 +189,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "stopRecording"      -> handleStopRecording(result)
             "saveToGallery"      -> handleSaveToGallery(call, result)
             "replaceGalleryImage"-> handleReplaceGalleryImage(call, result)
+            "composeOverlay"     -> handleComposeOverlay(call, result)
             "dispose"            -> handleDispose(result)
             "processWithGpu"   -> {
                 if (captureProcessor == null) {
@@ -1293,6 +1302,196 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 }
             }
         }
+    }
+
+    private fun handleComposeOverlay(call: MethodCall, result: MethodChannel.Result) {
+        bgExecutor.execute {
+            try {
+                val filePath = call.argument<String>("filePath")
+                if (filePath.isNullOrEmpty()) {
+                    result.error("INVALID_ARG", "filePath required", null)
+                    return@execute
+                }
+                val srcBitmap = BitmapFactory.decodeFile(filePath)
+                    ?: run {
+                        result.error("DECODE_FAILED", "Failed to decode source", null)
+                        return@execute
+                    }
+                val canvasW = ((call.argument<Double>("canvasWidth") ?: srcBitmap.width.toDouble()).toInt()).coerceAtLeast(1)
+                val canvasH = ((call.argument<Double>("canvasHeight") ?: srcBitmap.height.toDouble()).toInt()).coerceAtLeast(1)
+                val outBitmap = Bitmap.createBitmap(canvasW, canvasH, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(outBitmap)
+
+                val canvasBg = call.argument<String>("canvasBgColor") ?: "transparent"
+                if (!canvasBg.equals("transparent", true) && canvasBg != "#00000000") {
+                    canvas.drawColor(parseColorSafe(canvasBg, Color.WHITE))
+                }
+
+                val drawFrameBg = call.argument<Boolean>("drawFrameBg") == true
+                if (drawFrameBg) {
+                    val frameBgColor = parseColorSafe(call.argument<String>("frameBgColor"), Color.parseColor("#F5F2EA"))
+                    val l = (call.argument<Double>("frameOuterLeft") ?: 0.0).toFloat()
+                    val t = (call.argument<Double>("frameOuterTop") ?: 0.0).toFloat()
+                    val w = (call.argument<Double>("frameOuterWidth") ?: 0.0).toFloat()
+                    val h = (call.argument<Double>("frameOuterHeight") ?: 0.0).toFloat()
+                    val r = (call.argument<Double>("frameCornerRadius") ?: 0.0).toFloat()
+                    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = frameBgColor }
+                    if (r > 0f) {
+                        canvas.drawRoundRect(RectF(l, t, l + w, t + h), r, r, paint)
+                    } else {
+                        canvas.drawRect(RectF(l, t, l + w, t + h), paint)
+                    }
+                }
+
+                val cropLeft = (call.argument<Double>("cropLeft") ?: 0.0).toInt().coerceAtLeast(0)
+                val cropTop = (call.argument<Double>("cropTop") ?: 0.0).toInt().coerceAtLeast(0)
+                val cropWidth = (call.argument<Double>("cropWidth") ?: srcBitmap.width.toDouble()).toInt()
+                val cropHeight = (call.argument<Double>("cropHeight") ?: srcBitmap.height.toDouble()).toInt()
+                val srcRect = Rect(
+                    cropLeft.coerceAtMost(srcBitmap.width - 1),
+                    cropTop.coerceAtMost(srcBitmap.height - 1),
+                    (cropLeft + cropWidth).coerceAtMost(srcBitmap.width),
+                    (cropTop + cropHeight).coerceAtMost(srcBitmap.height),
+                )
+                val imageLeft = (call.argument<Double>("imageLeft") ?: 0.0).toInt()
+                val imageTop = (call.argument<Double>("imageTop") ?: 0.0).toInt()
+                val imageWidth = (call.argument<Double>("imageWidth") ?: canvasW.toDouble()).toInt()
+                val imageHeight = (call.argument<Double>("imageHeight") ?: canvasH.toDouble()).toInt()
+                val dstRect = Rect(imageLeft, imageTop, imageLeft + imageWidth, imageTop + imageHeight)
+                canvas.drawBitmap(srcBitmap, srcRect, dstRect, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    isFilterBitmap = true
+                    isDither = true
+                })
+
+                val frameAssetPath = call.argument<String>("frameAssetPath") ?: ""
+                if (frameAssetPath.isNotEmpty()) {
+                    runCatching {
+                        flutterPluginBinding.applicationContext.assets
+                            .open(frameAssetPath.removePrefix("assets/"))
+                            .use { input ->
+                                val frameBitmap = BitmapFactory.decodeStream(input)
+                                if (frameBitmap != null) {
+                                    canvas.drawBitmap(
+                                        frameBitmap,
+                                        null,
+                                        Rect(0, 0, canvasW, canvasH),
+                                        Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+                                    )
+                                    frameBitmap.recycle()
+                                }
+                            }
+                    }.onFailure {
+                        Log.w(TAG, "composeOverlay frame load failed: ${it.message}")
+                    }
+                }
+
+                val watermarkText = call.argument<String>("watermarkText") ?: ""
+                if (watermarkText.isNotEmpty()) {
+                    drawWatermarkOnCanvas(canvas, call)
+                }
+
+                val jpegQuality = (call.argument<Int>("jpegQuality") ?: 88).coerceIn(60, 95)
+                val outFile = File(
+                    flutterPluginBinding.applicationContext.cacheDir,
+                    "gpu_overlay_${System.currentTimeMillis()}.jpg"
+                )
+                java.io.FileOutputStream(outFile).use { fos ->
+                    outBitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, fos)
+                }
+
+                srcBitmap.recycle()
+                outBitmap.recycle()
+                val mainExecutor = ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
+                mainExecutor.execute { result.success(mapOf("filePath" to outFile.absolutePath)) }
+            } catch (e: Exception) {
+                Log.e(TAG, "composeOverlay failed", e)
+                val mainExecutor = ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
+                mainExecutor.execute { result.error("COMPOSE_FAILED", e.message, null) }
+            }
+        }
+    }
+
+    private fun drawWatermarkOnCanvas(canvas: Canvas, call: MethodCall) {
+        val text = call.argument<String>("watermarkText") ?: return
+        if (text.isEmpty()) return
+        val imageLeft = (call.argument<Double>("imageLeft") ?: 0.0).toFloat()
+        val imageTop = (call.argument<Double>("imageTop") ?: 0.0).toFloat()
+        val imageWidth = (call.argument<Double>("imageWidth") ?: 0.0).toFloat()
+        val imageHeight = (call.argument<Double>("imageHeight") ?: 0.0).toFloat()
+        if (imageWidth <= 1f || imageHeight <= 1f) return
+
+        val hasFrame = call.argument<Boolean>("watermarkHasFrame") == true
+        val margin = imageWidth * if (hasFrame) 0.08f else 0.04f
+        val direction = call.argument<String>("watermarkDirection") ?: "horizontal"
+        val position = call.argument<String>("watermarkPosition") ?: "bottom_right"
+        val color = parseColorSafe(call.argument<String>("watermarkColor"), Color.parseColor("#FF8C00"))
+        val fontSize = (call.argument<Double>("watermarkFontSize") ?: (imageWidth * 0.038)).toFloat()
+        val fontWeight = call.argument<Int>("watermarkFontWeight") ?: 400
+        val letterSpacing = (call.argument<Double>("watermarkLetterSpacing") ?: 0.0).toFloat()
+        val fontFamily = (call.argument<String>("watermarkFontFamily") ?: "").trim()
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            textSize = fontSize
+            typeface = if (fontFamily.isNotEmpty()) {
+                Typeface.create(fontFamily, if (fontWeight >= 700) Typeface.BOLD else Typeface.NORMAL)
+            } else {
+                Typeface.defaultFromStyle(if (fontWeight >= 700) Typeface.BOLD else Typeface.NORMAL)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                this.letterSpacing = if (fontSize > 0f) letterSpacing / fontSize else 0f
+            }
+        }
+        val fm = paint.fontMetrics
+        val lineHeight = fm.descent - fm.ascent
+
+        if (direction == "vertical") {
+            val chars = text.toCharArray().map { it.toString() }
+            val maxW = chars.maxOfOrNull { paint.measureText(it) } ?: 0f
+            val totalH = lineHeight * chars.size
+            val (sx, sy) = resolveWatermarkStart(position, imageLeft, imageTop, imageWidth, imageHeight, maxW, totalH, margin)
+            var y = sy - fm.ascent
+            for (c in chars) {
+                val cw = paint.measureText(c)
+                canvas.drawText(c, sx + (maxW - cw) / 2f, y, paint)
+                y += lineHeight
+            }
+        } else {
+            val textW = paint.measureText(text)
+            val textH = lineHeight
+            val (dx, dyTop) = resolveWatermarkStart(position, imageLeft, imageTop, imageWidth, imageHeight, textW, textH, margin)
+            val baseline = dyTop - fm.ascent
+            canvas.drawText(text, dx, baseline, paint)
+        }
+    }
+
+    private fun resolveWatermarkStart(
+        position: String,
+        ox: Float,
+        oy: Float,
+        w: Float,
+        h: Float,
+        textW: Float,
+        textH: Float,
+        margin: Float
+    ): Pair<Float, Float> {
+        return when (position) {
+            "bottom_left" -> Pair(ox + margin, oy + h - textH - margin)
+            "top_right" -> Pair(ox + w - textW - margin, oy + margin)
+            "top_left" -> Pair(ox + margin, oy + margin)
+            "bottom_center" -> Pair(ox + (w - textW) / 2f, oy + h - textH - margin)
+            "top_center" -> Pair(ox + (w - textW) / 2f, oy + margin)
+            else -> Pair(ox + w - textW - margin, oy + h - textH - margin)
+        }
+    }
+
+    private fun parseColorSafe(value: String?, fallback: Int): Int {
+        if (value.isNullOrEmpty()) return fallback
+        if (value.equals("transparent", true)) return Color.TRANSPARENT
+        return runCatching {
+            val v = if (value.startsWith("#")) value else "#$value"
+            Color.parseColor(v)
+        }.getOrDefault(fallback)
     }
 
     private fun handleDispose(result: MethodChannel.Result) {

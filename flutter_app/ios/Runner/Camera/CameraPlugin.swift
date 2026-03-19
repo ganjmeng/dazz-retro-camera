@@ -87,6 +87,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleSaveToGallery(call: call, result: result)
         case "processWithGpu":
             handleProcessWithGpu(call: call, result: result)
+        case "composeOverlay":
+            handleComposeOverlay(call: call, result: result)
         case "dispose":
             handleDispose(result: result)
         default:
@@ -567,6 +569,171 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
                 }
             }
         }
+    }
+
+    private func handleComposeOverlay(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let filePath = args["filePath"] as? String,
+              let srcImage = UIImage(contentsOfFile: filePath),
+              let srcCg = srcImage.cgImage else {
+            result(FlutterError(code: "INVALID_ARG", message: "filePath required", details: nil))
+            return
+        }
+
+        let canvasW = max(1, Int((args["canvasWidth"] as? Double) ?? Double(srcCg.width)))
+        let canvasH = max(1, Int((args["canvasHeight"] as? Double) ?? Double(srcCg.height)))
+        let cropLeft = CGFloat((args["cropLeft"] as? Double) ?? 0)
+        let cropTop = CGFloat((args["cropTop"] as? Double) ?? 0)
+        let cropWidth = CGFloat((args["cropWidth"] as? Double) ?? Double(srcCg.width))
+        let cropHeight = CGFloat((args["cropHeight"] as? Double) ?? Double(srcCg.height))
+        let imageLeft = CGFloat((args["imageLeft"] as? Double) ?? 0)
+        let imageTop = CGFloat((args["imageTop"] as? Double) ?? 0)
+        let imageWidth = CGFloat((args["imageWidth"] as? Double) ?? Double(canvasW))
+        let imageHeight = CGFloat((args["imageHeight"] as? Double) ?? Double(canvasH))
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: canvasW, height: canvasH))
+
+        let composed = renderer.image { ctx in
+            let cg = ctx.cgContext
+
+            let canvasBg = args["canvasBgColor"] as? String ?? "transparent"
+            if let bgColor = Self.parseColor(canvasBg), bgColor != UIColor.clear {
+                bgColor.setFill()
+                cg.fill(CGRect(x: 0, y: 0, width: canvasW, height: canvasH))
+            }
+
+            if (args["drawFrameBg"] as? Bool) == true {
+                let frameBg = Self.parseColor(args["frameBgColor"] as? String ?? "") ?? UIColor(red: 0.96, green: 0.95, blue: 0.92, alpha: 1.0)
+                let l = CGFloat((args["frameOuterLeft"] as? Double) ?? 0)
+                let t = CGFloat((args["frameOuterTop"] as? Double) ?? 0)
+                let w = CGFloat((args["frameOuterWidth"] as? Double) ?? 0)
+                let h = CGFloat((args["frameOuterHeight"] as? Double) ?? 0)
+                let r = CGFloat((args["frameCornerRadius"] as? Double) ?? 0)
+                frameBg.setFill()
+                if r > 0.1 {
+                    UIBezierPath(roundedRect: CGRect(x: l, y: t, width: w, height: h), cornerRadius: r).fill()
+                } else {
+                    cg.fill(CGRect(x: l, y: t, width: w, height: h))
+                }
+            }
+
+            let boundedCrop = CGRect(
+                x: max(0, min(CGFloat(srcCg.width - 1), cropLeft)),
+                y: max(0, min(CGFloat(srcCg.height - 1), cropTop)),
+                width: max(1, min(cropWidth, CGFloat(srcCg.width))),
+                height: max(1, min(cropHeight, CGFloat(srcCg.height)))
+            )
+            if let cropped = srcCg.cropping(to: boundedCrop) {
+                UIImage(cgImage: cropped).draw(in: CGRect(x: imageLeft, y: imageTop, width: imageWidth, height: imageHeight))
+            } else {
+                srcImage.draw(in: CGRect(x: imageLeft, y: imageTop, width: imageWidth, height: imageHeight))
+            }
+
+            if let frameAssetPath = args["frameAssetPath"] as? String, !frameAssetPath.isEmpty {
+                let bundlePath = Bundle.main.bundlePath
+                let fullPath = bundlePath + "/Frameworks/App.framework/flutter_assets/" + frameAssetPath
+                if let frameImage = UIImage(contentsOfFile: fullPath) {
+                    frameImage.draw(in: CGRect(x: 0, y: 0, width: canvasW, height: canvasH))
+                }
+            }
+
+            if let watermarkText = args["watermarkText"] as? String, !watermarkText.isEmpty {
+                Self.drawWatermark(args: args, text: watermarkText, in: cg)
+            }
+        }
+
+        let qualityInt = (args["jpegQuality"] as? Int) ?? 88
+        let quality = CGFloat(max(60, min(95, qualityInt))) / 100.0
+        guard let jpegData = composed.jpegData(compressionQuality: quality) else {
+            result(FlutterError(code: "COMPOSE_FAILED", message: "Failed to encode jpeg", details: nil))
+            return
+        }
+        let outputURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("gpu_overlay_\(UUID().uuidString).jpg")
+        do {
+            try jpegData.write(to: outputURL)
+            result(["filePath": outputURL.path])
+        } catch {
+            result(FlutterError(code: "COMPOSE_FAILED", message: error.localizedDescription, details: nil))
+        }
+    }
+
+    private static func drawWatermark(args: [String: Any], text: String, in cg: CGContext) {
+        let imageLeft = CGFloat((args["imageLeft"] as? Double) ?? 0)
+        let imageTop = CGFloat((args["imageTop"] as? Double) ?? 0)
+        let imageWidth = CGFloat((args["imageWidth"] as? Double) ?? 0)
+        let imageHeight = CGFloat((args["imageHeight"] as? Double) ?? 0)
+        if imageWidth <= 1 || imageHeight <= 1 { return }
+        let hasFrame = (args["watermarkHasFrame"] as? Bool) == true
+        let margin = imageWidth * (hasFrame ? 0.08 : 0.04)
+        let direction = (args["watermarkDirection"] as? String) ?? "horizontal"
+        let position = (args["watermarkPosition"] as? String) ?? "bottom_right"
+        let fontSize = CGFloat((args["watermarkFontSize"] as? Double) ?? Double(imageWidth * 0.038))
+        let color = parseColor(args["watermarkColor"] as? String ?? "#FF8C00") ?? UIColor.orange
+        let fontWeight = ((args["watermarkFontWeight"] as? Int) ?? 400) >= 700 ? UIFont.Weight.bold : UIFont.Weight.regular
+        let fontFamily = ((args["watermarkFontFamily"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let font = UIFont(name: fontFamily, size: fontSize) ?? UIFont.systemFont(ofSize: fontSize, weight: fontWeight)
+
+        if direction == "vertical" {
+            let chars = text.map { String($0) }
+            var maxW: CGFloat = 0
+            var lineH: CGFloat = font.lineHeight
+            for c in chars {
+                let sz = (c as NSString).size(withAttributes: [.font: font])
+                maxW = max(maxW, sz.width)
+                lineH = max(lineH, sz.height)
+            }
+            let totalH = lineH * CGFloat(chars.count)
+            let origin = resolveWatermarkOrigin(position: position, ox: imageLeft, oy: imageTop, w: imageWidth, h: imageHeight, textW: maxW, textH: totalH, margin: margin)
+            for (idx, c) in chars.enumerated() {
+                let y = origin.y + CGFloat(idx) * lineH
+                let sz = (c as NSString).size(withAttributes: [.font: font])
+                let x = origin.x + (maxW - sz.width) / 2
+                (c as NSString).draw(at: CGPoint(x: x, y: y), withAttributes: [.font: font, .foregroundColor: color])
+            }
+        } else {
+            let size = (text as NSString).size(withAttributes: [.font: font])
+            let origin = resolveWatermarkOrigin(position: position, ox: imageLeft, oy: imageTop, w: imageWidth, h: imageHeight, textW: size.width, textH: size.height, margin: margin)
+            (text as NSString).draw(at: origin, withAttributes: [.font: font, .foregroundColor: color])
+        }
+    }
+
+    private static func resolveWatermarkOrigin(
+        position: String,
+        ox: CGFloat,
+        oy: CGFloat,
+        w: CGFloat,
+        h: CGFloat,
+        textW: CGFloat,
+        textH: CGFloat,
+        margin: CGFloat
+    ) -> CGPoint {
+        switch position {
+        case "bottom_left":
+            return CGPoint(x: ox + margin, y: oy + h - textH - margin)
+        case "top_right":
+            return CGPoint(x: ox + w - textW - margin, y: oy + margin)
+        case "top_left":
+            return CGPoint(x: ox + margin, y: oy + margin)
+        case "bottom_center":
+            return CGPoint(x: ox + (w - textW) / 2, y: oy + h - textH - margin)
+        case "top_center":
+            return CGPoint(x: ox + (w - textW) / 2, y: oy + margin)
+        default:
+            return CGPoint(x: ox + w - textW - margin, y: oy + h - textH - margin)
+        }
+    }
+
+    private static func parseColor(_ hex: String) -> UIColor? {
+        if hex.lowercased() == "transparent" { return UIColor.clear }
+        var raw = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw.hasPrefix("#") { raw.removeFirst() }
+        if raw.count == 6 { raw = "FF" + raw }
+        guard raw.count == 8, let value = UInt32(raw, radix: 16) else { return nil }
+        let a = CGFloat((value >> 24) & 0xFF) / 255.0
+        let r = CGFloat((value >> 16) & 0xFF) / 255.0
+        let g = CGFloat((value >> 8) & 0xFF) / 255.0
+        let b = CGFloat(value & 0xFF) / 255.0
+        return UIColor(red: r, green: g, blue: b, alpha: a)
     }
 
     // ─────────────────────────────────────────────
