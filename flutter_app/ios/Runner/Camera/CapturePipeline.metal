@@ -105,8 +105,11 @@ static float2 cp_fisheyeUV(float2 uv, float aspect) {
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
     float r = length(p);
-    if (r > 1.0) return float2(-1.0);
-    float theta = r * 1.5707963; // π/2
+    // 与预览保持一致：缩小有效圆半径，增强圆形边界可见度。
+    constexpr float rMax = 0.90;
+    if (r > rMax) return float2(-1.0);
+    float rn = r / rMax;
+    float theta = rn * 1.5707963; // π/2
     float phi = atan2(p.y, p.x);
     float sinTheta = sin(theta);
     float2 texCoord = float2(sinTheta * cos(phi), sinTheta * sin(phi));

@@ -333,7 +333,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       setState(() => _showTransition = true);
       await _reinitAndSyncCameraPipeline();
       if (!mounted) return;
-      _transitionTimer = Timer(const Duration(milliseconds: 260), () {
+      _transitionTimer = Timer(const Duration(milliseconds: 140), () {
         if (mounted && _lastLifecycleState == AppLifecycleState.resumed) {
           setState(() => _showTransition = false);
         }
@@ -394,7 +394,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 1. 显示过渡动画（黑屏 + icon）
     _transitionTimer?.cancel();
     setState(() => _showTransition = true);
-    await Future.delayed(const Duration(milliseconds: 180));
+    await Future.delayed(const Duration(milliseconds: 80));
     // 2. 暂停原生相机预览（释放 GPU/CPU 资源）
     await ref.read(cameraServiceProvider.notifier).stopPreview();
     // 3. push 到二级页面，await 等待返回
@@ -406,28 +406,31 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (!mounted) return;
     await _reinitAndSyncCameraPipeline();
     // 5. 淡出过渡动画（setSharpen 完成后再淡出，确保分辨率已切换）
-    _transitionTimer = Timer(const Duration(milliseconds: 300), () {
+    _transitionTimer = Timer(const Duration(milliseconds: 160), () {
       if (mounted) setState(() => _showTransition = false);
     });
   }
 
   /// 耗时操作过渡：黑屏 + App Icon 淡入，执行 [action]，然后淡出。
-  /// [duration] 是黑屏持续时间（不含淡入淡出动画时间）。
+  /// [minVisible] 是覆盖层最短可见时间，用于避免闪屏。
   Future<void> _showCameraTransition(FutureOr<void> Function() action,
-      {Duration duration = const Duration(milliseconds: 400)}) async {
+      {Duration minVisible = const Duration(milliseconds: 180)}) async {
     _transitionTimer?.cancel();
     setState(() => _showTransition = true);
-    // 等待淡入动画完成再执行操作
-    await Future.delayed(const Duration(milliseconds: 200));
+    final sw = Stopwatch()..start();
+    // 轻量等待一帧级别时间，确保覆盖层先出现，避免闪烁
+    await Future.delayed(const Duration(milliseconds: 60));
     // await action，最多等待 2 秒，防止原生层无响应时永久卡黑屏
     await Future.value(action()).timeout(
       const Duration(seconds: 2),
       onTimeout: () {},
     );
-    // 持续黑屏一段时间，然后淡出
-    _transitionTimer = Timer(duration, () {
-      if (mounted) setState(() => _showTransition = false);
-    });
+    sw.stop();
+    final remain = minVisible - sw.elapsed;
+    if (remain > Duration.zero) {
+      await Future.delayed(remain);
+    }
+    if (mounted) setState(() => _showTransition = false);
   }
 
   // ── 取景框中央文字提示（1.5秒后自动消失）────────────────────────────────────
@@ -1391,7 +1394,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           return GestureDetector(
             onTap: () => _showCameraTransition(
               () => ref.read(cameraAppProvider.notifier).switchToCamera(camId),
-              duration: const Duration(milliseconds: 500),
+              minVisible: const Duration(milliseconds: 220),
             ),
             child: Container(
               width: 76,
@@ -1752,7 +1755,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   label: _s().rear,
                   onTap: () => _showCameraTransition(
                     () => ref.read(cameraAppProvider.notifier).flipCamera(),
-                    duration: const Duration(milliseconds: 500),
+                    minVisible: const Duration(milliseconds: 220),
                   ),
                 ),
               ),
@@ -2079,7 +2082,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                   () => ref
                                       .read(cameraAppProvider.notifier)
                                       .cycleSharpen(),
-                                  duration: const Duration(milliseconds: 350),
+                                  minVisible: const Duration(milliseconds: 200),
                                 ),
                               ),
                               // 3. 小框模式
@@ -2313,7 +2316,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 class _OptionsSheet extends ConsumerWidget {
   final VoidCallback onClose;
   final Future<void> Function(FutureOr<void> Function() action,
-      {Duration duration}) onCameraTransition;
+      {Duration minVisible}) onCameraTransition;
 
   const _OptionsSheet({
     required this.onClose,
@@ -2474,7 +2477,7 @@ class _OptionsSheet extends ConsumerWidget {
                     () => ref
                         .read(cameraAppProvider.notifier)
                         .switchToCamera(camId),
-                    duration: const Duration(milliseconds: 500),
+                    minVisible: const Duration(milliseconds: 220),
                   );
                   onClose();
                 },
@@ -2589,7 +2592,7 @@ class _OptionsSheet extends ConsumerWidget {
                     () => ref
                         .read(cameraAppProvider.notifier)
                         .switchToCamera(cam.id),
-                    duration: const Duration(milliseconds: 500),
+                    minVisible: const Duration(milliseconds: 220),
                   );
                   onClose();
                 },
@@ -2841,7 +2844,7 @@ class _OptionsSheet extends ConsumerWidget {
             activeId: st.activeRatioId,
             onSelect: (id) => onCameraTransition(
               () => ref.read(cameraAppProvider.notifier).selectRatio(id),
-              duration: const Duration(milliseconds: 400),
+              minVisible: const Duration(milliseconds: 180),
             ),
           ),
         'filter' => _FilterRow(
@@ -2849,7 +2852,7 @@ class _OptionsSheet extends ConsumerWidget {
             activeId: st.activeFilterId,
             onSelect: (id) => onCameraTransition(
               () => ref.read(cameraAppProvider.notifier).selectFilter(id),
-              duration: const Duration(milliseconds: 400),
+              minVisible: const Duration(milliseconds: 180),
             ),
           ),
         'frame' => _FrameGrid(

@@ -613,11 +613,10 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                         val jpegBytes = ByteArray(buffer.remaining())
                         buffer.get(jpegBytes)
                         val rawRotationDegrees = image.imageInfo.rotationDegrees
-                        val rotationDegrees = if (rawRotationDegrees == 0 && deviceQuarter != 0) {
-                            deviceQuarter * 90
-                        } else {
-                            rawRotationDegrees
-                        }
+                        // imageInfo.rotationDegrees 已包含 CameraX 对 targetRotation 的计算结果。
+                        // rawRotation=0 是合法值（表示无需额外旋转），不能再用 deviceQuarter 强行补偿，
+                        // 否则会在部分机型上出现横屏成片方向错误（如左横屏变成倒置竖图）。
+                        val rotationDegrees = rawRotationDegrees
                         val isFront = currentLensPosition == CameraSelector.LENS_FACING_FRONT
                         val captureW = image.width
                         val captureH = image.height

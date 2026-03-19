@@ -103,7 +103,7 @@
         "name": "宽鱼眼",
         "nameEn": "FisheyeW",
         "zoomFactor": 0.58,
-        "distortion": 0.22,
+        "distortion": 0.42,
         "vignette": 0.03,
         "chromaticAberration": 0.035,
         "edgeBlur": 0.0,

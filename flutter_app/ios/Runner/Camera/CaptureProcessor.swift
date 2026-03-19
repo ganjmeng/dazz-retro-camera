@@ -107,6 +107,17 @@ class CaptureProcessor {
         print("[CaptureProcessor] Metal Compute Pipeline initialized successfully")
     }
 
+    /// 将带 EXIF 方向的 UIImage 归一化为 .up，避免后续直接使用 cgImage 时丢失方向。
+    private func normalizedImage(_ image: UIImage) -> UIImage {
+        if image.imageOrientation == .up { return image }
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = image.scale
+        let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: image.size))
+        }
+    }
+
     /**
      * 处理图像文件，返回处理后的临时文件路径
      *
@@ -115,8 +126,12 @@ class CaptureProcessor {
      * @return 处理后的 JPEG 文件路径，失败时返回 nil
      */
     func processImage(filePath: String, params: [String: Any]) -> String? {
-        guard let image = UIImage(contentsOfFile: filePath),
-              var cgImage = image.cgImage else {
+        guard let rawImage = UIImage(contentsOfFile: filePath) else {
+            print("[CaptureProcessor] Failed to load image: \(filePath)")
+            return nil
+        }
+        let image = normalizedImage(rawImage)
+        guard var cgImage = image.cgImage else {
             print("[CaptureProcessor] Failed to load image: \(filePath)")
             return nil
         }

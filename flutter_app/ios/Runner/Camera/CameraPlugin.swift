@@ -581,9 +581,13 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     private func handleComposeOverlay(call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [String: Any],
               let filePath = args["filePath"] as? String,
-              let srcImage = UIImage(contentsOfFile: filePath),
-              let srcCg = srcImage.cgImage else {
+              let rawImage = UIImage(contentsOfFile: filePath) else {
             result(FlutterError(code: "INVALID_ARG", message: "filePath required", details: nil))
+            return
+        }
+        let srcImage = Self.normalizedImage(rawImage)
+        guard let srcCg = srcImage.cgImage else {
+            result(FlutterError(code: "INVALID_ARG", message: "invalid source image", details: nil))
             return
         }
 
@@ -806,6 +810,17 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         guard let image = UIImage(contentsOfFile: fullPath) else { return nil }
         frameImageCache.setObject(image, forKey: key)
         return image
+    }
+
+    /// 将带 EXIF 方向的 UIImage 归一化为 .up，避免直接用 cgImage 时方向丢失。
+    private static func normalizedImage(_ image: UIImage) -> UIImage {
+        if image.imageOrientation == .up { return image }
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = image.scale
+        let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: image.size))
+        }
     }
 
     // ─────────────────────────────────────────────

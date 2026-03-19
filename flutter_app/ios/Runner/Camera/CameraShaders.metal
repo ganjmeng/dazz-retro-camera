@@ -157,9 +157,12 @@ float2 fisheyeUV(float2 uv, float aspect) {
     float2 p = (uv - 0.5) * 2.0;
     p.x *= aspect; // 修正宽高比使圆形不变形
     float r = length(p);
-    if (r > 1.0) return float2(-1.0); // 圆外标记
+    // 缩小有效圆半径，让鱼眼“圆边界”更明显。
+    constexpr float rMax = 0.90;
+    if (r > rMax) return float2(-1.0); // 圆外标记
+    float rn = r / rMax;
     // 等距投影：theta = r * (π/2)
-    float theta = r * 1.5707963; // M_PI_F / 2
+    float theta = rn * 1.5707963; // M_PI_F / 2
     float phi = atan2(p.y, p.x);
     float sinTheta = sin(theta);
     float2 texCoord = float2(

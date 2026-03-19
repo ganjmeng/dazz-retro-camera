@@ -12,6 +12,7 @@ import android.opengl.EGLDisplay
 import android.opengl.EGLSurface
 import android.opengl.GLES30
 import android.util.Log
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -184,8 +185,11 @@ vec2 fisheyeUV(vec2 uv, float aspect) {
     vec2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
     float r = length(p);
-    if (r > 1.0) return vec2(-1.0);
-    float theta = r * 1.5707963; // pi/2
+    // 与预览保持一致：缩小有效圆半径，增强圆形边界可见度。
+    const float rMax = 0.90;
+    if (r > rMax) return vec2(-1.0);
+    float rn = r / rMax;
+    float theta = rn * 1.5707963; // pi/2
     float phi = atan(p.y, p.x);
     float sinTheta = sin(theta);
     vec2 texCoord = vec2(sinTheta * cos(phi), sinTheta * sin(phi));
@@ -883,8 +887,23 @@ void main() {
             val rawBitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size, options)
                 ?: return null.also { Log.e(TAG, "Failed to decode JPEG bytes") }
 
-            // 1a. 应用旋转和镜像（直接使用角度，不需要读文件 EXIF）
-            val exifBitmap = applyRotation(rawBitmap, exifOrientation, isFrontCamera)
+            // 1a. 优先读取 JPEG 内存字节里的 EXIF Orientation（更可靠，避免方向猜测误差）。
+            // 若内存字节无 EXIF（极少机型）再回退到 rotationDegrees + front 镜像。
+            val exifTag = try {
+                ExifInterface(ByteArrayInputStream(jpegBytes))
+                    .getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_UNDEFINED
+                    )
+            } catch (_: Exception) {
+                ExifInterface.ORIENTATION_UNDEFINED
+            }
+            val exifBitmap = if (exifTag != ExifInterface.ORIENTATION_UNDEFINED &&
+                exifTag != ExifInterface.ORIENTATION_NORMAL) {
+                applyExifOrientation(rawBitmap, exifTag)
+            } else {
+                applyRotation(rawBitmap, exifOrientation, isFrontCamera)
+            }
             if (exifBitmap !== rawBitmap) rawBitmap.recycle()
 
             // 1b. 按 maxDimension 缩放
@@ -996,6 +1015,30 @@ void main() {
         if (rotationDegrees != 0) matrix.postRotate(rotationDegrees.toFloat())
         if (mirror) matrix.preScale(-1f, 1f)
         if (rotationDegrees == 0 && !mirror) return bitmap
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
+    /**
+     * 根据 EXIF Orientation 标记应用旋转/翻转。
+     */
+    private fun applyExifOrientation(bitmap: Bitmap, orientation: Int): Bitmap {
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90  -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.preScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL   -> matrix.preScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                matrix.postRotate(90f)
+                matrix.preScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                matrix.postRotate(270f)
+                matrix.preScale(-1f, 1f)
+            }
+            else -> return bitmap
+        }
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 

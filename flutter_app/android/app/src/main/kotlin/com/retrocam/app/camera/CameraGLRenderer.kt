@@ -285,8 +285,11 @@ vec2 fisheyeUV(vec2 uv, float aspect) {
     vec2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
     float r = length(p);
-    if (r > 1.0) return vec2(-1.0);
-    float theta = r * 1.5707963; // pi/2
+    // 缩小有效圆半径，让鱼眼“圆边界”更明显（视觉更接近主流鱼眼相机）。
+    const float rMax = 0.90;
+    if (r > rMax) return vec2(-1.0);
+    float rn = r / rMax;
+    float theta = rn * 1.5707963; // pi/2
     float phi = atan(p.y, p.x);
     float sinTheta = sin(theta);
     vec2 texCoord = vec2(

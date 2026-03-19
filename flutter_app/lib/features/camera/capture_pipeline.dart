@@ -25,7 +25,10 @@ class CaptureResult {
   final Uint8List bytes;
   final int outputWidth;
   final int outputHeight;
-  const CaptureResult({required this.bytes, required this.outputWidth, required this.outputHeight});
+  const CaptureResult(
+      {required this.bytes,
+      required this.outputWidth,
+      required this.outputHeight});
 }
 
 class CapturePipeline {
@@ -34,17 +37,19 @@ class CapturePipeline {
   static final Map<String, ui.Image> _frameTextureCache = <String, ui.Image>{};
   static final List<String> _frameTextureLru = <String>[];
   static const int _kFrameAssetBytesCacheMaxEntries = 8;
-  static final Map<String, Uint8List> _frameAssetBytesCache = <String, Uint8List>{};
+  static final Map<String, Uint8List> _frameAssetBytesCache =
+      <String, Uint8List>{};
   static final List<String> _frameAssetBytesLru = <String>[];
 
   /// 输出图像最大边长（像素）。超过此値时等比缩小画布。
   /// 各清晰度档位的输出最大边长（像素）
-  static const int kMaxDimLow    = 1920; // 低画质：1920p 长边，~2MP
-  static const int kMaxDimMid    = 1920; // 中画质：1920p 长边，与低档对齐（减少 glReadPixels 回读量 ~50%）
-  static const int kMaxDimHigh   = 4096; // 高画质：4K 长边，~12MP
+  static const int kMaxDimLow = 1920; // 低画质：1920p 长边，~2MP
+  static const int kMaxDimMid =
+      1920; // 中画质：1920p 长边，与低档对齐（减少 glReadPixels 回读量 ~50%）
+  static const int kMaxDimHigh = 4096; // 高画质：4K 长边，~12MP
   /// 各清晰度档位的 JPEG 编码质量
-  static const int kJpegQualityLow  = 72; // 对齐竞品低画质 ~385 KB
-  static const int kJpegQualityMid  = 80; // 对齐竞品中画质 ~442 KB
+  static const int kJpegQualityLow = 72; // 对齐竞品低画质 ~385 KB
+  static const int kJpegQualityMid = 80; // 对齐竞品中画质 ~442 KB
   static const int kJpegQualityHigh = 90;
 
   CapturePipeline({required this.camera});
@@ -68,7 +73,8 @@ class CapturePipeline {
     return bytes;
   }
 
-  Future<ui.Image> _getFrameTexture(String assetPath, int targetWidth, int targetHeight) async {
+  Future<ui.Image> _getFrameTexture(
+      String assetPath, int targetWidth, int targetHeight) async {
     final key = '$assetPath@$targetWidth@$targetHeight';
     final cached = _frameTextureCache[key];
     if (cached != null) {
@@ -94,7 +100,8 @@ class CapturePipeline {
   }
 
   /// 处理拍摄的图片文件，返回包含 JPEG 字节和输出分辨率的 CaptureResult
-    static const MethodChannel _channel = MethodChannel("com.retrocam.app/camera_control");
+  static const MethodChannel _channel =
+      MethodChannel("com.retrocam.app/camera_control");
 
   Future<CaptureResult?> process({
     bool useGpu = true, // 新增开关
@@ -103,17 +110,17 @@ class CapturePipeline {
     required String selectedFrameId,
     required String selectedWatermarkId,
     String? frameBackgroundColor, // 用户选择的背景色（覆盖 JSON 默认值）
-    String? watermarkColorOverride,   // 用户覆盖颜色
+    String? watermarkColorOverride, // 用户覆盖颜色
     String? watermarkPositionOverride, // 用户覆盖位置
-    String? watermarkSizeOverride,    // 用户覆盖大小
+    String? watermarkSizeOverride, // 用户覆盖大小
     String? watermarkDirectionOverride, // 用户覆盖方向
-    String? watermarkStyleOverride,   // 用户覆盖样式 ID
+    String? watermarkStyleOverride, // 用户覆盖样式 ID
     PreviewRenderParams? renderParams,
     Rect? minimapNormalizedRect, // 小窗模式裁剪区域（归一化 0.0~1.0）
     int deviceQuarter = 0, // 设备方向：0=竖屏, 1=逆时针横屏(左转90°), 2=倒竖, 3=顺时针横屏(右转90°)
-    int maxDimension = kMaxDimMid,   // 输出最大边长（由调用方按清晰度档位传入）
-    int jpegQuality  = kJpegQualityMid, // JPEG 编码质量（由调用方按清晰度档位传入）
-    bool fisheyeMode = false,           // 鱼眼圆圈模式：在成片四角绘制默色阒罩
+    int maxDimension = kMaxDimMid, // 输出最大边长（由调用方按清晰度档位传入）
+    int jpegQuality = kJpegQualityMid, // JPEG 编码质量（由调用方按清晰度档位传入）
+    bool fisheyeMode = false, // 鱼眼圆圈模式：在成片四角绘制默色阒罩
   }) async {
     try {
       // ── 1. 先尝试 GPU 快速路径（无相框/水印时完全跳过 Dart 解码）─────────────
@@ -124,7 +131,8 @@ class CapturePipeline {
 
       if (useGpu && (Platform.isIOS || Platform.isAndroid)) {
         try {
-          debugPrint("[CapturePipeline] Attempting to use native GPU pipeline...");
+          debugPrint(
+              "[CapturePipeline] Attempting to use native GPU pipeline...");
           final gpuResult = await _channel.invokeMethod<Map>("processWithGpu", {
             "filePath": imagePath,
             "params": renderParams?.toJson() ?? {},
@@ -139,25 +147,31 @@ class CapturePipeline {
             final hasFrame = selectedFrameId.isNotEmpty &&
                 selectedFrameId != 'frame_none' &&
                 selectedFrameId != 'none';
-            final hasWatermark = selectedWatermarkId.isNotEmpty &&
-                selectedWatermarkId != 'none';
+            final hasWatermark =
+                selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none';
             final hasMinimap = minimapNormalizedRect != null;
             if (!hasFrame && !hasWatermark && !hasMinimap) {
               final gpuBytes = await File(newPath).readAsBytes();
-              try { File(newPath).deleteSync(); } catch (_) {}
+              try {
+                File(newPath).deleteSync();
+              } catch (_) {}
               final gpuSize = _readJpegDimensions(gpuBytes);
               final gpuW = gpuSize?[0] ?? 0;
               final gpuH = gpuSize?[1] ?? 0;
-              debugPrint('[CapturePipeline] Fast path: GPU output returned directly (no frame/watermark), ${gpuW}x${gpuH}');
-              return CaptureResult(bytes: gpuBytes, outputWidth: gpuW, outputHeight: gpuH);
+              debugPrint(
+                  '[CapturePipeline] Fast path: GPU output returned directly (no frame/watermark), ${gpuW}x${gpuH}');
+              return CaptureResult(
+                  bytes: gpuBytes, outputWidth: gpuW, outputHeight: gpuH);
             }
             // 有相框/水印/小窗裁剪：优先尝试原生叠加路径，失败再回退 Dart Canvas
             gpuOutputBytes = await File(newPath).readAsBytes();
             gpuProcessed = true;
-            debugPrint("[CapturePipeline] GPU pipeline successful, preparing native overlay path.");
+            debugPrint(
+                "[CapturePipeline] GPU pipeline successful, preparing native overlay path.");
           }
         } catch (e) {
-          debugPrint("[CapturePipeline] Native GPU pipeline failed, falling back to Dart: $e");
+          debugPrint(
+              "[CapturePipeline] Native GPU pipeline failed, falling back to Dart: $e");
         }
       }
 
@@ -184,16 +198,19 @@ class CapturePipeline {
         srcImage = frame.image;
       }
       if (!gpuProcessed && renderParams != null) {
-        debugPrint('[CapturePipeline] Applying universal Dart fallback pipeline for: ${camera.id}');
+        debugPrint(
+            '[CapturePipeline] Applying universal Dart fallback pipeline for: ${camera.id}');
         // ── 统一 Dart 降级管线（参数驱动，不再按相机 ID 路由）──────────────
         // 所有相机差异完全由 renderParams（来自 DefaultLook JSON）驱动
         // 处理顺序与 Native Shader（CaptureGLProcessor / CapturePipeline.metal）一致：
         //   1. Highlight Rolloff → 2. Sensor Non-uniformity → 3. Skin Protection
         //   → 4. Chemical Irregularity → 5. Paper Texture → 6. Development Softness
         if (renderParams.highlightRolloff > 0.001) {
-          srcImage = await drawHighlightRolloff(srcImage!, renderParams.highlightRolloff);
+          srcImage = await drawHighlightRolloff(
+              srcImage!, renderParams.highlightRolloff);
         }
-        if (renderParams.centerGain > 0.001 || renderParams.edgeFalloff > 0.001) {
+        if (renderParams.centerGain > 0.001 ||
+            renderParams.edgeFalloff > 0.001) {
           srcImage = await drawSensorNonUniformity(
             srcImage!,
             renderParams.centerGain,
@@ -211,13 +228,16 @@ class CapturePipeline {
           );
         }
         if (renderParams.chemicalIrregularity > 0.001) {
-          srcImage = await drawChemicalIrregularity(srcImage!, renderParams.chemicalIrregularity);
+          srcImage = await drawChemicalIrregularity(
+              srcImage!, renderParams.chemicalIrregularity);
         }
         if (renderParams.paperTexture > 0.001) {
-          srcImage = await drawPaperTexture(srcImage!, renderParams.paperTexture);
+          srcImage =
+              await drawPaperTexture(srcImage!, renderParams.paperTexture);
         }
         if (renderParams.developmentSoftness > 0.001) {
-          srcImage = await drawDevelopmentSoftness(srcImage!, renderParams.developmentSoftness);
+          srcImage = await drawDevelopmentSoftness(
+              srcImage!, renderParams.developmentSoftness);
         }
         debugPrint('[CapturePipeline] Universal fallback pipeline applied.');
       }
@@ -243,18 +263,24 @@ class CapturePipeline {
         srcH = srcImage.height.toDouble();
       }
 
-      debugPrint('[CapturePipeline] decoded: ${srcW.toInt()}x${srcH.toInt()}, ratio=$selectedRatioId, frame=$selectedFrameId, wm=$selectedWatermarkId');
+      debugPrint(
+          '[CapturePipeline] decoded: ${srcW.toInt()}x${srcH.toInt()}, ratio=$selectedRatioId, frame=$selectedFrameId, wm=$selectedWatermarkId');
 
       // ── 2. 计算裁剪区域（保持中心裁剪）────────────────────────────────────────────
       Rect cropRect = _calcCropRect(srcW, srcH, selectedRatioId);
       // ── 2b. 小窗模式：将裁剪区域进一步缩小到小窗内容 ──────────────────────────────
       if (minimapNormalizedRect != null) {
-        final mmLeft   = cropRect.left   + minimapNormalizedRect.left   * cropRect.width;
-        final mmTop    = cropRect.top    + minimapNormalizedRect.top    * cropRect.height;
-        final mmRight  = cropRect.left   + minimapNormalizedRect.right  * cropRect.width;
-        final mmBottom = cropRect.top    + minimapNormalizedRect.bottom * cropRect.height;
+        final mmLeft =
+            cropRect.left + minimapNormalizedRect.left * cropRect.width;
+        final mmTop =
+            cropRect.top + minimapNormalizedRect.top * cropRect.height;
+        final mmRight =
+            cropRect.left + minimapNormalizedRect.right * cropRect.width;
+        final mmBottom =
+            cropRect.top + minimapNormalizedRect.bottom * cropRect.height;
         cropRect = Rect.fromLTRB(mmLeft, mmTop, mmRight, mmBottom);
-        debugPrint('[CapturePipeline] minimap crop: ${cropRect.width}x${cropRect.height}@(${cropRect.left},${cropRect.top})');
+        debugPrint(
+            '[CapturePipeline] minimap crop: ${cropRect.width}x${cropRect.height}@(${cropRect.left},${cropRect.top})');
       }
       double outW = cropRect.width;
       double outH = cropRect.height;
@@ -268,14 +294,17 @@ class CapturePipeline {
           selectedFrameId != 'frame_none' &&
           selectedFrameId != 'none') {
         try {
-          frameOpt = camera.modules.frames.firstWhere((f) => f.id == selectedFrameId);
+          frameOpt =
+              camera.modules.frames.firstWhere((f) => f.id == selectedFrameId);
           // FIX: 检查相框是否支持当前 ratio（如 2:3 比例下拍立得相框不可用）
           if (frameOpt.supportedRatios.isNotEmpty &&
               !frameOpt.supportedRatios.contains(selectedRatioId)) {
-            debugPrint('[CapturePipeline] frame ${selectedFrameId} does not support ratio $selectedRatioId, skipping');
+            debugPrint(
+                '[CapturePipeline] frame ${selectedFrameId} does not support ratio $selectedRatioId, skipping');
             frameOpt = null;
           }
-          if (frameOpt == null) throw StateError('frame not supported for ratio');
+          if (frameOpt == null)
+            throw StateError('frame not supported for ratio');
           final refSize = math.min(outW, outH);
           final scale = refSize / 1080.0;
           final activeInset = frameOpt.insetForRatio(selectedRatioId);
@@ -283,7 +312,8 @@ class CapturePipeline {
           rightPx = activeInset.right * scale;
           bottomPx = activeInset.bottom * scale;
           leftPx = activeInset.left * scale;
-          debugPrint('[CapturePipeline] frame inset (ratio=$selectedRatioId): t=$topPx r=$rightPx b=$bottomPx l=$leftPx');
+          debugPrint(
+              '[CapturePipeline] frame inset (ratio=$selectedRatioId): t=$topPx r=$rightPx b=$bottomPx l=$leftPx');
         } catch (_) {
           frameOpt = null;
         }
@@ -310,8 +340,10 @@ class CapturePipeline {
           resolvedAsset.isNotEmpty;
 
       // 最终输出画布尺寸（含 outerPadding）
-      double canvasW = hasPngAssetForSize ? frameCanvasW : frameCanvasW + outerPadPx * 2;
-      double canvasH = hasPngAssetForSize ? frameCanvasH : frameCanvasH + outerPadPx * 2;
+      double canvasW =
+          hasPngAssetForSize ? frameCanvasW : frameCanvasW + outerPadPx * 2;
+      double canvasH =
+          hasPngAssetForSize ? frameCanvasH : frameCanvasH + outerPadPx * 2;
 
       // ── 3c. 限制画布最大边长（防止超大画布导致 GPU OOM / 卡顿）─────────────────────
       final maxCanvas = math.max(canvasW, canvasH);
@@ -327,7 +359,8 @@ class CapturePipeline {
         bottomPx *= canvasScale;
         leftPx *= canvasScale;
         outerPadPx *= canvasScale;
-        debugPrint('[CapturePipeline] canvas downscaled by $canvasScale → ${canvasW.toInt()}x${canvasH.toInt()}');
+        debugPrint(
+            '[CapturePipeline] canvas downscaled by $canvasScale → ${canvasW.toInt()}x${canvasH.toInt()}');
       }
 
       final frameOffsetX = hasPngAssetForSize ? 0.0 : outerPadPx;
@@ -337,10 +370,12 @@ class CapturePipeline {
 
       String canvasBgHexSrc = '#FFFFFF';
       if (frameOpt != null) {
-        canvasBgHexSrc = (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
-            ? frameBackgroundColor
-            : frameOpt.outerBackgroundColor;
-      } else if (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty) {
+        canvasBgHexSrc =
+            (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
+                ? frameBackgroundColor
+                : frameOpt.outerBackgroundColor;
+      } else if (frameBackgroundColor != null &&
+          frameBackgroundColor.isNotEmpty) {
         canvasBgHexSrc = frameBackgroundColor;
       }
       final frameBgHexSrc = frameOpt == null
@@ -363,7 +398,8 @@ class CapturePipeline {
       if (selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none') {
         final wmPresets = camera.modules.watermarks.presets;
         try {
-          final wmOpt = wmPresets.firstWhere((wm) => wm.id == selectedWatermarkId);
+          final wmOpt =
+              wmPresets.firstWhere((wm) => wm.id == selectedWatermarkId);
           if (!wmOpt.isNone) {
             final styleDef = getWatermarkStyle(watermarkStyleOverride);
             watermarkText = styleDef.buildText(DateTime.now());
@@ -386,11 +422,13 @@ class CapturePipeline {
                 baseFontSize = outW * 0.038;
             }
             watermarkFontSize = baseFontSize.clamp(12.0, 120.0);
-            watermarkPosition = watermarkPositionOverride ?? wmOpt.position ?? 'bottom_right';
+            watermarkPosition =
+                watermarkPositionOverride ?? wmOpt.position ?? 'bottom_right';
             watermarkDirection = watermarkDirectionOverride ?? 'horizontal';
             watermarkFontFamily = styleDef.fontFamily ?? wmOpt.fontFamily;
             watermarkLetterSpacing = styleDef.letterSpacing;
-            watermarkFontWeight = styleDef.fontWeight == FontWeight.bold ? 700 : 400;
+            watermarkFontWeight =
+                styleDef.fontWeight == FontWeight.bold ? 700 : 400;
           }
         } catch (_) {}
       }
@@ -398,7 +436,9 @@ class CapturePipeline {
       // 原生叠加：GPU 处理成功后优先在 native 侧完成相框+水印合成，失败再回退 Dart Canvas。
       if (gpuProcessed &&
           gpuOutputPath != null &&
-          (frameOpt != null || watermarkText.isNotEmpty || minimapNormalizedRect != null)) {
+          (frameOpt != null ||
+              watermarkText.isNotEmpty ||
+              minimapNormalizedRect != null)) {
         try {
           final composed = await _channel.invokeMethod<Map>("composeOverlay", {
             "filePath": gpuOutputPath,
@@ -435,7 +475,9 @@ class CapturePipeline {
           final composedPath = composed?["filePath"] as String?;
           if (composedPath != null && composedPath.isNotEmpty) {
             final outBytes = await File(composedPath).readAsBytes();
-            try { File(composedPath).deleteSync(); } catch (_) {}
+            try {
+              File(composedPath).deleteSync();
+            } catch (_) {}
             try {
               if (gpuOutputPath != composedPath) {
                 File(gpuOutputPath).deleteSync();
@@ -448,7 +490,8 @@ class CapturePipeline {
             );
           }
         } catch (e) {
-          debugPrint('[CapturePipeline] native compose failed, fallback to Dart: $e');
+          debugPrint(
+              '[CapturePipeline] native compose failed, fallback to Dart: $e');
         }
       }
 
@@ -464,7 +507,8 @@ class CapturePipeline {
 
       // ── 4a. 先填充画布背景色 ────────────────────────────────────────────────────
       {
-        if (canvasBgHexSrc.toLowerCase() != 'transparent' && canvasBgHexSrc.toLowerCase() != '#00000000') {
+        if (canvasBgHexSrc.toLowerCase() != 'transparent' &&
+            canvasBgHexSrc.toLowerCase() != '#00000000') {
           Color bgColor = Colors.white;
           try {
             final hex = canvasBgHexSrc.replaceAll('#', '');
@@ -492,14 +536,16 @@ class CapturePipeline {
           if (frameCornerRadiusPx > 0) {
             canvas.drawRRect(
               RRect.fromRectAndRadius(
-                Rect.fromLTWH(frameOffsetX, frameOffsetY, outW + leftPx + rightPx, outH + topPx + bottomPx),
+                Rect.fromLTWH(frameOffsetX, frameOffsetY,
+                    outW + leftPx + rightPx, outH + topPx + bottomPx),
                 Radius.circular(frameCornerRadiusPx),
               ),
               Paint()..color = bgColor,
             );
           } else {
             canvas.drawRect(
-              Rect.fromLTWH(frameOffsetX, frameOffsetY, outW + leftPx + rightPx, outH + topPx + bottomPx),
+              Rect.fromLTWH(frameOffsetX, frameOffsetY, outW + leftPx + rightPx,
+                  outH + topPx + bottomPx),
               Paint()..color = bgColor,
             );
           }
@@ -507,7 +553,8 @@ class CapturePipeline {
       }
 
       // ── 4b. 绘制图片（抖动模糊 + 颜色效果）────────────────────────────────────
-      final destRect = Rect.fromLTWH(frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
+      final destRect = Rect.fromLTWH(
+          frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
       final shakeStrength = frameOpt?.shake ?? 0.0;
 
       if (shakeStrength > 0.01) {
@@ -519,8 +566,10 @@ class CapturePipeline {
         final dy2 = (rng.nextDouble() - 0.5) * 2 * maxOffset * 0.6;
         final ghostAlpha1 = (shakeStrength * 55).clamp(0, 55).toInt();
         final ghostAlpha2 = (shakeStrength * 35).clamp(0, 35).toInt();
-        final shakeRect1 = Rect.fromLTWH(frameOffsetX + leftPx + dx1, frameOffsetY + topPx + dy1, outW, outH);
-        final shakeRect2 = Rect.fromLTWH(frameOffsetX + leftPx + dx2, frameOffsetY + topPx + dy2, outW, outH);
+        final shakeRect1 = Rect.fromLTWH(frameOffsetX + leftPx + dx1,
+            frameOffsetY + topPx + dy1, outW, outH);
+        final shakeRect2 = Rect.fromLTWH(frameOffsetX + leftPx + dx2,
+            frameOffsetY + topPx + dy2, outW, outH);
         // ── FIX: 绘制抖动重影效果（2层半透明位移叠加，模拟手持拍立得的运动模糊）──
         canvas.drawImageRect(
           srcImage!,
@@ -550,9 +599,11 @@ class CapturePipeline {
           frameOffsetX + leftPx + outW / 2,
           frameOffsetY + topPx + outH / 2,
         );
-        final fisheyeRadius = math.min(outW, outH) / 2;
+        // 与原生 shader 对齐：有效圆半径缩小到 90%，让圆边界更明显。
+        final fisheyeRadius = math.min(outW, outH) / 2 * 0.90;
         final fisheyeClipPath = Path()
-          ..addOval(Rect.fromCircle(center: fisheyeCenter, radius: fisheyeRadius));
+          ..addOval(
+              Rect.fromCircle(center: fisheyeCenter, radius: fisheyeRadius));
         canvas.clipPath(fisheyeClipPath);
       }
 
@@ -587,25 +638,35 @@ class CapturePipeline {
 
       // ── 4c. 暗角 ──────────────────────────────────────────────────────────────
       // GPU 成片管线已包含 Vignette Pass，仅在 Dart 降级时由 Canvas 补充
-      if (!gpuProcessed && renderParams != null && renderParams.effectiveVignette > 0.01) {
-        _drawVignette(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, renderParams.effectiveVignette);
+      if (!gpuProcessed &&
+          renderParams != null &&
+          renderParams.effectiveVignette > 0.01) {
+        _drawVignette(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW,
+            outH, renderParams.effectiveVignette);
       }
 
       // ── 4c3. 胶片颗粒感（grain）+ 数字噪点（noise）──────────────────────────
       // GPU 成片管线已包含 Film Grain + Digital Noise Pass，仅在 Dart 降级时由 Canvas 补充
-      if (!gpuProcessed && renderParams != null && (renderParams.effectiveGrain > 0.01 || renderParams.noiseAmount > 0.001)) {
-        _drawFilmGrain(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, renderParams.effectiveGrain, noiseAmount: renderParams.noiseAmount);
+      if (!gpuProcessed &&
+          renderParams != null &&
+          (renderParams.effectiveGrain > 0.01 ||
+              renderParams.noiseAmount > 0.001)) {
+        _drawFilmGrain(canvas, frameOffsetX + leftPx, frameOffsetY + topPx,
+            outW, outH, renderParams.effectiveGrain,
+            noiseAmount: renderParams.noiseAmount);
       }
 
       // ── 4c2. 内嵌阴影（拟物相纸厚度感）──────────────────────────────────────
       if (frameOpt != null && frameOpt.innerShadow) {
-        _drawInnerShadow(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
+        _drawInnerShadow(
+            canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
       }
 
       // ── 4d. 漏光效果 ──────────────────────────────────────────────────────────
       final lightLeakStrength = frameOpt?.lightLeak ?? 0.0;
       if (lightLeakStrength > 0.01) {
-        _drawLightLeak(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH, lightLeakStrength);
+        _drawLightLeak(canvas, frameOffsetX + leftPx, frameOffsetY + topPx,
+            outW, outH, lightLeakStrength);
       }
 
       // ── 4e. 色差（Chromatic Aberration）──────────────────────────────────────
@@ -615,7 +676,10 @@ class CapturePipeline {
           renderParams.policy.enableChromaticAberration &&
           renderParams.effectiveChromaticAberration > 0.001) {
         _drawChromaticAberration(
-          canvas, srcImage!, cropRect, destRect,
+          canvas,
+          srcImage!,
+          cropRect,
+          destRect,
           renderParams.effectiveChromaticAberration,
           renderParams,
         );
@@ -626,24 +690,31 @@ class CapturePipeline {
       if (!gpuProcessed &&
           renderParams != null &&
           renderParams.policy.enableBloom &&
-          (renderParams.effectiveBloom > 0.01 || renderParams.effectiveSoftFocus > 0.01)) {
+          (renderParams.effectiveBloom > 0.01 ||
+              renderParams.effectiveSoftFocus > 0.01)) {
         _drawBloom(
-          canvas, srcImage!, cropRect, destRect,
+          canvas,
+          srcImage!,
+          cropRect,
+          destRect,
           renderParams.effectiveBloom,
           renderParams.effectiveSoftFocus,
           renderParams,
         );
       }
 
-       // ── 4e3. 鱼眼四角黑色遮罩 ────────────────────────────────────────────
+      // ── 4e3. 鱼眼四角黑色遮罩 ────────────────────────────────────────────
       // GPU 已处理时，原生 shader 已在圆外输出纯黑，无需 Flutter Canvas 再绘制遮罩
       // Dart 降级时仍由 _drawFisheyeMask 补充（与预览层 _FisheyeCirclePainter 对齐）
       if (fisheyeMode && !gpuProcessed) {
-        _drawFisheyeMask(canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
+        _drawFisheyeMask(
+            canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
       }
 
       // ── 4f. 相框纹理 PNG 叠加 ──────────────────────────────────────────────────
-      if (frameOpt != null && resolvedAsset != null && resolvedAsset.isNotEmpty) {
+      if (frameOpt != null &&
+          resolvedAsset != null &&
+          resolvedAsset.isNotEmpty) {
         try {
           final frameImg = await _getFrameTexture(
             resolvedAsset,
@@ -652,13 +723,13 @@ class CapturePipeline {
           );
           canvas.drawImageRect(
             frameImg,
-            Rect.fromLTWH(0, 0,
-              frameImg.width.toDouble(),
-              frameImg.height.toDouble()),
+            Rect.fromLTWH(
+                0, 0, frameImg.width.toDouble(), frameImg.height.toDouble()),
             Rect.fromLTWH(0, 0, canvasW, canvasH),
             Paint()..filterQuality = FilterQuality.high,
           );
-          debugPrint('[CapturePipeline] frame texture applied: $resolvedAsset (ratio=$selectedRatioId)');
+          debugPrint(
+              '[CapturePipeline] frame texture applied: $resolvedAsset (ratio=$selectedRatioId)');
         } catch (e) {
           debugPrint('[CapturePipeline] frame asset load error: $e');
         }
@@ -684,7 +755,8 @@ class CapturePipeline {
 
       // ── 5. 光栅化并输出 ────────────────────────────────────────────────────────
       final picture = recorder.endRecording();
-      final outputImage = await picture.toImage(canvasW.toInt(), canvasH.toInt());
+      final outputImage =
+          await picture.toImage(canvasW.toInt(), canvasH.toInt());
 
       //      // ── 5b. 根据设备方向旋转图片 ────────────────────────────────────
       // FIX: 当 GPU 管线已成功处理时，跳过 deviceQuarter 旋转。
@@ -707,16 +779,22 @@ class CapturePipeline {
         rotCanvas.drawImage(outputImage, Offset.zero, Paint());
         final rotPicture = rotRecorder.endRecording();
         finalImage = await rotPicture.toImage(rotW.toInt(), rotH.toInt());
-        debugPrint('[CapturePipeline] rotated: quarter=$effectiveQuarter, ${rotW.toInt()}x${rotH.toInt()}');
+        debugPrint(
+            '[CapturePipeline] rotated: quarter=$effectiveQuarter, ${rotW.toInt()}x${rotH.toInt()}');
       }
 
       // ── 5b-2. 应用 GL Shader 中缺失的效果 (已移动到 Canvas 绘制前) ────────────
 
-      final byteData = await finalImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final byteData =
+          await finalImage.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (byteData == null) return null;
 
-      final finalW = effectiveQuarter == 1 || effectiveQuarter == 3 ? canvasH.toInt() : canvasW.toInt();
-      final finalH = effectiveQuarter == 1 || effectiveQuarter == 3 ? canvasW.toInt() : canvasH.toInt();
+      final finalW = effectiveQuarter == 1 || effectiveQuarter == 3
+          ? canvasH.toInt()
+          : canvasW.toInt();
+      final finalH = effectiveQuarter == 1 || effectiveQuarter == 3
+          ? canvasW.toInt()
+          : canvasH.toInt();
 
       final jpegBytes = await _encodeJpeg(
         byteData.buffer.asUint8List(),
@@ -725,10 +803,14 @@ class CapturePipeline {
         quality: jpegQuality,
       );
       if (gpuOutputPath != null) {
-        try { File(gpuOutputPath).deleteSync(); } catch (_) {}
+        try {
+          File(gpuOutputPath).deleteSync();
+        } catch (_) {}
       }
-      debugPrint('[CapturePipeline] output: ${finalW}x${finalH}, bytes=${jpegBytes.length}');
-      return CaptureResult(bytes: jpegBytes, outputWidth: finalW, outputHeight: finalH);
+      debugPrint(
+          '[CapturePipeline] output: ${finalW}x${finalH}, bytes=${jpegBytes.length}');
+      return CaptureResult(
+          bytes: jpegBytes, outputWidth: finalW, outputHeight: finalH);
     } catch (e, st) {
       debugPrint('[CapturePipeline] Error: $e\n$st');
       return null;
@@ -744,7 +826,8 @@ class CapturePipeline {
         ratioOpt = camera.modules.ratios.firstWhere((r) => r.id == ratioId);
       } catch (_) {}
     }
-    ratioOpt ??= camera.modules.ratios.isNotEmpty ? camera.modules.ratios.first : null;
+    ratioOpt ??=
+        camera.modules.ratios.isNotEmpty ? camera.modules.ratios.first : null;
 
     if (ratioOpt == null) return Rect.fromLTWH(0, 0, w, h);
 
@@ -765,7 +848,8 @@ class CapturePipeline {
       cropY = (h - cropH) / 2;
     }
 
-    debugPrint('[CapturePipeline] ratio=${ratioOpt.label} targetRatio=$targetRatio srcRatio=$srcRatio crop=${cropW}x${cropH}@($cropX,$cropY)');
+    debugPrint(
+        '[CapturePipeline] ratio=${ratioOpt.label} targetRatio=$targetRatio srcRatio=$srcRatio crop=${cropW}x${cropH}@($cropX,$cropY)');
     return Rect.fromLTWH(cropX, cropY, cropW, cropH);
   }
 
@@ -775,7 +859,9 @@ class CapturePipeline {
     var m = _identity();
 
     // 1. 曝光
-    final expMul = math.pow(2.0, params.exposureOffset + params.effectiveLensExposure).toDouble();
+    final expMul = math
+        .pow(2.0, params.exposureOffset + params.effectiveLensExposure)
+        .toDouble();
     m = _multiply(m, _exposureMatrix(expMul));
     // 2. 色温
     if (params.policy.enableTemperature) {
@@ -787,8 +873,12 @@ class CapturePipeline {
     }
     // 4. 黑场/白场
     if (params.policy.enableContrast) {
-      if (params.effectiveBlacks.abs() > 0.5 || params.effectiveWhites.abs() > 0.5) {
-        m = _multiply(m, _blacksWhitesMatrix(params.effectiveBlacks, params.effectiveWhites));
+      if (params.effectiveBlacks.abs() > 0.5 ||
+          params.effectiveWhites.abs() > 0.5) {
+        m = _multiply(
+            m,
+            _blacksWhitesMatrix(
+                params.effectiveBlacks, params.effectiveWhites));
       }
     }
     // 5. 对比度
@@ -797,9 +887,12 @@ class CapturePipeline {
     }
     // 6. 高光/阴影
     if (params.policy.enableContrast) {
-      if (params.effectiveHighlights.abs() > 0.5 || params.effectiveShadows.abs() > 0.5) {
-        m = _multiply(m, _highlightsShadowsMatrix(
-          params.effectiveHighlights, params.effectiveShadows));
+      if (params.effectiveHighlights.abs() > 0.5 ||
+          params.effectiveShadows.abs() > 0.5) {
+        m = _multiply(
+            m,
+            _highlightsShadowsMatrix(
+                params.effectiveHighlights, params.effectiveShadows));
       }
     }
     // 7. 清晰度 (clarity)
@@ -811,55 +904,122 @@ class CapturePipeline {
       m = _multiply(m, _saturationMatrix(params.effectiveSaturation));
     }
     // 9. 自然饱和度 (vibrance)
-    if (params.policy.enableSaturation && params.effectiveVibrance.abs() > 0.5) {
+    if (params.policy.enableSaturation &&
+        params.effectiveVibrance.abs() > 0.5) {
       m = _multiply(m, _vibranceMatrix(params.effectiveVibrance));
     }
     // 10. 色彩偏移 (film color bias)
     if (params.effectiveColorBiasR.abs() > 0.005 ||
         params.effectiveColorBiasG.abs() > 0.005 ||
         params.effectiveColorBiasB.abs() > 0.005) {
-      m = _multiply(m, _colorBiasMatrix(
-        params.effectiveColorBiasR,
-        params.effectiveColorBiasG,
-        params.effectiveColorBiasB,
-      ));
+      m = _multiply(
+          m,
+          _colorBiasMatrix(
+            params.effectiveColorBiasR,
+            params.effectiveColorBiasG,
+            params.effectiveColorBiasB,
+          ));
     }
     return m;
   }
 
   static List<double> _identity() => [
-    1, 0, 0, 0, 0,
-    0, 1, 0, 0, 0,
-    0, 0, 1, 0, 0,
-    0, 0, 0, 1, 0,
-  ];
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ];
 
   static List<double> _exposureMatrix(double mul) => [
-    mul, 0, 0, 0, 0,
-    0, mul, 0, 0, 0,
-    0, 0, mul, 0, 0,
-    0, 0, 0, 1, 0,
-  ];
+        mul,
+        0,
+        0,
+        0,
+        0,
+        0,
+        mul,
+        0,
+        0,
+        0,
+        0,
+        0,
+        mul,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ];
 
   static List<double> _temperatureMatrix(double temp) {
     final t = temp / 100.0;
     final rShift = t * 0.20;
     final bShift = -t * 0.20;
     return [
-      1 + rShift, 0, 0, 0, 0,
-      0, 1.0, 0, 0, 0,
-      0, 0, 1 + bShift, 0, 0,
-      0, 0, 0, 1, 0,
+      1 + rShift,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1.0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1 + bShift,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
     ];
   }
 
   static List<double> _contrastMatrix(double contrast) {
     final offset = 0.5 * (1 - contrast);
     return [
-      contrast, 0, 0, 0, offset * 255,
-      0, contrast, 0, 0, offset * 255,
-      0, 0, contrast, 0, offset * 255,
-      0, 0, 0, 1, 0,
+      contrast,
+      0,
+      0,
+      0,
+      offset * 255,
+      0,
+      contrast,
+      0,
+      0,
+      offset * 255,
+      0,
+      0,
+      contrast,
+      0,
+      offset * 255,
+      0,
+      0,
+      0,
+      1,
+      0,
     ];
   }
 
@@ -871,10 +1031,26 @@ class CapturePipeline {
     final sg = (1 - sat) * lg;
     final sb = (1 - sat) * lb;
     return [
-      sr + sat, sg, sb, 0, 0,
-      sr, sg + sat, sb, 0, 0,
-      sr, sg, sb + sat, 0, 0,
-      0, 0, 0, 1, 0,
+      sr + sat,
+      sg,
+      sb,
+      0,
+      0,
+      sr,
+      sg + sat,
+      sb,
+      0,
+      0,
+      sr,
+      sg,
+      sb + sat,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
     ];
   }
 
@@ -900,10 +1076,26 @@ class CapturePipeline {
     final gShift = -t * 0.12;
     final rbShift = t * 0.06;
     return [
-      1 + rbShift, 0, 0, 0, 0,
-      0, 1 + gShift, 0, 0, 0,
-      0, 0, 1 + rbShift, 0, 0,
-      0, 0, 0, 1, 0,
+      1 + rbShift,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1 + gShift,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1 + rbShift,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
     ];
   }
 
@@ -911,14 +1103,31 @@ class CapturePipeline {
     final blacksOffset = blacks / 100.0 * 20.0;
     final whitesScale = 1.0 + whites / 100.0 * 0.15;
     return [
-      whitesScale, 0, 0, 0, blacksOffset,
-      0, whitesScale, 0, 0, blacksOffset,
-      0, 0, whitesScale, 0, blacksOffset,
-      0, 0, 0, 1, 0,
+      whitesScale,
+      0,
+      0,
+      0,
+      blacksOffset,
+      0,
+      whitesScale,
+      0,
+      0,
+      blacksOffset,
+      0,
+      0,
+      whitesScale,
+      0,
+      blacksOffset,
+      0,
+      0,
+      0,
+      1,
+      0,
     ];
   }
 
-  static List<double> _highlightsShadowsMatrix(double highlights, double shadows) {
+  static List<double> _highlightsShadowsMatrix(
+      double highlights, double shadows) {
     final hScale = 1.0 + highlights / 100.0 * 0.12;
     final hOffset = -highlights / 100.0 * 0.12 * 191.0;
     final sScale = 1.0 - shadows / 100.0 * 0.08;
@@ -926,10 +1135,26 @@ class CapturePipeline {
     final scale = hScale * sScale;
     final offset = hOffset * sScale + sOffset;
     return [
-      scale, 0, 0, 0, offset,
-      0, scale, 0, 0, offset,
-      0, 0, scale, 0, offset,
-      0, 0, 0, 1, 0,
+      scale,
+      0,
+      0,
+      0,
+      offset,
+      0,
+      scale,
+      0,
+      0,
+      offset,
+      0,
+      0,
+      scale,
+      0,
+      offset,
+      0,
+      0,
+      0,
+      1,
+      0,
     ];
   }
 
@@ -938,10 +1163,26 @@ class CapturePipeline {
     final boost = 1.0 + c * 0.15;
     final offset = -c * 0.15 * 0.5 * 255;
     return [
-      boost, 0, 0, 0, offset,
-      0, boost, 0, 0, offset,
-      0, 0, boost, 0, offset,
-      0, 0, 0, 1, 0,
+      boost,
+      0,
+      0,
+      0,
+      offset,
+      0,
+      boost,
+      0,
+      0,
+      offset,
+      0,
+      0,
+      boost,
+      0,
+      offset,
+      0,
+      0,
+      0,
+      1,
+      0,
     ];
   }
 
@@ -955,19 +1196,51 @@ class CapturePipeline {
     final sg = (1 - sat) * lg;
     final sb = (1 - sat) * lb;
     return [
-      sr + sat, sg, sb, 0, 0,
-      sr, sg + sat, sb, 0, 0,
-      sr, sg, sb + sat, 0, 0,
-      0, 0, 0, 1, 0,
+      sr + sat,
+      sg,
+      sb,
+      0,
+      0,
+      sr,
+      sg + sat,
+      sb,
+      0,
+      0,
+      sr,
+      sg,
+      sb + sat,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
     ];
   }
 
   static List<double> _colorBiasMatrix(double r, double g, double b) {
     return [
-      1, 0, 0, 0, r * 30.0,
-      0, 1, 0, 0, g * 30.0,
-      0, 0, 1, 0, b * 30.0,
-      0, 0, 0, 1, 0,
+      1,
+      0,
+      0,
+      0,
+      r * 30.0,
+      0,
+      1,
+      0,
+      0,
+      g * 30.0,
+      0,
+      0,
+      1,
+      0,
+      b * 30.0,
+      0,
+      0,
+      0,
+      1,
+      0,
     ];
   }
 
@@ -981,38 +1254,47 @@ class CapturePipeline {
     final sw = math.min(w, h) * shadowWidth;
     canvas.drawRect(
       Rect.fromLTWH(ox, oy, w, sw),
-      Paint()..shader = LinearGradient(
-        begin: Alignment.topCenter, end: Alignment.bottomCenter,
-        colors: [shadowColor, Colors.transparent],
-      ).createShader(Rect.fromLTWH(ox, oy, w, sw)),
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [shadowColor, Colors.transparent],
+        ).createShader(Rect.fromLTWH(ox, oy, w, sw)),
     );
     canvas.drawRect(
       Rect.fromLTWH(ox, oy + h - sw, w, sw),
-      Paint()..shader = LinearGradient(
-        begin: Alignment.bottomCenter, end: Alignment.topCenter,
-        colors: [shadowColor, Colors.transparent],
-      ).createShader(Rect.fromLTWH(ox, oy + h - sw, w, sw)),
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [shadowColor, Colors.transparent],
+        ).createShader(Rect.fromLTWH(ox, oy + h - sw, w, sw)),
     );
     canvas.drawRect(
       Rect.fromLTWH(ox, oy, sw, h),
-      Paint()..shader = LinearGradient(
-        begin: Alignment.centerLeft, end: Alignment.centerRight,
-        colors: [shadowColor, Colors.transparent],
-      ).createShader(Rect.fromLTWH(ox, oy, sw, h)),
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [shadowColor, Colors.transparent],
+        ).createShader(Rect.fromLTWH(ox, oy, sw, h)),
     );
     canvas.drawRect(
       Rect.fromLTWH(ox + w - sw, oy, sw, h),
-      Paint()..shader = LinearGradient(
-        begin: Alignment.centerRight, end: Alignment.centerLeft,
-        colors: [shadowColor, Colors.transparent],
-      ).createShader(Rect.fromLTWH(ox + w - sw, oy, sw, h)),
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.centerRight,
+          end: Alignment.centerLeft,
+          colors: [shadowColor, Colors.transparent],
+        ).createShader(Rect.fromLTWH(ox + w - sw, oy, sw, h)),
     );
   }
 
   // ── 胶片颗粒感（Film Grain）────────────────────────────────────────────────
   /// 优化版：使用两个 Path（亮颗粒 / 暗颗粒）批量绘制，减少 draw call 从 O(N) 降到 O(2)
   void _drawFilmGrain(
-      Canvas canvas, double ox, double oy, double w, double h, double strength, {double noiseAmount = 0.0}) {
+      Canvas canvas, double ox, double oy, double w, double h, double strength,
+      {double noiseAmount = 0.0}) {
     final rng = math.Random(DateTime.now().microsecondsSinceEpoch);
     // 颗粒数量限制在 2000 以内（原来最多 8000），视觉效果几乎无差异
     final count = (w * h * strength * 0.004).clamp(100, 2000).toInt();
@@ -1029,7 +1311,8 @@ class CapturePipeline {
       final py = oy + rng.nextDouble() * h;
       final size = baseSize * (0.5 + rng.nextDouble() * 0.8);
       if (rng.nextBool()) {
-        brightPath.addOval(Rect.fromCircle(center: Offset(px, py), radius: size));
+        brightPath
+            .addOval(Rect.fromCircle(center: Offset(px, py), radius: size));
       } else {
         darkPath.addOval(Rect.fromCircle(center: Offset(px, py), radius: size));
       }
@@ -1060,8 +1343,8 @@ class CapturePipeline {
     }
   }
 
-  void _drawVignette(
-      Canvas canvas, double ox, double oy, double w, double h, double strength) {
+  void _drawVignette(Canvas canvas, double ox, double oy, double w, double h,
+      double strength) {
     final center = Offset(ox + w / 2, oy + h / 2);
     final radius = math.sqrt(w * w + h * h) / 2;
     final paint = Paint()
@@ -1077,8 +1360,8 @@ class CapturePipeline {
 
   // ── 漏光效果（角落径向渐变，暖橙/红色）─────────────────────────────────────────
 
-  void _drawLightLeak(
-      Canvas canvas, double ox, double oy, double w, double h, double strength) {
+  void _drawLightLeak(Canvas canvas, double ox, double oy, double w, double h,
+      double strength) {
     final rng = math.Random(42);
     final corners = [
       Offset(ox, oy),
@@ -1089,7 +1372,9 @@ class CapturePipeline {
     final selectedCorners = [corners[rng.nextInt(4)]];
     if (strength > 0.5) {
       int idx2;
-      do { idx2 = rng.nextInt(4); } while (corners[idx2] == selectedCorners[0]);
+      do {
+        idx2 = rng.nextInt(4);
+      } while (corners[idx2] == selectedCorners[0]);
       selectedCorners.add(corners[idx2]);
     }
 
@@ -1138,10 +1423,26 @@ class CapturePipeline {
       Paint()
         ..filterQuality = FilterQuality.medium
         ..colorFilter = ColorFilter.matrix([
-          colorMatrix[0], colorMatrix[1], colorMatrix[2], colorMatrix[3], colorMatrix[4],
-          0, 0, 0, 0, 0,
-          0, 0, 0, 0, 0,
-          0, 0, 0, alpha, 0,
+          colorMatrix[0],
+          colorMatrix[1],
+          colorMatrix[2],
+          colorMatrix[3],
+          colorMatrix[4],
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          alpha,
+          0,
         ]),
     );
 
@@ -1159,10 +1460,26 @@ class CapturePipeline {
       Paint()
         ..filterQuality = FilterQuality.medium
         ..colorFilter = ColorFilter.matrix([
-          0, 0, 0, 0, 0,
-          0, 0, 0, 0, 0,
-          colorMatrix[10], colorMatrix[11], colorMatrix[12], colorMatrix[13], colorMatrix[14],
-          0, 0, 0, alpha, 0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          colorMatrix[10],
+          colorMatrix[11],
+          colorMatrix[12],
+          colorMatrix[13],
+          colorMatrix[14],
+          0,
+          0,
+          0,
+          alpha,
+          0,
         ]),
     );
   }
@@ -1206,10 +1523,26 @@ class CapturePipeline {
         Paint()
           ..filterQuality = FilterQuality.low
           ..colorFilter = ColorFilter.matrix([
-            1.2, 0, 0, 0, 0,
-            0, 1.1, 0, 0, 0,
-            0, 0, 0.9, 0, 0,
-            0, 0, 0, layerAlpha, 0,
+            1.2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1.1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0.9,
+            0,
+            0,
+            0,
+            0,
+            0,
+            layerAlpha,
+            0,
           ]),
       );
     }
@@ -1226,7 +1559,8 @@ class CapturePipeline {
     double h,
   ) {
     final center = Offset(ox + w / 2, oy + h / 2);
-    final radius = math.min(w, h) / 2;
+    // 与 shader 保持一致
+    final radius = math.min(w, h) / 2 * 0.90;
     // 用 Path evenOdd 填充规则：矩形 - 圆形 = 四角黑色区域
     final maskPath = Path()
       ..addRect(Rect.fromLTWH(ox, oy, w, h))
@@ -1238,7 +1572,12 @@ class CapturePipeline {
   // ── 水印（绘制在图片区域内）──────────────────────────────────────────────────
 
   void _drawWatermark(
-      Canvas canvas, double ox, double oy, double w, double h, String watermarkId, {
+    Canvas canvas,
+    double ox,
+    double oy,
+    double w,
+    double h,
+    String watermarkId, {
     String? colorOverride,
     String? positionOverride,
     String? sizeOverride,
@@ -1273,9 +1612,15 @@ class CapturePipeline {
 
     double baseFontSize;
     switch (sizeOverride) {
-      case 'small':  baseFontSize = w * 0.028; break;
-      case 'medium': baseFontSize = w * 0.038; break;
-      case 'large':  baseFontSize = w * 0.055; break;
+      case 'small':
+        baseFontSize = w * 0.028;
+        break;
+      case 'medium':
+        baseFontSize = w * 0.038;
+        break;
+      case 'large':
+        baseFontSize = w * 0.055;
+        break;
       default:
         baseFontSize = w * 0.038;
     }
@@ -1423,7 +1768,8 @@ class CapturePipeline {
   }
 
   //  // ── RGBA bytes → JPEG bytes（使用 compute() 在独立 Isolate 中编码，不阻塞 UI 线程）─────
-  Future<Uint8List> _encodeJpeg(Uint8List rgba, int w, int h, {int quality = 82}) {
+  Future<Uint8List> _encodeJpeg(Uint8List rgba, int w, int h,
+      {int quality = 82}) {
     return compute(_encodeJpegIsolate, _JpegEncodeParams(rgba, w, h, quality));
   }
 
@@ -1464,8 +1810,10 @@ class CapturePipeline {
       // 这最接近胶片相机在同一张胶片上曝光两次的物理效果
 
       final destRect = Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble());
-      final srcRect1 = Rect.fromLTWH(0, 0, firstImg.width.toDouble(), firstImg.height.toDouble());
-      final srcRect2 = Rect.fromLTWH(0, 0, secondImg.width.toDouble(), secondImg.height.toDouble());
+      final srcRect1 = Rect.fromLTWH(
+          0, 0, firstImg.width.toDouble(), firstImg.height.toDouble());
+      final srcRect2 = Rect.fromLTWH(
+          0, 0, secondImg.width.toDouble(), secondImg.height.toDouble());
 
       // 第一张：默认模式绘制，降亮度到 blend 权重
       canvas.drawImageRect(
@@ -1475,10 +1823,26 @@ class CapturePipeline {
         Paint()
           ..filterQuality = FilterQuality.high
           ..colorFilter = ColorFilter.matrix([
-            blend, 0, 0, 0, 0,
-            0, blend, 0, 0, 0,
-            0, 0, blend, 0, 0,
-            0, 0, 0, 1, 0,
+            blend,
+            0,
+            0,
+            0,
+            0,
+            0,
+            blend,
+            0,
+            0,
+            0,
+            0,
+            0,
+            blend,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
           ]),
       );
 
@@ -1492,23 +1856,42 @@ class CapturePipeline {
           ..filterQuality = FilterQuality.high
           ..blendMode = BlendMode.screen
           ..colorFilter = ColorFilter.matrix([
-            secondBlend, 0, 0, 0, 0,
-            0, secondBlend, 0, 0, 0,
-            0, 0, secondBlend, 0, 0,
-            0, 0, 0, 1, 0,
+            secondBlend,
+            0,
+            0,
+            0,
+            0,
+            0,
+            secondBlend,
+            0,
+            0,
+            0,
+            0,
+            0,
+            secondBlend,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
           ]),
       );
 
       // 输出图像
       final picture = recorder.endRecording();
       final outputImage = await picture.toImage(w, h);
-      final byteData = await outputImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final byteData =
+          await outputImage.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (byteData == null) return null;
       final rgba = byteData.buffer.asUint8List();
 
       // 编码为 JPEG
-      final result = await compute(_encodeJpegIsolate, _JpegEncodeParams(rgba, w, h, 90));
-      debugPrint('[DoubleExp] Blend complete: ${w}x${h}, ${result.length} bytes');
+      final result =
+          await compute(_encodeJpegIsolate, _JpegEncodeParams(rgba, w, h, 90));
+      debugPrint(
+          '[DoubleExp] Blend complete: ${w}x${h}, ${result.length} bytes');
       return result;
     } catch (e, st) {
       debugPrint('[DoubleExp] blendDoubleExposure error: $e\n$st');
@@ -1516,6 +1899,7 @@ class CapturePipeline {
     }
   }
 }
+
 // ── Isolate 顶层函数（必须是顶层函数，不能是类方法）────────────────────────────────────
 class _JpegEncodeParams {
   final Uint8List rgba;

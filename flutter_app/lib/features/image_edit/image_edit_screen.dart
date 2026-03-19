@@ -19,7 +19,6 @@ import '../camera/capture_pipeline.dart';
 import 'package:image/image.dart' as image_lib;
 import '../../core/l10n.dart';
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // 入口
 // ─────────────────────────────────────────────────────────────────────────────
@@ -106,17 +105,17 @@ class ImageEditScreen extends ConsumerStatefulWidget {
 
 class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   // ── 编辑参数 ──────────────────────────────────────────────────────────────
-  double _fineRotation = 0.0;  // 精细旋转：-45 ~ 45 度（刻度尺控制）
-  int _coarseRotation = 0;     // 粗旋转：0/90/180/270（旋转按钮控制）
+  double _fineRotation = 0.0; // 精细旋转：-45 ~ 45 度（刻度尺控制）
+  int _coarseRotation = 0; // 粗旋转：0/90/180/270（旋转按钮控制）
   bool _flipH = false;
   bool _isCropMode = false;
   Rect _cropRect = const Rect.fromLTWH(0, 0, 1, 1);
 
   // ── 预览手势（缩放/拖动）────────────────────────────────────────────────
-  double _previewScale = 1.0;       // 当前缩放倍率
-  double _scaleStart = 1.0;         // 捏合手势开始时的缩放倍率
+  double _previewScale = 1.0; // 当前缩放倍率
+  double _scaleStart = 1.0; // 捏合手势开始时的缩放倍率
   Offset _previewOffset = Offset.zero; // 当前平移偏移
-  Offset _panStart = Offset.zero;   // 拖动手势开始时的偏移
+  Offset _panStart = Offset.zero; // 拖动手势开始时的偏移
 
   // ── 面板状态 ──────────────────────────────────────────────────────────────
   String? _activePanel; // 'filter' | 'frame' | 'watermark' | null
@@ -126,7 +125,8 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   bool _isSaving = false;
 
   // ── GPU 预览（已改为 Flutter 纯渲染，以下变量仅保留供 _save 使用）────────────
-  static const MethodChannel _gpuChannel = MethodChannel('com.retrocam.app/camera_control');
+  static const MethodChannel _gpuChannel =
+      MethodChannel('com.retrocam.app/camera_control');
   // 预览不再使用 GPU，以下变量仅供 _save 时保存高质量成片
   // String? _gpuPreviewPath;    // 已废弃：预览不再走 GPU
   // bool _gpuProcessing = false;
@@ -134,8 +134,10 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   // String? _lastGpuParamsSignature;
 
   // ── 高清图片缩小后的预览源路径（避免 OOM）──────────────────────────────────
-  String? _resizedPreviewPath;   // 缩小到 ≤4096px 的预览源
+  String? _resizedPreviewPath; // 缩小到 ≤4096px 的预览源
   static const int _kMaxPreviewDim = 4096;
+  int _originalW = 0;
+  int _originalH = 0;
 
   // ── 白平衡/曝光控件状态 ──────────────────────────────────────────────────
   bool _showExposureSlider = false;
@@ -159,6 +161,8 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       final frame = await codec.getNextFrame();
       final srcW = frame.image.width;
       final srcH = frame.image.height;
+      _originalW = srcW;
+      _originalH = srcH;
       frame.image.dispose();
 
       // 2. 如果原图超过 _kMaxPreviewDim，在后台 isolate 中缩小（避免卡 UI，让加载动画正常渲染）
@@ -170,15 +174,19 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         final resizedJpg = await Isolate.run(() {
           final decoded = image_lib.decodeImage(originalBytes);
           if (decoded == null) return null;
-          final resized = image_lib.copyResize(decoded, width: newW, height: newH,
+          final resized = image_lib.copyResize(decoded,
+              width: newW,
+              height: newH,
               interpolation: image_lib.Interpolation.linear);
           return image_lib.encodeJpg(resized, quality: 92);
         });
         if (resizedJpg != null) {
-          final tmpPath = '${Directory.systemTemp.path}/dazz_resized_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final tmpPath =
+              '${Directory.systemTemp.path}/dazz_resized_${DateTime.now().millisecondsSinceEpoch}.jpg';
           await File(tmpPath).writeAsBytes(resizedJpg);
           _resizedPreviewPath = tmpPath;
-          debugPrint('[ImageEditScreen] Resized ${srcW}x$srcH → ${newW}x$newH for preview');
+          debugPrint(
+              '[ImageEditScreen] Resized ${srcW}x$srcH → ${newW}x$newH for preview');
         }
       }
 
@@ -202,12 +210,15 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   void dispose() {
     // 清理缩小后的预览源临时文件
     if (_resizedPreviewPath != null) {
-      try { File(_resizedPreviewPath!).deleteSync(); } catch (_) {}
+      try {
+        File(_resizedPreviewPath!).deleteSync();
+      } catch (_) {}
     }
     super.dispose();
   }
 
-  void _rotate90() => setState(() => _coarseRotation = (_coarseRotation + 90) % 360);
+  void _rotate90() =>
+      setState(() => _coarseRotation = (_coarseRotation + 90) % 360);
   void _flipHorizontal() => setState(() => _flipH = !_flipH);
   void _resetRotation() => setState(() => _fineRotation = 0.0);
 
@@ -219,12 +230,14 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   Future<void> _save() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
+    String? gpuTmpPath;
+    String? transformTmpPath;
+    String? composeTmpPath;
     try {
       final st = ref.read(cameraAppProvider);
       final camera = st.camera;
       if (camera == null) {
         _showSnack(sOf(ref.read(languageProvider)).selectCameraFirst);
-        setState(() => _isSaving = false);
         return;
       }
 
@@ -237,80 +250,137 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
           final result = await _gpuChannel.invokeMethod<Map>('processWithGpu', {
             'filePath': widget.imagePath, // 使用原始高清图
             'params': renderParams.toJson(),
+            // 关键：限制中间结果最大边长，避免 2 亿像素机型返回超大图导致后续 OOM
+            'maxDimension': CapturePipeline.kMaxDimHigh,
+            'jpegQuality': CapturePipeline.kJpegQualityHigh,
           });
           if (result != null && result['filePath'] != null) {
             gpuSourceForSave = result['filePath'] as String;
+            if (gpuSourceForSave != widget.imagePath) {
+              gpuTmpPath = gpuSourceForSave;
+            }
           }
         } catch (e) {
-          debugPrint('[ImageEditScreen] GPU save processing failed, using original: $e');
+          debugPrint(
+              '[ImageEditScreen] GPU save processing failed, using original: $e');
           // 降级：使用原始高清图
           gpuSourceForSave = widget.imagePath;
         }
       }
 
-      final transformedBytes = await _applyTransforms(sourcePath: gpuSourceForSave);
-      // 清理保存用的 GPU 临时文件
-      if (gpuSourceForSave != widget.imagePath) {
-        try { File(gpuSourceForSave).deleteSync(); } catch (_) {}
+      final hasUserTransform = _hasTransformEdits();
+      final hasFrame = (st.activeFrameId ?? '').isNotEmpty &&
+          st.activeFrameId != 'none' &&
+          st.activeFrameId != 'frame_none';
+      final hasWatermark = (st.activeWatermarkId ?? '').isNotEmpty &&
+          st.activeWatermarkId != 'none';
+      // 只要用户做了裁剪/旋转/翻转且存在缩小预览源，就优先用缩小源做变换。
+      // 这样可避免对超大原图进行 Dart 端 decodeImage 引发内存峰值崩溃。
+      final needSafeTransformSource =
+          hasUserTransform && _resizedPreviewPath != null;
+      final transformSourcePath =
+          needSafeTransformSource ? _resizedPreviewPath! : gpuSourceForSave;
+      if (needSafeTransformSource) {
+        debugPrint(
+            '[ImageEditScreen] large image safeguard: use resized source for transforms '
+            '${_originalW}x$_originalH -> $_resizedPreviewPath');
       }
 
-      if (transformedBytes == null) {
-        _showSnack(sOf(ref.read(languageProvider)).imageProcessFailed);
-        setState(() => _isSaving = false);
-        return;
-      }
-      // 临时文件使用 .jpg 扩展名
-      final tmpPath = '${Directory.systemTemp.path}/dazz_edit_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      await File(tmpPath).writeAsBytes(transformedBytes);
-      final pipeline = CapturePipeline(camera: camera);
-      const maxDim = CapturePipeline.kMaxDimHigh;
-      const jpegQ = CapturePipeline.kJpegQualityHigh;
-      // pipeline.process 中跳过色彩处理（useGpu=false + renderParams=null），
-      // 仅做相框合成 + 水印合成（色彩已由前置 GPU 完成）
-      // FIX: 传入 activeFrameId，修复保存成片时相框失效的问题
-      final result = await pipeline.process(
-        imagePath: tmpPath,
-        useGpu: false,        // 跳过 GPU 色彩处理
-        renderParams: null,   // 跳过 Dart 降级色彩处理（色彩已由 GPU 完成）
-        selectedRatioId: st.activeRatioId ?? '',
-        selectedFrameId: st.activeFrameId ?? '',  // FIX: 使用用户选择的相框（原来错误地传 ''）
-        selectedWatermarkId: st.activeWatermarkId ?? '',
-        frameBackgroundColor: st.frameBackgroundColor,
-        watermarkColorOverride: st.watermarkColor,
-        watermarkPositionOverride: st.watermarkPosition,
-        watermarkSizeOverride: st.watermarkSize,
-        watermarkDirectionOverride: st.watermarkDirection,
-        watermarkStyleOverride: st.watermarkStyle,
-        maxDimension: maxDim,
-        jpegQuality: jpegQ,
-      );
-      final finalBytes = result?.bytes ?? transformedBytes;
-      await File(tmpPath).writeAsBytes(finalBytes);
+      final saveTitle = 'DAZZ_${DateTime.now().millisecondsSinceEpoch}';
       final perm = await PhotoManager.requestPermissionExtend();
       if (!perm.hasAccess) {
         _showSnack(sOf(ref.read(languageProvider)).needGalleryPermission);
-        setState(() => _isSaving = false);
         return;
       }
-      final saved = await PhotoManager.editor.saveImageWithPath(
-        tmpPath,
-        title: 'DAZZ_${DateTime.now().millisecondsSinceEpoch}',
+
+      String pathForCompose = gpuSourceForSave;
+
+      if (hasUserTransform) {
+        final transformedBytes =
+            await _applyTransforms(sourcePath: transformSourcePath);
+        if (transformedBytes == null) {
+          _showSnack(sOf(ref.read(languageProvider)).imageProcessFailed);
+          return;
+        }
+        transformTmpPath =
+            '${Directory.systemTemp.path}/dazz_edit_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        await File(transformTmpPath).writeAsBytes(transformedBytes);
+        pathForCompose = transformTmpPath;
+      }
+
+      String pathToSave = pathForCompose;
+      // 无变换且无相框/水印：直接保存文件路径，避免大图 bytes 往返拷贝。
+      if (hasUserTransform || hasFrame || hasWatermark) {
+        final pipeline = CapturePipeline(camera: camera);
+        const maxDim = CapturePipeline.kMaxDimHigh;
+        const jpegQ = CapturePipeline.kJpegQualityHigh;
+        final result = await pipeline.process(
+          imagePath: pathForCompose,
+          useGpu: false, // 跳过 GPU 色彩处理
+          renderParams: null, // 跳过 Dart 降级色彩处理（色彩已由前置 GPU 完成）
+          selectedRatioId: st.activeRatioId ?? '',
+          selectedFrameId: st.activeFrameId ?? '',
+          selectedWatermarkId: st.activeWatermarkId ?? '',
+          frameBackgroundColor: st.frameBackgroundColor,
+          watermarkColorOverride: st.watermarkColor,
+          watermarkPositionOverride: st.watermarkPosition,
+          watermarkSizeOverride: st.watermarkSize,
+          watermarkDirectionOverride: st.watermarkDirection,
+          watermarkStyleOverride: st.watermarkStyle,
+          maxDimension: maxDim,
+          jpegQuality: jpegQ,
+        );
+        final finalBytes = result?.bytes;
+        if (finalBytes == null) {
+          _showSnack(sOf(ref.read(languageProvider)).imageProcessFailed);
+          return;
+        }
+        composeTmpPath =
+            '${Directory.systemTemp.path}/dazz_compose_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        await File(composeTmpPath).writeAsBytes(finalBytes);
+        pathToSave = composeTmpPath;
+      }
+
+      await PhotoManager.editor.saveImageWithPath(
+        pathToSave,
+        title: saveTitle,
       );
-      try { await File(tmpPath).delete(); } catch (_) {}
-      if (saved != null && mounted) {
+
+      if (mounted) {
         HapticFeedback.mediumImpact();
         _showSnack(sOf(ref.read(languageProvider)).savedToGallery);
         await Future.delayed(const Duration(milliseconds: 800));
         if (mounted) Navigator.of(context).pop();
-      } else {
-        _showSnack(sOf(ref.read(languageProvider)).saveFailed);
       }
     } catch (e) {
       debugPrint('[ImageEditScreen] save error: $e');
       _showSnack(sOf(ref.read(languageProvider)).saveError);
     } finally {
+      if (transformTmpPath != null) {
+        try {
+          await File(transformTmpPath).delete();
+        } catch (_) {}
+      }
+      if (composeTmpPath != null) {
+        try {
+          await File(composeTmpPath).delete();
+        } catch (_) {}
+      }
+      if (gpuTmpPath != null) {
+        try {
+          File(gpuTmpPath).deleteSync();
+        } catch (_) {}
+      }
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  bool _hasTransformEdits() {
+    final cropEdited = (_cropRect.left - 0.0).abs() > 0.0001 ||
+        (_cropRect.top - 0.0).abs() > 0.0001 ||
+        (_cropRect.width - 1.0).abs() > 0.0001 ||
+        (_cropRect.height - 1.0).abs() > 0.0001;
+    return _flipH || _totalRotation.abs() > 0.1 || cropEdited;
   }
 
   /// 应用裁剪/旋转/翻转变换
@@ -342,7 +412,10 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
         // 裁剪
         image_lib.Image current = image_lib.copyCrop(
           decoded,
-          x: cropX, y: cropY, width: cropW, height: cropH,
+          x: cropX,
+          y: cropY,
+          width: cropW,
+          height: cropH,
         );
 
         // 翻转
@@ -450,8 +523,10 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
               ),
               child: _isSaving
                   ? const SizedBox(
-                      width: 16, height: 16,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2),
                     )
                   : Text(
                       sOf(ref.watch(languageProvider)).save,
@@ -563,7 +638,8 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
                               backgroundColorOverride: st.frameBackgroundColor,
                             ),
                           ),
-                        if (st.activeWatermark != null && !st.activeWatermark!.isNone)
+                        if (st.activeWatermark != null &&
+                            !st.activeWatermark!.isNone)
                           IgnorePointer(
                             child: _WatermarkPreviewOverlay(
                               watermark: st.activeWatermark!,
@@ -577,7 +653,8 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
                         if (_isCropMode)
                           _CropOverlay(
                             cropRect: _cropRect,
-                            onCropChanged: (rect) => setState(() => _cropRect = rect),
+                            onCropChanged: (rect) =>
+                                setState(() => _cropRect = rect),
                           ),
                       ],
                     );
@@ -676,9 +753,13 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
             ),
             child: Center(
               child: Icon(
-                _showWbPanel ? Icons.keyboard_arrow_down : Icons.thermostat_outlined,
+                _showWbPanel
+                    ? Icons.keyboard_arrow_down
+                    : Icons.thermostat_outlined,
                 size: 16,
-                color: (_showWbPanel || st.wbMode != 'auto') ? Colors.black : Colors.white,
+                color: (_showWbPanel || st.wbMode != 'auto')
+                    ? Colors.black
+                    : Colors.white,
               ),
             ),
           ),
@@ -706,9 +787,13 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  _showExposureSlider ? Icons.keyboard_arrow_down : Icons.wb_sunny_outlined,
+                  _showExposureSlider
+                      ? Icons.keyboard_arrow_down
+                      : Icons.wb_sunny_outlined,
                   size: 14,
-                  color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : Colors.white,
+                  color: (_showExposureSlider || st.exposureValue != 0)
+                      ? Colors.black
+                      : Colors.white,
                 ),
                 const SizedBox(width: 5),
                 Text(
@@ -717,7 +802,9 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
                       : (st.exposureValue > 0 ? '+' : '') +
                           st.exposureValue.toStringAsFixed(1),
                   style: TextStyle(
-                    color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : Colors.white,
+                    color: (_showExposureSlider || st.exposureValue != 0)
+                        ? Colors.black
+                        : Colors.white,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
@@ -788,7 +875,8 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
                 GestureDetector(
                   onTap: _resetRotation,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: _fineRotation.abs() > 0.1
                           ? const Color(0xFFFF8C00).withOpacity(0.2)
@@ -811,7 +899,9 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
                 const Spacer(),
                 // 裁剪模式按钮
                 _RulerIconBtn(
-                  icon: _isCropMode ? Icons.check_circle_outline : Icons.crop_outlined,
+                  icon: _isCropMode
+                      ? Icons.check_circle_outline
+                      : Icons.crop_outlined,
                   isActive: _isCropMode,
                   onTap: () => setState(() => _isCropMode = !_isCropMode),
                 ),
@@ -862,9 +952,11 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
           Row(
             children: [
               Text(
-                _activePanel == 'filter' ? sOf(ref.read(languageProvider)).filter
-                    : _activePanel == 'frame' ? sOf(ref.read(languageProvider)).frame
-                    : sOf(ref.read(languageProvider)).watermark,
+                _activePanel == 'filter'
+                    ? sOf(ref.read(languageProvider)).filter
+                    : _activePanel == 'frame'
+                        ? sOf(ref.read(languageProvider)).frame
+                        : sOf(ref.read(languageProvider)).watermark,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -874,7 +966,8 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
               const Spacer(),
               GestureDetector(
                 onTap: () => setState(() => _activePanel = null),
-                child: const Icon(Icons.keyboard_arrow_down, color: Colors.white54, size: 22),
+                child: const Icon(Icons.keyboard_arrow_down,
+                    color: Colors.white54, size: 22),
               ),
             ],
           ),
@@ -884,17 +977,20 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
             'filter' => _FilterRow(
                 filters: camera.modules.filters,
                 activeId: st.activeFilterId,
-                onSelect: (id) => ref.read(cameraAppProvider.notifier).selectFilter(id),
+                onSelect: (id) =>
+                    ref.read(cameraAppProvider.notifier).selectFilter(id),
               ),
             'frame' => _FrameRow(
                 frames: camera.modules.frames,
                 activeId: st.activeFrameId,
-                onSelect: (id) => ref.read(cameraAppProvider.notifier).selectFrame(id),
+                onSelect: (id) =>
+                    ref.read(cameraAppProvider.notifier).selectFrame(id),
               ),
             'watermark' => _WatermarkRow(
                 presets: camera.modules.watermarks.presets,
                 activeId: st.activeWatermarkId,
-                onSelect: (id) => ref.read(cameraAppProvider.notifier).selectWatermark(id),
+                onSelect: (id) =>
+                    ref.read(cameraAppProvider.notifier).selectWatermark(id),
               ),
             _ => const SizedBox.shrink(),
           },
@@ -1003,12 +1099,12 @@ class _WbControlPanel extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(18),
                     gradient: const LinearGradient(
-                          colors: [
-                            Color(0xFFE8A05A), // 暖橙（左=1800K最暖）
-                            Color(0xFFB08AE0), // 中紫
-                            Color(0xFF6B8FE8), // 冷蓝（右=8000K最冷）
-                          ],
-                        ),
+                      colors: [
+                        Color(0xFFE8A05A), // 暖橙（左=1800K最暖）
+                        Color(0xFFB08AE0), // 中紫
+                        Color(0xFF6B8FE8), // 冷蓝（右=8000K最冷）
+                      ],
+                    ),
                   ),
                 ),
                 Positioned.fill(
@@ -1045,17 +1141,29 @@ class _WbControlPanel extends StatelessWidget {
             width: 42,
             child: Text(
               '${colorTempK}K',
-              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500),
               textAlign: TextAlign.center,
             ),
           ),
           const SizedBox(width: 4),
           // 三个预设按钮
-          _WbPresetBtn(label: 'A', isActive: wbMode == 'auto', onTap: () => onPreset('auto')),
+          _WbPresetBtn(
+              label: 'A',
+              isActive: wbMode == 'auto',
+              onTap: () => onPreset('auto')),
           const SizedBox(width: 4),
-          _WbPresetBtn(icon: Icons.wb_sunny_outlined, isActive: wbMode == 'daylight', onTap: () => onPreset('daylight')),
+          _WbPresetBtn(
+              icon: Icons.wb_sunny_outlined,
+              isActive: wbMode == 'daylight',
+              onTap: () => onPreset('daylight')),
           const SizedBox(width: 4),
-          _WbPresetBtn(icon: Icons.lightbulb_outline, isActive: wbMode == 'incandescent', onTap: () => onPreset('incandescent')),
+          _WbPresetBtn(
+              icon: Icons.lightbulb_outline,
+              isActive: wbMode == 'incandescent',
+              onTap: () => onPreset('incandescent')),
         ],
       ),
     );
@@ -1067,7 +1175,8 @@ class _WbPresetBtn extends StatelessWidget {
   final IconData? icon;
   final bool isActive;
   final VoidCallback onTap;
-  const _WbPresetBtn({this.label, this.icon, required this.isActive, required this.onTap});
+  const _WbPresetBtn(
+      {this.label, this.icon, required this.isActive, required this.onTap});
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -1092,7 +1201,9 @@ class _WbPresetBtn extends StatelessWidget {
                 )
               : Icon(
                   icon,
-                  color: isActive ? const Color(0xFF1C1C1E) : Colors.white.withAlpha(180),
+                  color: isActive
+                      ? const Color(0xFF1C1C1E)
+                      : Colors.white.withAlpha(180),
                   size: 16,
                 ),
         ),
@@ -1117,6 +1228,7 @@ class _WbTrackDotsPainter extends CustomPainter {
       x += spacing;
     }
   }
+
   @override
   bool shouldRepaint(_WbTrackDotsPainter old) => false;
 }
@@ -1125,7 +1237,7 @@ class _WbTrackDotsPainter extends CustomPainter {
 // 旋转刻度尺 Widget
 // ─────────────────────────────────────────────────────────────────────────────
 class _RotationRuler extends StatefulWidget {
-  final double value;       // -45 ~ 45
+  final double value; // -45 ~ 45
   final ValueChanged<double> onChanged;
   const _RotationRuler({required this.value, required this.onChanged});
   @override
@@ -1174,7 +1286,11 @@ class _RulerPainter extends CustomPainter {
 
       final isMajor = deg % 5 == 0;
       final isZero = deg == 0;
-      final tickH = isZero ? 20.0 : isMajor ? 14.0 : 8.0;
+      final tickH = isZero
+          ? 20.0
+          : isMajor
+              ? 14.0
+              : 8.0;
       final color = isZero
           ? const Color(0xFFFF8C00)
           : isMajor
@@ -1227,7 +1343,8 @@ class _RulerIconBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   final bool isActive;
-  const _RulerIconBtn({required this.icon, required this.onTap, this.isActive = false});
+  const _RulerIconBtn(
+      {required this.icon, required this.onTap, this.isActive = false});
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -1237,7 +1354,9 @@ class _RulerIconBtn extends StatelessWidget {
         height: 34,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: isActive ? const Color(0xFFFF8C00).withOpacity(0.2) : Colors.white10,
+          color: isActive
+              ? const Color(0xFFFF8C00).withOpacity(0.2)
+              : Colors.white10,
         ),
         child: Icon(
           icon,
@@ -1277,7 +1396,8 @@ class _FilterRow extends StatelessWidget {
   final List<FilterDefinition> filters;
   final String? activeId;
   final ValueChanged<String> onSelect;
-  const _FilterRow({required this.filters, this.activeId, required this.onSelect});
+  const _FilterRow(
+      {required this.filters, this.activeId, required this.onSelect});
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -1307,7 +1427,8 @@ class _FilterRow extends StatelessWidget {
                     ),
                     child: Icon(
                       Icons.filter_vintage_outlined,
-                      color: isActive ? const Color(0xFFFF8C00) : Colors.white38,
+                      color:
+                          isActive ? const Color(0xFFFF8C00) : Colors.white38,
                       size: 24,
                     ),
                   ),
@@ -1315,7 +1436,8 @@ class _FilterRow extends StatelessWidget {
                   Text(
                     f.nameEn,
                     style: TextStyle(
-                      color: isActive ? const Color(0xFFFF8C00) : Colors.white38,
+                      color:
+                          isActive ? const Color(0xFFFF8C00) : Colors.white38,
                       fontSize: 10,
                     ),
                     maxLines: 1,
@@ -1339,7 +1461,8 @@ class _FrameRow extends ConsumerWidget {
   final List<FrameDefinition> frames;
   final String? activeId;
   final ValueChanged<String> onSelect;
-  const _FrameRow({required this.frames, this.activeId, required this.onSelect});
+  const _FrameRow(
+      {required this.frames, this.activeId, required this.onSelect});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = sOf(ref.watch(languageProvider));
@@ -1378,20 +1501,24 @@ class _FrameRow extends ConsumerWidget {
                           ? const Color(0xFF2A2A2A)
                           : opt.color,
                       border: isActive
-                          ? Border.all(color: const Color(0xFFFF8C00), width: 2.5)
+                          ? Border.all(
+                              color: const Color(0xFFFF8C00), width: 2.5)
                           : Border.all(color: Colors.white12),
                     ),
                     child: opt.color == Colors.transparent
-                        ? const Icon(Icons.block, color: Colors.white38, size: 20)
+                        ? const Icon(Icons.block,
+                            color: Colors.white38, size: 20)
                         : isActive
-                            ? const Icon(Icons.check, color: Color(0xFFFF8C00), size: 20)
+                            ? const Icon(Icons.check,
+                                color: Color(0xFFFF8C00), size: 20)
                             : null,
                   ),
                   const SizedBox(height: 4),
                   Text(
                     opt.name,
                     style: TextStyle(
-                      color: isActive ? const Color(0xFFFF8C00) : Colors.white38,
+                      color:
+                          isActive ? const Color(0xFFFF8C00) : Colors.white38,
                       fontSize: 10,
                     ),
                     maxLines: 1,
@@ -1422,7 +1549,8 @@ class _WatermarkRow extends StatelessWidget {
   final List<WatermarkPreset> presets;
   final String? activeId;
   final ValueChanged<String> onSelect;
-  const _WatermarkRow({required this.presets, this.activeId, required this.onSelect});
+  const _WatermarkRow(
+      {required this.presets, this.activeId, required this.onSelect});
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -1459,7 +1587,8 @@ class _WatermarkRow extends StatelessWidget {
                     ),
                     child: Center(
                       child: wm.isNone
-                          ? const Icon(Icons.block, color: Colors.white38, size: 20)
+                          ? const Icon(Icons.block,
+                              color: Colors.white38, size: 20)
                           : Container(
                               width: 18,
                               height: 18,
@@ -1474,7 +1603,8 @@ class _WatermarkRow extends StatelessWidget {
                   Text(
                     wm.name,
                     style: TextStyle(
-                      color: isActive ? const Color(0xFFFF8C00) : Colors.white38,
+                      color:
+                          isActive ? const Color(0xFFFF8C00) : Colors.white38,
                       fontSize: 10,
                     ),
                     maxLines: 1,
@@ -1520,7 +1650,8 @@ class _CropOverlayState extends State<_CropOverlay> {
     if ((pos - r.topLeft).distance < _hitSlop) return _CropHandle.topLeft;
     if ((pos - r.topRight).distance < _hitSlop) return _CropHandle.topRight;
     if ((pos - r.bottomLeft).distance < _hitSlop) return _CropHandle.bottomLeft;
-    if ((pos - r.bottomRight).distance < _hitSlop) return _CropHandle.bottomRight;
+    if ((pos - r.bottomRight).distance < _hitSlop)
+      return _CropHandle.bottomRight;
     if (r.contains(pos)) return _CropHandle.move;
     return null;
   }
@@ -1534,7 +1665,8 @@ class _CropOverlayState extends State<_CropOverlay> {
   }
 
   void _onPanUpdate(DragUpdateDetails d, Size size) {
-    if (_activeHandle == null || _dragStart == null || _rectAtDragStart == null) return;
+    if (_activeHandle == null || _dragStart == null || _rectAtDragStart == null)
+      return;
     final dx = d.localPosition.dx / size.width - _dragStart!.dx / size.width;
     final dy = d.localPosition.dy / size.height - _dragStart!.dy / size.height;
     final r = _rectAtDragStart!;
@@ -1544,7 +1676,8 @@ class _CropOverlayState extends State<_CropOverlay> {
         newRect = Rect.fromLTRB(
           (r.left + dx).clamp(0.0, r.right - minSize),
           (r.top + dy).clamp(0.0, r.bottom - minSize),
-          r.right, r.bottom,
+          r.right,
+          r.bottom,
         );
         break;
       case _CropHandle.topRight:
@@ -1558,13 +1691,15 @@ class _CropOverlayState extends State<_CropOverlay> {
       case _CropHandle.bottomLeft:
         newRect = Rect.fromLTRB(
           (r.left + dx).clamp(0.0, r.right - minSize),
-          r.top, r.right,
+          r.top,
+          r.right,
           (r.bottom + dy).clamp(r.top + minSize, 1.0),
         );
         break;
       case _CropHandle.bottomRight:
         newRect = Rect.fromLTRB(
-          r.left, r.top,
+          r.left,
+          r.top,
           (r.right + dx).clamp(r.left + minSize, 1.0),
           (r.bottom + dy).clamp(r.top + minSize, 1.0),
         );
@@ -1651,6 +1786,7 @@ class _CropPainter extends CustomPainter {
     canvas.drawLine(r.bottomRight, r.bottomRight + const Offset(-hl, 0), hp);
     canvas.drawLine(r.bottomRight, r.bottomRight + const Offset(0, -hl), hp);
   }
+
   @override
   bool shouldRepaint(_CropPainter old) => old.rect != rect;
 }
@@ -1703,7 +1839,11 @@ class _FramePreviewOverlayState extends State<_FramePreviewOverlay> {
       final data = await rootBundle.load(assetPath);
       final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
       final frame = await codec.getNextFrame();
-      if (mounted) setState(() { _pngImage = frame.image; _loadedAsset = assetPath; });
+      if (mounted)
+        setState(() {
+          _pngImage = frame.image;
+          _loadedAsset = assetPath;
+        });
     } catch (e) {
       debugPrint('[FramePreviewOverlay] asset load error: $e');
     }
@@ -1717,9 +1857,10 @@ class _FramePreviewOverlayState extends State<_FramePreviewOverlay> {
 
     // 解析相框背景色（与 capture_pipeline 一致）
     Color bgColor = const Color(0xFFF5F2EA);
-    final bgHexSrc = (backgroundColorOverride != null && backgroundColorOverride!.isNotEmpty)
-        ? backgroundColorOverride!
-        : frame.backgroundColor;
+    final bgHexSrc =
+        (backgroundColorOverride != null && backgroundColorOverride!.isNotEmpty)
+            ? backgroundColorOverride!
+            : frame.backgroundColor;
     try {
       if (bgHexSrc.toLowerCase() == 'transparent') {
         bgColor = Colors.transparent;
@@ -1738,16 +1879,18 @@ class _FramePreviewOverlayState extends State<_FramePreviewOverlay> {
 
         // 获取当前比例对应的 inset
         final activeInset = frame.insetForRatio(ratioId);
-        final topPx    = activeInset.top    * scale;
+        final topPx = activeInset.top * scale;
         final bottomPx = activeInset.bottom * scale;
-        final leftPx   = activeInset.left   * scale;
-        final rightPx  = activeInset.right  * scale;
+        final leftPx = activeInset.left * scale;
+        final rightPx = activeInset.right * scale;
 
         // outerPadding：在相框外周加白边（拍立得风格）
-        final outerPad = frame.outerPadding > 0 ? frame.outerPadding * scale : 0.0;
+        final outerPad =
+            frame.outerPadding > 0 ? frame.outerPadding * scale : 0.0;
 
         // cornerRadius
-        final cornerRad = frame.cornerRadius > 0 ? frame.cornerRadius * scale : 0.0;
+        final cornerRad =
+            frame.cornerRadius > 0 ? frame.cornerRadius * scale : 0.0;
 
         // 判断是否有 PNG 资源
         final resolvedAsset = frame.assetForRatio(ratioId);
@@ -1804,25 +1947,31 @@ class _FrameOverlayPainter extends CustomPainter {
       // PNG 资源模式：只画四边相框色块（PNG 层由 Image.asset 在上方另行叠加）
       // 上
       if (topPx > 0 && bgColor != Colors.transparent) {
-        canvas.drawRect(Rect.fromLTWH(0, 0, w, topPx), Paint()..color = bgColor);
+        canvas.drawRect(
+            Rect.fromLTWH(0, 0, w, topPx), Paint()..color = bgColor);
       }
       // 下
       if (bottomPx > 0 && bgColor != Colors.transparent) {
-        canvas.drawRect(Rect.fromLTWH(0, h - bottomPx, w, bottomPx), Paint()..color = bgColor);
+        canvas.drawRect(Rect.fromLTWH(0, h - bottomPx, w, bottomPx),
+            Paint()..color = bgColor);
       }
       // 左
       if (leftPx > 0 && bgColor != Colors.transparent) {
-        canvas.drawRect(Rect.fromLTWH(0, topPx, leftPx, h - topPx - bottomPx), Paint()..color = bgColor);
+        canvas.drawRect(Rect.fromLTWH(0, topPx, leftPx, h - topPx - bottomPx),
+            Paint()..color = bgColor);
       }
       // 右
       if (rightPx > 0 && bgColor != Colors.transparent) {
-        canvas.drawRect(Rect.fromLTWH(w - rightPx, topPx, rightPx, h - topPx - bottomPx), Paint()..color = bgColor);
+        canvas.drawRect(
+            Rect.fromLTWH(w - rightPx, topPx, rightPx, h - topPx - bottomPx),
+            Paint()..color = bgColor);
       }
       // 叠加 PNG 纹理
       if (pngImage != null) {
         canvas.drawImageRect(
           pngImage!,
-          Rect.fromLTWH(0, 0, pngImage!.width.toDouble(), pngImage!.height.toDouble()),
+          Rect.fromLTWH(
+              0, 0, pngImage!.width.toDouble(), pngImage!.height.toDouble()),
           Rect.fromLTWH(0, 0, w, h),
           Paint()..filterQuality = FilterQuality.medium,
         );
@@ -1836,10 +1985,24 @@ class _FrameOverlayPainter extends CustomPainter {
       }
       // 四边色块
       final paint = Paint()..color = bgColor;
-      if (topPx > 0) canvas.drawRect(Rect.fromLTWH(outerPad, outerPad, w - outerPad * 2, topPx), paint);
-      if (bottomPx > 0) canvas.drawRect(Rect.fromLTWH(outerPad, h - outerPad - bottomPx, w - outerPad * 2, bottomPx), paint);
-      if (leftPx > 0) canvas.drawRect(Rect.fromLTWH(outerPad, outerPad + topPx, leftPx, h - outerPad * 2 - topPx - bottomPx), paint);
-      if (rightPx > 0) canvas.drawRect(Rect.fromLTWH(w - outerPad - rightPx, outerPad + topPx, rightPx, h - outerPad * 2 - topPx - bottomPx), paint);
+      if (topPx > 0)
+        canvas.drawRect(
+            Rect.fromLTWH(outerPad, outerPad, w - outerPad * 2, topPx), paint);
+      if (bottomPx > 0)
+        canvas.drawRect(
+            Rect.fromLTWH(
+                outerPad, h - outerPad - bottomPx, w - outerPad * 2, bottomPx),
+            paint);
+      if (leftPx > 0)
+        canvas.drawRect(
+            Rect.fromLTWH(outerPad, outerPad + topPx, leftPx,
+                h - outerPad * 2 - topPx - bottomPx),
+            paint);
+      if (rightPx > 0)
+        canvas.drawRect(
+            Rect.fromLTWH(w - outerPad - rightPx, outerPad + topPx, rightPx,
+                h - outerPad * 2 - topPx - bottomPx),
+            paint);
     }
 
     // innerShadow：在图片区域边缘画渐变阴影
@@ -1854,34 +2017,42 @@ class _FrameOverlayPainter extends CustomPainter {
       // 上
       canvas.drawRect(
         Rect.fromLTWH(imgX, imgY, imgW, sw),
-        Paint()..shader = LinearGradient(
-          begin: Alignment.topCenter, end: Alignment.bottomCenter,
-          colors: [shadowColor, Colors.transparent],
-        ).createShader(Rect.fromLTWH(imgX, imgY, imgW, sw)),
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [shadowColor, Colors.transparent],
+          ).createShader(Rect.fromLTWH(imgX, imgY, imgW, sw)),
       );
       // 下
       canvas.drawRect(
         Rect.fromLTWH(imgX, imgY + imgH - sw, imgW, sw),
-        Paint()..shader = LinearGradient(
-          begin: Alignment.bottomCenter, end: Alignment.topCenter,
-          colors: [shadowColor, Colors.transparent],
-        ).createShader(Rect.fromLTWH(imgX, imgY + imgH - sw, imgW, sw)),
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [shadowColor, Colors.transparent],
+          ).createShader(Rect.fromLTWH(imgX, imgY + imgH - sw, imgW, sw)),
       );
       // 左
       canvas.drawRect(
         Rect.fromLTWH(imgX, imgY, sw, imgH),
-        Paint()..shader = LinearGradient(
-          begin: Alignment.centerLeft, end: Alignment.centerRight,
-          colors: [shadowColor, Colors.transparent],
-        ).createShader(Rect.fromLTWH(imgX, imgY, sw, imgH)),
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [shadowColor, Colors.transparent],
+          ).createShader(Rect.fromLTWH(imgX, imgY, sw, imgH)),
       );
       // 右
       canvas.drawRect(
         Rect.fromLTWH(imgX + imgW - sw, imgY, sw, imgH),
-        Paint()..shader = LinearGradient(
-          begin: Alignment.centerRight, end: Alignment.centerLeft,
-          colors: [shadowColor, Colors.transparent],
-        ).createShader(Rect.fromLTWH(imgX + imgW - sw, imgY, sw, imgH)),
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.centerRight,
+            end: Alignment.centerLeft,
+            colors: [shadowColor, Colors.transparent],
+          ).createShader(Rect.fromLTWH(imgX + imgW - sw, imgY, sw, imgH)),
       );
     }
   }
@@ -1889,10 +2060,14 @@ class _FrameOverlayPainter extends CustomPainter {
   @override
   bool shouldRepaint(_FrameOverlayPainter old) =>
       old.bgColor != bgColor ||
-      old.topPx != topPx || old.bottomPx != bottomPx ||
-      old.leftPx != leftPx || old.rightPx != rightPx ||
-      old.outerPad != outerPad || old.cornerRad != cornerRad ||
-      old.innerShadow != innerShadow || old.hasPng != hasPng ||
+      old.topPx != topPx ||
+      old.bottomPx != bottomPx ||
+      old.leftPx != leftPx ||
+      old.rightPx != rightPx ||
+      old.outerPad != outerPad ||
+      old.cornerRad != cornerRad ||
+      old.innerShadow != innerShadow ||
+      old.hasPng != hasPng ||
       old.pngImage != pngImage;
 }
 
@@ -1928,11 +2103,20 @@ class _WatermarkPreviewOverlay extends StatelessWidget {
     final position = positionOverride ?? watermark.position ?? 'bottom_right';
     Alignment align;
     switch (position) {
-      case 'bottom_left': align = Alignment.bottomLeft; break;
-      case 'bottom_center': align = Alignment.bottomCenter; break;
-      case 'top_right': align = Alignment.topRight; break;
-      case 'top_left': align = Alignment.topLeft; break;
-      default: align = Alignment.bottomRight;
+      case 'bottom_left':
+        align = Alignment.bottomLeft;
+        break;
+      case 'bottom_center':
+        align = Alignment.bottomCenter;
+        break;
+      case 'top_right':
+        align = Alignment.topRight;
+        break;
+      case 'top_left':
+        align = Alignment.topLeft;
+        break;
+      default:
+        align = Alignment.bottomRight;
     }
     return Align(
       alignment: align,
