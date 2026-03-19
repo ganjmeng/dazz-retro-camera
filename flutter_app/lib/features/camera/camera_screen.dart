@@ -120,6 +120,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   String _sceneHintKey = 'sceneHintBalanced';
   String? _pendingSceneHintKey;
   String _sceneHintSignal = '';
+  String _runtimeColorSignal = '';
   DateTime _sceneHintLastSwitchAt = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _sceneHintCommitTimer;
   // 曝光水平滑动条是否展开（点击胶囊触发）
@@ -361,6 +362,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _syncPipelineAfterCameraInit() async {
     final svc = ref.read(cameraServiceProvider.notifier);
+    ref.read(cameraAppProvider.notifier).syncRuntimeColorContext(
+        ref.read(cameraServiceProvider).activeCameraDebugInfo);
     // setSharpen 会重建 renderer，必须先执行
     final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
     const sharpenLevels = [0.0, 0.5, 1.0];
@@ -501,6 +504,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       if (!mounted) return;
       final next = _classifySceneHintKey(st, sensorMp);
       _enqueueSceneHint(next);
+    });
+  }
+
+  void _scheduleRuntimeColorContextSync(CameraState camSvc) {
+    final info = camSvc.activeCameraDebugInfo;
+    if (info.isEmpty) return;
+    final signal = [
+      info['cameraId']?.toString() ?? '',
+      info['sensorMp']?.toString() ?? '',
+      info['brand']?.toString() ?? '',
+      info['model']?.toString() ?? '',
+      info['facing']?.toString() ?? '',
+    ].join('|');
+    if (signal == _runtimeColorSignal) return;
+    _runtimeColorSignal = signal;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(cameraAppProvider.notifier).syncRuntimeColorContext(info);
     });
   }
 
@@ -874,6 +895,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final statusBarH = mq.padding.top;
     final bottomSafeH = mq.padding.bottom;
     _scheduleSceneHintRefresh(st, camSvc);
+    _scheduleRuntimeColorContextSync(camSvc);
     // 底部面板常量已提升为顶层常量（文件顶部定义）
     // kToolbarH=64, kShutterH=96, kBottomPanelTopPad=12, kToolbarShutterGap=32
     // kBottomPanelH=204, kCapsuleH=40, kCapsuleBottomOffset=220

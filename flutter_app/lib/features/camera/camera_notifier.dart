@@ -90,6 +90,11 @@ class CameraAppState {
   // Debug: 最近一次拍照的分辨率信息
   final String lastCaptureRaw; // e.g. "4032×3024" 原始分辨率
   final String lastCaptureOutput; // e.g. "3024×3024" 输出分辨率
+  // Runtime color calibration context
+  final String runtimeDeviceBrand;
+  final String runtimeDeviceModel;
+  final String runtimeCameraId;
+  final double runtimeSensorMp;
 
   const CameraAppState({
     this.activeCameraId = 'grd_r',
@@ -139,6 +144,10 @@ class CameraAppState {
     this.isBursting = false,
     this.lastCaptureRaw = '',
     this.lastCaptureOutput = '',
+    this.runtimeDeviceBrand = '',
+    this.runtimeDeviceModel = '',
+    this.runtimeCameraId = '',
+    this.runtimeSensorMp = 0,
   });
   CameraAppState copyWith({
     String? activeCameraId,
@@ -190,6 +199,10 @@ class CameraAppState {
     bool? isBursting,
     String? lastCaptureRaw,
     String? lastCaptureOutput,
+    String? runtimeDeviceBrand,
+    String? runtimeDeviceModel,
+    String? runtimeCameraId,
+    double? runtimeSensorMp,
     bool clearPanel = false,
     bool clearError = false,
     bool clearFrameId = false, // 用于将 activeFrameId 清空为 null
@@ -254,6 +267,10 @@ class CameraAppState {
       isBursting: isBursting ?? this.isBursting,
       lastCaptureRaw: lastCaptureRaw ?? this.lastCaptureRaw,
       lastCaptureOutput: lastCaptureOutput ?? this.lastCaptureOutput,
+      runtimeDeviceBrand: runtimeDeviceBrand ?? this.runtimeDeviceBrand,
+      runtimeDeviceModel: runtimeDeviceModel ?? this.runtimeDeviceModel,
+      runtimeCameraId: runtimeCameraId ?? this.runtimeCameraId,
+      runtimeSensorMp: runtimeSensorMp ?? this.runtimeSensorMp,
     );
   }
 
@@ -275,6 +292,13 @@ class CameraAppState {
       temperatureOffset: temperatureOffset,
       exposureOffset: exposureValue,
       policy: camera!.previewPolicy,
+      wbMode: wbMode,
+      colorTempK: colorTempK,
+      isFrontCamera: isFrontCamera,
+      runtimeDeviceBrand: runtimeDeviceBrand,
+      runtimeDeviceModel: runtimeDeviceModel,
+      runtimeCameraId: runtimeCameraId,
+      runtimeSensorMp: runtimeSensorMp,
     );
   }
 
@@ -308,6 +332,33 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   CameraAppNotifier(this._ref) : super(const CameraAppState());
 
+  void syncRuntimeColorContext([Map<String, dynamic>? debugInfoOverride]) {
+    final info = debugInfoOverride ??
+        _ref.read(cameraServiceProvider).activeCameraDebugInfo;
+    final rawSensor = info['sensorMp']?.toString() ?? '';
+    final sensorMp = double.tryParse(rawSensor) ?? state.runtimeSensorMp;
+    final brand = (info['brand']?.toString() ?? '').trim().toLowerCase();
+    final model = (info['model']?.toString() ?? '').trim();
+    final cameraId = (info['cameraId']?.toString() ?? '').trim();
+    final fallbackBrand = Platform.isIOS ? 'apple' : '';
+    final fallbackModel = Platform.isIOS ? 'iphone' : '';
+
+    final nextBrand = brand.isNotEmpty ? brand : fallbackBrand;
+    final nextModel = model.isNotEmpty ? model : fallbackModel;
+    if (nextBrand == state.runtimeDeviceBrand &&
+        nextModel == state.runtimeDeviceModel &&
+        cameraId == state.runtimeCameraId &&
+        (sensorMp - state.runtimeSensorMp).abs() < 0.001) {
+      return;
+    }
+    state = state.copyWith(
+      runtimeDeviceBrand: nextBrand,
+      runtimeDeviceModel: nextModel,
+      runtimeCameraId: cameraId,
+      runtimeSensorMp: sensorMp,
+    );
+  }
+
   /// Initialize: 从持久化读取上次选择的相机和全局设置
   Future<void> initialize() async {
     final prefs = await AppPrefsService.instance.load();
@@ -321,6 +372,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       locationEnabled: prefs.locationEnabled,
       mirrorFrontCamera: prefs.mirrorFrontCamera,
     );
+    syncRuntimeColorContext();
     await _loadCamera(prefs.lastCameraId);
   }
 
@@ -915,6 +967,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   Future<TakePhotoResult?> takePhoto(
       {Rect? minimapNormalizedRect, int deviceQuarter = 0}) async {
     if (state.isTakingPhoto) return null;
+    syncRuntimeColorContext();
     state = state.copyWith(isTakingPhoto: true);
     HapticFeedback.mediumImpact();
     final totalSw = Stopwatch()..start();
@@ -1444,6 +1497,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   void _sendRenderParamsNow() {
+    syncRuntimeColorContext();
     final params = state.renderParams;
     if (params == null) return;
     final json = params.toJson();

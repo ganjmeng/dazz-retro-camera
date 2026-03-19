@@ -5,10 +5,116 @@
 //
 // Design: Darkroom Aesthetics — deep brown-black, amber highlights, film grain texture.
 
-import 'dart:math' as math;
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../models/camera_definition.dart';
+
+enum SceneClass {
+  balanced,
+  indoor,
+  outdoor,
+  lowLight,
+  backlit,
+  highDynamic,
+}
+
+class DeviceColorProfile {
+  final String id;
+  final double temperatureOffset;
+  final double tintOffset;
+  final double contrastScale;
+  final double saturationScale;
+  final double colorBiasROffset;
+  final double colorBiasGOffset;
+  final double colorBiasBOffset;
+
+  const DeviceColorProfile({
+    required this.id,
+    this.temperatureOffset = 0.0,
+    this.tintOffset = 0.0,
+    this.contrastScale = 1.0,
+    this.saturationScale = 1.0,
+    this.colorBiasROffset = 0.0,
+    this.colorBiasGOffset = 0.0,
+    this.colorBiasBOffset = 0.0,
+  });
+
+  static const neutral = DeviceColorProfile(id: 'neutral');
+
+  static DeviceColorProfile resolve({
+    required String brand,
+    required String model,
+    required double sensorMp,
+  }) {
+    final b = brand.toLowerCase();
+    final m = model.toLowerCase();
+    if (b.contains('xiaomi') || b.contains('redmi') || b.contains('poco')) {
+      return DeviceColorProfile(
+        id: 'xiaomi_family',
+        temperatureOffset: -5.0,
+        tintOffset: -2.5,
+        contrastScale: 1.02,
+        saturationScale: 0.97,
+        colorBiasROffset: -0.008,
+        colorBiasGOffset: 0.003,
+        colorBiasBOffset: 0.006,
+      );
+    }
+    if (b.contains('samsung')) {
+      return DeviceColorProfile(
+        id: 'samsung_family',
+        temperatureOffset: 2.0,
+        tintOffset: -0.8,
+        contrastScale: 0.99,
+        saturationScale: 0.98,
+        colorBiasROffset: -0.003,
+        colorBiasGOffset: 0.001,
+        colorBiasBOffset: 0.002,
+      );
+    }
+    if (b.contains('vivo') || b.contains('oppo') || b.contains('oneplus')) {
+      return DeviceColorProfile(
+        id: 'bbk_family',
+        temperatureOffset: -2.0,
+        tintOffset: -1.0,
+        contrastScale: 1.00,
+        saturationScale: 0.98,
+        colorBiasROffset: -0.004,
+        colorBiasGOffset: 0.001,
+        colorBiasBOffset: 0.002,
+      );
+    }
+    if (b.contains('huawei') || b.contains('honor')) {
+      return DeviceColorProfile(
+        id: 'huawei_family',
+        temperatureOffset: 1.2,
+        tintOffset: -0.6,
+        contrastScale: 0.99,
+        saturationScale: 0.99,
+      );
+    }
+    if (b.contains('apple') || m.contains('iphone')) {
+      return DeviceColorProfile(
+        id: 'apple_iphone',
+        temperatureOffset: 0.6,
+        tintOffset: 0.2,
+        contrastScale: 1.0,
+        saturationScale: 1.0,
+      );
+    }
+    if (sensorMp >= 150.0) {
+      // 高频高像素传感器泛型补偿
+      return DeviceColorProfile(
+        id: 'generic_200mp',
+        temperatureOffset: -2.0,
+        tintOffset: -0.8,
+        saturationScale: 0.98,
+        colorBiasROffset: -0.004,
+        colorBiasBOffset: 0.003,
+      );
+    }
+    return neutral;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PreviewRenderParams — all parameters needed for one frame render
@@ -19,8 +125,15 @@ class PreviewRenderParams {
   final FilterDefinition? activeFilter;
   final LensDefinition? activeLens;
   final double temperatureOffset; // user-adjusted, -100..100
-  final double exposureOffset;    // user-adjusted, -2.0..2.0
+  final double exposureOffset; // user-adjusted, -2.0..2.0
   final PreviewPolicy policy;
+  final String wbMode;
+  final int colorTempK;
+  final bool isFrontCamera;
+  final String runtimeDeviceBrand;
+  final String runtimeDeviceModel;
+  final String runtimeCameraId;
+  final double runtimeSensorMp;
 
   const PreviewRenderParams({
     DefaultLook? defaultLook,
@@ -29,18 +142,62 @@ class PreviewRenderParams {
     this.temperatureOffset = 0,
     this.exposureOffset = 0,
     PreviewPolicy? policy,
-  }) : defaultLook = defaultLook ?? const DefaultLook(
-         temperature: 0, contrast: 1.0, saturation: 1.0,
-         vignette: 0, distortion: 0, chromaticAberration: 0,
-         bloom: 0, flare: 0,
-       ),
-       policy = policy ?? const PreviewPolicy(
-         enableLut: false, enableTemperature: false, enableContrast: false,
-         enableSaturation: false, enableVignette: false, enableLightLensEffect: false,
-         enableGrain: false, enableBloom: false, enableHalation: false,
-         enablePaperTexture: false, enableChromaticAberration: false,
-         enableFrameComposite: false, enableWatermarkComposite: false,
-       );
+    this.wbMode = 'auto',
+    this.colorTempK = 6300,
+    this.isFrontCamera = false,
+    this.runtimeDeviceBrand = '',
+    this.runtimeDeviceModel = '',
+    this.runtimeCameraId = '',
+    this.runtimeSensorMp = 0,
+  })  : defaultLook = defaultLook ??
+            const DefaultLook(
+              temperature: 0,
+              contrast: 1.0,
+              saturation: 1.0,
+              vignette: 0,
+              distortion: 0,
+              chromaticAberration: 0,
+              bloom: 0,
+              flare: 0,
+            ),
+        policy = policy ??
+            const PreviewPolicy(
+              enableLut: false,
+              enableTemperature: false,
+              enableContrast: false,
+              enableSaturation: false,
+              enableVignette: false,
+              enableLightLensEffect: false,
+              enableGrain: false,
+              enableBloom: false,
+              enableHalation: false,
+              enablePaperTexture: false,
+              enableChromaticAberration: false,
+              enableFrameComposite: false,
+              enableWatermarkComposite: false,
+            );
+
+  DeviceColorProfile get _deviceProfile => DeviceColorProfile.resolve(
+        brand: runtimeDeviceBrand,
+        model: runtimeDeviceModel,
+        sensorMp: runtimeSensorMp,
+      );
+
+  SceneClass get sceneClass {
+    if (isFrontCamera) return SceneClass.indoor;
+    if (exposureOffset >= 1.0) return SceneClass.lowLight;
+    if (exposureOffset <= -0.9) return SceneClass.backlit;
+    if (defaultLook.highlights <= -20 && defaultLook.shadows >= 20) {
+      return SceneClass.highDynamic;
+    }
+    if (wbMode == 'incandescent' || colorTempK < 4300) {
+      return SceneClass.indoor;
+    }
+    if (wbMode == 'daylight' || colorTempK > 6200) {
+      return SceneClass.outdoor;
+    }
+    return SceneClass.balanced;
+  }
 
   // Effective vignette = defaultLook + lens override
   double get effectiveVignette {
@@ -78,15 +235,21 @@ class PreviewRenderParams {
   double get effectiveContrast {
     final base = defaultLook.contrast;
     final filter = activeFilter?.contrast ?? 1.0;
-    final lens = activeLens?.contrast ?? 0.0; // lens.contrast is additive offset
-    return (base * filter + lens).clamp(0.5, 2.0);
+    final lens =
+        activeLens?.contrast ?? 0.0; // lens.contrast is additive offset
+    final adapted = _sceneContrastScale(sceneClass);
+    return ((base * filter + lens) * _deviceProfile.contrastScale * adapted)
+        .clamp(0.5, 2.0);
   }
 
   double get effectiveSaturation {
     final base = defaultLook.saturation;
     final filter = activeFilter?.saturation ?? 1.0;
-    final lens = activeLens?.saturation ?? 0.0; // lens.saturation is additive offset
-    return (base * filter + lens).clamp(0.0, 2.0);
+    final lens =
+        activeLens?.saturation ?? 0.0; // lens.saturation is additive offset
+    final adapted = _sceneSaturationScale(sceneClass);
+    return ((base * filter + lens) * _deviceProfile.saturationScale * adapted)
+        .clamp(0.0, 2.0);
   }
 
   /// 镜头曝光偏移（叠加到 exposureOffset 上）
@@ -95,36 +258,187 @@ class PreviewRenderParams {
   // Temperature: combine defaultLook + user offset
   // defaultLook.temperature is in Kelvin offset (-100 = cool, +100 = warm)
   double get effectiveTemperature {
-    return (defaultLook.temperature + temperatureOffset).clamp(-100.0, 100.0);
+    return (defaultLook.temperature +
+            temperatureOffset +
+            _deviceProfile.temperatureOffset +
+            _sceneTemperatureOffset(sceneClass))
+        .clamp(-100.0, 100.0);
   }
 
-  double get effectiveTint => defaultLook.tint.clamp(-100.0, 100.0);
-  double get effectiveHighlights => defaultLook.highlights.clamp(-100.0, 100.0);
-  double get effectiveShadows => defaultLook.shadows.clamp(-100.0, 100.0);
-  double get effectiveWhites => defaultLook.whites.clamp(-100.0, 100.0);
+  double get effectiveTint =>
+      (defaultLook.tint + _deviceProfile.tintOffset).clamp(-100.0, 100.0);
+  double get effectiveHighlights =>
+      (defaultLook.highlights + _sceneHighlightOffset(sceneClass))
+          .clamp(-100.0, 100.0);
+  double get effectiveShadows =>
+      (defaultLook.shadows + _sceneShadowsOffset(sceneClass))
+          .clamp(-100.0, 100.0);
+  double get effectiveWhites =>
+      (defaultLook.whites + _sceneWhitesOffset(sceneClass))
+          .clamp(-100.0, 100.0);
   double get effectiveBlacks => defaultLook.blacks.clamp(-100.0, 100.0);
   double get effectiveClarity => defaultLook.clarity.clamp(-100.0, 100.0);
   double get effectiveVibrance => defaultLook.vibrance.clamp(-100.0, 100.0);
   double get effectiveGrain => defaultLook.grain.clamp(0.0, 1.0);
-  double get effectiveColorBiasR => defaultLook.colorBiasR.clamp(-1.0, 1.0);
-  double get effectiveColorBiasG => defaultLook.colorBiasG.clamp(-1.0, 1.0);
-  double get effectiveColorBiasB => defaultLook.colorBiasB.clamp(-1.0, 1.0);
+  double get effectiveColorBiasR =>
+      (defaultLook.colorBiasR + _deviceProfile.colorBiasROffset)
+          .clamp(-1.0, 1.0);
+  double get effectiveColorBiasG =>
+      (defaultLook.colorBiasG + _deviceProfile.colorBiasGOffset)
+          .clamp(-1.0, 1.0);
+  double get effectiveColorBiasB =>
+      (defaultLook.colorBiasB + _deviceProfile.colorBiasBOffset)
+          .clamp(-1.0, 1.0);
 
   // ── 拍立得即时成像专属参数 getter ──────────────────────────────────────────────
-  double get highlightRolloff => defaultLook.highlightRolloff.clamp(0.0, 1.0);
+  double get highlightRolloff =>
+      (defaultLook.highlightRolloff + _sceneHighlightRolloffBoost(sceneClass))
+          .clamp(0.0, 1.0);
   double get centerGain => defaultLook.centerGain.clamp(0.0, 0.2);
   double get edgeFalloff => defaultLook.edgeFalloff.clamp(0.0, 1.0);
   double get cornerWarmShift => defaultLook.cornerWarmShift.clamp(0.0, 5.0);
   double get skinHueProtect => defaultLook.skinHueProtect ? 1.0 : 0.0;
-  double get chemicalIrregularity => defaultLook.chemicalIrregularity.clamp(0.0, 0.1);
+  double get chemicalIrregularity =>
+      defaultLook.chemicalIrregularity.clamp(0.0, 0.1);
+
   /// FIX: noiseAmount 现已添加到 DefaultLook
   double get noiseAmount => defaultLook.noiseAmount.clamp(0.0, 1.0);
-  double get skinSatProtect => defaultLook.skinSatProtect.clamp(0.0, 1.0);
-  double get skinLumaSoften => defaultLook.skinLumaSoften.clamp(0.0, 0.2);
-  double get skinRedLimit => defaultLook.skinRedLimit.clamp(0.9, 1.2);
+  double get skinSatProtect =>
+      (defaultLook.skinSatProtect - _dynamicSkinSatDelta()).clamp(0.0, 1.0);
+  double get skinLumaSoften =>
+      (defaultLook.skinLumaSoften + _dynamicSkinLumaDelta()).clamp(0.0, 0.2);
+  double get skinRedLimit =>
+      (defaultLook.skinRedLimit - _dynamicSkinRedLimitDelta()).clamp(0.9, 1.2);
+
+  double _sceneHighlightRolloffBoost(SceneClass scene) {
+    switch (scene) {
+      case SceneClass.backlit:
+        return 0.18;
+      case SceneClass.highDynamic:
+        return 0.16;
+      case SceneClass.lowLight:
+        return 0.10;
+      case SceneClass.indoor:
+        return 0.06;
+      case SceneClass.outdoor:
+        return 0.04;
+      case SceneClass.balanced:
+        return 0.0;
+    }
+  }
+
+  double _sceneHighlightOffset(SceneClass scene) {
+    switch (scene) {
+      case SceneClass.backlit:
+        return -20.0;
+      case SceneClass.highDynamic:
+        return -16.0;
+      case SceneClass.lowLight:
+        return -8.0;
+      case SceneClass.indoor:
+        return -6.0;
+      case SceneClass.outdoor:
+        return -2.0;
+      case SceneClass.balanced:
+        return 0.0;
+    }
+  }
+
+  double _sceneShadowsOffset(SceneClass scene) {
+    switch (scene) {
+      case SceneClass.backlit:
+        return 18.0;
+      case SceneClass.highDynamic:
+        return 16.0;
+      case SceneClass.lowLight:
+        return 12.0;
+      case SceneClass.indoor:
+        return 8.0;
+      case SceneClass.outdoor:
+        return 3.0;
+      case SceneClass.balanced:
+        return 0.0;
+    }
+  }
+
+  double _sceneWhitesOffset(SceneClass scene) {
+    switch (scene) {
+      case SceneClass.backlit:
+        return -16.0;
+      case SceneClass.highDynamic:
+        return -12.0;
+      case SceneClass.lowLight:
+        return -8.0;
+      case SceneClass.indoor:
+        return -5.0;
+      case SceneClass.outdoor:
+        return -2.0;
+      case SceneClass.balanced:
+        return 0.0;
+    }
+  }
+
+  double _sceneContrastScale(SceneClass scene) {
+    switch (scene) {
+      case SceneClass.lowLight:
+        return 0.98;
+      case SceneClass.backlit:
+      case SceneClass.highDynamic:
+        return 0.96;
+      default:
+        return 1.0;
+    }
+  }
+
+  double _sceneSaturationScale(SceneClass scene) {
+    switch (scene) {
+      case SceneClass.indoor:
+      case SceneClass.lowLight:
+        return 0.98;
+      case SceneClass.outdoor:
+        return 1.01;
+      default:
+        return 1.0;
+    }
+  }
+
+  double _sceneTemperatureOffset(SceneClass scene) {
+    switch (scene) {
+      case SceneClass.lowLight:
+        return -2.0;
+      case SceneClass.outdoor:
+        return 1.0;
+      default:
+        return 0.0;
+    }
+  }
+
+  double _dynamicSkinSatDelta() {
+    if (skinHueProtect < 0.5) return 0.0;
+    final warmWeight = ((5200 - colorTempK) / 2600.0).clamp(0.0, 1.0);
+    final lowLightWeight = (exposureOffset / 1.4).clamp(0.0, 1.0);
+    return 0.10 * warmWeight + 0.06 * lowLightWeight;
+  }
+
+  double _dynamicSkinLumaDelta() {
+    if (skinHueProtect < 0.5) return 0.0;
+    final lowLightWeight = (exposureOffset / 1.5).clamp(0.0, 1.0);
+    return 0.03 * lowLightWeight;
+  }
+
+  double _dynamicSkinRedLimitDelta() {
+    if (skinHueProtect < 0.5) return 0.0;
+    final warmWeight = ((5200 - colorTempK) / 2600.0).clamp(0.0, 1.0);
+    final dynamicWeight =
+        sceneClass == SceneClass.backlit || sceneClass == SceneClass.highDynamic
+            ? 1.0
+            : 0.0;
+    return 0.03 * warmWeight + 0.02 * dynamicWeight;
+  }
 
   double get paperTexture => defaultLook.paperTexture.clamp(0.0, 1.0);
-  double get developmentSoftness => defaultLook.developmentSoftness.clamp(0.0, 1.0);
+  double get developmentSoftness =>
+      defaultLook.developmentSoftness.clamp(0.0, 1.0);
 
   // 化学不规则感参数
   double get irregUvScale => defaultLook.irregUvScale;
@@ -161,14 +475,14 @@ class PreviewRenderParams {
         'highlightRolloff': highlightRolloff,
         'paperTexture': paperTexture,
         'edgeFalloff': edgeFalloff,
-        'cornerWarmShift': defaultLook.cornerWarmShift, // 直接从 defaultLook 读取
+        'cornerWarmShift': cornerWarmShift,
         'centerGain': centerGain,
         'developmentSoftness': developmentSoftness,
         'chemicalIrregularity': chemicalIrregularity,
         'skinHueProtect': skinHueProtect,
-        'skinSatProtect': defaultLook.skinSatProtect,
-        'skinLumaSoften': defaultLook.skinLumaSoften,
-        'skinRedLimit': defaultLook.skinRedLimit,
+        'skinSatProtect': skinSatProtect,
+        'skinLumaSoften': skinLumaSoften,
+        'skinRedLimit': skinRedLimit,
 
         'irregUvScale': irregUvScale,
         'irregFreq1': irregFreq1,
@@ -200,6 +514,11 @@ class PreviewRenderParams {
         'highlightTintB': defaultLook.highlightTintB.clamp(-0.2, 0.2),
         'splitToneBalance': defaultLook.splitToneBalance.clamp(0.0, 1.0),
         'lightLeakAmount': defaultLook.lightLeakAmount.clamp(0.0, 1.0),
+        // runtime calibration/debug context
+        'sceneClass': sceneClass.name,
+        'deviceProfileId': _deviceProfile.id,
+        'runtimeCameraId': runtimeCameraId,
+        'runtimeSensorMp': runtimeSensorMp,
       };
 }
 
@@ -210,8 +529,10 @@ class PreviewRenderParams {
 class PreviewFilterWidget extends StatelessWidget {
   final int textureId;
   final PreviewRenderParams params;
+
   /// 目标比例（用户选择，如 1:1/3:4/9:16）——只用于取景框容器大小计算
   final double aspectRatio;
+
   /// 相机传感器实际输出比例（固定为 3/4）——用于 cover 缩放计算
   static const double _kSensorAspect = 3.0 / 4.0; // CameraX 默认输出 4:3
 
@@ -362,4 +683,3 @@ class _GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GridPainter old) => false;
 }
-

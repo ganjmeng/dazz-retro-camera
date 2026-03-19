@@ -422,7 +422,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 "sensorSize" to "${sensorW}×${sensorH}",
                 "sensorMp" to String.format("%.1f", sensorW * sensorH / 1_000_000.0),
                 "focalLengths" to focalStr,
-                "facing" to facingStr
+                "facing" to facingStr,
+                "brand" to Build.BRAND,
+                "model" to Build.MODEL,
+                "manufacturer" to Build.MANUFACTURER,
+                "device" to Build.DEVICE
             )
             Log.d(TAG, "Active camera: id=$camId sensor=${sensorW}×${sensorH} focal=$focalStr facing=$facingStr")
         } catch (e: Exception) {

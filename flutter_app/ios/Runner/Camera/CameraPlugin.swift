@@ -131,6 +131,17 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cameraManager?.sampleBufferDelegate = renderer!
         cameraManager?.configure(lens: lens)
         cameraManager?.startSession()
+        let d = UIDevice.current
+        emitEvent(type: "onCameraReady", payload: [
+            "cameraId": lensStr,
+            "sensorSize": "?",
+            "sensorMp": "0.0",
+            "focalLengths": "?",
+            "facing": lensStr,
+            "brand": "apple",
+            "model": d.model,
+            "device": d.name
+        ])
 
         result(["textureId": textureId])
     }
@@ -866,6 +877,10 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         }
         renderer = nil
         result(nil)
+    }
+
+    private func emitEvent(type: String, payload: [String: Any]) {
+        eventSink?(["type": type, "payload": payload])
     }
 }
 
