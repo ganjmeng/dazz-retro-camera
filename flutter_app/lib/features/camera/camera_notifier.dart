@@ -3,6 +3,7 @@
 // Replaces grd_camera_notifier.dart with full multi-camera support.
 // Loads any camera from the registry and manages all UI state.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -39,19 +40,21 @@ class CameraAppState {
 
   // User adjustments
   final double temperatureOffset; // -100..100
-  final double exposureValue;     // -2.0..2.0
+  final double exposureValue; // -2.0..2.0
   // White balance
-  final String wbMode;   // 'auto' | 'daylight' | 'incandescent'
-  final int colorTempK;  // 1800..8000
-  final String? watermarkColor;       // hex color override for watermark
-  final String? watermarkPosition;    // 位置覆盖: 'bottom_right'|'bottom_left'|'top_right'|'top_left'|'bottom_center'|'top_center'
-  final String? watermarkSize;        // 大小覆盖: 'small'|'medium'|'large'
-  final String? watermarkDirection;   // 方向覆盖: 'horizontal'|'vertical'
-  final String? watermarkStyle;       // 样式覆盖: preset id
+  final String wbMode; // 'auto' | 'daylight' | 'incandescent'
+  final int colorTempK; // 1800..8000
+  final String? watermarkColor; // hex color override for watermark
+  final String?
+      watermarkPosition; // 位置覆盖: 'bottom_right'|'bottom_left'|'top_right'|'top_left'|'bottom_center'|'top_center'
+  final String? watermarkSize; // 大小覆盖: 'small'|'medium'|'large'
+  final String? watermarkDirection; // 方向覆盖: 'horizontal'|'vertical'
+  final String? watermarkStyle; // 样式覆盖: preset id
   final String? frameBackgroundColor; // hex color override for frame background
 
   // UI state
-  final String? activePanel; // null | 'filter' | 'lens' | 'ratio' | 'frame' | 'watermark'
+  final String?
+      activePanel; // null | 'filter' | 'lens' | 'ratio' | 'frame' | 'watermark'
   final bool gridEnabled;
   final bool showTopMenu;
   final bool showCameraManager;
@@ -64,25 +67,25 @@ class CameraAppState {
   final int sharpenLevel; // 0=低, 1=中, 2=高
 
   // Zoom & Minimap
-  final double zoomLevel;      // 0.6 ~ 20.0, default 1.0
-  final bool showZoomSlider;   // 胶囊点击后展开缩放滑动条
-  final bool minimapEnabled;   // 小窗模式开关
-  final bool locationEnabled;  // 位置信息开关：开启后拍照将 GPS 坐标写入 EXIF
+  final double zoomLevel; // 0.6 ~ 20.0, default 1.0
+  final bool showZoomSlider; // 胶囊点击后展开缩放滑动条
+  final bool minimapEnabled; // 小窗模式开关
+  final bool locationEnabled; // 位置信息开关：开启后拍照将 GPS 坐标写入 EXIF
   final bool showDebugOverlay; // 调试信息浮层：显示实时渲染参数
   final bool shutterSoundEnabled; // 快门声音开关
-  final bool mirrorFrontCamera;   // 前置摄像头镜像开关
+  final bool mirrorFrontCamera; // 前置摄像头镜像开关
   final bool shutterVibrationEnabled; // 快门振动开关
-  final bool fisheyeMode;              // 鱼眼圆圈模式
+  final bool fisheyeMode; // 鱼眼圆圈模式
   // ── 双重曝光 ──────────────────────────────────────────────────────────────
-  final bool doubleExpEnabled;       // 双重曝光开关
-  final String? doubleExpFirstPath;  // 第一张照片本地路径（待合成）
-  final double doubleExpBlend;       // 混合比例 0.3~0.7，默认 0.5
+  final bool doubleExpEnabled; // 双重曝光开关
+  final String? doubleExpFirstPath; // 第一张照片本地路径（待合成）
+  final double doubleExpBlend; // 混合比例 0.3~0.7，默认 0.5
   // ── 连拍 ──────────────────────────────────────────────────────────────────
-  final int burstCount;       // 连拍张数：0=关闭, 3=3张, 10=10张
-  final int burstProgress;    // 当前连拍进度（0=未开始，1~N=第N张完成）
-  final bool isBursting;      // 是否正在连拍中
+  final int burstCount; // 连拍张数：0=关闭, 3=3张, 10=10张
+  final int burstProgress; // 当前连拍进度（0=未开始，1~N=第N张完成）
+  final bool isBursting; // 是否正在连拍中
   // Debug: 最近一次拍照的分辨率信息
-  final String lastCaptureRaw;    // e.g. "4032×3024" 原始分辨率
+  final String lastCaptureRaw; // e.g. "4032×3024" 原始分辨率
   final String lastCaptureOutput; // e.g. "3024×3024" 输出分辨率
 
   const CameraAppState({
@@ -123,7 +126,7 @@ class CameraAppState {
     this.showDebugOverlay = false,
     this.shutterSoundEnabled = true,
     this.mirrorFrontCamera = true,
-     this.shutterVibrationEnabled = true,
+    this.shutterVibrationEnabled = true,
     this.fisheyeMode = false,
     this.doubleExpEnabled = false,
     this.doubleExpFirstPath,
@@ -196,17 +199,26 @@ class CameraAppState {
       activeFilterId: activeFilterId ?? this.activeFilterId,
       activeLensId: activeLensId ?? this.activeLensId,
       activeRatioId: activeRatioId ?? this.activeRatioId,
-      activeFrameId: clearFrameId ? null : (activeFrameId ?? this.activeFrameId),
+      activeFrameId:
+          clearFrameId ? null : (activeFrameId ?? this.activeFrameId),
       activeWatermarkId: activeWatermarkId ?? this.activeWatermarkId,
       temperatureOffset: temperatureOffset ?? this.temperatureOffset,
       exposureValue: exposureValue ?? this.exposureValue,
       wbMode: wbMode ?? this.wbMode,
       colorTempK: colorTempK ?? this.colorTempK,
       watermarkColor: watermarkColor ?? this.watermarkColor,
-      watermarkPosition: clearWatermarkOverrides ? null : (watermarkPosition ?? this.watermarkPosition),
-      watermarkSize: clearWatermarkOverrides ? null : (watermarkSize ?? this.watermarkSize),
-      watermarkDirection: clearWatermarkOverrides ? null : (watermarkDirection ?? this.watermarkDirection),
-      watermarkStyle: clearWatermarkOverrides ? null : (watermarkStyle ?? this.watermarkStyle),
+      watermarkPosition: clearWatermarkOverrides
+          ? null
+          : (watermarkPosition ?? this.watermarkPosition),
+      watermarkSize: clearWatermarkOverrides
+          ? null
+          : (watermarkSize ?? this.watermarkSize),
+      watermarkDirection: clearWatermarkOverrides
+          ? null
+          : (watermarkDirection ?? this.watermarkDirection),
+      watermarkStyle: clearWatermarkOverrides
+          ? null
+          : (watermarkStyle ?? this.watermarkStyle),
       frameBackgroundColor: frameBackgroundColor ?? this.frameBackgroundColor,
       activePanel: clearPanel ? null : (activePanel ?? this.activePanel),
       gridEnabled: gridEnabled ?? this.gridEnabled,
@@ -226,10 +238,13 @@ class CameraAppState {
       showDebugOverlay: showDebugOverlay ?? this.showDebugOverlay,
       shutterSoundEnabled: shutterSoundEnabled ?? this.shutterSoundEnabled,
       mirrorFrontCamera: mirrorFrontCamera ?? this.mirrorFrontCamera,
-      shutterVibrationEnabled: shutterVibrationEnabled ?? this.shutterVibrationEnabled,
+      shutterVibrationEnabled:
+          shutterVibrationEnabled ?? this.shutterVibrationEnabled,
       fisheyeMode: fisheyeMode ?? this.fisheyeMode,
       doubleExpEnabled: doubleExpEnabled ?? this.doubleExpEnabled,
-      doubleExpFirstPath: clearDoubleExpFirst ? null : (doubleExpFirstPath ?? this.doubleExpFirstPath),
+      doubleExpFirstPath: clearDoubleExpFirst
+          ? null
+          : (doubleExpFirstPath ?? this.doubleExpFirstPath),
       doubleExpBlend: doubleExpBlend ?? this.doubleExpBlend,
       burstCount: burstCount ?? this.burstCount,
       burstProgress: burstProgress ?? this.burstProgress,
@@ -245,7 +260,8 @@ class CameraAppState {
   LensDefinition? get activeLens => camera?.lensById(activeLensId);
   RatioDefinition? get activeRatio => camera?.ratioById(activeRatioId);
   FrameDefinition? get activeFrame => camera?.frameById(activeFrameId);
-  WatermarkPreset? get activeWatermark => camera?.watermarkById(activeWatermarkId);
+  WatermarkPreset? get activeWatermark =>
+      camera?.watermarkById(activeWatermarkId);
 
   PreviewRenderParams? get renderParams {
     if (camera == null) return null;
@@ -289,13 +305,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     final prefs = await AppPrefsService.instance.load();
     // 先将持久化的全局设置写入 state（在 _loadCamera 之前，避免被覆盖）
     state = state.copyWith(
-      sharpenLevel:            prefs.sharpenLevel,
-      gridEnabled:             prefs.gridEnabled,
-      minimapEnabled:          prefs.minimapEnabled,
-      shutterSoundEnabled:     prefs.shutterSoundEnabled,
+      sharpenLevel: prefs.sharpenLevel,
+      gridEnabled: prefs.gridEnabled,
+      minimapEnabled: prefs.minimapEnabled,
+      shutterSoundEnabled: prefs.shutterSoundEnabled,
       shutterVibrationEnabled: prefs.shutterVibrationEnabled,
-      locationEnabled:         prefs.locationEnabled,
-      mirrorFrontCamera:       prefs.mirrorFrontCamera,
+      locationEnabled: prefs.locationEnabled,
+      mirrorFrontCamera: prefs.mirrorFrontCamera,
     );
     await _loadCamera(prefs.lastCameraId);
   }
@@ -325,37 +341,44 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       state.activeCameraId,
       CameraSnapshot(
         temperatureOffset: state.temperatureOffset,
-        colorTempK:        state.colorTempK,
-        wbMode:            state.wbMode,
-        exposureValue:     state.exposureValue,
-        zoomLevel:         state.zoomLevel,
-        frameId:           state.activeFrameId,
+        colorTempK: state.colorTempK,
+        wbMode: state.wbMode,
+        exposureValue: state.exposureValue,
+        zoomLevel: state.zoomLevel,
+        frameId: state.activeFrameId,
       ),
     );
   }
 
   Future<void> _loadCamera(String cameraId) async {
-    state = state.copyWith(isLoading: true, clearError: true, activeCameraId: cameraId);
+    state = state.copyWith(
+        isLoading: true, clearError: true, activeCameraId: cameraId);
     try {
       final camera = await loadCamera(cameraId);
       final defaults = camera.defaultSelection;
 
       // 读取保留设定开关和该相机的快照
-      final retainState    = _ref.read(retainSettingsProvider);
+      final retainState = _ref.read(retainSettingsProvider);
       final retainNotifier = _ref.read(retainSettingsProvider.notifier);
-      final snapshot       = await retainNotifier.loadSnapshot(cameraId);
+      final snapshot = await retainNotifier.loadSnapshot(cameraId);
 
       // 根据各开关决定是否恢复设定，无快照则使用默认值
-      final double tempOffset = (retainState.retainTemperature && snapshot != null)
-          ? snapshot.temperatureOffset : 0;
-      final int    colorK     = (retainState.retainTemperature && snapshot != null)
-          ? snapshot.colorTempK : 6300;
-      final String wbMode     = (retainState.retainTemperature && snapshot != null)
-          ? snapshot.wbMode : 'auto';
-      final double exposure   = (retainState.retainExposure && snapshot != null)
-          ? snapshot.exposureValue : 0;
-      final double zoom       = (retainState.retainZoom && snapshot != null)
-          ? snapshot.zoomLevel : 1.0;
+      final double tempOffset =
+          (retainState.retainTemperature && snapshot != null)
+              ? snapshot.temperatureOffset
+              : 0;
+      final int colorK = (retainState.retainTemperature && snapshot != null)
+          ? snapshot.colorTempK
+          : 6300;
+      final String wbMode = (retainState.retainTemperature && snapshot != null)
+          ? snapshot.wbMode
+          : 'auto';
+      final double exposure = (retainState.retainExposure && snapshot != null)
+          ? snapshot.exposureValue
+          : 0;
+      final double zoom = (retainState.retainZoom && snapshot != null)
+          ? snapshot.zoomLevel
+          : 1.0;
       // retainFrame 开启时：有快照则恢复快照值（含 null=关闭相框）；无快照则用默认值
       // retainFrame 关闭时：始终使用 defaults.frameId
       // FIX: 恢复 frameId 时必须检查当前相机是否支持该 frame，以及当前 ratio 是否兼容
@@ -372,7 +395,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       // 验证 frame 支持当前 ratio（如 2:3 比例下拍立得相框不可用）
       if (frameId != null) {
         final frame = camera.frameById(frameId);
-        if (frame != null && frame.supportedRatios.isNotEmpty &&
+        if (frame != null &&
+            frame.supportedRatios.isNotEmpty &&
             !frame.supportedRatios.contains(defaults.ratioId)) {
           frameId = null;
         }
@@ -404,20 +428,21 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       // 同步默认镜头参数到原生 GPU shader
       final defaultLens = camera.lensById(defaults.lensId);
       _ref.read(cameraServiceProvider.notifier).updateLensParams(
-        distortion: defaultLens?.distortion ?? 0.0,
-        vignette: defaultLens?.vignette ?? 0.0,
-        zoomFactor: defaultLens?.zoomFactor ?? 1.0,
-        fisheyeMode: defaultLens?.fisheyeMode ?? false,
-        chromaticAberration: defaultLens?.chromaticAberration ?? 0.0,
-        bloom: defaultLens?.bloom ?? 0.0,
-        softFocus: defaultLens?.softFocus ?? 0.0,
-        exposure: defaultLens?.exposure ?? 0.0,
-        contrast: defaultLens?.contrast ?? 0.0,
-        saturation: defaultLens?.saturation ?? 0.0,
-        highlightCompression: defaultLens?.highlightCompression ?? 0.0,
-      );
+            distortion: defaultLens?.distortion ?? 0.0,
+            vignette: defaultLens?.vignette ?? 0.0,
+            zoomFactor: defaultLens?.zoomFactor ?? 1.0,
+            fisheyeMode: defaultLens?.fisheyeMode ?? false,
+            chromaticAberration: defaultLens?.chromaticAberration ?? 0.0,
+            bloom: defaultLens?.bloom ?? 0.0,
+            softFocus: defaultLens?.softFocus ?? 0.0,
+            exposure: defaultLens?.exposure ?? 0.0,
+            contrast: defaultLens?.contrast ?? 0.0,
+            saturation: defaultLens?.saturation ?? 0.0,
+            highlightCompression: defaultLens?.highlightCompression ?? 0.0,
+          );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: 'Failed to load camera: $e');
+      state =
+          state.copyWith(isLoading: false, error: 'Failed to load camera: $e');
     }
   }
 
@@ -425,14 +450,17 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   void togglePanel(String panelId) {
     if (state.activePanel == panelId) {
-      state = state.copyWith(clearPanel: true, showTopMenu: false, showCameraManager: false);
+      state = state.copyWith(
+          clearPanel: true, showTopMenu: false, showCameraManager: false);
     } else {
-      state = state.copyWith(activePanel: panelId, showTopMenu: false, showCameraManager: false);
+      state = state.copyWith(
+          activePanel: panelId, showTopMenu: false, showCameraManager: false);
     }
   }
 
   void closeAllPanels() {
-    state = state.copyWith(clearPanel: true, showTopMenu: false, showCameraManager: false);
+    state = state.copyWith(
+        clearPanel: true, showTopMenu: false, showCameraManager: false);
   }
 
   void toggleTopMenu() {
@@ -476,18 +504,18 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     state = state.copyWith(activeLensId: newLensId, fisheyeMode: fisheyeMode);
     // ── FIX: 将所有镜头参数发送到原生层（之前只发了 fisheyeMode 和 vignette）──
     _ref.read(cameraServiceProvider.notifier).updateLensParams(
-      distortion: newLens?.distortion ?? 0.0,
-      vignette: newLens?.vignette ?? 0.0,
-      zoomFactor: newLens?.zoomFactor ?? 1.0,
-      fisheyeMode: fisheyeMode,
-      chromaticAberration: newLens?.chromaticAberration ?? 0.0,
-      bloom: newLens?.bloom ?? 0.0,
-      softFocus: newLens?.softFocus ?? 0.0,
-      exposure: newLens?.exposure ?? 0.0,
-      contrast: newLens?.contrast ?? 0.0,
-      saturation: newLens?.saturation ?? 0.0,
-      highlightCompression: newLens?.highlightCompression ?? 0.0,
-    );
+          distortion: newLens?.distortion ?? 0.0,
+          vignette: newLens?.vignette ?? 0.0,
+          zoomFactor: newLens?.zoomFactor ?? 1.0,
+          fisheyeMode: fisheyeMode,
+          chromaticAberration: newLens?.chromaticAberration ?? 0.0,
+          bloom: newLens?.bloom ?? 0.0,
+          softFocus: newLens?.softFocus ?? 0.0,
+          exposure: newLens?.exposure ?? 0.0,
+          contrast: newLens?.contrast ?? 0.0,
+          saturation: newLens?.saturation ?? 0.0,
+          highlightCompression: newLens?.highlightCompression ?? 0.0,
+        );
     // ── FIX: 镜头切换后也重发完整渲染参数（镜头影响 contrast、saturation、vignette 等组合值）──
     _applyCurrentRenderParamsToNative();
   }
@@ -526,7 +554,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   void selectWatermark(String id) {
     // 切换预设时清空用户覆盖（使新预设的默认配置生效）
-    state = state.copyWith(activeWatermarkId: id, clearWatermarkOverrides: true);
+    state =
+        state.copyWith(activeWatermarkId: id, clearWatermarkOverrides: true);
   }
 
   void selectWatermarkColor(String hexColor) {
@@ -602,11 +631,11 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         'camera_snapshot_${state.activeCameraId}',
         jsonEncode(CameraSnapshot(
           temperatureOffset: state.temperatureOffset,
-          colorTempK:        state.colorTempK,
-          wbMode:            state.wbMode,
-          exposureValue:     state.exposureValue,
-          zoomLevel:         state.zoomLevel,
-          frameId:           state.activeFrameId,
+          colorTempK: state.colorTempK,
+          wbMode: state.wbMode,
+          exposureValue: state.exposureValue,
+          zoomLevel: state.zoomLevel,
+          frameId: state.activeFrameId,
         ).toJson()),
       );
     } catch (_) {
@@ -631,14 +660,22 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   void setWhiteBalance(String mode) {
     int tempK;
     switch (mode) {
-      case 'daylight':      tempK = 4800; break;
-      case 'incandescent':  tempK = 1800; break;
-      default:              tempK = 6300; break; // auto
+      case 'daylight':
+        tempK = 4800;
+        break;
+      case 'incandescent':
+        tempK = 1800;
+        break;
+      default:
+        tempK = 6300;
+        break; // auto
     }
     // FIX: 同步更新 temperatureOffset，使成片后处理的颜色矩阵也能读取到白平衡变化
     // temperatureOffset 范围 -100..100，映射规则与 setColorTempK 一致
-    final offset = mode == 'auto' ? 0.0 : ((tempK - 4800) / 32.0).clamp(-100.0, 100.0);
-    state = state.copyWith(wbMode: mode, colorTempK: tempK, temperatureOffset: offset);
+    final offset =
+        mode == 'auto' ? 0.0 : ((tempK - 4800) / 32.0).clamp(-100.0, 100.0);
+    state = state.copyWith(
+        wbMode: mode, colorTempK: tempK, temperatureOffset: offset);
     // 通知原生层设置白平衡（影响预览）
     _ref.read(cameraServiceProvider.notifier).setWhiteBalance(mode);
     // FIX: 同步更新原生 GPU shader 参数（确保成片与预览一致）
@@ -647,7 +684,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   // 手动设置色温（滑动条拖动时调用）
   void setColorTempK(int kelvin) {
-    state = state.copyWith(wbMode: 'manual', colorTempK: kelvin.clamp(1800, 8000));
+    state =
+        state.copyWith(wbMode: 'manual', colorTempK: kelvin.clamp(1800, 8000));
     // 将 K 值映射到 temperatureOffset（-100..100）供原生层使用
     final offset = ((kelvin - 4800) / 32.0).clamp(-100.0, 100.0);
     state = state.copyWith(temperatureOffset: offset);
@@ -771,17 +809,17 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         // 3. 同步镜头参数
         final lens = camera.lensById(state.activeLensId);
         await svc.updateLensParams(
-          distortion:            lens?.distortion            ?? 0.0,
-          vignette:              lens?.vignette              ?? 0.0,
-          zoomFactor:            lens?.zoomFactor            ?? 1.0,
-          fisheyeMode:           lens?.fisheyeMode           ?? false,
-          chromaticAberration:   lens?.chromaticAberration   ?? 0.0,
-          bloom:                 lens?.bloom                 ?? 0.0,
-          softFocus:             lens?.softFocus             ?? 0.0,
-          exposure:              lens?.exposure              ?? 0.0,
-          contrast:              lens?.contrast              ?? 0.0,
-          saturation:            lens?.saturation            ?? 0.0,
-          highlightCompression:  lens?.highlightCompression  ?? 0.0,
+          distortion: lens?.distortion ?? 0.0,
+          vignette: lens?.vignette ?? 0.0,
+          zoomFactor: lens?.zoomFactor ?? 1.0,
+          fisheyeMode: lens?.fisheyeMode ?? false,
+          chromaticAberration: lens?.chromaticAberration ?? 0.0,
+          bloom: lens?.bloom ?? 0.0,
+          softFocus: lens?.softFocus ?? 0.0,
+          exposure: lens?.exposure ?? 0.0,
+          contrast: lens?.contrast ?? 0.0,
+          saturation: lens?.saturation ?? 0.0,
+          highlightCompression: lens?.highlightCompression ?? 0.0,
         );
       }
 
@@ -863,24 +901,40 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   /// 返回 [TakePhotoResult]，包含缓存文件路径和 MediaStore 资产 ID。
   /// galleryAssetId 可直接用于 AssetEntity.fromId()，完全绕开相册查询逻辑。
   /// [minimapNormalizedRect] 小窗归一化裁剪区域（在取景框内的相对坐标 0.0~1.0）
-  Future<TakePhotoResult?> takePhoto({Rect? minimapNormalizedRect, int deviceQuarter = 0}) async {
+  Future<TakePhotoResult?> takePhoto(
+      {Rect? minimapNormalizedRect, int deviceQuarter = 0}) async {
     if (state.isTakingPhoto) return null;
     state = state.copyWith(isTakingPhoto: true);
     HapticFeedback.mediumImpact();
+    final totalSw = Stopwatch()..start();
+    int captureMs = 0;
+    int postMs = 0;
+    int exifMs = 0;
+    int galleryMs = 0;
+    bool postApplied = false;
 
     try {
-      final photoResult = await _ref.read(cameraServiceProvider.notifier).takePhoto();
+      final captureSw = Stopwatch()..start();
+      final photoResult =
+          await _ref.read(cameraServiceProvider.notifier).takePhoto();
+      captureSw.stop();
+      captureMs = captureSw.elapsedMilliseconds;
       final path = photoResult?['filePath'] as String?;
       final captureW = photoResult?['captureWidth'] as int? ?? 0;
       final captureH = photoResult?['captureHeight'] as int? ?? 0;
+      debugPrint(
+          '[Perf][takePhoto] capture=$captureMs ms raw=${captureW}x$captureH path=${path ?? "null"}');
       if (captureW > 0 && captureH > 0) {
         state = state.copyWith(lastCaptureRaw: '${captureW}×${captureH}');
       }
 
       if (path != null) {
         state = state.copyWith(showCaptureFlash: true);
-        await Future.delayed(const Duration(milliseconds: 150));
-        state = state.copyWith(showCaptureFlash: false);
+        // 视觉闪光异步关闭，避免固定 150ms 阻塞拍照主链路。
+        unawaited(Future<void>.delayed(const Duration(milliseconds: 150), () {
+          if (!mounted) return;
+          state = state.copyWith(showCaptureFlash: false);
+        }));
         HapticFeedback.lightImpact();
 
         // 如果开启位置，并行获取 GPS 坐标（与后处理并行，不阻塞流程）
@@ -891,8 +945,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
         // Post-process: color effects + ratio crop + frame + watermark
         if (state.camera != null) {
+          final postSw = Stopwatch()..start();
           try {
-            debugPrint('[CameraNotifier] Starting post-process: ratio=${state.activeRatioId}, frame=${state.activeFrameId}, wm=${state.activeWatermarkId}');
+            debugPrint(
+                '[CameraNotifier] Starting post-process: ratio=${state.activeRatioId}, frame=${state.activeFrameId}, wm=${state.activeWatermarkId}');
             final pipeline = CapturePipeline(camera: state.camera!);
             // 按清晰度档位选择输出尺寸和 JPEG 质量
             // sharpenLevel: 0=低(1080px/q82), 1=中(1440px/q82), 2=高(4096px/q90)
@@ -915,8 +971,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                 final processed = await pipeline.process(
                   imagePath: path,
                   selectedRatioId: state.activeRatioId ?? '',
-                  selectedFrameId: 'frame_none',  // 第一张不加相框
-                  selectedWatermarkId: 'none',     // 第一张不加水印
+                  selectedFrameId: 'frame_none', // 第一张不加相框
+                  selectedWatermarkId: 'none', // 第一张不加水印
                   renderParams: state.renderParams,
                   minimapNormalizedRect: minimapNormalizedRect,
                   deviceQuarter: deviceQuarter,
@@ -927,7 +983,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                 if (processed != null) {
                   // 将处理后的第一张写入临时文件
                   final tmpDir = Directory.systemTemp;
-                  final firstSavePath = '${tmpDir.path}/dazz_double_exp_first_${DateTime.now().millisecondsSinceEpoch}.jpg';
+                  final firstSavePath =
+                      '${tmpDir.path}/dazz_double_exp_first_${DateTime.now().millisecondsSinceEpoch}.jpg';
                   await File(firstSavePath).writeAsBytes(processed.bytes);
                   state = state.copyWith(doubleExpFirstPath: firstSavePath);
                   debugPrint('[DoubleExp] First photo saved: $firstSavePath');
@@ -958,7 +1015,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                   );
                   if (blended != null) {
                     // 将合成结果再过一遍完整的 pipeline（加相框、水印等）
-                    final tmpBlendPath = '${Directory.systemTemp.path}/dazz_blend_${DateTime.now().millisecondsSinceEpoch}.jpg';
+                    final tmpBlendPath =
+                        '${Directory.systemTemp.path}/dazz_blend_${DateTime.now().millisecondsSinceEpoch}.jpg';
                     await File(tmpBlendPath).writeAsBytes(blended);
                     final finalProcessed = await pipeline.process(
                       imagePath: tmpBlendPath,
@@ -972,7 +1030,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                       watermarkDirectionOverride: state.watermarkDirection,
                       watermarkStyleOverride: state.watermarkStyle,
                       renderParams: null, // 已经应用过滞色矩阵，不重复
-                      deviceQuarter: 0,   // 已经旋转过
+                      deviceQuarter: 0, // 已经旋转过
                       maxDimension: maxDim,
                       jpegQuality: jpegQ,
                       fisheyeMode: state.fisheyeMode,
@@ -980,23 +1038,29 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                     if (finalProcessed != null) {
                       await File(path).writeAsBytes(finalProcessed.bytes);
                       state = state.copyWith(
-                        lastCaptureOutput: '${finalProcessed.outputWidth}×${finalProcessed.outputHeight}',
+                        lastCaptureOutput:
+                            '${finalProcessed.outputWidth}×${finalProcessed.outputHeight}',
                       );
                     } else {
                       await File(path).writeAsBytes(blended);
                     }
                     // 清理临时文件
-                    try { File(tmpBlendPath).deleteSync(); } catch (_) {}
+                    try {
+                      File(tmpBlendPath).deleteSync();
+                    } catch (_) {}
                   }
                   // 清理第一张临时文件
-                  try { File(firstPath).deleteSync(); } catch (_) {}
+                  try {
+                    File(firstPath).deleteSync();
+                  } catch (_) {}
                 }
                 // 合成完成，关闭双重曝光模式
                 state = state.copyWith(
                   doubleExpEnabled: false,
                   clearDoubleExpFirst: true,
                 );
-                debugPrint('[DoubleExp] Blend complete, double exp mode closed');
+                debugPrint(
+                    '[DoubleExp] Blend complete, double exp mode closed');
               }
             } else {
               // 普通拍照流程
@@ -1021,20 +1085,30 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
               if (processed != null) {
                 await File(path).writeAsBytes(processed.bytes);
                 state = state.copyWith(
-                  lastCaptureOutput: '${processed.outputWidth}×${processed.outputHeight}',
+                  lastCaptureOutput:
+                      '${processed.outputWidth}×${processed.outputHeight}',
                 );
-                debugPrint('[CameraNotifier] Post-process done, wrote ${processed.bytes.length} bytes to $path (${processed.outputWidth}x${processed.outputHeight})');
+                debugPrint(
+                    '[CameraNotifier] Post-process done, wrote ${processed.bytes.length} bytes to $path (${processed.outputWidth}x${processed.outputHeight})');
+                postApplied = true;
               } else {
-                debugPrint('[CameraNotifier] Post-process returned null, keeping original');
+                debugPrint(
+                    '[CameraNotifier] Post-process returned null, keeping original');
               }
             }
           } catch (e, st) {
             debugPrint('[CameraNotifier] Post-process error: $e\n$st');
+          } finally {
+            postSw.stop();
+            postMs = postSw.elapsedMilliseconds;
+            debugPrint(
+                '[Perf][takePhoto] post_process=$postMs ms applied=$postApplied');
           }
         }
 
         // 写入 GPS EXIF（在后处理完成后、保存到相册之前）
         if (locationFuture != null) {
+          final exifSw = Stopwatch()..start();
           try {
             final position = await locationFuture;
             if (position != null) {
@@ -1042,38 +1116,72 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             }
           } catch (e) {
             debugPrint('[CameraNotifier] GPS EXIF write error: $e');
+          } finally {
+            exifSw.stop();
+            exifMs = exifSw.elapsedMilliseconds;
+            debugPrint('[Perf][takePhoto] gps_exif=$exifMs ms');
           }
         }
 
-        // 保存到相册，获取资产 ID
+        // 保存到相册（快速返回策略）：
+        // 最多等待短时间拿 galleryAssetId；超时则后台继续，不阻塞本次拍照返回。
         // Android: content://media/external/images/media/{_id} → 提取末段数字
         // iOS:    PHAsset.localIdentifier（直接使用，无需解析 URI）
         String? galleryAssetId;
+        final gallerySw = Stopwatch()..start();
+        final saveFuture =
+            _ref.read(cameraServiceProvider.notifier).saveToGallery(
+                  path,
+                  cameraId: state.activeCameraId,
+                );
         try {
-          final galleryUri = await _ref.read(cameraServiceProvider.notifier).saveToGallery(
-            path,
-            cameraId: state.activeCameraId,
-          );
+          const fastReturnBudget = Duration(milliseconds: 120);
+          final galleryUri = await saveFuture.timeout(fastReturnBudget);
           debugPrint('[CameraNotifier] Saved to gallery: $galleryUri');
           if (galleryUri != null && galleryUri.isNotEmpty) {
             if (galleryUri.startsWith('content://')) {
-              // Android: content://media/external/images/media/{_id}
               final uri = Uri.tryParse(galleryUri);
               galleryAssetId = uri?.pathSegments.lastOrNull;
             } else {
-              // iOS: PHAsset.localIdentifier 直接使用
               galleryAssetId = galleryUri;
             }
             debugPrint('[CameraNotifier] galleryAssetId=$galleryAssetId');
           }
+        } on TimeoutException {
+          debugPrint(
+              '[CameraNotifier] saveToGallery pending in background (>120ms), returning early');
+          unawaited(saveFuture.then((galleryUri) {
+            debugPrint(
+                '[CameraNotifier] saveToGallery completed in background: $galleryUri');
+          }).catchError((Object e) {
+            debugPrint('[CameraNotifier] saveToGallery background error: $e');
+          }));
         } catch (e) {
           debugPrint('[CameraNotifier] saveToGallery error: $e');
+        } finally {
+          gallerySw.stop();
+          galleryMs = gallerySw.elapsedMilliseconds;
+          debugPrint('[Perf][takePhoto] save_gallery_waited=$galleryMs ms');
         }
+
+        totalSw.stop();
+        debugPrint(
+          '[Perf][takePhoto] total=${totalSw.elapsedMilliseconds} ms '
+          '(capture=$captureMs, post=$postMs, exif=$exifMs, gallery=$galleryMs)',
+        );
 
         return TakePhotoResult(path: path, galleryAssetId: galleryAssetId);
       }
+      totalSw.stop();
+      debugPrint(
+          '[Perf][takePhoto] total=${totalSw.elapsedMilliseconds} ms (path=null)');
       return null;
     } finally {
+      if (totalSw.isRunning) {
+        totalSw.stop();
+        debugPrint(
+            '[Perf][takePhoto] total=${totalSw.elapsedMilliseconds} ms (finally)');
+      }
       state = state.copyWith(isTakingPhoto: false);
     }
   }
@@ -1141,7 +1249,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         'GPSAltitudeRef': position.altitude >= 0 ? '0' : '1',
       });
       await exif.close();
-      debugPrint('[CameraNotifier] GPS EXIF written: ${position.latitude}, ${position.longitude}');
+      debugPrint(
+          '[CameraNotifier] GPS EXIF written: ${position.latitude}, ${position.longitude}');
     } catch (e) {
       debugPrint('[CameraNotifier] Failed to write GPS EXIF: $e');
     }
@@ -1153,7 +1262,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     final params = state.renderParams;
     if (params == null) return;
     final json = params.toJson();
-    debugPrint('[CameraNotifier] _applyCurrentRenderParamsToNative: sending ${json.length} params to native');
+    debugPrint(
+        '[CameraNotifier] _applyCurrentRenderParamsToNative: sending ${json.length} params to native');
     _ref.read(cameraServiceProvider.notifier).updateRenderParams(json);
   }
 }
@@ -1352,7 +1462,8 @@ final shutterSoundEnabledProvider = Provider<bool>(
 
 /// 快门振动开关（切换振动时 rebuild）
 final shutterVibrationEnabledProvider = Provider<bool>(
-  (ref) => ref.watch(cameraAppProvider.select((s) => s.shutterVibrationEnabled)),
+  (ref) =>
+      ref.watch(cameraAppProvider.select((s) => s.shutterVibrationEnabled)),
 );
 
 /// 前置镜像开关（切换镜像时 rebuild）

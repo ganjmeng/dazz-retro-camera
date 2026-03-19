@@ -2,6 +2,7 @@ package com.retrocam.app.camera
 
 import android.content.ContentValues
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.SurfaceTexture
 import android.os.Build
 import android.os.Environment
@@ -83,6 +84,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     // Filter state
     private var currentPresetJson: Map<*, *>? = null
     private var currentSharpenLevel: Float = 0.5f
+    private var currentCameraId: String = ""
+    @Volatile private var pendingShotStartNs: Long = 0L
+    @Volatile private var pendingShotLevel: Float = 0.5f
     // ── 缓存 lens 参数，供 switchLens 后重新应用 ──
     private var cachedLensFisheyeMode: Boolean = false
     private var cachedLensVignette: Double = 0.0
@@ -96,6 +100,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     @Volatile private var pendingIsFrontCamera: Boolean = false
     // 当前镜头朝向（LENS_FACING_BACK / LENS_FACING_FRONT）
     private var currentLensPosition: Int = CameraSelector.LENS_FACING_BACK
+    private val perfPrefs: SharedPreferences by lazy {
+        flutterPluginBinding.applicationContext.getSharedPreferences(
+            "dazz_capture_perf",
+            Context.MODE_PRIVATE
+        )
+    }
 
     // ─────────────────────────────────────────────
     // FlutterPlugin lifecycle
@@ -427,6 +437,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val preset = call.argument<Map<*, *>>("preset")
         currentPresetJson = preset
         val cameraId = (preset?.get("cameraId") as? String) ?: (preset?.get("id") as? String) ?: ""
+        currentCameraId = cameraId
         Log.d(TAG, "setPreset: cameraId=$cameraId")
 
         if (preset != null) {
@@ -562,6 +573,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             result.error("NOT_INITIALIZED", "Camera not initialized", null)
             return
         }
+        pendingShotStartNs = System.nanoTime()
+        pendingShotLevel = currentSharpenLevel
         val context = flutterPluginBinding.applicationContext
         // 使用 OnImageCapturedCallback 内存模式，跳过磁盘写入
         capture.takePicture(
@@ -576,8 +589,10 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                         val isFront = currentLensPosition == CameraSelector.LENS_FACING_FRONT
                         val captureW = image.width
                         val captureH = image.height
+                        val elapsedMs = ((System.nanoTime() - pendingShotStartNs) / 1_000_000L).coerceAtLeast(0L)
                         image.close()
                         Log.d(TAG, "takePhoto(mem): ${captureW}x${captureH} rot=${rotationDegrees} front=${isFront}")
+                        maybeRecordMidCapturePerf(captureW, captureH, elapsedMs)
                         // 异步写入 cache，保持 filePath 接口兼容性
                         val ts = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
                         val cacheDir = File(context.cacheDir, "dazz_captures").apply { mkdirs() }
@@ -806,8 +821,123 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     //   高档  输出 4096px → 输入请求 ≤16MP（4096×3072），覆盖输出所需，跳过多帧合成
     // 行业标准：输入分辨率只需略大于输出分辨率即可，不需要传感器全像素。
     // ─────────────────────────────────────────────
+    private fun applySpeedCaptureOptions(
+        builder: ImageCapture.Builder,
+        level: Float,
+    ) {
+        val extender = Camera2Interop.Extender(builder)
+        // 速度优先：尽量降低厂商 ISP 的高质量慢路径概率（不支持时会被 HAL 忽略）
+        extender.setCaptureRequestOption(
+            CaptureRequest.CONTROL_CAPTURE_INTENT,
+            CaptureRequest.CONTROL_CAPTURE_INTENT_STILL_CAPTURE
+        )
+        extender.setCaptureRequestOption(
+            CaptureRequest.CONTROL_AF_MODE,
+            CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+        )
+        val noiseMode = when {
+            level < 0.7f -> CaptureRequest.NOISE_REDUCTION_MODE_FAST
+            else -> CaptureRequest.NOISE_REDUCTION_MODE_HIGH_QUALITY
+        }
+        val edgeMode = when {
+            level < 0.7f -> CaptureRequest.EDGE_MODE_FAST
+            else -> CaptureRequest.EDGE_MODE_HIGH_QUALITY
+        }
+        extender.setCaptureRequestOption(CaptureRequest.NOISE_REDUCTION_MODE, noiseMode)
+        extender.setCaptureRequestOption(CaptureRequest.EDGE_MODE, edgeMode)
+        // 中低档画质进一步降低 JPEG 硬件编码质量，减少编码耗时
+        val jpegQ: Byte = when {
+            level < 0.2f -> 84
+            level < 0.7f -> 86
+            else -> 92
+        }
+        extender.setCaptureRequestOption(CaptureRequest.JPEG_QUALITY, jpegQ)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            extender.setCaptureRequestOption(CaptureRequest.CONTROL_ENABLE_ZSL, true)
+        }
+    }
+
+    private fun pickMidSpeedSizes(supportedSizes: List<Size>): List<Size> {
+        val profileKey = buildMidProfileKey()
+        val bestW = perfPrefs.getInt("${profileKey}_best_w", 0)
+        val bestH = perfPrefs.getInt("${profileKey}_best_h", 0)
+
+        // 1) 优先 12MP binning 原生档位（常见 4000x3000 / 4096x3072），很多 2 亿像素机型更快
+        val prefer12Mp = supportedSizes.filter {
+            val longSide = maxOf(it.width, it.height)
+            val shortSide = minOf(it.width, it.height)
+            val px = it.width.toLong() * it.height.toLong()
+            px in 10_000_000L..14_500_000L &&
+                longSide in 3900..4200 &&
+                shortSide in 2900..3200
+        }.sortedByDescending { it.width.toLong() * it.height.toLong() }
+
+        // 2) 回退：4MP 附近（旧策略）
+        val near4Mp = supportedSizes.filter {
+            val px = it.width.toLong() * it.height.toLong()
+            px in 3_200_000L..4_500_000L
+        }.sortedByDescending { it.width.toLong() * it.height.toLong() }
+
+        // 3) 再回退：<=8MP 的最大档位，避免掉回全像素慢路径
+        val fallback = supportedSizes.filter {
+            it.width.toLong() * it.height.toLong() <= 8_000_000L
+        }.sortedByDescending { it.width.toLong() * it.height.toLong() }
+            .ifEmpty { supportedSizes.sortedBy { it.width.toLong() * it.height.toLong() } }
+        val candidates = (prefer12Mp + near4Mp + fallback)
+            .distinctBy { "${it.width}x${it.height}" }
+
+        if (candidates.isEmpty()) return supportedSizes
+
+        // 已学习到最优尺寸：固定优先该尺寸。
+        if (bestW > 0 && bestH > 0) {
+            val best = candidates.firstOrNull {
+                (it.width == bestW && it.height == bestH) || (it.width == bestH && it.height == bestW)
+            }
+            if (best != null) {
+                return listOf(best) + candidates.filterNot { it == best }
+            }
+        }
+
+        // 未学习到最优尺寸：轮询探索前 3 个候选档位。
+        val explorePool = candidates.take(minOf(3, candidates.size))
+        val idxKey = "${profileKey}_explore_idx"
+        val idx = perfPrefs.getInt(idxKey, 0)
+        val selected = explorePool[idx % explorePool.size]
+        perfPrefs.edit().putInt(idxKey, idx + 1).apply()
+        Log.d(TAG, "mid explore size=${selected.width}x${selected.height}, idx=$idx key=$profileKey")
+        return listOf(selected) + candidates.filterNot { it == selected }
+    }
+
+    private fun buildMidProfileKey(): String {
+        val cam = if (currentCameraId.isNotEmpty()) currentCameraId else "unknown"
+        val lens = if (currentLensPosition == CameraSelector.LENS_FACING_FRONT) "front" else "back"
+        return "mid_${Build.MANUFACTURER}_${Build.MODEL}_${cam}_$lens"
+    }
+
+    private fun maybeRecordMidCapturePerf(captureW: Int, captureH: Int, elapsedMs: Long) {
+        if (pendingShotLevel < 0.2f || pendingShotLevel >= 0.7f) return
+        if (captureW <= 0 || captureH <= 0 || elapsedMs <= 0L) return
+
+        val key = buildMidProfileKey()
+        val oldBestMs = perfPrefs.getLong("${key}_best_ms", Long.MAX_VALUE)
+        val oldBestW = perfPrefs.getInt("${key}_best_w", 0)
+        val oldBestH = perfPrefs.getInt("${key}_best_h", 0)
+        if (elapsedMs < oldBestMs) {
+            perfPrefs.edit()
+                .putLong("${key}_best_ms", elapsedMs)
+                .putInt("${key}_best_w", captureW)
+                .putInt("${key}_best_h", captureH)
+                .apply()
+            Log.d(TAG, "mid best update: ${captureW}x${captureH} ${elapsedMs}ms (prev=${oldBestW}x${oldBestH} ${oldBestMs}ms)")
+        } else {
+            Log.d(TAG, "mid sample: ${captureW}x${captureH} ${elapsedMs}ms, best=${oldBestW}x${oldBestH} ${oldBestMs}ms")
+        }
+    }
+
     private fun buildImageCapture(level: Float): ImageCapture {
         val builder = ImageCapture.Builder()
+        applySpeedCaptureOptions(builder, level)
         when {
             level < 0.2f -> {
                 // 低清晰度：输出 1920px（~2MP），输入精准对齐 ≤4MP（2688×2016）
@@ -830,18 +960,10 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 ).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             }
             level < 0.7f -> {
-                // 中清晰度：输出 2688px（~4MP），输入精准对齐 ≤4MP（2688×2016）
-                // 用 ResolutionFilter 选"≤400万像素的最大档位"，与输出分辨率精准匹配
-                // 让 ISP 走 Binning 自然输出（单帧），避免多帧合成（2亿像素手机慢 3-5s 的根因）
+                // 中清晰度：优先 12MP binning 原生档位（如 4000x3000 / 4096x3072）
+                // 若机型无该档位，再回退到 4MP 附近，避免走全像素慢路径。
                 val midFilter = ResolutionFilter { supportedSizes, _ ->
-                    val candidates = supportedSizes.filter {
-                        it.width.toLong() * it.height.toLong() <= 4_000_000L
-                    }
-                    candidates.sortedByDescending { it.width.toLong() * it.height.toLong() }
-                        .ifEmpty {
-                            // 所有档位都超过 400 万像素（极少数设备），回落到最小可用
-                            supportedSizes.sortedBy { it.width.toLong() * it.height.toLong() }
-                        }
+                    pickMidSpeedSizes(supportedSizes)
                 }
                 builder.setResolutionSelector(
                     ResolutionSelector.Builder()
@@ -875,12 +997,6 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                         }
                     }
                 }
-                // 通过 Camera2Interop 设置 JPEG 硬件编码质量为 92（行业标准：兼顾速度与质量）
-                val extender = Camera2Interop.Extender(builder)
-                extender.setCaptureRequestOption(
-                    CaptureRequest.JPEG_QUALITY,
-                    92.toByte()
-                )
                 builder.setResolutionSelector(
                     ResolutionSelector.Builder()
                         .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)

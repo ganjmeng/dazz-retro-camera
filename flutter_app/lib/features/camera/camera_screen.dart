@@ -38,6 +38,7 @@ import '../image_edit/image_edit_screen.dart';
 import '../../services/camera_manager_service.dart';
 import '../../models/watermark_styles.dart';
 import '../../core/l10n.dart';
+
 // ─── 颜色常量 ─────────────────────────────────────────────────────────────────────────────
 const _kBlack = Color(0xFF000000);
 const _kDarkGray = Color(0xFF1C1C1E);
@@ -47,15 +48,16 @@ const _kBlue = Color(0xFF007AFF);
 const _kRed = Color(0xFFFF3B30);
 
 // ─── 布局常量（提升为顶层常量，供多个方法共享）─────────────────────────────────────────────────────────────────────────────
-const kToolbarH = 52.0;          // 工具栏高度
-const kShutterH = 96.0;           // 快门行高度
-const kBottomPanelTopPad = 0.0;   // 工具栏上方间距
-const kToolbarShutterGap = 10.0;  // 工具栏和快门行间距
-const kBottomPanelH = kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
-const kCapsuleH = 40.0;           // 胶囊高度（参考图约40px）
-const kCapsuleInsetBottom = 8.0;  // 胶囊距取景框底部的内边距（胶囊下移8px）
-const kSliderAreaH = 72.0;        // 胶囊下方滑条展开区域预留高度（不能小于滑条内容高度44px）
-const kViewfinderHPadding = 8.0;  // 取景框左右边距（参考图约8px，贴边显示）
+const kToolbarH = 52.0; // 工具栏高度
+const kShutterH = 96.0; // 快门行高度
+const kBottomPanelTopPad = 0.0; // 工具栏上方间距
+const kToolbarShutterGap = 10.0; // 工具栏和快门行间距
+const kBottomPanelH =
+    kBottomPanelTopPad + kToolbarH + kToolbarShutterGap + kShutterH;
+const kCapsuleH = 40.0; // 胶囊高度（参考图约40px）
+const kCapsuleInsetBottom = 8.0; // 胶囊距取景框底部的内边距（胶囊下移8px）
+const kSliderAreaH = 72.0; // 胶囊下方滑条展开区域预留高度（不能小于滑条内容高度44px）
+const kViewfinderHPadding = 8.0; // 取景框左右边距（参考图约8px，贴边显示）
 const kTopBarH = 44.0;
 // 宽屏适配：取景框最大宽度（平板/折叠屏展开态限制取景框不超过此宽度，避免画面过宽失调）
 // 普通手机最宽约 430dp，此值确保宽屏设备取景框宽度与手机体验一致
@@ -72,7 +74,6 @@ class CameraScreen extends ConsumerStatefulWidget {
 
 class _CameraScreenState extends ConsumerState<CameraScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
-
   Uint8List? _latestThumb;
   AssetEntity? _latestAsset; // 最新照片 entity（长按直接打开详情用）
   int _timerCountdown = 0;
@@ -85,7 +86,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   double _tempDragStart = 0;
   double _tempAtDragStart = 0;
 
-   // ── 对焦圈 + 曝光太阳（取景框内） ────────────────────────────────────
+  // ── 对焦圈 + 曝光太阳（取景框内） ────────────────────────────────────
   // 对焦点（相对取景框的局部坐标）
   Offset? _focusPoint;
   // 曝光太阳在垂直轨道上的偏移量（像素，正=下=暗，负=上=亮）
@@ -149,7 +150,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _optionsSlide = Tween<Offset>(
       begin: const Offset(0, 1),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _optionsAnim, curve: Curves.easeOutCubic));
+    ).animate(
+        CurvedAnimation(parent: _optionsAnim, curve: Curves.easeOutCubic));
 
     // 旋转动画控制器
     _rotateAnim = AnimationController(
@@ -207,28 +209,32 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       // recreates CameraGLRenderer. All subsequent param calls must happen AFTER this.
       final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
       const sharpenLevels = [0.0, 0.5, 1.0];
-      await ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevels[sharpenLevel]);
+      await ref
+          .read(cameraServiceProvider.notifier)
+          .setSharpen(sharpenLevels[sharpenLevel]);
 
       // ── STEP 2: renderer 已就绪（setSharpen await 保证），重新发送相机参数 ──
       final cameraAfterInit = ref.read(cameraAppProvider).camera;
       if (cameraAfterInit != null) {
-        await ref.read(cameraServiceProvider.notifier).setCamera(cameraAfterInit);
+        await ref
+            .read(cameraServiceProvider.notifier)
+            .setCamera(cameraAfterInit);
         // 同步镜头参数（含 fisheyeMode）
         final lensId = ref.read(cameraAppProvider).activeLensId;
         final lens = cameraAfterInit.lensById(lensId);
         ref.read(cameraServiceProvider.notifier).updateLensParams(
-          distortion: lens?.distortion ?? 0.0,
-          vignette: lens?.vignette ?? 0.0,
-          zoomFactor: lens?.zoomFactor ?? 1.0,
-          fisheyeMode: lens?.fisheyeMode ?? false,
-          chromaticAberration: lens?.chromaticAberration ?? 0.0,
-          bloom: lens?.bloom ?? 0.0,
-          softFocus: lens?.softFocus ?? 0.0,
-          exposure: lens?.exposure ?? 0.0,
-          contrast: lens?.contrast ?? 0.0,
-          saturation: lens?.saturation ?? 0.0,
-          highlightCompression: lens?.highlightCompression ?? 0.0,
-        );
+              distortion: lens?.distortion ?? 0.0,
+              vignette: lens?.vignette ?? 0.0,
+              zoomFactor: lens?.zoomFactor ?? 1.0,
+              fisheyeMode: lens?.fisheyeMode ?? false,
+              chromaticAberration: lens?.chromaticAberration ?? 0.0,
+              bloom: lens?.bloom ?? 0.0,
+              softFocus: lens?.softFocus ?? 0.0,
+              exposure: lens?.exposure ?? 0.0,
+              contrast: lens?.contrast ?? 0.0,
+              saturation: lens?.saturation ?? 0.0,
+              highlightCompression: lens?.highlightCompression ?? 0.0,
+            );
       }
       _loadLatestThumb();
 
@@ -267,10 +273,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       const double kPrimaryThreshold = 5.5;
       const double kDominanceRatio = 2.0;
       int newQuarter;
-      if (absY > absX && absY > kPrimaryThreshold && absY > absX * kDominanceRatio) {
+      if (absY > absX &&
+          absY > kPrimaryThreshold &&
+          absY > absX * kDominanceRatio) {
         // 以氪屏为主
         newQuarter = y > 0 ? 0 : 2; // 0=氪屏正向, 2=倒氪
-      } else if (absX > absY && absX > kPrimaryThreshold && absX > absY * kDominanceRatio) {
+      } else if (absX > absY &&
+          absX > kPrimaryThreshold &&
+          absX > absY * kDominanceRatio) {
         // 以横屏为主
         newQuarter = x > 0 ? 3 : 1; // 1=逆时针横屏(左转90°), 3=顺时针横屏(右转90°)
       } else {
@@ -291,7 +301,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           _rotateAngle = Tween<double>(
             begin: _prevAngle,
             end: newAngle,
-          ).animate(CurvedAnimation(parent: _rotateAnim, curve: Curves.easeOutCubic));
+          ).animate(
+              CurvedAnimation(parent: _rotateAnim, curve: Curves.easeOutCubic));
           _prevAngle = newAngle;
         });
         _rotateAnim
@@ -304,11 +315,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   /// 将设备方向转换为工具栏图标的旋转角度（弧度）
   double _quarterToAngle(int quarter) {
     switch (quarter) {
-      case 0: return 0.0;              // 竖屏正向：图标不旋转
-      case 1: return -math.pi / 2;    // 逆时针横屏：图标顺时针旋转90°
-      case 2: return math.pi;          // 倒竖：图标旋转180°
-      case 3: return math.pi / 2;     // 顺时针横屏：图标逆时针旋转90°
-      default: return 0.0;
+      case 0:
+        return 0.0; // 竖屏正向：图标不旋转
+      case 1:
+        return -math.pi / 2; // 逆时针横屏：图标顺时针旋转90°
+      case 2:
+        return math.pi; // 倒竖：图标旋转180°
+      case 3:
+        return math.pi / 2; // 顺时针横屏：图标逆时针旋转90°
+      default:
+        return 0.0;
     }
   }
 
@@ -324,7 +340,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         if (mounted) setState(() => _showTransition = false);
       });
     } else if (state == AppLifecycleState.paused ||
-               state == AppLifecycleState.inactive) {
+        state == AppLifecycleState.inactive) {
       // App 进入后台或切到其他 App：保存当前相机快照，确保下次打开能恢复设定
       ref.read(cameraAppProvider.notifier).saveCurrentSnapshot();
     }
@@ -357,22 +373,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       final lensIdBack = ref.read(cameraAppProvider).activeLensId;
       final lensBack = cameraBack.lensById(lensIdBack);
       await ref.read(cameraServiceProvider.notifier).updateLensParams(
-        distortion: lensBack?.distortion ?? 0.0,
-        vignette: lensBack?.vignette ?? 0.0,
-        zoomFactor: lensBack?.zoomFactor ?? 1.0,
-        fisheyeMode: lensBack?.fisheyeMode ?? false,
-        chromaticAberration: lensBack?.chromaticAberration ?? 0.0,
-        bloom: lensBack?.bloom ?? 0.0,
-        softFocus: lensBack?.softFocus ?? 0.0,
-        exposure: lensBack?.exposure ?? 0.0,
-        contrast: lensBack?.contrast ?? 0.0,
-        saturation: lensBack?.saturation ?? 0.0,
-        highlightCompression: lensBack?.highlightCompression ?? 0.0,
-      );
+            distortion: lensBack?.distortion ?? 0.0,
+            vignette: lensBack?.vignette ?? 0.0,
+            zoomFactor: lensBack?.zoomFactor ?? 1.0,
+            fisheyeMode: lensBack?.fisheyeMode ?? false,
+            chromaticAberration: lensBack?.chromaticAberration ?? 0.0,
+            bloom: lensBack?.bloom ?? 0.0,
+            softFocus: lensBack?.softFocus ?? 0.0,
+            exposure: lensBack?.exposure ?? 0.0,
+            contrast: lensBack?.contrast ?? 0.0,
+            saturation: lensBack?.saturation ?? 0.0,
+            highlightCompression: lensBack?.highlightCompression ?? 0.0,
+          );
       // 同步完整渲染参数（滤镜+镜头+defaultLook 组合值）
       final renderParams = ref.read(cameraAppProvider).renderParams;
       if (renderParams != null) {
-        ref.read(cameraServiceProvider.notifier).updateRenderParams(renderParams.toJson());
+        ref
+            .read(cameraServiceProvider.notifier)
+            .updateRenderParams(renderParams.toJson());
       }
     }
     // FIX: 恢复缩放倍率（initCamera 重建后原生层缩放被重置为 x1）
@@ -385,16 +403,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // native camera is fully reconfigured at the correct resolution.
     final sharpenLevelBack = ref.read(cameraAppProvider).sharpenLevel;
     const sharpenLevelsBack = [0.0, 0.5, 1.0];
-    await ref.read(cameraServiceProvider.notifier).setSharpen(sharpenLevelsBack[sharpenLevelBack]);
+    await ref
+        .read(cameraServiceProvider.notifier)
+        .setSharpen(sharpenLevelsBack[sharpenLevelBack]);
     // 5. 淡出过渡动画（setSharpen 完成后再淡出，确保分辨率已切换）
     _transitionTimer = Timer(const Duration(milliseconds: 300), () {
       if (mounted) setState(() => _showTransition = false);
     });
   }
 
-    /// 耗时操作过渡：黑屏 + App Icon 淡入，执行 [action]，然后淡出。
+  /// 耗时操作过渡：黑屏 + App Icon 淡入，执行 [action]，然后淡出。
   /// [duration] 是黑屏持续时间（不含淡入淡出动画时间）。
-  Future<void> _showCameraTransition(FutureOr<void> Function() action, {Duration duration = const Duration(milliseconds: 400)}) async {
+  Future<void> _showCameraTransition(FutureOr<void> Function() action,
+      {Duration duration = const Duration(milliseconds: 400)}) async {
     _transitionTimer?.cancel();
     setState(() => _showTransition = true);
     // 等待淡入动画完成再执行操作
@@ -503,8 +524,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 一次性弹出所有权限请求
     final statuses = await [
       Permission.camera,
-      Permission.photos,   // Android 13+ / iOS
-      Permission.storage,  // Android 12 及以下
+      Permission.photos, // Android 13+ / iOS
+      Permission.storage, // Android 12 及以下
     ].request();
 
     final cameraGranted = statuses[Permission.camera]?.isGranted == true;
@@ -514,7 +535,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
-          title: Text(s2.cameraPerm, style: const TextStyle(color: Colors.white)),
+          title:
+              Text(s2.cameraPerm, style: const TextStyle(color: Colors.white)),
           content: Text(
             s2.cameraPermDesc,
             style: const TextStyle(color: Colors.grey),
@@ -522,14 +544,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(s2.cancel, style: const TextStyle(color: Colors.grey)),
+              child:
+                  Text(s2.cancel, style: const TextStyle(color: Colors.grey)),
             ),
             TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
                 openAppSettings();
               },
-              child: Text(s2.goToSettings, style: const TextStyle(color: Color(0xFFFF9500))),
+              child: Text(s2.goToSettings,
+                  style: const TextStyle(color: Color(0xFFFF9500))),
             ),
           ],
         ),
@@ -547,18 +571,41 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       hasAll: true,
       onlyAll: false,
       filterOption: FilterOptionGroup(
-        orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
+        orders: [
+          const OrderOption(type: OrderOptionType.createDate, asc: false)
+        ],
       ),
     );
     if (albums.isEmpty) return;
     AssetPathEntity? target;
     for (final a in albums) {
-      if (a.name.toUpperCase().contains('DAZZ')) { target = a; break; }
+      if (a.name.toUpperCase().contains('DAZZ')) {
+        target = a;
+        break;
+      }
     }
     target ??= albums.firstWhere((a) => a.isAll, orElse: () => albums.first);
     final assets = await target.getAssetListRange(start: 0, end: 1);
     if (assets.isNotEmpty && mounted) {
       await _applyThumbFromAsset(assets.first);
+    }
+  }
+
+  /// saveToGallery 后台完成时，短时重试刷新缩略图。
+  Future<void> _loadLatestThumbWithRetry() async {
+    final prevId = _latestAsset?.id;
+    const waits = <Duration>[
+      Duration(milliseconds: 120),
+      Duration(milliseconds: 300),
+      Duration(milliseconds: 600),
+    ];
+    for (final wait in waits) {
+      await Future.delayed(wait);
+      if (!mounted) return;
+      await _loadLatestThumb();
+      if (!mounted) return;
+      final curId = _latestAsset?.id;
+      if (curId != null && curId != prevId) return;
     }
   }
 
@@ -569,13 +616,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       await _applyThumbFromAsset(asset);
       debugPrint('[CameraScreen] _loadThumbFromGalleryId OK, id=$assetId');
     } else {
-      debugPrint('[CameraScreen] _loadThumbFromGalleryId: asset not found for id=$assetId');
+      debugPrint(
+          '[CameraScreen] _loadThumbFromGalleryId: asset not found for id=$assetId');
     }
   }
 
   /// 生成缩略图并更新状态
   Future<void> _applyThumbFromAsset(AssetEntity asset) async {
-    final thumb = await asset.thumbnailDataWithSize(const ThumbnailSize(120, 120));
+    final thumb =
+        await asset.thumbnailDataWithSize(const ThumbnailSize(120, 120));
     if (mounted) {
       setState(() {
         _latestThumb = thumb;
@@ -583,6 +632,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       });
     }
   }
+
   Future<void> _handleShutter() async {
     final st = ref.read(cameraAppProvider);
     final timer = st.timerSeconds;
@@ -616,17 +666,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         ShutterSoundService.instance.play(st.activeCameraId);
       }
       _showViewfinderHint(s2.burstStart(st.burstCount));
-      final results = await ref.read(cameraAppProvider.notifier).takeBurstPhotos(
-        minimapNormalizedRect: minimapRect,
-        deviceQuarter: _deviceQuarter,
-      );
+      final results =
+          await ref.read(cameraAppProvider.notifier).takeBurstPhotos(
+                minimapNormalizedRect: minimapRect,
+                deviceQuarter: _deviceQuarter,
+              );
       if (mounted && results.isNotEmpty) {
         // 显示最后一张的缩略图
         final last = results.last;
         if (last.galleryAssetId != null) {
           _loadThumbFromGalleryId(last.galleryAssetId!);
         } else {
-          _loadLatestThumb();
+          _loadLatestThumbWithRetry();
         }
         _showViewfinderHint(s2.burstDone(results.length));
       }
@@ -642,7 +693,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 双重曝光模式下，在快门按下时显示中间状态提示
     final s3 = sOf(ref.read(languageProvider));
     // 记录拍照前的双重曝光状态：只有拍摄的是第二张（firstPath != null）才可能合成完成
-    final wasDoubleExpSecondShot = st.doubleExpEnabled && st.doubleExpFirstPath != null;
+    final wasDoubleExpSecondShot =
+        st.doubleExpEnabled && st.doubleExpFirstPath != null;
     if (st.doubleExpEnabled && st.doubleExpFirstPath == null) {
       _showViewfinderHint(s3.captured1);
     } else if (st.doubleExpEnabled && st.doubleExpFirstPath != null) {
@@ -650,9 +702,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
 
     final result = await ref.read(cameraAppProvider.notifier).takePhoto(
-      minimapNormalizedRect: minimapRect,
-      deviceQuarter: _deviceQuarter,
-    );
+          minimapNormalizedRect: minimapRect,
+          deviceQuarter: _deviceQuarter,
+        );
     if (result != null && mounted) {
       // 优先用 galleryAssetId 直接查资产（绕开相册查询，100% 可靠）
       if (result.galleryAssetId != null) {
@@ -663,7 +715,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         }
       } else {
         // fallback: 相册查询（仅当 saveToGallery 未返回 URI 时）
-        _loadLatestThumb();
+        _loadLatestThumbWithRetry();
       }
     }
   }
@@ -694,10 +746,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 对于 9:16（竖向比例 < 0.75），取景框宽度缩窄以居中显示
     // 对于 1:1、3:4、2:3，取景框宽度 = 全屏宽 - 边距
     // kSliderAreaH: 预留胶囊下方滑条区域（曝光/色温/缩放滑条展开时显示在此区域）
-    final maxViewfinderH = mq.size.height - statusBarH - kTopBarH - kBottomPanelH - bottomSafeH - kSliderAreaH;
+    final maxViewfinderH = mq.size.height -
+        statusBarH -
+        kTopBarH -
+        kBottomPanelH -
+        bottomSafeH -
+        kSliderAreaH;
     final aspectRatio = st.previewAspectRatio; // width/height
     // 宽屏设备（平板/折叠屏）限制取景框最大宽度，避免画面过宽失调
-    final maxVfW = (screenW - kViewfinderHPadding * 2).clamp(0.0, kMaxViewfinderW);
+    final maxVfW =
+        (screenW - kViewfinderHPadding * 2).clamp(0.0, kMaxViewfinderW);
     double viewfinderW;
     double viewfinderH;
     if (aspectRatio < 0.75) {
@@ -707,12 +765,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     } else {
       // 横向或方形比例（1:1, 3:4, 2:3）：宽度撑满（受宽屏限制），高度按比例
       viewfinderW = maxVfW;
-      viewfinderH = (viewfinderW / aspectRatio).clamp(viewfinderW * 0.5, maxViewfinderH);
+      viewfinderH =
+          (viewfinderW / aspectRatio).clamp(viewfinderW * 0.5, maxViewfinderH);
     }
     // 取景框在顶部栏和底部面板之间的可用空间内垂直居中
     // 注意：去掉 clamp 上限，确保 1:1/3:4 等比例下取景框能真正居中
     final availableH = maxViewfinderH;
-    final viewfinderTopOffset = statusBarH + kTopBarH + ((availableH - viewfinderH) / 2).clamp(0.0, availableH);
+    final viewfinderTopOffset = statusBarH +
+        kTopBarH +
+        ((availableH - viewfinderH) / 2).clamp(0.0, availableH);
     // 取景框水平居中
     final viewfinderLeft = (screenW - viewfinderW) / 2;
 
@@ -736,7 +797,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             child: Align(
               alignment: Alignment.centerRight,
               child: GestureDetector(
-                onTap: () => ref.read(cameraAppProvider.notifier).toggleTopMenu(),
+                onTap: () =>
+                    ref.read(cameraAppProvider.notifier).toggleTopMenu(),
                 child: SizedBox(
                   width: 56,
                   height: kTopBarH,
@@ -776,14 +838,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 child: Builder(builder: (ctx) {
                   // 记录取景框尺寸，供对焦坐标归一化使用
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted && (_viewfinderW != viewfinderW || _viewfinderH != viewfinderH)) {
+                    if (mounted &&
+                        (_viewfinderW != viewfinderW ||
+                            _viewfinderH != viewfinderH)) {
                       setState(() {
                         _viewfinderW = viewfinderW;
                         _viewfinderH = viewfinderH;
                       });
                     }
                   });
-                  return _buildViewfinderArea(st, camSvc, viewfinderH, viewfinderW);
+                  return _buildViewfinderArea(
+                      st, camSvc, viewfinderH, viewfinderW);
                 }),
               ),
             ),
@@ -794,7 +859,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           Positioned(
             left: viewfinderLeft,
             right: viewfinderLeft,
-            bottom: kBottomPanelH + bottomSafeH + kSliderAreaH + kCapsuleInsetBottom,
+            bottom: kBottomPanelH +
+                bottomSafeH +
+                kSliderAreaH +
+                kCapsuleInsetBottom,
             height: kCapsuleH,
             child: Center(child: _buildControlCapsule(st)),
           ),
@@ -940,7 +1008,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   // ── 取景框区域（上段）──────────────────────────────────────────────────────────────
   // 布局：圆角取景框，内部只有预览画面和网格线（控制胶囊已移到取景框外部）
-  Widget _buildViewfinderArea(CameraAppState st, CameraState camSvc, double areaH, double screenW) {
+  Widget _buildViewfinderArea(
+      CameraAppState st, CameraState camSvc, double areaH, double screenW) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.hardEdge, // 强制裁剪，防止 OverflowBox 内容溢出圆角边界
@@ -964,12 +1033,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             Container(
               color: Colors.black.withAlpha(80),
               child: const Center(
-                child: CircularProgressIndicator(color: _kWhite, strokeWidth: 2),
+                child:
+                    CircularProgressIndicator(color: _kWhite, strokeWidth: 2),
               ),
             ),
           // ── 色温滤色叠加层（根据 colorTempK 叠加半透明暖/冷色调）──
-          if (st.wbMode != 'auto')
-            _WbColorOverlay(colorTempK: st.colorTempK),
+          if (st.wbMode != 'auto') _WbColorOverlay(colorTempK: st.colorTempK),
           // ── 取景框手势：对焦 + 曝光 + 捩合缩放（完全分离）──
           // Listener 追踪活跃触控点数，确保双指不触发对焦
           Listener(
@@ -1018,7 +1087,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 if (d.pointerCount < 2) return;
                 // 小窗模式下最大缩放 10x（防止小窗缩到 120mm 以下）
                 // 正常模式最大 20x
-                final maxZoom = ref.read(cameraAppProvider).minimapEnabled ? 10.0 : 20.0;
+                final maxZoom =
+                    ref.read(cameraAppProvider).minimapEnabled ? 10.0 : 20.0;
                 final newZoom = (_pinchStartZoom * d.scale).clamp(0.6, maxZoom);
                 ref.read(cameraAppProvider.notifier).setZoom(newZoom);
               },
@@ -1051,7 +1121,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     opacity: _viewfinderHint != null ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 200),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 10),
                       decoration: BoxDecoration(
                         color: Colors.black.withAlpha(160),
                         borderRadius: BorderRadius.circular(20),
@@ -1095,7 +1166,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               child: IgnorePointer(
                 child: Center(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.black.withAlpha(180),
                       borderRadius: BorderRadius.circular(20),
@@ -1126,7 +1198,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                         if (st.doubleExpFirstPath != null) ...[
                           const SizedBox(width: 10),
                           GestureDetector(
-                            onTap: () => ref.read(cameraAppProvider.notifier).clearDoubleExpFirst(),
+                            onTap: () => ref
+                                .read(cameraAppProvider.notifier)
+                                .clearDoubleExpFirst(),
                             child: const Icon(
                               Icons.refresh,
                               color: Color(0xFFFFD700),
@@ -1154,6 +1228,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       ),
     );
   } // ── 底部面板（下段）──────────────────────────────────────────────────────────────────
+
   // 布局：深灰色圆角面板，[照片/视频 tab] + [样图/管理] → 相机列表 → 工具栏 → 快门行
   Widget _buildBottomPanel(CameraAppState st) {
     // 底部面板：纯黑背景
@@ -1167,10 +1242,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // 工具图标行（4个图标+文字标签）
           // 点击曝光胶囊或色温胶囊时隐藏工具栏
           AnimatedOpacity(
-            opacity: (_showExposureSlider || _showWbPanel || st.showZoomSlider) ? 0.0 : 1.0,
+            opacity: (_showExposureSlider || _showWbPanel || st.showZoomSlider)
+                ? 0.0
+                : 1.0,
             duration: const Duration(milliseconds: 200),
             child: IgnorePointer(
-              ignoring: _showExposureSlider || _showWbPanel || st.showZoomSlider,
+              ignoring:
+                  _showExposureSlider || _showWbPanel || st.showZoomSlider,
               child: _buildToolbar(st),
             ),
           ),
@@ -1220,7 +1298,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           GestureDetector(
             onTap: () {
               HapticFeedback.selectionClick();
-              _pushWithCameraPause(CameraSampleScreen(cameraId: st.activeCameraId));
+              _pushWithCameraPause(
+                  CameraSampleScreen(cameraId: st.activeCameraId));
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1233,18 +1312,28 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 children: [
                   // 当前相机图标（圆角小图）
                   Builder(builder: (_) {
-                    final entry = kAllCameras.where((e) => e.id == st.activeCameraId).firstOrNull;
+                    final entry = kAllCameras
+                        .where((e) => e.id == st.activeCameraId)
+                        .firstOrNull;
                     final iconPath = entry?.iconPath;
                     return ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: iconPath != null
-                          ? Image.asset(iconPath, width: 18, height: 18, fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined, color: _kWhite, size: 14))
-                          : const Icon(Icons.image_outlined, color: _kWhite, size: 14),
+                          ? Image.asset(iconPath,
+                              width: 18,
+                              height: 18,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.image_outlined,
+                                  color: _kWhite,
+                                  size: 14))
+                          : const Icon(Icons.image_outlined,
+                              color: _kWhite, size: 14),
                     );
                   }),
                   const SizedBox(width: 5),
-                  Text(_s().sample, style: const TextStyle(color: _kWhite, fontSize: 13)),
+                  Text(_s().sample,
+                      style: const TextStyle(color: _kWhite, fontSize: 13)),
                 ],
               ),
             ),
@@ -1264,9 +1353,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 14),
+                  const Icon(Icons.photo_camera_outlined,
+                      color: _kWhite, size: 14),
                   const SizedBox(width: 4),
-                  Text(_s().manage, style: const TextStyle(color: _kWhite, fontSize: 13)),
+                  Text(_s().manage,
+                      style: const TextStyle(color: _kWhite, fontSize: 13)),
                 ],
               ),
             ),
@@ -1280,8 +1371,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Widget _buildCameraList(CameraAppState st) {
     // 从管理状态读取启用且有序的相机 ID 列表
     final managerState = ref.watch(cameraManagerProvider).valueOrNull;
-    final enabledIds = managerState?.enabledOrderedIds
-        ?? kAllCameras.map((e) => e.id).toList();
+    final enabledIds = managerState?.enabledOrderedIds ??
+        kAllCameras.map((e) => e.id).toList();
 
     return SizedBox(
       height: 88,
@@ -1295,7 +1386,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (entry == null) return const SizedBox.shrink();
           final isActive = st.activeCameraId == camId;
           final iconPath = entry.iconPath;
-          final isFavorited = managerState?.favoritedIds.contains(camId) ?? false;
+          final isFavorited =
+              managerState?.favoritedIds.contains(camId) ?? false;
 
           return GestureDetector(
             onTap: () => _showCameraTransition(
@@ -1329,11 +1421,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                   height: 64,
                                   fit: BoxFit.cover,
                                   errorBuilder: (_, __, ___) => const Center(
-                                    child: Icon(Icons.camera_alt, color: Colors.white54, size: 28),
+                                    child: Icon(Icons.camera_alt,
+                                        color: Colors.white54, size: 28),
                                   ),
                                 )
                               : const Center(
-                                  child: Icon(Icons.camera_alt, color: Colors.white54, size: 28),
+                                  child: Icon(Icons.camera_alt,
+                                      color: Colors.white54, size: 28),
                                 ),
                         ),
                       ),
@@ -1349,7 +1443,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                               color: Color(0xFFFFCC00),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.star, color: Colors.black, size: 10),
+                            child: const Icon(Icons.star,
+                                color: Colors.black, size: 10),
                           ),
                         ),
                     ],
@@ -1374,11 +1469,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       ),
     );
   }
-    Widget _buildPreview(CameraAppState st, CameraState camSvc) {
+
+  Widget _buildPreview(CameraAppState st, CameraState camSvc) {
     if (camSvc.isLoading) {
       return Container(
         color: Colors.black,
-        child: const Center(child: CircularProgressIndicator(color: _kWhite, strokeWidth: 2)),
+        child: const Center(
+            child: CircularProgressIndicator(color: _kWhite, strokeWidth: 2)),
       );
     }
     if (camSvc.error != null) {
@@ -1458,9 +1555,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 builder: (_, __) => Transform.rotate(
                   angle: _rotateAngle.value,
                   child: Icon(
-                    _showWbPanel ? Icons.keyboard_arrow_down : Icons.thermostat_outlined,
+                    _showWbPanel
+                        ? Icons.keyboard_arrow_down
+                        : Icons.thermostat_outlined,
                     size: 16,
-                    color: (_showWbPanel || st.wbMode != 'auto') ? Colors.black : _kWhite,
+                    color: (_showWbPanel || st.wbMode != 'auto')
+                        ? Colors.black
+                        : _kWhite,
                   ),
                 ),
               ),
@@ -1530,9 +1631,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  _showExposureSlider ? Icons.keyboard_arrow_down : Icons.wb_sunny_outlined,
+                  _showExposureSlider
+                      ? Icons.keyboard_arrow_down
+                      : Icons.wb_sunny_outlined,
                   size: 14,
-                  color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : _kWhite,
+                  color: (_showExposureSlider || st.exposureValue != 0)
+                      ? Colors.black
+                      : _kWhite,
                 ),
                 const SizedBox(width: 5),
                 AnimatedBuilder(
@@ -1545,7 +1650,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           : (st.exposureValue > 0 ? '+' : '') +
                               st.exposureValue.toStringAsFixed(1),
                       style: TextStyle(
-                        color: (_showExposureSlider || st.exposureValue != 0) ? Colors.black : _kWhite,
+                        color: (_showExposureSlider || st.exposureValue != 0)
+                            ? Colors.black
+                            : _kWhite,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
@@ -1559,6 +1666,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       ],
     );
   }
+
   // ── 工具栏（5个图标）────────────────────────────────────────────────────────
   Widget _buildToolbar(CameraAppState st) {
     const double btnW = 64.0;
@@ -1595,7 +1703,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   onTap: () {
                     final cur = ref.read(cameraAppProvider).timerSeconds;
                     final options = [0, 3, 10];
-                    final next = options[(options.indexOf(cur) + 1) % options.length];
+                    final next =
+                        options[(options.indexOf(cur) + 1) % options.length];
                     final sl = sOf(ref.read(languageProvider));
                     ref.read(cameraAppProvider.notifier).cycleTimer();
                     if (next == 0) {
@@ -1695,9 +1804,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                 child: _latestThumb != null
                                     ? ClipRRect(
                                         borderRadius: BorderRadius.circular(10),
-                                        child: Image.memory(_latestThumb!, fit: BoxFit.cover),
+                                        child: Image.memory(_latestThumb!,
+                                            fit: BoxFit.cover),
                                       )
-                                    : const Icon(Icons.photo_outlined, color: Colors.grey, size: 24),
+                                    : const Icon(Icons.photo_outlined,
+                                        color: Colors.grey, size: 24),
                               ),
                             ),
                           ),
@@ -1794,7 +1905,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                         child: GestureDetector(
                           onTap: () => showCameraConfigSheet(
                             context,
-                            onCameraSwitch: (action) => _showCameraTransition(action),
+                            onCameraSwitch: (action) =>
+                                _showCameraTransition(action),
                           ),
                           child: SizedBox(
                             width: 83,
@@ -1819,23 +1931,32 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                       );
                                       return Column(
                                         mainAxisSize: MainAxisSize.min,
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
                                           // 优先使用真实相机图标，如果没有则用系统图标
                                           if (entry.iconPath != null)
                                             ClipRRect(
-                                              borderRadius: BorderRadius.circular(6),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
                                               child: Image.asset(
                                                 entry.iconPath!,
                                                 width: 56,
                                                 height: 56,
                                                 fit: BoxFit.cover,
                                                 errorBuilder: (_, __, ___) =>
-                                                    const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 36),
+                                                    const Icon(
+                                                        Icons
+                                                            .photo_camera_outlined,
+                                                        color: _kWhite,
+                                                        size: 36),
                                               ),
                                             )
                                           else
-                                            const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 36),
+                                            const Icon(
+                                                Icons.photo_camera_outlined,
+                                                color: _kWhite,
+                                                size: 36),
                                           Text(
                                             entry.name,
                                             style: const TextStyle(
@@ -1912,190 +2033,237 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                         borderRadius: BorderRadius.circular(16),
                       ),
                       padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // 第一行: 4个图标（等宽分布）
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          // 1. 网格线
-                          _TopMenuBtn(
-                            icon: st.gridEnabled ? Icons.grid_on : Icons.grid_off,
-                            label: st.gridEnabled ? _s().gridOn : _s().gridOff,
-                            btnW: btnW,
-                            onTap: () => ref.read(cameraAppProvider.notifier).toggleGrid(),
-                          ),
-                          // 2. 清晰度（循环切换 低/中/高）
-                          _TopMenuBtn(
-                            customIcon: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.white, width: 1.5),
-                                borderRadius: BorderRadius.circular(5),
+                          // 第一行: 4个图标（等宽分布）
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              // 1. 网格线
+                              _TopMenuBtn(
+                                icon: st.gridEnabled
+                                    ? Icons.grid_on
+                                    : Icons.grid_off,
+                                label:
+                                    st.gridEnabled ? _s().gridOn : _s().gridOff,
+                                btnW: btnW,
+                                onTap: () => ref
+                                    .read(cameraAppProvider.notifier)
+                                    .toggleGrid(),
                               ),
-                              child: Center(
-                                child: Text(
-                                  sharpenLabels[st.sharpenLevel],
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    height: 1,
+                              // 2. 清晰度（循环切换 低/中/高）
+                              _TopMenuBtn(
+                                customIcon: Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                        color: Colors.white, width: 1.5),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      sharpenLabels[st.sharpenLevel],
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1,
+                                      ),
+                                    ),
                                   ),
                                 ),
+                                label: _s().sharpness,
+                                btnW: btnW,
+                                onTap: () => _showCameraTransition(
+                                  () => ref
+                                      .read(cameraAppProvider.notifier)
+                                      .cycleSharpen(),
+                                  duration: const Duration(milliseconds: 350),
+                                ),
                               ),
-                            ),
-                            label: _s().sharpness,
-                            btnW: btnW,
-                            onTap: () => _showCameraTransition(
-                              () => ref.read(cameraAppProvider.notifier).cycleSharpen(),
-                              duration: const Duration(milliseconds: 350),
-                            ),
+                              // 3. 小框模式
+                              _TopMenuBtn(
+                                icon: st.minimapEnabled
+                                    ? Icons.picture_in_picture
+                                    : Icons.picture_in_picture_outlined,
+                                label: st.minimapEnabled
+                                    ? _s().minimapOn
+                                    : _s().minimapOff,
+                                btnW: btnW,
+                                onTap: () {
+                                  final willEnable = !st.minimapEnabled;
+                                  final sl = sOf(ref.read(languageProvider));
+                                  ref
+                                      .read(cameraAppProvider.notifier)
+                                      .toggleMinimap();
+                                  ref
+                                      .read(cameraAppProvider.notifier)
+                                      .toggleTopMenu();
+                                  _showViewfinderHint(willEnable
+                                      ? sl.minimapHintOn
+                                      : sl.minimapHintOff);
+                                },
+                              ),
+                              // 4. 双重曝光
+                              _TopMenuBtn(
+                                icon: st.doubleExpEnabled
+                                    ? Icons.exposure
+                                    : Icons.exposure_outlined,
+                                label: st.doubleExpEnabled
+                                    ? _s().doubleExpOn
+                                    : _s().doubleExpOff,
+                                btnW: btnW,
+                                onTap: () {
+                                  final willEnable = !st.doubleExpEnabled;
+                                  final sl = sOf(ref.read(languageProvider));
+                                  ref
+                                      .read(cameraAppProvider.notifier)
+                                      .toggleDoubleExp();
+                                  ref
+                                      .read(cameraAppProvider.notifier)
+                                      .toggleTopMenu();
+                                  _showViewfinderHint(willEnable
+                                      ? sl.doubleExpStart
+                                      : sl.doubleExpDisabled);
+                                },
+                              ),
+                            ],
                           ),
-                          // 3. 小框模式
-                          _TopMenuBtn(
-                            icon: st.minimapEnabled
-                                ? Icons.picture_in_picture
-                                : Icons.picture_in_picture_outlined,
-                            label: st.minimapEnabled ? _s().minimapOn : _s().minimapOff,
-                            btnW: btnW,
-                            onTap: () {
-                              final willEnable = !st.minimapEnabled;
-                              final sl = sOf(ref.read(languageProvider));
-                              ref.read(cameraAppProvider.notifier).toggleMinimap();
-                              ref.read(cameraAppProvider.notifier).toggleTopMenu();
-                              _showViewfinderHint(willEnable ? sl.minimapHintOn : sl.minimapHintOff);
-                            },
-                          ),
-                          // 4. 双重曝光
-                          _TopMenuBtn(
-                            icon: st.doubleExpEnabled
-                                ? Icons.exposure
-                                : Icons.exposure_outlined,
-                            label: st.doubleExpEnabled ? _s().doubleExpOn : _s().doubleExpOff,
-                            btnW: btnW,
-                            onTap: () {
-                              final willEnable = !st.doubleExpEnabled;
-                              final sl = sOf(ref.read(languageProvider));
-                              ref.read(cameraAppProvider.notifier).toggleDoubleExp();
-                              ref.read(cameraAppProvider.notifier).toggleTopMenu();
-                              _showViewfinderHint(willEnable
-                                  ? sl.doubleExpStart
-                                  : sl.doubleExpDisabled);
-                            },
+                          const SizedBox(height: 24),
+                          // 第二行: 2个图标 + 2个占位（保持等宽对齐）
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              // 5. 连拍
+                              _TopMenuBtn(
+                                icon: Icons.burst_mode_outlined,
+                                label: st.burstCount == 0
+                                    ? _s().burstOff
+                                    : _s().burstCount(st.burstCount),
+                                btnW: btnW,
+                                isActive: st.burstCount > 0,
+                                onTap: () {
+                                  final sl = sOf(ref.read(languageProvider));
+                                  ref
+                                      .read(cameraAppProvider.notifier)
+                                      .cycleBurst();
+                                  final next = st.burstCount == 0
+                                      ? 3
+                                      : (st.burstCount == 3 ? 10 : 0);
+                                  if (next == 0) {
+                                    _showViewfinderHint(sl.burstOff);
+                                  } else {
+                                    _showViewfinderHint(sl.burstCount(next));
+                                  }
+                                },
+                              ),
+                              // 6. 位置信息
+                              _TopMenuBtn(
+                                icon: st.locationEnabled
+                                    ? Icons.location_on
+                                    : Icons.location_off_outlined,
+                                label: st.locationEnabled
+                                    ? _s().locationOn
+                                    : _s().locationOff,
+                                btnW: btnW,
+                                onTap: () async {
+                                  final result = await ref
+                                      .read(cameraAppProvider.notifier)
+                                      .toggleLocation();
+                                  if (!context.mounted) return;
+                                  final sl = sOf(ref.read(languageProvider));
+                                  switch (result) {
+                                    case LocationToggleResult.enabled:
+                                      _showViewfinderHint(sl.locationEnabled);
+                                      break;
+                                    case LocationToggleResult.disabled:
+                                      _showViewfinderHint(sl.locationDisabled);
+                                      break;
+                                    case LocationToggleResult.permissionDenied:
+                                      _showViewfinderHint(sl.locationDenied);
+                                      break;
+                                    case LocationToggleResult
+                                          .permissionDeniedForever:
+                                      showDialog(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          backgroundColor:
+                                              const Color(0xFF1C1C1E),
+                                          title: Text(sl.locationPermTitle,
+                                              style: const TextStyle(
+                                                  color: Colors.white)),
+                                          content: Text(
+                                            sl.locationPermDesc,
+                                            style: const TextStyle(
+                                                color: Colors.grey),
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(ctx),
+                                              child: Text(sl.cancel,
+                                                  style: const TextStyle(
+                                                      color: Colors.grey)),
+                                            ),
+                                            TextButton(
+                                              onPressed: () {
+                                                Navigator.pop(ctx);
+                                                LocationService.instance
+                                                    .openSettings();
+                                              },
+                                              child: Text(sl.goToSettings,
+                                                  style: const TextStyle(
+                                                      color:
+                                                          Color(0xFFFF9500))),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      break;
+                                  }
+                                },
+                              ),
+                              // 7. 设置
+                              _TopMenuBtn(
+                                icon: Icons.settings_outlined,
+                                label: _s().settings,
+                                btnW: btnW,
+                                onTap: () {
+                                  ref
+                                      .read(cameraAppProvider.notifier)
+                                      .toggleTopMenu();
+                                  _pushWithCameraPause(const SettingsScreen());
+                                },
+                              ),
+                              // 8. 调试信息浮层
+                              _TopMenuBtn(
+                                icon: st.showDebugOverlay
+                                    ? Icons.bug_report
+                                    : Icons.bug_report_outlined,
+                                label: st.showDebugOverlay
+                                    ? _s().debugOn
+                                    : _s().debugOff,
+                                btnW: btnW,
+                                onTap: () {
+                                  ref
+                                      .read(cameraAppProvider.notifier)
+                                      .toggleDebugOverlay();
+                                  ref
+                                      .read(cameraAppProvider.notifier)
+                                      .toggleTopMenu();
+                                },
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
-                      // 第二行: 2个图标 + 2个占位（保持等宽对齐）
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          // 5. 连拍
-                          _TopMenuBtn(
-                            icon: Icons.burst_mode_outlined,
-                            label: st.burstCount == 0
-                                ? _s().burstOff
-                                : _s().burstCount(st.burstCount),
-                            btnW: btnW,
-                            isActive: st.burstCount > 0,
-                            onTap: () {
-                              final sl = sOf(ref.read(languageProvider));
-                              ref.read(cameraAppProvider.notifier).cycleBurst();
-                              final next = st.burstCount == 0 ? 3 : (st.burstCount == 3 ? 10 : 0);
-                              if (next == 0) {
-                                _showViewfinderHint(sl.burstOff);
-                              } else {
-                                _showViewfinderHint(sl.burstCount(next));
-                              }
-                            },
-                          ),
-                          // 6. 位置信息
-                          _TopMenuBtn(
-                            icon: st.locationEnabled
-                                ? Icons.location_on
-                                : Icons.location_off_outlined,
-                            label: st.locationEnabled ? _s().locationOn : _s().locationOff,
-                            btnW: btnW,
-                            onTap: () async {
-                              final result = await ref.read(cameraAppProvider.notifier).toggleLocation();
-                              if (!context.mounted) return;
-                              final sl = sOf(ref.read(languageProvider));
-                              switch (result) {
-                                case LocationToggleResult.enabled:
-                                  _showViewfinderHint(sl.locationEnabled);
-                                  break;
-                                case LocationToggleResult.disabled:
-                                  _showViewfinderHint(sl.locationDisabled);
-                                  break;
-                                case LocationToggleResult.permissionDenied:
-                                  _showViewfinderHint(sl.locationDenied);
-                                  break;
-                                case LocationToggleResult.permissionDeniedForever:
-                                  showDialog(
-                                    context: context,
-                                    builder: (ctx) => AlertDialog(
-                                      backgroundColor: const Color(0xFF1C1C1E),
-                                      title: Text(sl.locationPermTitle,
-                                          style: const TextStyle(color: Colors.white)),
-                                      content: Text(
-                                        sl.locationPermDesc,
-                                        style: const TextStyle(color: Colors.grey),
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(ctx),
-                                          child: Text(sl.cancel,
-                                              style: const TextStyle(color: Colors.grey)),
-                                        ),
-                                        TextButton(
-                                          onPressed: () {
-                                            Navigator.pop(ctx);
-                                            LocationService.instance.openSettings();
-                                          },
-                                          child: Text(sl.goToSettings,
-                                              style: const TextStyle(color: Color(0xFFFF9500))),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                  break;
-                              }
-                            },
-                          ),
-                          // 7. 设置
-                          _TopMenuBtn(
-                            icon: Icons.settings_outlined,
-                            label: _s().settings,
-                            btnW: btnW,
-                            onTap: () {
-                              ref.read(cameraAppProvider.notifier).toggleTopMenu();
-                              _pushWithCameraPause(const SettingsScreen());
-                            },
-                          ),
-                          // 8. 调试信息浮层
-                          _TopMenuBtn(
-                            icon: st.showDebugOverlay
-                                ? Icons.bug_report
-                                : Icons.bug_report_outlined,
-                            label: st.showDebugOverlay ? _s().debugOn : _s().debugOff,
-                            btnW: btnW,
-                            onTap: () {
-                              ref.read(cameraAppProvider.notifier).toggleDebugOverlay();
-                              ref.read(cameraAppProvider.notifier).toggleTopMenu();
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
           ],
         ),
       ),
@@ -2145,7 +2313,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 // ─────────────────────────────────────────────────────────────────────────────
 class _OptionsSheet extends ConsumerWidget {
   final VoidCallback onClose;
-  final Future<void> Function(FutureOr<void> Function() action, {Duration duration}) onCameraTransition;
+  final Future<void> Function(FutureOr<void> Function() action,
+      {Duration duration}) onCameraTransition;
 
   const _OptionsSheet({
     required this.onClose,
@@ -2174,7 +2343,8 @@ class _OptionsSheet extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildCameraSection(context, ref, st, 'Video', _kVideoCameras),
+                    _buildCameraSection(
+                        context, ref, st, 'Video', _kVideoCameras),
                     const SizedBox(height: 8),
                     _buildManagedCameraSection(context, ref, st),
                     const SizedBox(height: 16),
@@ -2196,7 +2366,8 @@ class _OptionsSheet extends ConsumerWidget {
                   color: _kDarkGray,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.keyboard_arrow_down, color: _kWhite, size: 28),
+                child: const Icon(Icons.keyboard_arrow_down,
+                    color: _kWhite, size: 28),
               ),
             ),
             const SizedBox(height: 8),
@@ -2231,7 +2402,11 @@ class _OptionsSheet extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Center(
-                child: Text('D', style: TextStyle(color: _kWhite, fontSize: 20, fontWeight: FontWeight.w900)),
+                child: Text('D',
+                    style: TextStyle(
+                        color: _kWhite,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900)),
               ),
             ),
             const SizedBox(width: 12),
@@ -2239,8 +2414,14 @@ class _OptionsSheet extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Dazz Pro', style: TextStyle(color: _kWhite, fontSize: 17, fontWeight: FontWeight.w700)),
-                  Text(s.unlockAll, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  const Text('Dazz Pro',
+                      style: TextStyle(
+                          color: _kWhite,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700)),
+                  Text(s.unlockAll,
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 13)),
                 ],
               ),
             ),
@@ -2252,10 +2433,11 @@ class _OptionsSheet extends ConsumerWidget {
   }
 
   // ── Photo 相机选择（从 cameraManagerProvider 读取启用且有序的相机）─────────────
-  Widget _buildManagedCameraSection(BuildContext context, WidgetRef ref, CameraAppState st) {
+  Widget _buildManagedCameraSection(
+      BuildContext context, WidgetRef ref, CameraAppState st) {
     final managerState = ref.watch(cameraManagerProvider).valueOrNull;
-    final enabledIds = managerState?.enabledOrderedIds
-        ?? kAllCameras.map((e) => e.id).toList();
+    final enabledIds = managerState?.enabledOrderedIds ??
+        kAllCameras.map((e) => e.id).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2268,7 +2450,9 @@ class _OptionsSheet extends ConsumerWidget {
               color: _kBlue,
               borderRadius: BorderRadius.circular(6),
             ),
-            child: const Text('Photo', style: TextStyle(color: _kWhite, fontSize: 13, fontWeight: FontWeight.w600)),
+            child: const Text('Photo',
+                style: TextStyle(
+                    color: _kWhite, fontSize: 13, fontWeight: FontWeight.w600)),
           ),
         ),
         SizedBox(
@@ -2282,12 +2466,15 @@ class _OptionsSheet extends ConsumerWidget {
               final entry = kAllCameras.where((e) => e.id == camId).firstOrNull;
               if (entry == null) return const SizedBox.shrink();
               final isActive = st.activeCameraId == camId;
-              final isFavorited = managerState?.favoritedIds.contains(camId) ?? false;
+              final isFavorited =
+                  managerState?.favoritedIds.contains(camId) ?? false;
 
               return GestureDetector(
                 onTap: () {
                   onCameraTransition(
-                    () => ref.read(cameraAppProvider.notifier).switchToCamera(camId),
+                    () => ref
+                        .read(cameraAppProvider.notifier)
+                        .switchToCamera(camId),
                     duration: const Duration(milliseconds: 500),
                   );
                   onClose();
@@ -2340,7 +2527,8 @@ class _OptionsSheet extends ConsumerWidget {
                                   color: Color(0xFFFFCC00),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(Icons.star, color: Colors.black, size: 10),
+                                child: const Icon(Icons.star,
+                                    color: Colors.black, size: 10),
                               ),
                             ),
                         ],
@@ -2351,7 +2539,8 @@ class _OptionsSheet extends ConsumerWidget {
                         style: TextStyle(
                           color: isActive ? _kWhite : Colors.grey,
                           fontSize: 11,
-                          fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                          fontWeight:
+                              isActive ? FontWeight.w600 : FontWeight.w400,
                         ),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
@@ -2368,7 +2557,8 @@ class _OptionsSheet extends ConsumerWidget {
     );
   }
 
-  Widget _buildCameraSection(BuildContext context, WidgetRef ref, CameraAppState st, String label, List<_CameraItem> cameras) {
+  Widget _buildCameraSection(BuildContext context, WidgetRef ref,
+      CameraAppState st, String label, List<_CameraItem> cameras) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2380,7 +2570,9 @@ class _OptionsSheet extends ConsumerWidget {
               color: _kBlue,
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Text(label, style: const TextStyle(color: _kWhite, fontSize: 13, fontWeight: FontWeight.w600)),
+            child: Text(label,
+                style: const TextStyle(
+                    color: _kWhite, fontSize: 13, fontWeight: FontWeight.w600)),
           ),
         ),
         SizedBox(
@@ -2395,7 +2587,9 @@ class _OptionsSheet extends ConsumerWidget {
               return GestureDetector(
                 onTap: () {
                   onCameraTransition(
-                    () => ref.read(cameraAppProvider.notifier).switchToCamera(cam.id),
+                    () => ref
+                        .read(cameraAppProvider.notifier)
+                        .switchToCamera(cam.id),
                     duration: const Duration(milliseconds: 500),
                   );
                   onClose();
@@ -2416,7 +2610,8 @@ class _OptionsSheet extends ConsumerWidget {
                               : null,
                         ),
                         child: Center(
-                          child: Text(cam.emoji, style: const TextStyle(fontSize: 36)),
+                          child: Text(cam.emoji,
+                              style: const TextStyle(fontSize: 36)),
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -2428,11 +2623,16 @@ class _OptionsSheet extends ConsumerWidget {
                             style: TextStyle(
                               color: isActive ? _kWhite : Colors.grey,
                               fontSize: 11,
-                              fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                              fontWeight:
+                                  isActive ? FontWeight.w600 : FontWeight.w400,
                             ),
                           ),
                           if (cam.hasR)
-                            const Text(' R', style: TextStyle(color: _kRed, fontSize: 11, fontWeight: FontWeight.w700)),
+                            const Text(' R',
+                                style: TextStyle(
+                                    color: _kRed,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700)),
                         ],
                       ),
                     ],
@@ -2446,10 +2646,12 @@ class _OptionsSheet extends ConsumerWidget {
     );
   }
 
-  Widget _buildOptionRow(BuildContext context, WidgetRef ref, CameraAppState st, CameraDefinition? camera) {
+  Widget _buildOptionRow(BuildContext context, WidgetRef ref, CameraAppState st,
+      CameraDefinition? camera) {
     final s = sOf(ref.read(languageProvider));
     // 当前比例是否支持边框
-    final currentRatioSupportsFrame = camera?.ratioById(st.activeRatioId)?.supportsFrame ?? false;
+    final currentRatioSupportsFrame =
+        camera?.ratioById(st.activeRatioId)?.supportsFrame ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2461,7 +2663,9 @@ class _OptionsSheet extends ConsumerWidget {
               color: _kBlue,
               borderRadius: BorderRadius.circular(6),
             ),
-            child: const Text('Option', style: TextStyle(color: _kWhite, fontSize: 13, fontWeight: FontWeight.w600)),
+            child: const Text('Option',
+                style: TextStyle(
+                    color: _kWhite, fontSize: 13, fontWeight: FontWeight.w600)),
           ),
         ),
         SizedBox(
@@ -2515,24 +2719,25 @@ class _OptionsSheet extends ConsumerWidget {
               ),
               // 边框（仅在当前比例支持边框时显示）
               if (currentRatioSupportsFrame)
-              _OptionIconBtn(
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _kDarkGray,
-                    border: Border.all(color: Colors.white54, width: 2),
+                _OptionIconBtn(
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _kDarkGray,
+                      border: Border.all(color: Colors.white54, width: 2),
+                    ),
+                    child:
+                        const Icon(Icons.crop_square, color: _kWhite, size: 22),
                   ),
-                  child: const Icon(Icons.crop_square, color: _kWhite, size: 22),
+                  label: s.frame,
+                  onTap: () {
+                    onClose();
+                    // 打开边框面板
+                    ref.read(cameraAppProvider.notifier).togglePanel('frame');
+                  },
                 ),
-                label: s.frame,
-                onTap: () {
-                  onClose();
-                  // 打开边框面板
-                  ref.read(cameraAppProvider.notifier).togglePanel('frame');
-                },
-              ),
               // 色彩
               _OptionIconBtn(
                 child: Container(
@@ -2559,7 +2764,10 @@ class _OptionsSheet extends ConsumerWidget {
                   child: Center(
                     child: Text(
                       st.timerSeconds > 0 ? '${st.timerSeconds}' : '10',
-                      style: const TextStyle(color: _kWhite, fontSize: 16, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                          color: _kWhite,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -2578,7 +2786,10 @@ class _OptionsSheet extends ConsumerWidget {
                   child: Center(
                     child: Text(
                       camera?.ratioById(st.activeRatioId)?.label ?? '3:4',
-                      style: const TextStyle(color: _kWhite, fontSize: 12, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                          color: _kWhite,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -2597,7 +2808,8 @@ class _OptionsSheet extends ConsumerWidget {
                     shape: BoxShape.circle,
                     color: _kDarkGray,
                   ),
-                  child: const Icon(Icons.access_time, color: _kWhite, size: 22),
+                  child:
+                      const Icon(Icons.access_time, color: _kWhite, size: 22),
                 ),
                 label: s.watermark,
                 onTap: () {
@@ -2615,7 +2827,8 @@ class _OptionsSheet extends ConsumerWidget {
     );
   }
 
-  Widget _buildSubPanel(BuildContext context, WidgetRef ref, CameraAppState st, CameraDefinition camera) {
+  Widget _buildSubPanel(BuildContext context, WidgetRef ref, CameraAppState st,
+      CameraDefinition camera) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(16),
@@ -2644,12 +2857,14 @@ class _OptionsSheet extends ConsumerWidget {
             frames: camera.modules.frames,
             activeId: st.activeFrameId,
             activeRatioId: st.activeRatioId,
-            onSelect: (id) => ref.read(cameraAppProvider.notifier).selectFrame(id),
+            onSelect: (id) =>
+                ref.read(cameraAppProvider.notifier).selectFrame(id),
           ),
         'watermark' => _WatermarkRow(
             presets: camera.modules.watermarks.presets,
             activeId: st.activeWatermarkId,
-            onSelect: (id) => ref.read(cameraAppProvider.notifier).selectWatermark(id),
+            onSelect: (id) =>
+                ref.read(cameraAppProvider.notifier).selectWatermark(id),
           ),
         _ => const SizedBox.shrink(),
       },
@@ -2665,6 +2880,7 @@ class _GallerySheet extends ConsumerStatefulWidget {
   @override
   ConsumerState<_GallerySheet> createState() => _GallerySheetState();
 }
+
 class _GallerySheetState extends ConsumerState<_GallerySheet> {
   List<AssetEntity> _allPhotos = [];
   bool _loading = true;
@@ -2673,13 +2889,19 @@ class _GallerySheetState extends ConsumerState<_GallerySheet> {
     super.initState();
     _loadPhotos();
   }
+
   Future<void> _loadPhotos() async {
     final perm = await PhotoManager.requestPermissionExtend();
-    if (!perm.hasAccess) { if (mounted) setState(() => _loading = false); return; }
+    if (!perm.hasAccess) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
     final albums = await PhotoManager.getAssetPathList(
       type: RequestType.image,
       filterOption: FilterOptionGroup(
-        orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
+        orders: [
+          const OrderOption(type: OrderOptionType.createDate, asc: false)
+        ],
       ),
     );
     if (albums.isNotEmpty) {
@@ -2687,7 +2909,9 @@ class _GallerySheetState extends ConsumerState<_GallerySheet> {
       AssetPathEntity? dazzPath;
       for (final p in albums) {
         final upper = p.name.toUpperCase();
-        if (upper == 'DAZZ' || upper.endsWith('/DAZZ') || upper.contains('DAZZ')) {
+        if (upper == 'DAZZ' ||
+            upper.endsWith('/DAZZ') ||
+            upper.contains('DAZZ')) {
           dazzPath = p;
           break;
         }
@@ -2697,22 +2921,30 @@ class _GallerySheetState extends ConsumerState<_GallerySheet> {
         // Android: 清除文件缓存，确保新照片立即可见
         await PhotoManager.clearFileCache();
         final count = await dazzPath.assetCountAsync;
-        assets = await dazzPath.getAssetListRange(start: 0, end: count.clamp(0, 200));
+        assets = await dazzPath.getAssetListRange(
+            start: 0, end: count.clamp(0, 200));
       } else {
         // 未找到 DAZZ 相册时，从根相册过滤 dazz_ 前缀文件
-        final rootPath = albums.firstWhere((p) => p.isAll, orElse: () => albums.first);
+        final rootPath =
+            albums.firstWhere((p) => p.isAll, orElse: () => albums.first);
         final rootCount = await rootPath.assetCountAsync;
-        final rootAssets = await rootPath.getAssetListRange(start: 0, end: rootCount.clamp(0, 1000));
+        final rootAssets = await rootPath.getAssetListRange(
+            start: 0, end: rootCount.clamp(0, 1000));
         assets = rootAssets.where((a) {
           final title = (a.title ?? '').toLowerCase();
           return title.startsWith('dazz_') || title.contains('dazz');
         }).toList();
       }
-      if (mounted) setState(() { _allPhotos = assets; _loading = false; });
+      if (mounted)
+        setState(() {
+          _allPhotos = assets;
+          _loading = false;
+        });
     } else {
       if (mounted) setState(() => _loading = false);
     }
   }
+
   @override
   Widget build(BuildContext context) {
     final s = sOf(ref.watch(languageProvider));
@@ -2737,7 +2969,8 @@ class _GallerySheetState extends ConsumerState<_GallerySheet> {
               children: [
                 // 顶部按鈕行
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -2748,7 +2981,8 @@ class _GallerySheetState extends ConsumerState<_GallerySheet> {
                           color: Color(0xFF3A3A3C),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.settings_outlined, color: _kWhite, size: 22),
+                        child: const Icon(Icons.settings_outlined,
+                            color: _kWhite, size: 22),
                       ),
                       Container(
                         width: 40,
@@ -2757,7 +2991,8 @@ class _GallerySheetState extends ConsumerState<_GallerySheet> {
                           color: Color(0xFF3A3A3C),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.check_box_outlined, color: _kWhite, size: 22),
+                        child: const Icon(Icons.check_box_outlined,
+                            color: _kWhite, size: 22),
                       ),
                     ],
                   ),
@@ -2776,8 +3011,10 @@ class _GallerySheetState extends ConsumerState<_GallerySheet> {
                     count: _loading ? 0 : _allPhotos.length,
                   ),
                 ),
-                _GalleryItem(icon: Icons.favorite_outline, label: s.favorites, count: 0),
-                _GalleryItem(icon: Icons.video_file_outlined, label: s.film, count: 0),
+                _GalleryItem(
+                    icon: Icons.favorite_outline, label: s.favorites, count: 0),
+                _GalleryItem(
+                    icon: Icons.video_file_outlined, label: s.film, count: 0),
               ],
             ),
           ),
@@ -2795,7 +3032,8 @@ class _GallerySheetState extends ConsumerState<_GallerySheet> {
                 color: Color(0xFF3A3A3C),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.photo_camera_outlined, color: _kWhite, size: 26),
+              child: const Icon(Icons.photo_camera_outlined,
+                  color: _kWhite, size: 26),
             ),
           ),
         ),
@@ -2803,6 +3041,7 @@ class _GallerySheetState extends ConsumerState<_GallerySheet> {
     );
   }
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Asset Thumbnail Widget
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2812,6 +3051,7 @@ class _AssetThumb extends StatefulWidget {
   @override
   State<_AssetThumb> createState() => _AssetThumbState();
 }
+
 class _AssetThumbState extends State<_AssetThumb> {
   Uint8List? _thumb;
   @override
@@ -2819,10 +3059,13 @@ class _AssetThumbState extends State<_AssetThumb> {
     super.initState();
     _load();
   }
+
   Future<void> _load() async {
-    final data = await widget.asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
+    final data =
+        await widget.asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
     if (mounted && data != null) setState(() => _thumb = data);
   }
+
   @override
   Widget build(BuildContext context) {
     if (_thumb == null) {
@@ -2846,14 +3089,18 @@ class _PhotoGridPage extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: _kBlack,
         foregroundColor: _kWhite,
-        title: Text(s.allPhotos, style: const TextStyle(color: _kWhite, fontSize: 17, fontWeight: FontWeight.w600)),
+        title: Text(s.allPhotos,
+            style: const TextStyle(
+                color: _kWhite, fontSize: 17, fontWeight: FontWeight.w600)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, color: _kWhite),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: photos.isEmpty
-          ? Center(child: Text(s.noPhotos, style: const TextStyle(color: Colors.white54)))
+          ? Center(
+              child: Text(s.noPhotos,
+                  style: const TextStyle(color: Colors.white54)))
           : GridView.builder(
               padding: const EdgeInsets.all(2),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -2886,6 +3133,7 @@ class _PhotoDetailPage extends StatefulWidget {
   @override
   State<_PhotoDetailPage> createState() => _PhotoDetailPageState();
 }
+
 class _PhotoDetailPageState extends State<_PhotoDetailPage> {
   Uint8List? _fullData;
   @override
@@ -2893,10 +3141,12 @@ class _PhotoDetailPageState extends State<_PhotoDetailPage> {
     super.initState();
     _load();
   }
+
   Future<void> _load() async {
     final data = await widget.asset.originBytes;
     if (mounted && data != null) setState(() => _fullData = data);
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2941,7 +3191,8 @@ class _PhotoDetailPageState extends State<_PhotoDetailPage> {
                   IconButton(
                     icon: const Icon(Icons.delete_outline, color: _kWhite),
                     onPressed: () async {
-                      await PhotoManager.editor.deleteWithIds([widget.asset.id]);
+                      await PhotoManager.editor
+                          .deleteWithIds([widget.asset.id]);
                       if (context.mounted) Navigator.of(context).pop();
                     },
                   ),
@@ -2956,7 +3207,8 @@ class _PhotoDetailPageState extends State<_PhotoDetailPage> {
             child: GestureDetector(
               onTap: () => Navigator.of(context).pop(),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: Colors.black54,
                   borderRadius: BorderRadius.circular(16),
@@ -2980,7 +3232,8 @@ class _GalleryItem extends StatelessWidget {
   final String label;
   final int count;
 
-  const _GalleryItem({this.icon, this.customIcon, required this.label, required this.count});
+  const _GalleryItem(
+      {this.icon, this.customIcon, required this.label, required this.count});
 
   @override
   Widget build(BuildContext context) {
@@ -2991,9 +3244,11 @@ class _GalleryItem extends StatelessWidget {
           customIcon ?? Icon(icon, color: Colors.white70, size: 24),
           const SizedBox(width: 16),
           Expanded(
-            child: Text(label, style: const TextStyle(color: _kWhite, fontSize: 16)),
+            child: Text(label,
+                style: const TextStyle(color: _kWhite, fontSize: 16)),
           ),
-          Text('$count', style: const TextStyle(color: Colors.grey, fontSize: 16)),
+          Text('$count',
+              style: const TextStyle(color: Colors.grey, fontSize: 16)),
         ],
       ),
     );
@@ -3010,7 +3265,8 @@ class _RatioRow extends StatelessWidget {
   final String? activeId;
   final ValueChanged<String> onSelect;
 
-  const _RatioRow({required this.ratios, this.activeId, required this.onSelect});
+  const _RatioRow(
+      {required this.ratios, this.activeId, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
@@ -3053,7 +3309,8 @@ class _FilterRow extends StatelessWidget {
   final String? activeId;
   final ValueChanged<String> onSelect;
 
-  const _FilterRow({required this.filters, this.activeId, required this.onSelect});
+  const _FilterRow(
+      {required this.filters, this.activeId, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
@@ -3078,9 +3335,11 @@ class _FilterRow extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: _kLightGray,
                       borderRadius: BorderRadius.circular(8),
-                      border: isActive ? Border.all(color: _kBlue, width: 2) : null,
+                      border:
+                          isActive ? Border.all(color: _kBlue, width: 2) : null,
                     ),
-                    child: const Icon(Icons.filter_vintage_outlined, color: Colors.white54, size: 24),
+                    child: const Icon(Icons.filter_vintage_outlined,
+                        color: Colors.white54, size: 24),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -3110,15 +3369,21 @@ class _FrameGrid extends ConsumerWidget {
   final String? activeRatioId;
   final ValueChanged<String> onSelect;
 
-  const _FrameGrid({required this.frames, this.activeId, this.activeRatioId, required this.onSelect});
+  const _FrameGrid(
+      {required this.frames,
+      this.activeId,
+      this.activeRatioId,
+      required this.onSelect});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = sOf(ref.watch(languageProvider));
     // 按当前比例过滤：只显示支持当前比例的相框
     final filteredFrames = activeRatioId != null
-        ? frames.where((f) =>
-            f.supportedRatios.isEmpty || f.supportedRatios.contains(activeRatioId))
+        ? frames
+            .where((f) =>
+                f.supportedRatios.isEmpty ||
+                f.supportedRatios.contains(activeRatioId))
             .toList()
         : frames;
     // 加上"无边框"选项
@@ -3149,7 +3414,8 @@ class _FrameGrid extends ConsumerWidget {
                 height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: opt.color == Colors.transparent ? _kLightGray : opt.color,
+                  color:
+                      opt.color == Colors.transparent ? _kLightGray : opt.color,
                   border: isActive
                       ? Border.all(color: _kBlue, width: 2.5)
                       : Border.all(color: Colors.white24, width: 1),
@@ -3161,7 +3427,8 @@ class _FrameGrid extends ConsumerWidget {
                         : null,
               ),
               const SizedBox(height: 4),
-              Text(opt.name, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+              Text(opt.name,
+                  style: const TextStyle(color: Colors.grey, fontSize: 10)),
             ],
           ),
         );
@@ -3174,7 +3441,8 @@ class _FrameOption {
   final String id;
   final String name;
   final Color color;
-  const _FrameOption({required this.id, required this.name, required this.color});
+  const _FrameOption(
+      {required this.id, required this.name, required this.color});
 }
 
 // 水印选择
@@ -3183,7 +3451,8 @@ class _WatermarkRow extends StatelessWidget {
   final String? activeId;
   final ValueChanged<String> onSelect;
 
-  const _WatermarkRow({required this.presets, this.activeId, required this.onSelect});
+  const _WatermarkRow(
+      {required this.presets, this.activeId, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
@@ -3215,24 +3484,26 @@ class _WatermarkRow extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: _kLightGray,
                       borderRadius: BorderRadius.circular(8),
-                      border: isActive ? Border.all(color: _kBlue, width: 2) : null,
+                      border:
+                          isActive ? Border.all(color: _kBlue, width: 2) : null,
                     ),
                     child: Center(
-                          child: wm.isNone
-                              ? const Icon(Icons.block, color: Colors.white54, size: 20)
-                              : Container(
-                                  width: 16,
-                                  height: 16,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: dotColor,
-                                  ),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        wm.name,
+                      child: wm.isNone
+                          ? const Icon(Icons.block,
+                              color: Colors.white54, size: 20)
+                          : Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: dotColor,
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    wm.name,
                     style: TextStyle(
                       color: isActive ? _kWhite : Colors.grey,
                       fontSize: 10,
@@ -3284,11 +3555,12 @@ class _RotatingToolbarBtn extends StatelessWidget {
 
 class _ToolbarBtn extends StatelessWidget {
   final IconData icon;
-  final String? label;   // 文字标签（显示在图标下方）
-  final String? badge;   // 小徽章（显示在图标右下角）
+  final String? label; // 文字标签（显示在图标下方）
+  final String? badge; // 小徽章（显示在图标右下角）
   final VoidCallback onTap;
 
-  const _ToolbarBtn({required this.icon, this.label, this.badge, required this.onTap});
+  const _ToolbarBtn(
+      {required this.icon, this.label, this.badge, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -3297,37 +3569,43 @@ class _ToolbarBtn extends StatelessWidget {
       child: SizedBox(
         width: 68,
         child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 28,
-            height: 28,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(icon, color: _kWhite, size: 22),
-                if (badge != null)
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: _kBlue,
-                        borderRadius: BorderRadius.circular(4),
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Icon(icon, color: _kWhite, size: 22),
+                  if (badge != null)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 3, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: _kBlue,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(badge!,
+                            style: const TextStyle(
+                                color: _kWhite,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700)),
                       ),
-                      child: Text(badge!, style: const TextStyle(color: _kWhite, fontSize: 8, fontWeight: FontWeight.w700)),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-          if (label != null) ...[  
-            const SizedBox(height: 3),
-            Text(label!, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+            if (label != null) ...[
+              const SizedBox(height: 3),
+              Text(label!,
+                  style: const TextStyle(color: Colors.white70, fontSize: 10)),
+            ],
           ],
-        ],
         ),
       ),
     );
@@ -3350,46 +3628,52 @@ class _FlashBtn extends StatelessWidget {
       child: SizedBox(
         width: 68,
         child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 28,
-            height: 28,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(
-                  Icons.flash_on,
-                  color: isOff ? _kWhite : _kRed,
-                  size: 22,
-                ),
-                if (isOff)
-                  CustomPaint(
-                    size: const Size(22, 22),
-                    painter: _StrikethroughPainter(),
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Icon(
+                    Icons.flash_on,
+                    color: isOff ? _kWhite : _kRed,
+                    size: 22,
                   ),
-                if (isAuto)
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: _kBlue,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text('A', style: TextStyle(color: _kWhite, fontSize: 8, fontWeight: FontWeight.w700)),
+                  if (isOff)
+                    CustomPaint(
+                      size: const Size(22, 22),
+                      painter: _StrikethroughPainter(),
                     ),
-                  ),
-              ],
+                  if (isAuto)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 3, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: _kBlue,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text('A',
+                            style: TextStyle(
+                                color: _kWhite,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-          if (label != null) ...[  
-            const SizedBox(height: 3),
-            Text(label!, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+            if (label != null) ...[
+              const SizedBox(height: 3),
+              Text(label!,
+                  style: const TextStyle(color: Colors.white70, fontSize: 10)),
+            ],
           ],
-        ],
         ),
       ),
     );
@@ -3513,7 +3797,8 @@ class _OptionIconBtn extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
-  const _OptionIconBtn({required this.child, required this.label, required this.onTap});
+  const _OptionIconBtn(
+      {required this.child, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -3527,7 +3812,8 @@ class _OptionIconBtn extends StatelessWidget {
           children: [
             child,
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+            Text(label,
+                style: const TextStyle(color: Colors.grey, fontSize: 10)),
           ],
         ),
       ),
@@ -3543,7 +3829,11 @@ class _CameraItem {
   final String name;
   final String emoji;
   final bool hasR;
-  const _CameraItem({required this.id, required this.name, required this.emoji, this.hasR = false});
+  const _CameraItem(
+      {required this.id,
+      required this.name,
+      required this.emoji,
+      this.hasR = false});
 }
 
 const _kVideoCameras = [
@@ -3604,10 +3894,14 @@ class _GridPainter extends CustomPainter {
     final paint = Paint()
       ..color = Colors.white.withAlpha(60)
       ..strokeWidth = 0.5;
-    canvas.drawLine(Offset(size.width / 3, 0), Offset(size.width / 3, size.height), paint);
-    canvas.drawLine(Offset(size.width * 2 / 3, 0), Offset(size.width * 2 / 3, size.height), paint);
-    canvas.drawLine(Offset(0, size.height / 3), Offset(size.width, size.height / 3), paint);
-    canvas.drawLine(Offset(0, size.height * 2 / 3), Offset(size.width, size.height * 2 / 3), paint);
+    canvas.drawLine(
+        Offset(size.width / 3, 0), Offset(size.width / 3, size.height), paint);
+    canvas.drawLine(Offset(size.width * 2 / 3, 0),
+        Offset(size.width * 2 / 3, size.height), paint);
+    canvas.drawLine(
+        Offset(0, size.height / 3), Offset(size.width, size.height / 3), paint);
+    canvas.drawLine(Offset(0, size.height * 2 / 3),
+        Offset(size.width, size.height * 2 / 3), paint);
   }
 
   @override
@@ -3706,7 +4000,8 @@ class _FocusExposureOverlayState extends State<_FocusExposureOverlay>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 120));
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 120));
     _buildAppearAnims();
     _playAppear();
   }
@@ -3813,14 +4108,16 @@ class _FocusExposureOverlayState extends State<_FocusExposureOverlay>
       case _FocusAnimPhase.focusing:
         ringWidget = AnimatedBuilder(
           animation: _ctrl,
-          builder: (_, child) => Opacity(opacity: _blinkAnim.value, child: child),
+          builder: (_, child) =>
+              Opacity(opacity: _blinkAnim.value, child: child),
           child: _buildRingWidget(ringR),
         );
         break;
       case _FocusAnimPhase.confirming:
         ringWidget = AnimatedBuilder(
           animation: _ctrl,
-          builder: (_, child) => Transform.scale(scale: _confirmAnim.value, child: child),
+          builder: (_, child) =>
+              Transform.scale(scale: _confirmAnim.value, child: child),
           child: _buildRingWidget(ringR),
         );
         break;
@@ -3863,7 +4160,8 @@ class _FocusExposureOverlayState extends State<_FocusExposureOverlay>
               height: sunSize,
               child: Icon(
                 Icons.wb_sunny_outlined,
-                color: widget.isDragging ? const Color(0xFFFFD60A) : Colors.white,
+                color:
+                    widget.isDragging ? const Color(0xFFFFD60A) : Colors.white,
                 size: sunSize,
               ),
             ),
@@ -4092,9 +4390,7 @@ class _WbPresetBtn extends StatelessWidget {
           shape: BoxShape.circle,
           // 激活时：白色实心圆（对齐截图中 A 按鈕选中效果）
           // 未激活：深灰色圆
-          color: isActive
-              ? Colors.white
-              : const Color(0xFF3A3A3C),
+          color: isActive ? Colors.white : const Color(0xFF3A3A3C),
         ),
         child: Center(
           child: label != null
@@ -4111,7 +4407,9 @@ class _WbPresetBtn extends StatelessWidget {
               : Icon(
                   icon,
                   // 激活时图标变黑色（白底黑字）
-                  color: isActive ? const Color(0xFF1C1C1E) : Colors.white.withAlpha(180),
+                  color: isActive
+                      ? const Color(0xFF1C1C1E)
+                      : Colors.white.withAlpha(180),
                   size: 20,
                 ),
         ),
@@ -4521,9 +4819,13 @@ class _CornerPainter extends CustomPainter {
       ..strokeWidth = thick
       ..style = PaintingStyle.stroke;
     if (showTop) canvas.drawLine(Offset(0, 0), Offset(size.width, 0), paint);
-    if (showBottom) canvas.drawLine(Offset(0, size.height), Offset(size.width, size.height), paint);
+    if (showBottom)
+      canvas.drawLine(
+          Offset(0, size.height), Offset(size.width, size.height), paint);
     if (showLeft) canvas.drawLine(Offset(0, 0), Offset(0, size.height), paint);
-    if (showRight) canvas.drawLine(Offset(size.width, 0), Offset(size.width, size.height), paint);
+    if (showRight)
+      canvas.drawLine(
+          Offset(size.width, 0), Offset(size.width, size.height), paint);
   }
 
   @override
@@ -4559,8 +4861,7 @@ class _MinimapDimPainter extends CustomPainter {
       height: boxH,
     );
     // 用 EvenOdd 填充规则：外部矩形 - 内部小窗矩形 = 遗罩区域
-    final path = Path()
-      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+    final path = Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
     if (radius > 0) {
       final rrect = RRect.fromRectAndRadius(boxRect, Radius.circular(radius));
       path.addRRect(rrect);
@@ -4700,8 +5001,7 @@ class _WatermarkPainter extends CustomPainter {
       }).toList();
 
       final totalH = charPainters.fold(0.0, (s, p) => s + p.height);
-      final charW = charPainters.fold(
-          0.0, (s, p) => s > p.width ? s : p.width);
+      final charW = charPainters.fold(0.0, (s, p) => s > p.width ? s : p.width);
 
       double startX, startY;
       switch (position) {
@@ -4852,7 +5152,11 @@ class _DebugOverlay extends ConsumerWidget {
       '── UI State ──',
       'Zoom: ${st.zoomLevel.toStringAsFixed(1)}x  Flash: ${st.flashMode}  Timer: ${st.timerSeconds}s',
       'WB: ${st.wbMode} (${st.colorTempK}K)  Front: ${st.isFrontCamera}',
-      'Sharpen: ${["\u4f4e", "\u4e2d", "\u9ad8"][st.sharpenLevel]}  Grid: ${st.gridEnabled}  Minimap: ${st.minimapEnabled}',
+      'Sharpen: ${[
+        "\u4f4e",
+        "\u4e2d",
+        "\u9ad8"
+      ][st.sharpenLevel]}  Grid: ${st.gridEnabled}  Minimap: ${st.minimapEnabled}',
       '',
       '\u2500\u2500 Capture Resolution \u2500\u2500',
       'Raw: ${st.lastCaptureRaw.isEmpty ? "(not captured yet)" : st.lastCaptureRaw}',
@@ -4872,28 +5176,34 @@ class _DebugOverlay extends ConsumerWidget {
         decoration: BoxDecoration(
           color: Colors.black.withAlpha(180),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF00FF88).withAlpha(120), width: 0.5),
+          border: Border.all(
+              color: const Color(0xFF00FF88).withAlpha(120), width: 0.5),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
-          children: lines.map((line) => Text(
-            line,
-            style: TextStyle(
-              color: line.startsWith('──')
-                  ? const Color(0xFF00FF88)
-                  : Colors.white.withAlpha(220),
-              fontSize: 9.5,
-              fontFamily: 'monospace',
-              height: 1.4,
-              fontWeight: line.startsWith('──') ? FontWeight.w700 : FontWeight.w400,
-            ),
-          )).toList(),
+          children: lines
+              .map((line) => Text(
+                    line,
+                    style: TextStyle(
+                      color: line.startsWith('──')
+                          ? const Color(0xFF00FF88)
+                          : Colors.white.withAlpha(220),
+                      fontSize: 9.5,
+                      fontFamily: 'monospace',
+                      height: 1.4,
+                      fontWeight: line.startsWith('──')
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                    ),
+                  ))
+              .toList(),
         ),
       ),
     );
   }
 }
+
 // ─── 双重曝光进度指示点────────────────────────────────────────────────────────
 class _DoubleExpDot extends StatelessWidget {
   final bool filled;
