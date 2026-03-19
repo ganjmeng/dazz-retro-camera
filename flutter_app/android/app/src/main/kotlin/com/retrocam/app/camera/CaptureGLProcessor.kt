@@ -136,6 +136,10 @@ uniform sampler2D uLutTexture;        // LUT 2D 纹理（宽=N*N，高=N）
 uniform float uLutEnabled;            // 1.0 = 启用 LUT
 uniform float uLutStrength;           // LUT 混合强度（0.0~1.0）
 uniform float uLutSize;               // LUT 边长（通常 33）
+// ── Device Calibration（V3：设备级线性校准）──────────────────────────────────────────────────
+uniform float uDeviceGamma;
+uniform vec3  uDeviceWhiteScale;
+uniform mat3  uDeviceCcm;
 // ── 工具函数 ────────────────────────────────────────────────────────────────────────────────
 float luminance(vec3 c) {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
@@ -296,6 +300,15 @@ vec3 applyVibrance(vec3 c, float vibrance) {
 vec3 applyColorBias(vec3 c, float r, float g, float b) {
     // colorBias 值已是归一化的小数（如 -0.030, +0.048），直接加，与预览 Shader 对齐
     return clamp(c + vec3(r, g, b), 0.0, 1.0);
+}
+vec3 applyDeviceCalibration(vec3 c, vec3 whiteScale, mat3 ccm, float gammaVal) {
+    c = clamp(c * whiteScale, 0.0, 1.0);
+    c = clamp(ccm * c, 0.0, 1.0);
+    if (abs(gammaVal - 1.0) > 0.0001) {
+        float invGamma = 1.0 / max(gammaVal, 0.001);
+        c = pow(clamp(c, 0.0, 1.0), vec3(invGamma));
+    }
+    return clamp(c, 0.0, 1.0);
 }
 
 // ── Pass 9: Bloom（空间扩散光晕）───────────────────────────────────────────
@@ -511,6 +524,9 @@ void main() {
         color = clamp(color, 0.0, 1.0);
     }
 
+    // Pass 1.75: 设备级色彩校准（白点缩放 + CCM + Gamma）
+    color = applyDeviceCalibration(color, uDeviceWhiteScale, uDeviceCcm, uDeviceGamma);
+
     // Pass 2: 色温 + Tint
     color = applyTemperature(color, uTemperatureShift);
     color = applyTint(color, uTintShift);
@@ -719,6 +735,9 @@ void main() {
     private var uLutEnabled = -1
     private var uLutStrength = -1
     private var uLutSize = -1
+    private var uDeviceGamma = -1
+    private var uDeviceWhiteScale = -1
+    private var uDeviceCcm = -1
     // LUT 纹理 ID（每次拍照时加载，处理完成后释放）
     private var lutTextureId: Int = 0
 
@@ -1223,6 +1242,9 @@ void main() {
         uLutEnabled  = loc("uLutEnabled")
         uLutStrength = loc("uLutStrength")
         uLutSize     = loc("uLutSize")
+        uDeviceGamma = loc("uDeviceGamma")
+        uDeviceWhiteScale = loc("uDeviceWhiteScale")
+        uDeviceCcm = loc("uDeviceCcm")
     }
 
     private fun setUniforms(params: Map<String, Any>) {
@@ -1231,6 +1253,7 @@ void main() {
             is Float  -> v
             is Int    -> v.toFloat()
             is Long   -> v.toFloat()
+            is String -> v.toFloatOrNull() ?: default
             else      -> default
         }
         GLES30.glUniform1f(uContrast, f("contrast", 1.0f))
@@ -1289,6 +1312,20 @@ void main() {
                     else 1.0f
         val ar = if (rawAr > 1.0f) 1.0f / rawAr else rawAr  // ensure <= 1.0
         GLES30.glUniform1f(uAspectRatio, ar)
+        GLES30.glUniform1f(uDeviceGamma, f("deviceGamma", 1.0f))
+        GLES30.glUniform3f(
+            uDeviceWhiteScale,
+            f("deviceWhiteScaleR", 1.0f),
+            f("deviceWhiteScaleG", 1.0f),
+            f("deviceWhiteScaleB", 1.0f)
+        )
+        // GLSL mat3 uniform 采用列主序；toJson 传入为 row-major（00..22），这里做重排。
+        val deviceCcmCols = floatArrayOf(
+            f("deviceCcm00", 1.0f), f("deviceCcm10", 0.0f), f("deviceCcm20", 0.0f),
+            f("deviceCcm01", 0.0f), f("deviceCcm11", 1.0f), f("deviceCcm21", 0.0f),
+            f("deviceCcm02", 0.0f), f("deviceCcm12", 0.0f), f("deviceCcm22", 1.0f)
+        )
+        GLES30.glUniformMatrix3fv(uDeviceCcm, 1, false, deviceCcmCols, 0)
         // LUT uniform（纹理绑定在 processImage 中单独处理）
         GLES30.glUniform1f(uLutEnabled, 0.0f)  // 默认关闭，由 processImage 覆盖
         GLES30.glUniform1f(uLutStrength, f("lutStrength", 1.0f))

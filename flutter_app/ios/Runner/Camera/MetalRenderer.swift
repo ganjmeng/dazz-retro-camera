@@ -65,6 +65,20 @@ struct CCDParams {
     var toneCurveStrength: Float = 0.0 // Tone Curve 强度（0.0~1.0）
     var exposureOffset: Float = 0.0    // 用户曝光补偿（-2.0~+2.0）
     var lensDistortion: Float = 0.0    // 轻量桶形畸变（非圆形鱼眼）
+    // ── Device Calibration（V3：设备级线性校准）─────────────────────────────────
+    var deviceGamma: Float = 1.0
+    var deviceWhiteScaleR: Float = 1.0
+    var deviceWhiteScaleG: Float = 1.0
+    var deviceWhiteScaleB: Float = 1.0
+    var deviceCcm00: Float = 1.0
+    var deviceCcm01: Float = 0.0
+    var deviceCcm02: Float = 0.0
+    var deviceCcm10: Float = 0.0
+    var deviceCcm11: Float = 1.0
+    var deviceCcm12: Float = 0.0
+    var deviceCcm20: Float = 0.0
+    var deviceCcm21: Float = 0.0
+    var deviceCcm22: Float = 1.0
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -259,6 +273,14 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
     // MARK: - Params Update
 
     func updateParams(_ params: [String: Any]) {
+        func num(_ key: String) -> Float? {
+            if let v = params[key] as? Float { return v }
+            if let v = params[key] as? Double { return Float(v) }
+            if let v = params[key] as? Int { return Float(v) }
+            if let v = params[key] as? NSNumber { return v.floatValue }
+            if let v = params[key] as? String { return Float(v) }
+            return nil
+        }
         // 相机 ID 切换不需要持锁，单独处理
         if let camId = params["cameraId"] as? String, !camId.isEmpty {
             currentCameraId = camId   // 触发 didSet → rebuildPipeline()
@@ -317,9 +339,21 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = params["noise"]       as? Float { ccdParams.noiseAmount = v }
         if let v = params["noiseAmount"] as? Float { ccdParams.noiseAmount = v }
         // 曝光补偿
-        if let v = params["exposureOffset"] as? Float { ccdParams.exposureOffset = v }
-        if let v = params["distortion"] as? Float { ccdParams.lensDistortion = v }
-        if let v = params["distortion"] as? Double { ccdParams.lensDistortion = Float(v) }
+        if let v = num("exposureOffset") { ccdParams.exposureOffset = v }
+        if let v = num("distortion") { ccdParams.lensDistortion = v }
+        if let v = num("deviceGamma") { ccdParams.deviceGamma = v }
+        if let v = num("deviceWhiteScaleR") { ccdParams.deviceWhiteScaleR = v }
+        if let v = num("deviceWhiteScaleG") { ccdParams.deviceWhiteScaleG = v }
+        if let v = num("deviceWhiteScaleB") { ccdParams.deviceWhiteScaleB = v }
+        if let v = num("deviceCcm00") { ccdParams.deviceCcm00 = v }
+        if let v = num("deviceCcm01") { ccdParams.deviceCcm01 = v }
+        if let v = num("deviceCcm02") { ccdParams.deviceCcm02 = v }
+        if let v = num("deviceCcm10") { ccdParams.deviceCcm10 = v }
+        if let v = num("deviceCcm11") { ccdParams.deviceCcm11 = v }
+        if let v = num("deviceCcm12") { ccdParams.deviceCcm12 = v }
+        if let v = num("deviceCcm20") { ccdParams.deviceCcm20 = v }
+        if let v = num("deviceCcm21") { ccdParams.deviceCcm21 = v }
+        if let v = num("deviceCcm22") { ccdParams.deviceCcm22 = v }
 
         // ── 纹理加载（#2 路径缓存：相同路径不重复加载）────────────────────────────────
         if let lutAsset = params["lut"] as? String {

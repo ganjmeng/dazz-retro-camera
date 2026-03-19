@@ -67,6 +67,20 @@ struct MetalCaptureParams {
     var lutStrength: Float = 1.0       // LUT 混合强度（0.0~1.0）
     var lutSize: Float = 33.0          // LUT 边长（通常 33）
     var lensDistortion: Float = 0      // 轻量桶形畸变（非圆形鱼眼）
+    // ── Device Calibration（V3：设备级线性校准）─────────────────────────────────
+    var deviceGamma: Float = 1.0
+    var deviceWhiteScaleR: Float = 1.0
+    var deviceWhiteScaleG: Float = 1.0
+    var deviceWhiteScaleB: Float = 1.0
+    var deviceCcm00: Float = 1.0
+    var deviceCcm01: Float = 0.0
+    var deviceCcm02: Float = 0.0
+    var deviceCcm10: Float = 0.0
+    var deviceCcm11: Float = 1.0
+    var deviceCcm12: Float = 0.0
+    var deviceCcm20: Float = 0.0
+    var deviceCcm21: Float = 0.0
+    var deviceCcm22: Float = 1.0
 }
 
 /**
@@ -312,6 +326,19 @@ class CaptureProcessor {
         p.exposureOffset     = getFloat(params, "exposureOffset", 0)
         p.fisheyeMode        = getFloat(params, "fisheyeMode", 0)
         p.lensDistortion     = getFloat(params, "distortion", 0)
+        p.deviceGamma        = getFloat(params, "deviceGamma", 1.0)
+        p.deviceWhiteScaleR  = getFloat(params, "deviceWhiteScaleR", 1.0)
+        p.deviceWhiteScaleG  = getFloat(params, "deviceWhiteScaleG", 1.0)
+        p.deviceWhiteScaleB  = getFloat(params, "deviceWhiteScaleB", 1.0)
+        p.deviceCcm00        = getFloat(params, "deviceCcm00", 1.0)
+        p.deviceCcm01        = getFloat(params, "deviceCcm01", 0.0)
+        p.deviceCcm02        = getFloat(params, "deviceCcm02", 0.0)
+        p.deviceCcm10        = getFloat(params, "deviceCcm10", 0.0)
+        p.deviceCcm11        = getFloat(params, "deviceCcm11", 1.0)
+        p.deviceCcm12        = getFloat(params, "deviceCcm12", 0.0)
+        p.deviceCcm20        = getFloat(params, "deviceCcm20", 0.0)
+        p.deviceCcm21        = getFloat(params, "deviceCcm21", 0.0)
+        p.deviceCcm22        = getFloat(params, "deviceCcm22", 1.0)
 
         return p
     }
@@ -336,6 +363,8 @@ class CaptureProcessor {
         if let v = params[key] as? Double { return Float(v) }
         if let v = params[key] as? Float  { return v }
         if let v = params[key] as? Int    { return Float(v) }
+        if let v = params[key] as? NSNumber { return v.floatValue }
+        if let v = params[key] as? String, let f = Float(v) { return f }
         return defaultVal
     }
 

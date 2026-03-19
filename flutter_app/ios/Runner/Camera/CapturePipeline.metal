@@ -95,6 +95,20 @@ struct CaptureParams {
     float lutStrength;       // LUT 混合强度（0.0~1.0）
     float lutSize;           // LUT 边长（通常 33）
     float lensDistortion;    // 轻量桶形畸变（非圆形鱼眼）
+    // ── Device Calibration（V3：设备级线性校准）──
+    float deviceGamma;
+    float deviceWhiteScaleR;
+    float deviceWhiteScaleG;
+    float deviceWhiteScaleB;
+    float deviceCcm00;
+    float deviceCcm01;
+    float deviceCcm02;
+    float deviceCcm10;
+    float deviceCcm11;
+    float deviceCcm12;
+    float deviceCcm20;
+    float deviceCcm21;
+    float deviceCcm22;
 };
 
 // ── 工具函数 ─────────────────────────────────────────────────────────────
@@ -199,6 +213,23 @@ static float3 cp_vibrance(float3 color, float vibrance) {
 /// RGB 通道偏移
 static float3 cp_colorBias(float3 color, float r, float g, float b) {
     return clamp(color + float3(r * (30.0/255.0), g * (30.0/255.0), b * (30.0/255.0)), 0.0, 1.0);
+}
+/// Device Calibration（设备级色彩校准：白点缩放 + CCM + Gamma）
+static float3 cp_deviceCalibration(float3 color, constant CaptureParams& params) {
+    color = clamp(color * float3(params.deviceWhiteScaleR, params.deviceWhiteScaleG, params.deviceWhiteScaleB), 0.0, 1.0);
+    float3 row0 = float3(params.deviceCcm00, params.deviceCcm01, params.deviceCcm02);
+    float3 row1 = float3(params.deviceCcm10, params.deviceCcm11, params.deviceCcm12);
+    float3 row2 = float3(params.deviceCcm20, params.deviceCcm21, params.deviceCcm22);
+    color = clamp(float3(
+        dot(row0, color),
+        dot(row1, color),
+        dot(row2, color)
+    ), 0.0, 1.0);
+    if (fabs(params.deviceGamma - 1.0) > 0.0001) {
+        float invGamma = 1.0 / max(params.deviceGamma, 0.001);
+        color = pow(clamp(color, 0.0, 1.0), float3(invGamma));
+    }
+    return clamp(color, 0.0, 1.0);
 }
 
 /// Bloom（高光光晕）
@@ -435,6 +466,9 @@ kernel void capturePipeline(
         color *= pow(2.0, params.exposureOffset);
         color = clamp(color, 0.0, 1.0);
     }
+
+    // ── Pass 1.75: 设备级色彩校准（白点缩放 + CCM + Gamma）──────────────────────────
+    color = cp_deviceCalibration(color, params);
 
     // ── Pass 2: 色温 + Tint ────────────────────────────────────────
     color = cp_temperatureShift(color, params.temperatureShift);

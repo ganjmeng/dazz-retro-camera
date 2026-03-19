@@ -79,6 +79,20 @@ struct CCDParams {
     float toneCurveStrength; // Tone Curve 强度（0.0~1.0）
     float exposureOffset;    // 用户曝光补偿（-2.0~+2.0）
     float lensDistortion;    // 轻量桶形畸变（非圆形鱼眼）
+    // ── Device Calibration（V3：设备级线性校准）─────────────────────────────────
+    float deviceGamma;
+    float deviceWhiteScaleR;
+    float deviceWhiteScaleG;
+    float deviceWhiteScaleB;
+    float deviceCcm00;
+    float deviceCcm01;
+    float deviceCcm02;
+    float deviceCcm10;
+    float deviceCcm11;
+    float deviceCcm12;
+    float deviceCcm20;
+    float deviceCcm21;
+    float deviceCcm22;
 };
 
 // MARK: - 工具函数
@@ -331,6 +345,26 @@ float3 applyColorBias(float3 color, float biasR, float biasG, float biasB) {
     color.b = clamp(color.b + biasB, 0.0, 1.0);
     return color;
 }
+float3 applyDeviceCalibration(
+    float3 color,
+    float gammaVal,
+    float3 whiteScale,
+    float3 ccmRow0,
+    float3 ccmRow1,
+    float3 ccmRow2
+) {
+    color = clamp(color * whiteScale, 0.0, 1.0);
+    color = clamp(float3(
+        dot(ccmRow0, color),
+        dot(ccmRow1, color),
+        dot(ccmRow2, color)
+    ), 0.0, 1.0);
+    if (fabs(gammaVal - 1.0) > 0.0001) {
+        float invGamma = 1.0 / max(gammaVal, 0.001);
+        color = pow(clamp(color, 0.0, 1.0), float3(invGamma));
+    }
+    return clamp(color, 0.0, 1.0);
+}
 
 // MARK: - Lightroom 风格参数
 float3 applyHighlightsShadows(float3 color, float highlights, float shadows, float whites, float blacks) {
@@ -442,6 +476,16 @@ fragment float4 ccdFragmentShader(
         color *= pow(2.0, params.exposureOffset);
         color = clamp(color, 0.0, 1.0);
     }
+
+    // === Pass 1.75: 设备级色彩校准（白点缩放 + CCM + Gamma） ===
+    color = applyDeviceCalibration(
+        color,
+        params.deviceGamma,
+        float3(params.deviceWhiteScaleR, params.deviceWhiteScaleG, params.deviceWhiteScaleB),
+        float3(params.deviceCcm00, params.deviceCcm01, params.deviceCcm02),
+        float3(params.deviceCcm10, params.deviceCcm11, params.deviceCcm12),
+        float3(params.deviceCcm20, params.deviceCcm21, params.deviceCcm22)
+    );
 
     // === Pass 2: 基础色彩调整 ===
     color = applyTemperatureShift(color, params.temperatureShift);
