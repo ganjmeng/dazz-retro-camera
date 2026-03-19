@@ -483,8 +483,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   void _scheduleSceneHintRefresh(CameraAppState st, CameraState camSvc) {
-    final sensorMp =
-        (camSvc.activeCameraDebugInfo['sensorMp'] as num?)?.toDouble() ?? 0.0;
+    final rawSensorMp = camSvc.activeCameraDebugInfo['sensorMp'];
+    final sensorMp = rawSensorMp is num
+        ? rawSensorMp.toDouble()
+        : double.tryParse(rawSensorMp?.toString() ?? '') ?? 0.0;
     final signal = [
       st.activeCameraId,
       st.activeLensId ?? '',
