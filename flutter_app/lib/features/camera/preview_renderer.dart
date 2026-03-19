@@ -302,6 +302,37 @@ class PreviewRenderParams {
     return SceneClass.balanced;
   }
 
+  String get protectionMode {
+    switch (sceneClass) {
+      case SceneClass.lowLight:
+        return 'noise_first';
+      case SceneClass.backlit:
+      case SceneClass.highDynamic:
+        return 'skin_first';
+      default:
+        return 'balanced';
+    }
+  }
+
+  String? get effectiveBaseLut {
+    switch (sceneClass) {
+      case SceneClass.lowLight:
+        return defaultLook.baseLutNight ??
+            defaultLook.baseLutIndoor ??
+            defaultLook.baseLut;
+      case SceneClass.indoor:
+        return defaultLook.baseLutIndoor ??
+            defaultLook.baseLutNight ??
+            defaultLook.baseLut;
+      case SceneClass.outdoor:
+        return defaultLook.baseLutDaylight ?? defaultLook.baseLut;
+      case SceneClass.backlit:
+      case SceneClass.highDynamic:
+      case SceneClass.balanced:
+        return defaultLook.baseLut;
+    }
+  }
+
   // Effective vignette = defaultLook + lens override
   double get effectiveVignette {
     final base = defaultLook.vignette;
@@ -385,9 +416,14 @@ class PreviewRenderParams {
       (defaultLook.whites + _sceneWhitesOffset(sceneClass))
           .clamp(-100.0, 100.0);
   double get effectiveBlacks => defaultLook.blacks.clamp(-100.0, 100.0);
-  double get effectiveClarity => defaultLook.clarity.clamp(-100.0, 100.0);
-  double get effectiveVibrance => defaultLook.vibrance.clamp(-100.0, 100.0);
-  double get effectiveGrain => defaultLook.grain.clamp(0.0, 1.0);
+  double get effectiveClarity =>
+      (defaultLook.clarity + _sceneClarityOffset(sceneClass))
+          .clamp(-100.0, 100.0);
+  double get effectiveVibrance =>
+      (defaultLook.vibrance + _sceneVibranceOffset(sceneClass))
+          .clamp(-100.0, 100.0);
+  double get effectiveGrain =>
+      (defaultLook.grain * _sceneGrainScale(sceneClass)).clamp(0.0, 1.0);
   double get effectiveColorBiasR => (defaultLook.colorBiasR +
           _deviceProfile.colorBiasROffset +
           _ccmBiasR() +
@@ -522,10 +558,44 @@ class PreviewRenderParams {
   double _sceneSaturationScale(SceneClass scene) {
     switch (scene) {
       case SceneClass.indoor:
+        return 0.97;
       case SceneClass.lowLight:
-        return 0.98;
+        return 0.93;
       case SceneClass.outdoor:
         return 1.01;
+      default:
+        return 1.0;
+    }
+  }
+
+  double _sceneClarityOffset(SceneClass scene) {
+    switch (scene) {
+      case SceneClass.lowLight:
+        return -8.0;
+      case SceneClass.indoor:
+        return -3.0;
+      default:
+        return 0.0;
+    }
+  }
+
+  double _sceneVibranceOffset(SceneClass scene) {
+    switch (scene) {
+      case SceneClass.lowLight:
+        return -10.0;
+      case SceneClass.indoor:
+        return -4.0;
+      default:
+        return 0.0;
+    }
+  }
+
+  double _sceneGrainScale(SceneClass scene) {
+    switch (scene) {
+      case SceneClass.lowLight:
+        return 0.68;
+      case SceneClass.indoor:
+        return 0.85;
       default:
         return 1.0;
     }
@@ -569,13 +639,23 @@ class PreviewRenderParams {
     if (skinHueProtect < 0.5) return 0.0;
     final warmWeight = ((5200 - colorTempK) / 2600.0).clamp(0.0, 1.0);
     final lowLightWeight = (exposureOffset / 1.4).clamp(0.0, 1.0);
-    return 0.10 * warmWeight + 0.06 * lowLightWeight;
+    final sceneBoost = switch (sceneClass) {
+      SceneClass.backlit || SceneClass.highDynamic => 0.05,
+      SceneClass.lowLight => 0.03,
+      _ => 0.0,
+    };
+    return 0.10 * warmWeight + 0.06 * lowLightWeight + sceneBoost;
   }
 
   double _dynamicSkinLumaDelta() {
     if (skinHueProtect < 0.5) return 0.0;
     final lowLightWeight = (exposureOffset / 1.5).clamp(0.0, 1.0);
-    return 0.03 * lowLightWeight;
+    final sceneBoost = switch (sceneClass) {
+      SceneClass.backlit || SceneClass.highDynamic => 0.02,
+      SceneClass.lowLight => 0.03,
+      _ => 0.0,
+    };
+    return 0.03 * lowLightWeight + sceneBoost;
   }
 
   double _dynamicSkinRedLimitDelta() {
@@ -585,7 +665,8 @@ class PreviewRenderParams {
         sceneClass == SceneClass.backlit || sceneClass == SceneClass.highDynamic
             ? 1.0
             : 0.0;
-    return 0.03 * warmWeight + 0.02 * dynamicWeight;
+    final lowLightBoost = sceneClass == SceneClass.lowLight ? 0.02 : 0.0;
+    return 0.03 * warmWeight + 0.02 * dynamicWeight + lowLightBoost;
   }
 
   double get paperTexture => defaultLook.paperTexture.clamp(0.0, 1.0);
@@ -646,9 +727,8 @@ class PreviewRenderParams {
         'paperUvScale2': paperUvScale2,
         'paperWeight1': paperWeight1,
         'paperWeight2': paperWeight2,
-        if (defaultLook.baseLut?.isNotEmpty == true)
-          'baseLut': defaultLook.baseLut,
-        if (defaultLook.baseLut?.isNotEmpty == true)
+        if (effectiveBaseLut?.isNotEmpty == true) 'baseLut': effectiveBaseLut,
+        if (effectiveBaseLut?.isNotEmpty == true)
           'lutStrength': effectiveLutStrength,
         'highlightRolloff2': defaultLook.highlightRolloff2.clamp(0.0, 1.0),
         'toneCurveStrength': defaultLook.toneCurveStrength.clamp(0.0, 1.0),
@@ -674,6 +754,7 @@ class PreviewRenderParams {
         'lightLeakAmount': defaultLook.lightLeakAmount.clamp(0.0, 1.0),
         // runtime calibration/debug context
         'sceneClass': sceneClass.name,
+        'protectionMode': protectionMode,
         'deviceProfileId': _deviceProfile.id,
         'runtimeCameraId': runtimeCameraId,
         'runtimeSensorMp': runtimeSensorMp,

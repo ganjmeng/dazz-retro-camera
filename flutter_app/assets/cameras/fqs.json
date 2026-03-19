@@ -12,6 +12,9 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/fqs_superia400_flash.cube",
+    "baseLutDaylight": "assets/lut/cameras/fqs_superia400_natural.cube",
+    "baseLutIndoor": "assets/lut/cameras/fqs_superia400_indoor.cube",
+    "baseLutNight": "assets/lut/cameras/fqs_superia400_flash.cube",
     "lutStrength": 0.91,
     "distortion": 0.0,
     "chromaticAberration": 0.15,

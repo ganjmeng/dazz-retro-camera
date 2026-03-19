@@ -127,6 +127,83 @@ void main() {
           closeTo(params.effectiveTemperature, 1e-6));
       expect(matrix.length, equals(20));
     });
+
+    test('scene LUT routing should switch daylight/indoor/night consistently',
+        () {
+      const look = DefaultLook(
+        baseLut: 'assets/lut/cameras/base.cube',
+        baseLutDaylight: 'assets/lut/cameras/day.cube',
+        baseLutIndoor: 'assets/lut/cameras/indoor.cube',
+        baseLutNight: 'assets/lut/cameras/night.cube',
+        lutStrength: 0.9,
+        temperature: 0,
+        contrast: 1.0,
+        saturation: 1.0,
+        vignette: 0,
+        distortion: 0,
+        chromaticAberration: 0,
+        bloom: 0,
+        flare: 0,
+      );
+
+      final outdoor = PreviewRenderParams(
+        defaultLook: look,
+        wbMode: 'daylight',
+        colorTempK: 6500,
+      ).toJson();
+      final indoor = PreviewRenderParams(
+        defaultLook: look,
+        wbMode: 'incandescent',
+        colorTempK: 3500,
+      ).toJson();
+      final night = PreviewRenderParams(
+        defaultLook: look,
+        exposureOffset: 1.2,
+        colorTempK: 4200,
+      ).toJson();
+
+      expect(outdoor['baseLut'], equals('assets/lut/cameras/day.cube'));
+      expect(indoor['baseLut'], equals('assets/lut/cameras/indoor.cube'));
+      expect(night['baseLut'], equals('assets/lut/cameras/night.cube'));
+      expect((night['lutStrength'] as num).toDouble(),
+          lessThan((outdoor['lutStrength'] as num).toDouble()));
+    });
+
+    test('priority strategy should expose protection mode for gating', () {
+      final backlit = PreviewRenderParams(
+        defaultLook: const DefaultLook(
+          temperature: 0,
+          contrast: 1.0,
+          saturation: 1.0,
+          vignette: 0,
+          distortion: 0,
+          chromaticAberration: 0,
+          bloom: 0,
+          flare: 0,
+          skinHueProtect: true,
+          skinSatProtect: 0.94,
+          skinLumaSoften: 0.02,
+          skinRedLimit: 1.03,
+        ),
+        exposureOffset: -1.0,
+      ).toJson();
+      final lowLight = PreviewRenderParams(
+        defaultLook: const DefaultLook(
+          temperature: 0,
+          contrast: 1.0,
+          saturation: 1.0,
+          vignette: 0,
+          distortion: 0,
+          chromaticAberration: 0,
+          bloom: 0,
+          flare: 0,
+        ),
+        exposureOffset: 1.2,
+      ).toJson();
+
+      expect(backlit['protectionMode'], equals('skin_first'));
+      expect(lowLight['protectionMode'], equals('noise_first'));
+    });
   });
 
   group('Color Calibration workflow metrics', () {

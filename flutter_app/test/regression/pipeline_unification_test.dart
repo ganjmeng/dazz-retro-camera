@@ -163,11 +163,14 @@ void main() {
 
       // 成片专属参数
       expect(json.containsKey('highlightRolloff'), isTrue);
+      expect(json.containsKey('highlightRolloff2'), isTrue);
+      expect(json.containsKey('toneCurveStrength'), isTrue);
       expect(json.containsKey('paperTexture'), isTrue);
       expect(json.containsKey('edgeFalloff'), isTrue);
       expect(json.containsKey('cornerWarmShift'), isTrue);
       expect(json.containsKey('centerGain'), isTrue);
       expect(json.containsKey('chemicalIrregularity'), isTrue);
+      expect(json.containsKey('protectionMode'), isTrue);
 
       // 新增参数（之前 toJson 中缺失的）
       expect(json.containsKey('exposureOffset'), isTrue);

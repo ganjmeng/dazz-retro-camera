@@ -14,6 +14,9 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/bw_trix400.cube",
+    "baseLutDaylight": "assets/lut/cameras/bw_trix400.cube",
+    "baseLutIndoor": "assets/lut/cameras/bw_hp5.cube",
+    "baseLutNight": "assets/lut/cameras/bw_hp5.cube",
     "lutStrength": 0.92,
     "saturation": 0.0,
     "vibrance": 0.0,

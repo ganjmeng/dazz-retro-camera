@@ -14,6 +14,9 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/u300_color.cube",
+    "baseLutDaylight": "assets/lut/cameras/u300_color.cube",
+    "baseLutIndoor": "assets/lut/cameras/u300_gold.cube",
+    "baseLutNight": "assets/lut/cameras/u300_portra.cube",
     "lutStrength": 0.87,
     "exposure": 0.02,
     "contrast": 1.1,

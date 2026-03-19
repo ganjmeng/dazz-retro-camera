@@ -14,6 +14,9 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/inst_sqc_warm.cube",
+    "baseLutDaylight": "assets/lut/cameras/inst_sq.cube",
+    "baseLutIndoor": "assets/lut/cameras/inst_sqc_warm.cube",
+    "baseLutNight": "assets/lut/cameras/inst_s.cube",
     "lutStrength": 0.83,
     "chromaticAberration": 0.04,
     "distortion": 0.0,

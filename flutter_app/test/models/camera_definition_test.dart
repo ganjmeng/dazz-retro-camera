@@ -42,6 +42,10 @@ Map<String, dynamic> _makeMinimalCameraJson({
     },
     'defaultLook': {
       'baseLut': 'assets/lut/cameras/test.cube',
+      'baseLutDaylight': 'assets/lut/cameras/test_day.cube',
+      'baseLutIndoor': 'assets/lut/cameras/test_indoor.cube',
+      'baseLutNight': 'assets/lut/cameras/test_night.cube',
+      'lutStrength': 0.88,
       'temperature': 2.0,
       'tint': 0.0,
       'contrast': 1.18,
@@ -265,6 +269,10 @@ void main() {
       expect(look.grain, closeTo(0.12, 0.001));
       expect(look.temperature, closeTo(2.0, 0.001));
       expect(look.baseLut, 'assets/lut/cameras/test.cube');
+      expect(look.baseLutDaylight, 'assets/lut/cameras/test_day.cube');
+      expect(look.baseLutIndoor, 'assets/lut/cameras/test_indoor.cube');
+      expect(look.baseLutNight, 'assets/lut/cameras/test_night.cube');
+      expect(look.lutStrength, closeTo(0.88, 0.001));
     });
 
     test('modules.filters 解析正确', () {

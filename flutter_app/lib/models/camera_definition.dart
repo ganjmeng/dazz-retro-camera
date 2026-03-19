@@ -210,6 +210,9 @@ class SensorConfig {
 
 class DefaultLook {
   final String? baseLut;
+  final String? baseLutDaylight; // 场景 LUT：日光
+  final String? baseLutIndoor; // 场景 LUT：室内
+  final String? baseLutNight; // 场景 LUT：夜景
   final double lutStrength; // 0.0 ~ 1.0 LUT 混合强度
   final double temperature; // -100 (cool) ~ +100 (warm)
   final double tint; // -100 (green) ~ +100 (magenta)
@@ -277,6 +280,9 @@ class DefaultLook {
 
   const DefaultLook({
     this.baseLut,
+    this.baseLutDaylight,
+    this.baseLutIndoor,
+    this.baseLutNight,
     this.lutStrength = 1.0,
     required this.temperature,
     this.tint = 0,
@@ -356,6 +362,9 @@ class DefaultLook {
 
   factory DefaultLook.fromJson(Map<String, dynamic> json) => DefaultLook(
         baseLut: json['baseLut'] as String?,
+        baseLutDaylight: json['baseLutDaylight'] as String?,
+        baseLutIndoor: json['baseLutIndoor'] as String?,
+        baseLutNight: json['baseLutNight'] as String?,
         lutStrength: (json['lutStrength'] as num? ?? 1.0).toDouble(),
         temperature: (json['temperature'] as num? ?? 0).toDouble(),
         tint: (json['tint'] as num? ?? 0).toDouble(),
@@ -424,6 +433,9 @@ class DefaultLook {
 
   Map<String, dynamic> toJson() => {
         if (baseLut != null) 'baseLut': baseLut,
+        if (baseLutDaylight != null) 'baseLutDaylight': baseLutDaylight,
+        if (baseLutIndoor != null) 'baseLutIndoor': baseLutIndoor,
+        if (baseLutNight != null) 'baseLutNight': baseLutNight,
         if (baseLut != null || lutStrength != 1.0) 'lutStrength': lutStrength,
         'temperature': temperature,
         'tint': tint,
