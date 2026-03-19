@@ -78,6 +78,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private var cameraProvider: ProcessCameraProvider? = null
     private var camera: Camera? = null
     private var preview: Preview? = null
+    private var imageAnalysis: ImageAnalysis? = null
     private var imageCapture: ImageCapture? = null
     /** 当前绑定摄像头的传感器调试信息，由 readActiveCameraInfo() 填充 */
     private var activeCameraDebugInfo: Map<String, Any> = emptyMap()
@@ -115,6 +116,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private var currentLensPosition: Int = CameraSelector.LENS_FACING_BACK
     // 持久化闪光灯状态，避免重建 ImageCapture 后丢失
     private var currentFlashMode: Int = ImageCapture.FLASH_MODE_OFF
+    @Volatile private var lastRuntimeStatsAtMs: Long = 0L
     private val perfPrefs: SharedPreferences by lazy {
         flutterPluginBinding.applicationContext.getSharedPreferences(
             "dazz_capture_perf",
@@ -379,6 +381,13 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
         imageCapture = buildImageCapture(currentSharpenLevel)
         imageCapture?.flashMode = currentFlashMode
+        imageAnalysis = ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build().also { analysis ->
+                analysis.setAnalyzer(bgExecutor) { image ->
+                    analyzeRuntimeLuma(image)
+                }
+            }
 
         val recorder = Recorder.Builder()
             .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
@@ -391,7 +400,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             cameraSelector,
             preview,
             imageCapture,
-            videoCapture
+            videoCapture,
+            imageAnalysis
         )
         // 绑定成功后读取当前摄像头的传感器信息，供 Debug 面板显示
         @Suppress("UnsafeOptInUsageError")
@@ -431,6 +441,52 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             Log.d(TAG, "Active camera: id=$camId sensor=${sensorW}×${sensorH} focal=$focalStr facing=$facingStr")
         } catch (e: Exception) {
             Log.w(TAG, "readActiveCameraInfo failed: ${e.message}")
+        }
+    }
+
+    /** 通过预览帧 Y 平面估算环境亮度，周期回传到 Flutter。 */
+    private fun analyzeRuntimeLuma(image: ImageProxy) {
+        try {
+            val now = System.currentTimeMillis()
+            if (now - lastRuntimeStatsAtMs < 350L) return
+            lastRuntimeStatsAtMs = now
+
+            val plane = image.planes.firstOrNull() ?: return
+            val buffer = plane.buffer
+            val rowStride = plane.rowStride
+            val pixelStride = plane.pixelStride
+            val width = image.width
+            val height = image.height
+            if (width <= 0 || height <= 0) return
+
+            val start = buffer.position()
+            var sum = 0L
+            var count = 0L
+            val stepX = 8
+            val stepY = 8
+            for (y in 0 until height step stepY) {
+                val rowBase = y * rowStride
+                for (x in 0 until width step stepX) {
+                    val idx = rowBase + x * pixelStride
+                    if (idx >= 0 && idx < buffer.limit()) {
+                        sum += (buffer.get(idx).toInt() and 0xFF)
+                        count++
+                    }
+                }
+            }
+            buffer.position(start)
+            if (count <= 0) return
+            val luma = sum.toDouble() / count.toDouble() // 0~255
+            val lightIndex = ((170.0 - luma) / 28.0).coerceIn(0.0, 6.0) // 越暗越大
+            val runtime = mapOf(
+                "rtLuma" to String.format(Locale.US, "%.1f", luma),
+                "rtLightIndex" to String.format(Locale.US, "%.2f", lightIndex),
+            )
+            activeCameraDebugInfo = activeCameraDebugInfo + runtime
+            sendEvent("onCameraRuntimeStats", runtime)
+        } catch (_: Exception) {
+        } finally {
+            image.close()
         }
     }
 

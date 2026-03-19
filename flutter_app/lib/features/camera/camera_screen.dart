@@ -487,10 +487,23 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   void _scheduleSceneHintRefresh(CameraAppState st, CameraState camSvc) {
-    final rawSensorMp = camSvc.activeCameraDebugInfo['sensorMp'];
+    final info = camSvc.activeCameraDebugInfo;
+    final rawSensorMp = info['sensorMp'];
     final sensorMp = rawSensorMp is num
         ? rawSensorMp.toDouble()
         : double.tryParse(rawSensorMp?.toString() ?? '') ?? 0.0;
+    final rawRtLight = info['rtLightIndex'];
+    final rtLightIndex = rawRtLight is num
+        ? rawRtLight.toDouble()
+        : double.tryParse(rawRtLight?.toString() ?? '') ?? -1.0;
+    final rawRtIso = info['rtIso'];
+    final rtIso = rawRtIso is num
+        ? rawRtIso.toDouble()
+        : double.tryParse(rawRtIso?.toString() ?? '') ?? -1.0;
+    final rawRtExposureMs = info['rtExposureMs'];
+    final rtExposureMs = rawRtExposureMs is num
+        ? rawRtExposureMs.toDouble()
+        : double.tryParse(rawRtExposureMs?.toString() ?? '') ?? -1.0;
     final signal = [
       st.activeCameraId,
       st.activeLensId ?? '',
@@ -502,13 +515,22 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       st.exposureValue.toStringAsFixed(1),
       st.colorTempK.toString(),
       sensorMp.toStringAsFixed(0),
+      rtLightIndex.toStringAsFixed(1),
+      rtIso > 0 ? rtIso.toStringAsFixed(0) : '-1',
+      rtExposureMs > 0 ? rtExposureMs.toStringAsFixed(1) : '-1',
     ].join('|');
     if (signal == _sceneHintSignal) return;
     _sceneHintSignal = signal;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final next = _classifySceneHintKey(st, sensorMp);
+      final next = _classifySceneHintKey(
+        st,
+        sensorMp,
+        rtLightIndex: rtLightIndex,
+        rtIso: rtIso,
+        rtExposureMs: rtExposureMs,
+      );
       _enqueueSceneHint(next);
     });
   }
@@ -531,7 +553,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     });
   }
 
-  String _classifySceneHintKey(CameraAppState st, double sensorMp) {
+  String _classifySceneHintKey(
+    CameraAppState st,
+    double sensorMp, {
+    double rtLightIndex = -1.0,
+    double rtIso = -1.0,
+    double rtExposureMs = -1.0,
+  }) {
     final lensId = (st.activeLensId ?? '').toLowerCase();
     if (st.fisheyeMode || lensId.contains('fish')) return 'sceneHintFisheye';
     if (lensId.contains('macro') || lensId.contains('close')) {
@@ -539,21 +567,32 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
     if (st.isFrontCamera) return 'sceneHintPortrait';
 
-    // 说明：
-    // exposureValue 是用户曝光补偿，不是实时环境测光值；仅在极端补偿时作为弱信号参考。
-    // 为减少“暗场仍显示户外日光”的误判，自动白平衡下提高 outdoor 阈值。
-    final isLowLight = st.exposureValue > 1.15 ||
+    final hasRealtime = rtLightIndex >= 0 || rtIso > 0 || rtExposureMs > 0;
+    final realtimeLowLight = rtLightIndex >= 4.2 ||
+        (rtIso >= 800 && rtExposureMs >= 20) ||
+        (rtIso >= 1200 && rtExposureMs >= 12);
+    final fallbackLowLight = st.exposureValue > 1.15 ||
         (st.wbMode == 'auto' &&
             st.colorTempK < 3800 &&
             st.exposureValue > 0.65);
+    final isLowLight = hasRealtime ? realtimeLowLight : fallbackLowLight;
     if (isLowLight) return 'sceneHintLowLight';
+
     if (st.exposureValue < -1.15) return 'sceneHintBacklit';
+
+    final likelyIndoorByRealtime = hasRealtime && rtLightIndex >= 3.1;
     if (st.wbMode == 'incandescent' ||
-        (st.wbMode == 'auto' && st.colorTempK < 3900)) {
+        (st.wbMode == 'auto' && st.colorTempK < 3900) ||
+        likelyIndoorByRealtime) {
       return 'sceneHintIndoor';
     }
+
+    final likelyOutdoorByRealtime =
+        hasRealtime && rtLightIndex > 0 && rtLightIndex <= 2.1;
     if (st.wbMode == 'daylight' ||
-        (st.wbMode == 'auto' && st.colorTempK >= 7000)) {
+        (st.wbMode == 'auto' &&
+            st.colorTempK >= 7000 &&
+            (likelyOutdoorByRealtime || !hasRealtime))) {
       return 'sceneHintOutdoor';
     }
     if (sensorMp >= 90) return 'sceneHintHighRes';

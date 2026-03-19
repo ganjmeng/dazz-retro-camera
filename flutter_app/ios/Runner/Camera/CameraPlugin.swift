@@ -34,6 +34,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
 
     // takePhoto 的回调（等待 AVCapturePhotoCaptureDelegate）
     private var pendingPhotoResult: FlutterResult?
+    private var runtimeStatsTimer: Timer?
 
     // Metal Compute 成片处理器（懒加载，首次使用时初始化）
     private lazy var captureProcessor: CaptureProcessor? = CaptureProcessor()
@@ -131,6 +132,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cameraManager?.sampleBufferDelegate = renderer!
         cameraManager?.configure(lens: lens)
         cameraManager?.startSession()
+        startRuntimeStatsTimer()
         let d = UIDevice.current
         emitEvent(type: "onCameraReady", payload: [
             "cameraId": lensStr,
@@ -873,6 +875,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     // dispose
     // ─────────────────────────────────────────────
     private func handleDispose(result: @escaping FlutterResult) {
+        runtimeStatsTimer?.invalidate()
+        runtimeStatsTimer = nil
         cameraManager?.stopSession()
         cameraManager = nil
         if registeredTextureId != -1 {
@@ -881,6 +885,15 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         }
         renderer = nil
         result(nil)
+    }
+
+    private func startRuntimeStatsTimer() {
+        runtimeStatsTimer?.invalidate()
+        runtimeStatsTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            guard let stats = self.cameraManager?.snapshotRuntimeStats() else { return }
+            self.emitEvent(type: "onCameraRuntimeStats", payload: stats)
+        }
     }
 
     private func emitEvent(type: String, payload: [String: Any]) {

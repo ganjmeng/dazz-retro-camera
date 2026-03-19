@@ -1,5 +1,6 @@
 import AVFoundation
 import UIKit
+import Foundation
 
 /// 管理 AVCaptureSession 的生命周期和配置
 class CameraSessionManager: NSObject {
@@ -354,6 +355,24 @@ class CameraSessionManager: NSObject {
         default:
             return .portrait
         }
+    }
+
+    /// 读取实时曝光状态（线程安全快照），供 Flutter 场景提示使用
+    func snapshotRuntimeStats() -> [String: Any]? {
+        var output: [String: Any]?
+        sessionQueue.sync {
+            guard let device = self.currentVideoInput?.device else { return }
+            let iso = Double(device.iso)
+            let exposureMs = device.exposureDuration.seconds * 1000.0
+            let lightIndex = log2(max(1.0, (iso / 100.0) * (exposureMs / 8.0)))
+            output = [
+                "rtIso": iso,
+                "rtExposureMs": exposureMs,
+                "rtLightIndex": lightIndex,
+                "rtExposureOffset": Double(device.exposureTargetOffset),
+            ]
+        }
+        return output
     }
 }
 

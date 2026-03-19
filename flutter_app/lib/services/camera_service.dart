@@ -460,6 +460,20 @@ class CameraService extends StateNotifier<CameraState> {
         final isRecording = payload?['isRecording'] as bool? ?? false;
         state = state.copyWith(isRecording: isRecording);
         break;
+      case 'onCameraRuntimeStats':
+        final runtime = <String, dynamic>{};
+        if (payload != null && payload.isNotEmpty) {
+          payload.forEach((k, v) => runtime[k.toString()] = v);
+        }
+        if (runtime.isNotEmpty) {
+          state = state.copyWith(
+            activeCameraDebugInfo: {
+              ...state.activeCameraDebugInfo,
+              ...runtime,
+            },
+          );
+        }
+        break;
       default:
         break;
     }
