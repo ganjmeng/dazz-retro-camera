@@ -21,6 +21,9 @@ import 'capture_pipeline.dart';
 import '../../services/retain_settings_service.dart';
 import '../../services/app_prefs_service.dart';
 
+// 默认关闭后台二次增强替换，优先保证预览与成片一致性（WYSIWYG）。
+const bool _kEnableBackgroundEnhanceReplace = false;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CameraAppState — full UI state for the camera screen
 // ─────────────────────────────────────────────────────────────────────────────
@@ -959,7 +962,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         }
 
         // PR2: 中画质先快拍，再后台增强替换同一相册资产（仅 Android 普通单拍）。
-        final enableBgEnhance = Platform.isAndroid &&
+        final enableBgEnhance = _kEnableBackgroundEnhanceReplace &&
+            Platform.isAndroid &&
             !state.doubleExpEnabled &&
             state.sharpenLevel == 1 &&
             minimapNormalizedRect == null &&
