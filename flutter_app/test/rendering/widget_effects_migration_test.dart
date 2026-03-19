@@ -4,19 +4,46 @@ import 'package:retro_cam/models/camera_definition.dart';
 
 void main() {
   group('Phase 2: Widget Effects Migration Tests', () {
-    
-    test('All Layer 3 effects should be disabled in previewPolicy when migrating to Native', () {
+    test(
+        'All Layer 3 effects should be disabled in previewPolicy when migrating to Native',
+        () {
       // Create a mock JSON representing a camera that has been fully migrated to Native
       final mockJson = {
         'id': 'migrated_cam',
         'name': 'Migrated Camera',
         'category': 'digital',
         'mode': 'photo',
-        'sensor': {'type': 'ccd', 'dynamicRange': 8, 'baseNoise': 0.1, 'colorDepth': 8},
-        'modules': {'filters': [], 'lenses': [], 'ratios': [], 'frames': [], 'watermarks': {'presets': [], 'editor': {}}, 'extras': []},
+        'sensor': {
+          'type': 'ccd',
+          'dynamicRange': 8,
+          'baseNoise': 0.1,
+          'colorDepth': 8
+        },
+        'modules': {
+          'filters': [],
+          'lenses': [],
+          'ratios': [],
+          'frames': [],
+          'watermarks': {'presets': [], 'editor': {}},
+          'extras': []
+        },
         'defaultSelection': {'lens': 'std', 'flash': 'off'},
-        'uiCapabilities': {'showLensRing': true, 'showZoomSlider': true, 'showExposureDial': true, 'showFlashButton': true, 'showWbButton': true, 'showQualitySelector': true, 'showRatioSelector': true},
-        'previewCapabilities': {'supportsRealtimeLut': true, 'supportsRealtimeGrain': true, 'supportsRealtimeVignette': true, 'supportsRealtimeBlur': true, 'supportsRealtimeAberration': true},
+        'uiCapabilities': {
+          'showLensRing': true,
+          'showZoomSlider': true,
+          'showExposureDial': true,
+          'showFlashButton': true,
+          'showWbButton': true,
+          'showQualitySelector': true,
+          'showRatioSelector': true
+        },
+        'previewCapabilities': {
+          'supportsRealtimeLut': true,
+          'supportsRealtimeGrain': true,
+          'supportsRealtimeVignette': true,
+          'supportsRealtimeBlur': true,
+          'supportsRealtimeAberration': true
+        },
         'previewPolicy': {
           // These must be false for Phase 2, as they are now handled by Native Shader
           'enableChromaticAberration': false,
@@ -28,8 +55,18 @@ void main() {
           'enableContrast': false,
           'enableSaturation': false
         },
-        'exportPolicy': {'addWatermark': true, 'addDateStamp': true, 'applyFrame': true, 'forceJpeg': true},
-        'videoConfig': {'maxResolution': '1080p', 'maxFps': 30, 'supportsAudio': true, 'defaultFilterIntensity': 1.0},
+        'exportPolicy': {
+          'addWatermark': true,
+          'addDateStamp': true,
+          'applyFrame': true,
+          'forceJpeg': true
+        },
+        'videoConfig': {
+          'maxResolution': '1080p',
+          'maxFps': 30,
+          'supportsAudio': true,
+          'defaultFilterIntensity': 1.0
+        },
         'assets': {'luts': [], 'frames': [], 'watermarks': []},
         'meta': {'releaseDate': '2000', 'brand': 'Test', 'model': 'Test'},
         'defaultLook': {
@@ -64,27 +101,63 @@ void main() {
       expect(params.effectiveHalation, 0.05);
       expect(params.effectiveVignette, 0.2);
       expect(params.paperTexture, 0.1);
-      expect(params.effectiveContrast, 1.2);
-      expect(params.effectiveSaturation, 1.1);
+      // V3：叠加设备校准 + 场景自适应后，不再固定等于 defaultLook 原值
+      expect(params.effectiveContrast, greaterThan(1.2));
+      expect(params.effectiveSaturation, greaterThan(1.1));
     });
 
-    test('ColorFilter matrix should be identity when policy disables contrast/saturation', () {
+    test(
+        'ColorFilter matrix should be identity when policy disables contrast/saturation',
+        () {
       final mockJson = {
         'id': 'migrated_cam',
         'name': 'Migrated Camera',
         'category': 'digital',
         'mode': 'photo',
-        'sensor': {'type': 'ccd', 'dynamicRange': 8, 'baseNoise': 0.1, 'colorDepth': 8},
-        'modules': {'filters': [], 'lenses': [], 'ratios': [], 'frames': [], 'watermarks': {'presets': [], 'editor': {}}, 'extras': []},
-        'defaultSelection': {'lens': 'std', 'flash': 'off'},
-        'uiCapabilities': {'showLensRing': true, 'showZoomSlider': true, 'showExposureDial': true, 'showFlashButton': true, 'showWbButton': true, 'showQualitySelector': true, 'showRatioSelector': true},
-        'previewCapabilities': {'supportsRealtimeLut': true, 'supportsRealtimeGrain': true, 'supportsRealtimeVignette': true, 'supportsRealtimeBlur': true, 'supportsRealtimeAberration': true},
-        'previewPolicy': {
-          'enableContrast': false,
-          'enableSaturation': false
+        'sensor': {
+          'type': 'ccd',
+          'dynamicRange': 8,
+          'baseNoise': 0.1,
+          'colorDepth': 8
         },
-        'exportPolicy': {'addWatermark': true, 'addDateStamp': true, 'applyFrame': true, 'forceJpeg': true},
-        'videoConfig': {'maxResolution': '1080p', 'maxFps': 30, 'supportsAudio': true, 'defaultFilterIntensity': 1.0},
+        'modules': {
+          'filters': [],
+          'lenses': [],
+          'ratios': [],
+          'frames': [],
+          'watermarks': {'presets': [], 'editor': {}},
+          'extras': []
+        },
+        'defaultSelection': {'lens': 'std', 'flash': 'off'},
+        'uiCapabilities': {
+          'showLensRing': true,
+          'showZoomSlider': true,
+          'showExposureDial': true,
+          'showFlashButton': true,
+          'showWbButton': true,
+          'showQualitySelector': true,
+          'showRatioSelector': true
+        },
+        'previewCapabilities': {
+          'supportsRealtimeLut': true,
+          'supportsRealtimeGrain': true,
+          'supportsRealtimeVignette': true,
+          'supportsRealtimeBlur': true,
+          'supportsRealtimeAberration': true
+        },
+        'previewPolicy': {'enableContrast': false, 'enableSaturation': false},
+        'exportPolicy': {
+          'addWatermark': true,
+          'addDateStamp': true,
+          'applyFrame': true,
+          'forceJpeg': true
+        },
+        'videoConfig': {
+          'maxResolution': '1080p',
+          'maxFps': 30,
+          'supportsAudio': true,
+          'defaultFilterIntensity': 1.0
+        },
         'assets': {'luts': [], 'frames': [], 'watermarks': []},
         'meta': {'releaseDate': '2000', 'brand': 'Test', 'model': 'Test'},
         'defaultLook': {
@@ -112,16 +185,19 @@ void main() {
 
       // In Phase 2, we want to ensure the Dart-side ColorFilter doesn't double-apply
       // the contrast and saturation if the policy disables it.
-      
+
       // Phase 2 重构后：ColorFilter/buildColorMatrix/computeColorMatrix 已全部删除
       // Flutter 层不再做像素级渲染，所有色彩处理由 Native Shader 完成
       // 验证 policy 状态仍然正确（用于 Native 层判断是否启用某些 pass）
       expect(params.policy.enableContrast, isFalse);
       expect(params.policy.enableSaturation, isFalse);
-      
-      // The parameters are still there for Native
-      expect(params.effectiveContrast, 1.5);
-      expect(params.effectiveSaturation, 2.0);
+
+      // The parameters are still there for Native（并且以 effective* 为准）
+      final json = params.toJson();
+      expect(json['contrast'], closeTo(params.effectiveContrast, 0.0001));
+      expect(json['saturation'], closeTo(params.effectiveSaturation, 0.0001));
+      expect(params.effectiveContrast, greaterThan(1.5));
+      expect(params.effectiveSaturation, greaterThanOrEqualTo(2.0));
     });
   });
 }

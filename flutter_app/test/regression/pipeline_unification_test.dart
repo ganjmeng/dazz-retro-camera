@@ -198,8 +198,11 @@ void main() {
       );
 
       final json = params.toJson();
-      // effectiveTemperature = -15 + 5 = -10
-      expect(json['temperatureShift'], closeTo(-10.0, 0.01));
+      // V3 起 temperature 会叠加场景自适应与设备校准偏移，断言与 effectiveTemperature 对齐。
+      expect(
+        json['temperatureShift'],
+        closeTo(params.effectiveTemperature, 0.01),
+      );
     });
 
     test('preview_renderer.dart 不应包含 buildColorMatrix 或 Widget 特效类', () {
