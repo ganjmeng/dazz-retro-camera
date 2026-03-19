@@ -125,6 +125,7 @@ class CapturePipeline {
     try {
       // ── 1. 先尝试 GPU 快速路径（无相框/水印时完全跳过 Dart 解码）─────────────
       bool gpuProcessed = false;
+      bool decodedWithScale = false;
       ui.Image? srcImage;
       String? gpuOutputPath;
       Uint8List? gpuOutputBytes;
@@ -188,6 +189,7 @@ class CapturePipeline {
           final scale = maxDimension / maxRaw;
           decodeTargetW = (rawW * scale).round();
           decodeTargetH = (rawH * scale).round();
+          decodedWithScale = true;
         }
         final codec = await ui.instantiateImageCodec(
           bytes,
@@ -433,15 +435,20 @@ class CapturePipeline {
         } catch (_) {}
       }
 
-      // 原生叠加：GPU 处理成功后优先在 native 侧完成相框+水印合成，失败再回退 Dart Canvas。
-      if (gpuProcessed &&
-          gpuOutputPath != null &&
-          (frameOpt != null ||
-              watermarkText.isNotEmpty ||
-              minimapNormalizedRect != null)) {
+      // 原生叠加：优先在 native 侧完成相框+水印合成，失败再回退 Dart Canvas。
+      // 非 GPU 场景仅在 renderParams==null 且未解码缩放时启用，避免坐标与源图不一致。
+      final hasNativeOverlayNeed = frameOpt != null ||
+          watermarkText.isNotEmpty ||
+          minimapNormalizedRect != null;
+      final nativeComposeSourcePath = gpuProcessed
+          ? gpuOutputPath
+          : ((!decodedWithScale && renderParams == null) ? imagePath : null);
+      if (hasNativeOverlayNeed &&
+          nativeComposeSourcePath != null &&
+          (Platform.isAndroid || Platform.isIOS)) {
         try {
           final composed = await _channel.invokeMethod<Map>("composeOverlay", {
-            "filePath": gpuOutputPath,
+            "filePath": nativeComposeSourcePath,
             "cropLeft": cropRect.left,
             "cropTop": cropRect.top,
             "cropWidth": cropRect.width,
@@ -479,7 +486,7 @@ class CapturePipeline {
               File(composedPath).deleteSync();
             } catch (_) {}
             try {
-              if (gpuOutputPath != composedPath) {
+              if (gpuOutputPath != null && gpuOutputPath != composedPath) {
                 File(gpuOutputPath).deleteSync();
               }
             } catch (_) {}

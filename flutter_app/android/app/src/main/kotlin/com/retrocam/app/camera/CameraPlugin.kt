@@ -191,6 +191,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "setWhiteBalance" -> handleSetWhiteBalance(call, result)
             "setSharpen"         -> handleSetSharpen(call, result)
             "updateLensParams"   -> handleUpdateLensParams(call, result)
+            "syncRuntimeState"   -> handleSyncRuntimeState(call, result)
             "startRecording"     -> handleStartRecording(result)
             "stopRecording"      -> handleStopRecording(result)
             "saveToGallery"      -> handleSaveToGallery(call, result)
@@ -1197,6 +1198,47 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "chromaticAberration=$chromaticAberration, bloom=$bloom, softFocus=$softFocus, " +
             "distortion=$distortion, exposure=$exposure, contrast=$contrast, " +
             "saturation=$saturation, zoomFactor=$zoomFactor")
+        result.success(null)
+    }
+
+    // ─────────────────────────────────────────────
+    // syncRuntimeState — 一次性同步镜头参数 + 渲染参数 + 缩放
+    // ─────────────────────────────────────────────
+    private fun handleSyncRuntimeState(call: MethodCall, result: MethodChannel.Result) {
+        val lensParams = call.argument<Map<String, Any>>("lensParams") ?: emptyMap()
+        val renderParams = call.argument<Map<String, Any>>("renderParams") ?: emptyMap()
+        val zoom = (call.argument<Double>("zoom") ?: 1.0).coerceIn(0.6, 20.0)
+
+        val fisheyeMode = (lensParams["fisheyeMode"] as? Boolean) ?: false
+        val vignette = (lensParams["vignette"] as? Number)?.toDouble() ?: 0.0
+        val distortion = (lensParams["distortion"] as? Number)?.toDouble() ?: 0.0
+        val chromaticAberration =
+            (lensParams["chromaticAberration"] as? Number)?.toDouble() ?: 0.0
+        val bloom = (lensParams["bloom"] as? Number)?.toDouble() ?: 0.0
+        val softFocus = (lensParams["softFocus"] as? Number)?.toDouble() ?: 0.0
+
+        // 缓存 lens 参数，供重建 renderer 后恢复
+        cachedLensFisheyeMode = fisheyeMode
+        cachedLensVignette = vignette
+        cachedLensDistortion = distortion
+
+        try {
+            camera?.cameraControl?.setZoomRatio(zoom.toFloat())
+        } catch (e: Exception) {
+            Log.w(TAG, "syncRuntimeState setZoom failed: ${e.message}")
+        }
+
+        glRenderer?.setFisheyeMode(fisheyeMode)
+
+        val merged = mutableMapOf<String, Any>()
+        merged.putAll(renderParams)
+        merged["vignette"] = vignette
+        merged["chromaticAberration"] = chromaticAberration
+        merged["bloomAmount"] = bloom
+        merged["softFocus"] = softFocus
+        merged["distortion"] = distortion
+        glRenderer?.updateParams(merged)
+
         result.success(null)
     }
 

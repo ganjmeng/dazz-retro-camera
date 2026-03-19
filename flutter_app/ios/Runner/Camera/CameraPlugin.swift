@@ -90,6 +90,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleSetSharpen(call: call, result: result)
         case "updateLensParams":
             handleUpdateLensParams(call: call, result: result)
+        case "syncRuntimeState":
+            handleSyncRuntimeState(call: call, result: result)
         case "saveToGallery":
             handleSaveToGallery(call: call, result: result)
         case "processWithGpu":
@@ -359,6 +361,35 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             // softFocus 暂未下沉到 Metal uniform（由统一 renderParams 管线兜底）
             r.setCCDParams(p)
         }
+        result(nil)
+    }
+
+    // ─────────────────────────────────────────────
+    // syncRuntimeState — 一次性同步镜头参数 + 渲染参数 + 缩放
+    // ─────────────────────────────────────────────
+    private func handleSyncRuntimeState(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any]
+        let lens = args?["lensParams"] as? [String: Any] ?? [:]
+        let render = args?["renderParams"] as? [String: Any] ?? [:]
+        let zoom = (args?["zoom"] as? Double) ?? 1.0
+
+        let fisheyeMode = lens["fisheyeMode"] as? Bool ?? false
+        let vignette = lens["vignette"] as? Double ?? 0.0
+        let chromaticAberration = lens["chromaticAberration"] as? Double ?? 0.0
+        let bloom = lens["bloom"] as? Double ?? 0.0
+        let softFocus = lens["softFocus"] as? Double ?? 0.0
+        let distortion = lens["distortion"] as? Double ?? 0.0
+
+        cameraManager?.setZoom(factor: CGFloat(zoom))
+        renderer?.setFisheyeMode(fisheyeMode)
+
+        var merged = render
+        merged["vignette"] = Float(vignette)
+        merged["chromaticAberration"] = Float(chromaticAberration)
+        merged["bloomAmount"] = Float(bloom)
+        merged["softFocus"] = Float(softFocus)
+        merged["distortion"] = Float(distortion)
+        renderer?.updateParams(merged)
         result(nil)
     }
 

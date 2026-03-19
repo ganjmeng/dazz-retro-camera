@@ -165,9 +165,16 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
       _originalH = srcH;
       frame.image.dispose();
 
-      // 2. 如果原图超过 _kMaxPreviewDim，在后台 isolate 中缩小（避免卡 UI，让加载动画正常渲染）
-      if (srcW > _kMaxPreviewDim || srcH > _kMaxPreviewDim) {
-        final scale = _kMaxPreviewDim / math.max(srcW, srcH);
+      // 2. 如果原图过大，在后台 isolate 中缩小（避免卡 UI / OOM）
+      // 分级策略：超大图用更保守尺寸；中大图尽量保留更多像素，兼顾画质与稳定。
+      final maxSrcDim = math.max(srcW, srcH);
+      final previewMaxDim = maxSrcDim >= 12000
+          ? 4096
+          : maxSrcDim >= 8000
+              ? 4608
+              : _kMaxPreviewDim;
+      if (srcW > previewMaxDim || srcH > previewMaxDim) {
+        final scale = previewMaxDim / maxSrcDim;
         final newW = (srcW * scale).round();
         final newH = (srcH * scale).round();
         // 在独立 isolate 中执行 CPU 密集的解码+缩放，主线程保持响应
@@ -276,8 +283,10 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
           st.activeWatermarkId != 'none';
       // 只要用户做了裁剪/旋转/翻转且存在缩小预览源，就优先用缩小源做变换。
       // 这样可避免对超大原图进行 Dart 端 decodeImage 引发内存峰值崩溃。
-      final needSafeTransformSource =
-          hasUserTransform && _resizedPreviewPath != null;
+      // 仅在超大图时走安全缩小源，避免中等分辨率也被过度降质。
+      final needSafeTransformSource = hasUserTransform &&
+          _resizedPreviewPath != null &&
+          math.max(_originalW, _originalH) >= 7000;
       final transformSourcePath =
           needSafeTransformSource ? _resizedPreviewPath! : gpuSourceForSave;
       if (needSafeTransformSource) {

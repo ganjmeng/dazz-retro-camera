@@ -123,6 +123,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _showTransition = false;
   Timer? _transitionTimer;
   bool _isLifecycleSwitching = false;
+  bool _isCameraTransitioning = false;
   AppLifecycleState _lastLifecycleState = AppLifecycleState.resumed;
 
   // Options 弹框控制器
@@ -355,29 +356,44 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       await svc.setCamera(camera);
       final lensId = ref.read(cameraAppProvider).activeLensId;
       final lens = camera.lensById(lensId);
-      await svc.updateLensParams(
-        distortion: lens?.distortion ?? 0.0,
-        vignette: lens?.vignette ?? 0.0,
-        zoomFactor: lens?.zoomFactor ?? 1.0,
-        fisheyeMode: lens?.fisheyeMode ?? false,
-        chromaticAberration: lens?.chromaticAberration ?? 0.0,
-        bloom: lens?.bloom ?? 0.0,
-        softFocus: lens?.softFocus ?? 0.0,
-        exposure: lens?.exposure ?? 0.0,
-        contrast: lens?.contrast ?? 0.0,
-        saturation: lens?.saturation ?? 0.0,
-        highlightCompression: lens?.highlightCompression ?? 0.0,
-      );
-    }
-
-    final renderParams = ref.read(cameraAppProvider).renderParams;
-    if (renderParams != null) {
-      await svc.updateRenderParams(renderParams.toJson());
-    }
-
-    final zoom = ref.read(cameraAppProvider).zoomLevel;
-    if (zoom != 1.0) {
-      await svc.setZoom(zoom);
+      final renderParams = ref.read(cameraAppProvider).renderParams;
+      final zoom = ref.read(cameraAppProvider).zoomLevel;
+      if (renderParams != null) {
+        await svc.syncRuntimeState(
+          lensParams: {
+            'distortion': lens?.distortion ?? 0.0,
+            'vignette': lens?.vignette ?? 0.0,
+            'zoomFactor': lens?.zoomFactor ?? 1.0,
+            'fisheyeMode': lens?.fisheyeMode ?? false,
+            'chromaticAberration': lens?.chromaticAberration ?? 0.0,
+            'bloom': lens?.bloom ?? 0.0,
+            'softFocus': lens?.softFocus ?? 0.0,
+            'exposure': lens?.exposure ?? 0.0,
+            'contrast': lens?.contrast ?? 0.0,
+            'saturation': lens?.saturation ?? 0.0,
+            'highlightCompression': lens?.highlightCompression ?? 0.0,
+          },
+          renderParams: renderParams.toJson(),
+          zoom: zoom,
+        );
+      } else {
+        await svc.updateLensParams(
+          distortion: lens?.distortion ?? 0.0,
+          vignette: lens?.vignette ?? 0.0,
+          zoomFactor: lens?.zoomFactor ?? 1.0,
+          fisheyeMode: lens?.fisheyeMode ?? false,
+          chromaticAberration: lens?.chromaticAberration ?? 0.0,
+          bloom: lens?.bloom ?? 0.0,
+          softFocus: lens?.softFocus ?? 0.0,
+          exposure: lens?.exposure ?? 0.0,
+          contrast: lens?.contrast ?? 0.0,
+          saturation: lens?.saturation ?? 0.0,
+          highlightCompression: lens?.highlightCompression ?? 0.0,
+        );
+        if (zoom != 1.0) {
+          await svc.setZoom(zoom);
+        }
+      }
     }
   }
 
@@ -415,22 +431,28 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   /// [minVisible] 是覆盖层最短可见时间，用于避免闪屏。
   Future<void> _showCameraTransition(FutureOr<void> Function() action,
       {Duration minVisible = const Duration(milliseconds: 180)}) async {
+    if (_isCameraTransitioning || !mounted) return;
+    _isCameraTransitioning = true;
     _transitionTimer?.cancel();
     setState(() => _showTransition = true);
     final sw = Stopwatch()..start();
     // 轻量等待一帧级别时间，确保覆盖层先出现，避免闪烁
     await Future.delayed(const Duration(milliseconds: 60));
     // await action，最多等待 2 秒，防止原生层无响应时永久卡黑屏
-    await Future.value(action()).timeout(
-      const Duration(seconds: 2),
-      onTimeout: () {},
-    );
-    sw.stop();
-    final remain = minVisible - sw.elapsed;
-    if (remain > Duration.zero) {
-      await Future.delayed(remain);
+    try {
+      await Future.value(action()).timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
+      sw.stop();
+      final remain = minVisible - sw.elapsed;
+      if (remain > Duration.zero) {
+        await Future.delayed(remain);
+      }
+      if (mounted) setState(() => _showTransition = false);
+    } finally {
+      _isCameraTransitioning = false;
     }
-    if (mounted) setState(() => _showTransition = false);
   }
 
   // ── 取景框中央文字提示（1.5秒后自动消失）────────────────────────────────────

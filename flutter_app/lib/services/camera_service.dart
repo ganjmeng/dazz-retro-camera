@@ -281,6 +281,23 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
+  /// 一次性同步预览运行态参数（镜头 + 渲染 + 缩放），减少多次 MethodChannel 往返和中间态闪动。
+  Future<void> syncRuntimeState({
+    required Map<String, dynamic> lensParams,
+    required Map<String, dynamic> renderParams,
+    required double zoom,
+  }) async {
+    try {
+      await _channel.invokeMethod('syncRuntimeState', {
+        'lensParams': lensParams,
+        'renderParams': renderParams,
+        'zoom': zoom,
+      });
+    } catch (e) {
+      print('Error syncing runtime state: $e');
+    }
+  }
+
   /// 设置前置摄像头镜像开关
   Future<void> setMirrorFrontCamera(bool enabled) async {
     try {
