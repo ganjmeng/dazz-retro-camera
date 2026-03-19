@@ -122,6 +122,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // 耗时操作过渡动画（换相机/切滤镜/切比例/切清晰度）
   bool _showTransition = false;
   Timer? _transitionTimer;
+  bool _isLifecycleSwitching = false;
+  AppLifecycleState _lastLifecycleState = AppLifecycleState.resumed;
 
   // Options 弹框控制器
   late AnimationController _optionsAnim;
@@ -204,38 +206,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         await ref.read(cameraServiceProvider.notifier).initCamera();
       }
 
-      // ── STEP 1: 先同步清晰度档位（setSharpen 会重建 renderer，必须最先执行）──
-      // IMPORTANT: must await — setSharpen on Android triggers unbindAll+rebind which
-      // recreates CameraGLRenderer. All subsequent param calls must happen AFTER this.
-      final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
-      const sharpenLevels = [0.0, 0.5, 1.0];
-      await ref
-          .read(cameraServiceProvider.notifier)
-          .setSharpen(sharpenLevels[sharpenLevel]);
-
-      // ── STEP 2: renderer 已就绪（setSharpen await 保证），重新发送相机参数 ──
-      final cameraAfterInit = ref.read(cameraAppProvider).camera;
-      if (cameraAfterInit != null) {
-        await ref
-            .read(cameraServiceProvider.notifier)
-            .setCamera(cameraAfterInit);
-        // 同步镜头参数（含 fisheyeMode）
-        final lensId = ref.read(cameraAppProvider).activeLensId;
-        final lens = cameraAfterInit.lensById(lensId);
-        ref.read(cameraServiceProvider.notifier).updateLensParams(
-              distortion: lens?.distortion ?? 0.0,
-              vignette: lens?.vignette ?? 0.0,
-              zoomFactor: lens?.zoomFactor ?? 1.0,
-              fisheyeMode: lens?.fisheyeMode ?? false,
-              chromaticAberration: lens?.chromaticAberration ?? 0.0,
-              bloom: lens?.bloom ?? 0.0,
-              softFocus: lens?.softFocus ?? 0.0,
-              exposure: lens?.exposure ?? 0.0,
-              contrast: lens?.contrast ?? 0.0,
-              saturation: lens?.saturation ?? 0.0,
-              highlightCompression: lens?.highlightCompression ?? 0.0,
-            );
-      }
+      await _syncPipelineAfterCameraInit();
       _loadLatestThumb();
 
       // ── 启动画面收尾：等 500ms 后隐藏 App Icon 覆盖层，进入正常拍摄界面 ──
@@ -332,18 +303,90 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    _lastLifecycleState = state;
     if (state == AppLifecycleState.resumed) {
-      // App 从后台切回前台：黑屏 + App Icon 淡入淡出
+      unawaited(_handleLifecycleResume());
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      unawaited(_handleLifecyclePause());
+    }
+  }
+
+  Future<void> _handleLifecyclePause() async {
+    if (_isLifecycleSwitching || !mounted) return;
+    _isLifecycleSwitching = true;
+    try {
+      // App 进入后台：保存快照并停预览，避免后台持有相机资源
+      ref.read(cameraAppProvider.notifier).saveCurrentSnapshot();
+      await ref.read(cameraServiceProvider.notifier).stopPreview();
+    } finally {
+      _isLifecycleSwitching = false;
+    }
+  }
+
+  Future<void> _handleLifecycleResume() async {
+    if (_isLifecycleSwitching || !mounted) return;
+    _isLifecycleSwitching = true;
+    try {
       _transitionTimer?.cancel();
       setState(() => _showTransition = true);
-      _transitionTimer = Timer(const Duration(milliseconds: 600), () {
-        if (mounted) setState(() => _showTransition = false);
+      await _reinitAndSyncCameraPipeline();
+      if (!mounted) return;
+      _transitionTimer = Timer(const Duration(milliseconds: 260), () {
+        if (mounted && _lastLifecycleState == AppLifecycleState.resumed) {
+          setState(() => _showTransition = false);
+        }
       });
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
-      // App 进入后台或切到其他 App：保存当前相机快照，确保下次打开能恢复设定
-      ref.read(cameraAppProvider.notifier).saveCurrentSnapshot();
+    } finally {
+      _isLifecycleSwitching = false;
     }
+  }
+
+  Future<void> _syncPipelineAfterCameraInit() async {
+    final svc = ref.read(cameraServiceProvider.notifier);
+    // setSharpen 会重建 renderer，必须先执行
+    final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
+    const sharpenLevels = [0.0, 0.5, 1.0];
+    await svc.setSharpen(sharpenLevels[sharpenLevel]);
+
+    final camera = ref.read(cameraAppProvider).camera;
+    if (camera != null) {
+      await svc.setCamera(camera);
+      final lensId = ref.read(cameraAppProvider).activeLensId;
+      final lens = camera.lensById(lensId);
+      await svc.updateLensParams(
+        distortion: lens?.distortion ?? 0.0,
+        vignette: lens?.vignette ?? 0.0,
+        zoomFactor: lens?.zoomFactor ?? 1.0,
+        fisheyeMode: lens?.fisheyeMode ?? false,
+        chromaticAberration: lens?.chromaticAberration ?? 0.0,
+        bloom: lens?.bloom ?? 0.0,
+        softFocus: lens?.softFocus ?? 0.0,
+        exposure: lens?.exposure ?? 0.0,
+        contrast: lens?.contrast ?? 0.0,
+        saturation: lens?.saturation ?? 0.0,
+        highlightCompression: lens?.highlightCompression ?? 0.0,
+      );
+    }
+
+    final renderParams = ref.read(cameraAppProvider).renderParams;
+    if (renderParams != null) {
+      await svc.updateRenderParams(renderParams.toJson());
+    }
+
+    final zoom = ref.read(cameraAppProvider).zoomLevel;
+    if (zoom != 1.0) {
+      await svc.setZoom(zoom);
+    }
+  }
+
+  Future<void> _reinitAndSyncCameraPipeline() async {
+    if (!mounted) return;
+    final svc = ref.read(cameraServiceProvider.notifier);
+    await svc.initCamera();
+    if (!mounted) return;
+    await _syncPipelineAfterCameraInit();
   }
 
   /// 进入二级页面时暂停相机预览，返回后自动恢复，并显示过渡动画。
@@ -359,53 +402,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => page),
     );
-    // 4. 返回后重新初始化相机（重新获取 textureId）
-    // 注意：不能只用 startPreview，因为 stopSession 后 MetalRenderer 停止推帧，
-    // Flutter 的 Texture widget 会冻结在最后一帧。必须重新 initCamera 才能恢复实时预览。
+    // 4. 返回后统一重建并同步完整相机链路
     if (!mounted) return;
-    await ref.read(cameraServiceProvider.notifier).initCamera();
-    // initCamera 会创建新的 CameraGLRenderer，必须重新设置当前相机的 shader
-    // 否则新 renderer 会使用错误的默认 shader
-    final cameraBack = ref.read(cameraAppProvider).camera;
-    if (cameraBack != null) {
-      await ref.read(cameraServiceProvider.notifier).setCamera(cameraBack);
-      // 同步镜头参数（所有字段）
-      final lensIdBack = ref.read(cameraAppProvider).activeLensId;
-      final lensBack = cameraBack.lensById(lensIdBack);
-      await ref.read(cameraServiceProvider.notifier).updateLensParams(
-            distortion: lensBack?.distortion ?? 0.0,
-            vignette: lensBack?.vignette ?? 0.0,
-            zoomFactor: lensBack?.zoomFactor ?? 1.0,
-            fisheyeMode: lensBack?.fisheyeMode ?? false,
-            chromaticAberration: lensBack?.chromaticAberration ?? 0.0,
-            bloom: lensBack?.bloom ?? 0.0,
-            softFocus: lensBack?.softFocus ?? 0.0,
-            exposure: lensBack?.exposure ?? 0.0,
-            contrast: lensBack?.contrast ?? 0.0,
-            saturation: lensBack?.saturation ?? 0.0,
-            highlightCompression: lensBack?.highlightCompression ?? 0.0,
-          );
-      // 同步完整渲染参数（滤镜+镜头+defaultLook 组合值）
-      final renderParams = ref.read(cameraAppProvider).renderParams;
-      if (renderParams != null) {
-        ref
-            .read(cameraServiceProvider.notifier)
-            .updateRenderParams(renderParams.toJson());
-      }
-    }
-    // FIX: 恢复缩放倍率（initCamera 重建后原生层缩放被重置为 x1）
-    final zoomBack = ref.read(cameraAppProvider).zoomLevel;
-    if (zoomBack != 1.0) {
-      await ref.read(cameraServiceProvider.notifier).setZoom(zoomBack);
-    }
-    // 同步清晰度档位对应的原生分辨率
-    // IMPORTANT: must await so the transition overlay stays visible until the
-    // native camera is fully reconfigured at the correct resolution.
-    final sharpenLevelBack = ref.read(cameraAppProvider).sharpenLevel;
-    const sharpenLevelsBack = [0.0, 0.5, 1.0];
-    await ref
-        .read(cameraServiceProvider.notifier)
-        .setSharpen(sharpenLevelsBack[sharpenLevelBack]);
+    await _reinitAndSyncCameraPipeline();
     // 5. 淡出过渡动画（setSharpen 完成后再淡出，确保分辨率已切换）
     _transitionTimer = Timer(const Duration(milliseconds: 300), () {
       if (mounted) setState(() => _showTransition = false);

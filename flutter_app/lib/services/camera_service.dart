@@ -51,7 +51,8 @@ class CameraState {
       currentPreset: currentPreset ?? this.currentPreset,
       isRecording: isRecording ?? this.isRecording,
       currentLens: currentLens ?? this.currentLens,
-      activeCameraDebugInfo: activeCameraDebugInfo ?? this.activeCameraDebugInfo,
+      activeCameraDebugInfo:
+          activeCameraDebugInfo ?? this.activeCameraDebugInfo,
     );
   }
 }
@@ -60,63 +61,100 @@ class CameraState {
 class CameraService extends StateNotifier<CameraState> {
   CameraService() : super(const CameraState());
 
-  static const MethodChannel _channel = MethodChannel(AppConstants.cameraControlChannel);
-  static const EventChannel _eventChannel = EventChannel(AppConstants.cameraEventsChannel);
+  static const MethodChannel _channel =
+      MethodChannel(AppConstants.cameraControlChannel);
+  static const EventChannel _eventChannel =
+      EventChannel(AppConstants.cameraEventsChannel);
 
   // 原生事件流订阅（每次 initCamera 先取消旧订阅再重新订阅，防止重复监听）
   StreamSubscription? _eventSubscription;
+  // 生命周期操作串行化，避免 init/stop/dispose 并发竞态
+  Future<void> _lifecycleChain = Future.value();
+  bool _isDisposed = false;
+  int _initGeneration = 0;
+
+  Future<T> _serializeLifecycle<T>(Future<T> Function() action) async {
+    final completer = Completer<T>();
+    _lifecycleChain = _lifecycleChain.then((_) async {
+      try {
+        if (_isDisposed) {
+          throw StateError('CameraService already disposed');
+        }
+        final result = await action();
+        completer.complete(result);
+      } catch (e, st) {
+        completer.completeError(e, st);
+      }
+    });
+    return completer.future;
+  }
 
   /// 初始化相机，获取 Texture ID 并开始预览
   Future<void> initCamera() async {
-    state = state.copyWith(isLoading: true, error: null);
-    
-    // 相机权限已在 CameraScreen._requestPermissions() 中一次性请求
-    // 这里只检查相机权限是否已授予，不再重复弹出权限对话框
-    final cameraGranted = await Permission.camera.isGranted;
-    if (!cameraGranted) {
-      state = state.copyWith(
-        isLoading: false,
-        error: 'Camera permission denied. Please grant permission in settings.',
-      );
-      return;
-    }
+    await _serializeLifecycle(() async {
+      state = state.copyWith(isLoading: true, error: null);
 
-    try {
-      // 取消旧订阅，防止重复监听
-      await _eventSubscription?.cancel();
-      _eventSubscription = _eventChannel.receiveBroadcastStream().listen(_onNativeEvent);
-
-      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('initCamera', {
-        'resolution': '1080p',
-        'lens': state.currentLens,
-      });
-
-      if (result == null || result['textureId'] == null) {
-        throw Exception('initCamera returned null textureId');
+      // 相机权限已在 CameraScreen._requestPermissions() 中一次性请求
+      // 这里只检查相机权限是否已授予，不再重复弹出权限对话框
+      final cameraGranted = await Permission.camera.isGranted;
+      if (!cameraGranted) {
+        state = state.copyWith(
+          isLoading: false,
+          error:
+              'Camera permission denied. Please grant permission in settings.',
+        );
+        return;
       }
 
-      final textureId = result['textureId'] as int;
-      state = state.copyWith(isLoading: false, isReady: true, textureId: textureId);
-      await startPreview();
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: 'Failed to init camera: $e');
-    }
+      final generation = ++_initGeneration;
+      try {
+        // 取消旧订阅，防止重复监听
+        await _eventSubscription?.cancel();
+        _eventSubscription =
+            _eventChannel.receiveBroadcastStream().listen(_onNativeEvent);
+
+        final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+          'initCamera',
+          {
+            'resolution': '1080p',
+            'lens': state.currentLens,
+          },
+        );
+
+        if (generation != _initGeneration) return;
+        if (result == null || result['textureId'] == null) {
+          throw Exception('initCamera returned null textureId');
+        }
+
+        final textureId = result['textureId'] as int;
+        state = state.copyWith(
+            isLoading: false, isReady: true, textureId: textureId);
+        await _channel.invokeMethod('startPreview');
+      } catch (e) {
+        state = state.copyWith(
+            isLoading: false, error: 'Failed to init camera: $e');
+      }
+    });
   }
 
   Future<void> startPreview() async {
-    try {
-      await _channel.invokeMethod('startPreview');
-    } catch (e) {
-      print('Error starting preview: $e');
-    }
+    await _serializeLifecycle(() async {
+      try {
+        await _channel.invokeMethod('startPreview');
+      } catch (e) {
+        print('Error starting preview: $e');
+      }
+    });
   }
 
   Future<void> stopPreview() async {
-    try {
-      await _channel.invokeMethod('stopPreview');
-    } catch (e) {
-      print('Error stopping preview: $e');
-    }
+    await _serializeLifecycle(() async {
+      try {
+        await _channel.invokeMethod('stopPreview');
+      } catch (e) {
+        print('Error stopping preview: $e');
+      }
+    });
   }
 
   /// 切换 Preset（相机型号）
@@ -234,7 +272,7 @@ class CameraService extends StateNotifier<CameraState> {
       // 这里直接复用 setPreset：将 params 作为 defaultLook 传入
       await _channel.invokeMethod('setPreset', {
         'preset': {
-          'cameraId': '',  // 空字符串不会触发 setCameraId
+          'cameraId': '', // 空字符串不会触发 setCameraId
           'defaultLook': params,
         },
       });
@@ -277,7 +315,8 @@ class CameraService extends StateNotifier<CameraState> {
   /// [deviceQuarter] 设备方向：0=竖屏, 1=左横屏, 2=倒竖, 3=右横屏
   Future<Map<String, dynamic>?> takePhoto({int deviceQuarter = 0}) async {
     try {
-      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('takePhoto', {
+      final result =
+          await _channel.invokeMethod<Map<dynamic, dynamic>>('takePhoto', {
         'flashMode': 'auto',
         'deviceQuarter': deviceQuarter,
       });
@@ -296,9 +335,10 @@ class CameraService extends StateNotifier<CameraState> {
   /// 开始录制视频
   Future<bool> startRecording() async {
     if (!state.isReady) return false;
-    
+
     try {
-      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('startRecording');
+      final result =
+          await _channel.invokeMethod<Map<dynamic, dynamic>>('startRecording');
       if (result?['success'] == true) {
         state = state.copyWith(isRecording: true);
         return true;
@@ -313,9 +353,10 @@ class CameraService extends StateNotifier<CameraState> {
   /// 停止录制视频，返回文件路径
   Future<String?> stopRecording() async {
     if (!state.isReady || !state.isRecording) return null;
-    
+
     try {
-      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('stopRecording');
+      final result =
+          await _channel.invokeMethod<Map<dynamic, dynamic>>('stopRecording');
       state = state.copyWith(isRecording: false);
       return result?['filePath'] as String?;
     } catch (e) {
@@ -330,7 +371,8 @@ class CameraService extends StateNotifier<CameraState> {
   /// [cameraId] 相机 ID，用于文件命名，使相册可按相机分类
   Future<String?> saveToGallery(String filePath, {String cameraId = ''}) async {
     try {
-      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('saveToGallery', {
+      final result =
+          await _channel.invokeMethod<Map<dynamic, dynamic>>('saveToGallery', {
         'filePath': filePath,
         if (cameraId.isNotEmpty) 'cameraId': cameraId,
       });
@@ -360,11 +402,18 @@ class CameraService extends StateNotifier<CameraState> {
 
   /// 释放所有资源
   Future<void> disposeCamera() async {
-    try {
-      await _channel.invokeMethod('dispose');
-    } catch (e) {
-      print('Error disposing camera: $e');
-    }
+    await _serializeLifecycle(() async {
+      try {
+        _initGeneration++;
+        await _eventSubscription?.cancel();
+        _eventSubscription = null;
+        await _channel.invokeMethod('dispose');
+        state =
+            state.copyWith(isReady: false, textureId: null, isRecording: false);
+      } catch (e) {
+        print('Error disposing camera: $e');
+      }
+    });
   }
 
   /// 处理原生回调事件
@@ -382,7 +431,8 @@ class CameraService extends StateNotifier<CameraState> {
         }
         state = state.copyWith(
           isReady: true,
-          activeCameraDebugInfo: debugInfo.isNotEmpty ? debugInfo : state.activeCameraDebugInfo,
+          activeCameraDebugInfo:
+              debugInfo.isNotEmpty ? debugInfo : state.activeCameraDebugInfo,
         );
         break;
       case AppConstants.eventError:
@@ -400,12 +450,16 @@ class CameraService extends StateNotifier<CameraState> {
 
   @override
   void dispose() {
-    disposeCamera();
+    _isDisposed = true;
+    // Provider 销毁阶段不阻塞等待；尽力释放原生资源。
+    unawaited(_channel.invokeMethod('dispose'));
+    _eventSubscription?.cancel();
     super.dispose();
   }
 }
 
 // Provider 暴露
-final cameraServiceProvider = StateNotifierProvider<CameraService, CameraState>((ref) {
+final cameraServiceProvider =
+    StateNotifierProvider<CameraService, CameraState>((ref) {
   return CameraService();
 });
