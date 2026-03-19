@@ -33,6 +33,9 @@ class CapturePipeline {
   static const int _kFrameTextureCacheMaxEntries = 6;
   static final Map<String, ui.Image> _frameTextureCache = <String, ui.Image>{};
   static final List<String> _frameTextureLru = <String>[];
+  static const int _kFrameAssetBytesCacheMaxEntries = 8;
+  static final Map<String, Uint8List> _frameAssetBytesCache = <String, Uint8List>{};
+  static final List<String> _frameAssetBytesLru = <String>[];
 
   /// 输出图像最大边长（像素）。超过此値时等比缩小画布。
   /// 各清晰度档位的输出最大边长（像素）
@@ -46,6 +49,25 @@ class CapturePipeline {
 
   CapturePipeline({required this.camera});
 
+  Future<Uint8List> _getFrameAssetBytes(String assetPath) async {
+    final cached = _frameAssetBytesCache[assetPath];
+    if (cached != null) {
+      _frameAssetBytesLru.remove(assetPath);
+      _frameAssetBytesLru.add(assetPath);
+      return cached;
+    }
+    final assetData = await rootBundle.load(assetPath);
+    final bytes = assetData.buffer.asUint8List();
+    _frameAssetBytesCache[assetPath] = bytes;
+    _frameAssetBytesLru.remove(assetPath);
+    _frameAssetBytesLru.add(assetPath);
+    while (_frameAssetBytesLru.length > _kFrameAssetBytesCacheMaxEntries) {
+      final evictKey = _frameAssetBytesLru.removeAt(0);
+      _frameAssetBytesCache.remove(evictKey);
+    }
+    return bytes;
+  }
+
   Future<ui.Image> _getFrameTexture(String assetPath, int targetWidth, int targetHeight) async {
     final key = '$assetPath@$targetWidth@$targetHeight';
     final cached = _frameTextureCache[key];
@@ -54,9 +76,9 @@ class CapturePipeline {
       _frameTextureLru.add(key);
       return cached;
     }
-    final assetData = await rootBundle.load(assetPath);
+    final assetBytes = await _getFrameAssetBytes(assetPath);
     final frameCodec = await ui.instantiateImageCodec(
-      assetData.buffer.asUint8List(),
+      assetBytes,
       targetWidth: targetWidth,
       targetHeight: targetHeight,
     );
@@ -1139,58 +1161,52 @@ class CapturePipeline {
     final fontWeight = styleDef.fontWeight;
 
     if (isVertical) {
-      final charPainters = text.split('').map((c) {
-        final p = TextPainter(
-          text: TextSpan(text: c, style: TextStyle(
+      final verticalText = text.split('').join('\n');
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: verticalText,
+          style: TextStyle(
             color: textColor,
             fontSize: fontSize,
             fontFamily: fontFamily,
             fontWeight: fontWeight,
-          )),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        return p;
-      }).toList();
+          ),
+        ),
+        textAlign: TextAlign.center,
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: w);
 
-      final totalH = charPainters.fold(0.0, (s, p) => s + p.height);
-      final charW = charPainters.fold(0.0, (s, p) => math.max(s, p.width));
-
-      double startX, startY;
+      double dx, dy;
       switch (position) {
         case 'bottom_right':
-          startX = ox + w - charW - margin;
-          startY = oy + h - totalH - margin;
+          dx = ox + w - textPainter.width - margin;
+          dy = oy + h - textPainter.height - margin;
           break;
         case 'bottom_left':
-          startX = ox + margin;
-          startY = oy + h - totalH - margin;
+          dx = ox + margin;
+          dy = oy + h - textPainter.height - margin;
           break;
         case 'top_right':
-          startX = ox + w - charW - margin;
-          startY = oy + margin;
+          dx = ox + w - textPainter.width - margin;
+          dy = oy + margin;
           break;
         case 'top_left':
-          startX = ox + margin;
-          startY = oy + margin;
+          dx = ox + margin;
+          dy = oy + margin;
           break;
         case 'bottom_center':
-          startX = ox + (w - charW) / 2;
-          startY = oy + h - totalH - margin;
+          dx = ox + (w - textPainter.width) / 2;
+          dy = oy + h - textPainter.height - margin;
           break;
         case 'top_center':
-          startX = ox + (w - charW) / 2;
-          startY = oy + margin;
+          dx = ox + (w - textPainter.width) / 2;
+          dy = oy + margin;
           break;
         default:
-          startX = ox + w - charW - margin;
-          startY = oy + h - totalH - margin;
+          dx = ox + w - textPainter.width - margin;
+          dy = oy + h - textPainter.height - margin;
       }
-
-      double curY = startY;
-      for (final p in charPainters) {
-        p.paint(canvas, Offset(startX + (charW - p.width) / 2, curY));
-        curY += p.height;
-      }
+      textPainter.paint(canvas, Offset(dx, dy));
     } else {
       final textPainter = TextPainter(
         text: TextSpan(
