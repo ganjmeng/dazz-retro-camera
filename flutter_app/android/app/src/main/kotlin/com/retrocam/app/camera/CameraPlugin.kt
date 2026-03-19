@@ -1368,19 +1368,14 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
                 val frameAssetPath = call.argument<String>("frameAssetPath") ?: ""
                 if (frameAssetPath.isNotEmpty()) {
-                    runCatching {
-                        val frameBitmap = getOrLoadFrameBitmap(frameAssetPath)
-                        if (frameBitmap != null) {
-                            canvas.drawBitmap(
-                                frameBitmap,
-                                null,
-                                Rect(0, 0, canvasW, canvasH),
-                                Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
-                            )
-                        }
-                    }.onFailure {
-                        Log.w(TAG, "composeOverlay frame load failed: ${it.message}")
-                    }
+                    val frameBitmap = getOrLoadFrameBitmap(frameAssetPath)
+                        ?: throw IllegalStateException("frame asset not found: $frameAssetPath")
+                    canvas.drawBitmap(
+                        frameBitmap,
+                        null,
+                        Rect(0, 0, canvasW, canvasH),
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+                    )
                 }
 
                 val watermarkText = call.argument<String>("watermarkText") ?: ""
@@ -1501,9 +1496,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 return cached
             }
         }
-        val decoded = flutterPluginBinding.applicationContext.assets
-            .open(frameAssetPath.removePrefix("assets/"))
-            .use { input -> BitmapFactory.decodeStream(input) }
+        val decoded = openFrameAssetStream(frameAssetPath)
+            ?.use { input -> BitmapFactory.decodeStream(input) }
             ?: return null
         synchronized(frameBitmapCache) {
             frameBitmapCache[frameAssetPath] = decoded
@@ -1515,6 +1509,37 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             }
         }
         return decoded
+    }
+
+    private fun openFrameAssetStream(frameAssetPath: String): java.io.InputStream? {
+        val assetManager = flutterPluginBinding.applicationContext.assets
+        val candidates = LinkedHashSet<String>()
+        val normalized = frameAssetPath
+            .removePrefix("/")
+            .removePrefix("flutter_assets/")
+        if (normalized.isNotEmpty()) {
+            candidates.add(normalized)
+            if (normalized.startsWith("assets/")) {
+                candidates.add(normalized.removePrefix("assets/"))
+            } else {
+                candidates.add("assets/$normalized")
+            }
+            runCatching {
+                flutterPluginBinding.flutterAssets.getAssetFilePathBySubpath(normalized)
+            }.getOrNull()?.let { lookup ->
+                candidates.add(lookup.removePrefix("/").removePrefix("flutter_assets/"))
+            }
+            runCatching {
+                flutterPluginBinding.flutterAssets.getAssetFilePathByName(normalized)
+            }.getOrNull()?.let { lookup ->
+                candidates.add(lookup.removePrefix("/").removePrefix("flutter_assets/"))
+            }
+        }
+        for (candidate in candidates) {
+            val stream = runCatching { assetManager.open(candidate) }.getOrNull()
+            if (stream != null) return stream
+        }
+        return null
     }
 
     private fun handleDispose(result: MethodChannel.Result) {

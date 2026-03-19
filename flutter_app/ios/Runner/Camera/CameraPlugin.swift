@@ -27,6 +27,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     private var eventSink: FlutterEventSink?
     private var textureRegistry: FlutterTextureRegistry?
     private var registeredTextureId: Int64 = -1
+    private var flutterAssetKeyLookup: ((String) -> String)?
 
     // 当前闪光灯模式
     private var currentFlashMode: AVCaptureDevice.FlashMode = .off
@@ -49,6 +50,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
 
         let instance = RetroCamPlugin()
         instance.textureRegistry = registrar.textures()
+        instance.flutterAssetKeyLookup = { registrar.lookupKey(forAsset: $0) }
 
         registrar.addMethodCallDelegate(instance, channel: channel)
         eventChannel.setStreamHandler(instance)
@@ -595,6 +597,14 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let imageTop = CGFloat((args["imageTop"] as? Double) ?? 0)
         let imageWidth = CGFloat((args["imageWidth"] as? Double) ?? Double(canvasW))
         let imageHeight = CGFloat((args["imageHeight"] as? Double) ?? Double(canvasH))
+        if let frameAssetPath = args["frameAssetPath"] as? String, !frameAssetPath.isEmpty {
+            guard let fullPath = resolveFlutterAssetPath(frameAssetPath),
+                  Self.cachedFrameImage(at: fullPath) != nil else {
+                result(FlutterError(code: "FRAME_ASSET_MISSING", message: "frame asset not found: \(frameAssetPath)", details: nil))
+                return
+            }
+        }
+
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: canvasW, height: canvasH))
 
         let composed = renderer.image { ctx in
@@ -634,9 +644,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             }
 
             if let frameAssetPath = args["frameAssetPath"] as? String, !frameAssetPath.isEmpty {
-                let bundlePath = Bundle.main.bundlePath
-                let fullPath = bundlePath + "/Frameworks/App.framework/flutter_assets/" + frameAssetPath
-                if let frameImage = Self.cachedFrameImage(at: fullPath) {
+                if let fullPath = resolveFlutterAssetPath(frameAssetPath),
+                   let frameImage = Self.cachedFrameImage(at: fullPath) {
                     frameImage.draw(in: CGRect(x: 0, y: 0, width: canvasW, height: canvasH))
                 }
             }
@@ -739,6 +748,54 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let g = CGFloat((value >> 8) & 0xFF) / 255.0
         let b = CGFloat(value & 0xFF) / 255.0
         return UIColor(red: r, green: g, blue: b, alpha: a)
+    }
+
+    private func resolveFlutterAssetPath(_ rawPath: String) -> String? {
+        let trimmed = rawPath
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if trimmed.isEmpty { return nil }
+
+        let normalized: String
+        if trimmed.hasPrefix("flutter_assets/") {
+            normalized = String(trimmed.dropFirst("flutter_assets/".count))
+        } else {
+            normalized = trimmed
+        }
+
+        var candidates: [String] = []
+        if let lookup = flutterAssetKeyLookup?(normalized), !lookup.isEmpty {
+            candidates.append(lookup)
+        }
+        if normalized.hasPrefix("assets/") {
+            let withoutAssets = String(normalized.dropFirst("assets/".count))
+            if let lookup = flutterAssetKeyLookup?(withoutAssets), !lookup.isEmpty {
+                candidates.append(lookup)
+            }
+            candidates.append("Frameworks/App.framework/flutter_assets/\(withoutAssets)")
+        } else {
+            if let lookup = flutterAssetKeyLookup?("assets/\(normalized)"), !lookup.isEmpty {
+                candidates.append(lookup)
+            }
+            candidates.append("Frameworks/App.framework/flutter_assets/assets/\(normalized)")
+        }
+        candidates.append("Frameworks/App.framework/flutter_assets/\(normalized)")
+
+        var seen = Set<String>()
+        for candidate in candidates where !candidate.isEmpty {
+            if seen.contains(candidate) { continue }
+            seen.insert(candidate)
+            let cleaned = candidate.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let absolute = Bundle.main.bundlePath + "/" + cleaned
+            if FileManager.default.fileExists(atPath: absolute) {
+                return absolute
+            }
+            if let path = Bundle.main.path(forResource: cleaned, ofType: nil),
+               FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+        return nil
     }
 
     private static func cachedFrameImage(at fullPath: String) -> UIImage? {
