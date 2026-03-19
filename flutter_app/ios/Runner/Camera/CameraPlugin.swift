@@ -236,10 +236,13 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             if let v = dl["chromaNoise"]         as? NSNumber { shaderParams["chromaNoise"]         = v.floatValue }
             // Inst C 专用字段
             if let v = dl["highlightRolloff"]   as? NSNumber { shaderParams["highlightRolloff"]   = v.floatValue }
+            if let v = dl["highlightRolloff2"]  as? NSNumber { shaderParams["highlightRolloff2"]  = v.floatValue }
             if let v = dl["paperTexture"]        as? NSNumber { shaderParams["paperTexture"]        = v.floatValue }
             if let v = dl["edgeFalloff"]         as? NSNumber { shaderParams["edgeFalloff"]         = v.floatValue }
             if let v = dl["exposureVariation"]   as? NSNumber { shaderParams["exposureVariation"]   = v.floatValue }
             if let v = dl["cornerWarmShift"]     as? NSNumber { shaderParams["cornerWarmShift"]     = v.floatValue }
+            if let v = dl["toneCurveStrength"]   as? NSNumber { shaderParams["toneCurveStrength"]   = v.floatValue }
+            if let v = dl["lutStrength"]         as? NSNumber { shaderParams["lutStrength"]         = v.floatValue }
             // SQC 专用字段
             if let v = dl["centerGain"]           as? NSNumber { shaderParams["centerGain"]           = v.floatValue }
             if let v = dl["developmentSoftness"]  as? NSNumber { shaderParams["developmentSoftness"]  = v.floatValue }
@@ -250,6 +253,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             if let v = dl["skinLumaSoften"]       as? NSNumber { shaderParams["skinLumaSoften"]       = v.floatValue }
             if let v = dl["skinRedLimit"]         as? NSNumber { shaderParams["skinRedLimit"]         = v.floatValue }
             if let lutPath = dl["baseLut"] as? String, !lutPath.isEmpty { shaderParams["lut"] = lutPath }
+            if let lutPath = dl["baseLut"] as? String, !lutPath.isEmpty { shaderParams["baseLut"] = lutPath }
         }
         if let lut = presetJson["lut"] as? String { shaderParams["lut"] = lut }
         if let grain = presetJson["grain"] as? String { shaderParams["grain"] = grain }

@@ -513,10 +513,14 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 (look["highlightWarmAmount"] as? Number)?.let { params["highlightWarmAmount"] = it }
                 // Inst C 专用字段（直接映射）
                 (look["highlightRolloff"]    as? Number)?.let { params["highlightRolloff"]    = it }
+                (look["highlightRolloff2"]   as? Number)?.let { params["highlightRolloff2"]   = it }
                 (look["paperTexture"]        as? Number)?.let { params["paperTexture"]        = it }
                 (look["edgeFalloff"]         as? Number)?.let { params["edgeFalloff"]         = it }
                 (look["exposureVariation"]   as? Number)?.let { params["exposureVariation"]   = it }
                 (look["cornerWarmShift"]     as? Number)?.let { params["cornerWarmShift"]     = it }
+                (look["toneCurveStrength"]   as? Number)?.let { params["toneCurveStrength"]   = it }
+                (look["lutStrength"]         as? Number)?.let { params["lutStrength"]         = it }
+                (look["baseLut"]             as? String)?.let { params["baseLut"]             = it }
                 // 用户曝光补偿（胶囊区拖条，必须在此映射，否则预览无效）
                 (look["exposureOffset"]       as? Number)?.let { params["exposureOffset"]       = it }
                 // SQC 专用字段
@@ -1670,10 +1674,14 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             (look["chromaNoise"]         as? Number)?.let { params["chromaNoise"]         = it }
             (look["highlightWarmAmount"] as? Number)?.let { params["highlightWarmAmount"] = it }
             (look["highlightRolloff"]    as? Number)?.let { params["highlightRolloff"]    = it }
+            (look["highlightRolloff2"]   as? Number)?.let { params["highlightRolloff2"]   = it }
             (look["paperTexture"]        as? Number)?.let { params["paperTexture"]        = it }
             (look["edgeFalloff"]         as? Number)?.let { params["edgeFalloff"]         = it }
             (look["exposureVariation"]   as? Number)?.let { params["exposureVariation"]   = it }
             (look["cornerWarmShift"]     as? Number)?.let { params["cornerWarmShift"]     = it }
+            (look["toneCurveStrength"]   as? Number)?.let { params["toneCurveStrength"]   = it }
+            (look["lutStrength"]         as? Number)?.let { params["lutStrength"]         = it }
+            (look["baseLut"]             as? String)?.let { params["baseLut"]             = it }
             // 用户曝光补偿（必须映射，否则预览无效）
             (look["exposureOffset"]       as? Number)?.let { params["exposureOffset"]       = it }
             (look["centerGain"]           as? Number)?.let { params["centerGain"]           = it }

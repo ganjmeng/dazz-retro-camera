@@ -14,6 +14,7 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/inst_sqc_warm.cube",
+    "lutStrength": 0.83,
     "chromaticAberration": 0.04,
     "distortion": 0.0,
     "flare": 0.0,
@@ -52,6 +53,7 @@
     "vignetteAmount": 0.0,
     "noiseAmount": 0.0,
     "luminanceNoise": 0.02,
+    "toneCurveStrength": 0.74,
     "irregUvScale": 2.5,
     "irregFreq1": 1.0,
     "irregFreq2": 1.7,

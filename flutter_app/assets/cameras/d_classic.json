@@ -14,6 +14,7 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/d_classic.cube",
+    "lutStrength": 0.86,
     "distortion": 0.0,
     "chromaticAberration": 0.01,
     "flare": 0.0,
@@ -48,6 +49,7 @@
     "skinSatProtect": 0.95,
     "skinLumaSoften": 0.0,
     "skinRedLimit": 1.0,
+    "toneCurveStrength": 0.65,
     "noiseAmount": 0.0,
     "irregUvScale": 2.5,
     "irregFreq1": 1.0,

@@ -531,6 +531,29 @@ class PreviewRenderParams {
     }
   }
 
+  double _sceneLutStrengthScale(SceneClass scene) {
+    switch (scene) {
+      case SceneClass.lowLight:
+        return 0.92;
+      case SceneClass.backlit:
+      case SceneClass.highDynamic:
+        return 0.94;
+      case SceneClass.indoor:
+        return 0.97;
+      case SceneClass.outdoor:
+        return 1.0;
+      case SceneClass.balanced:
+        return 1.0;
+    }
+  }
+
+  double get effectiveLutStrength {
+    final base = defaultLook.lutStrength.clamp(0.0, 1.0);
+    final sceneScale = _sceneLutStrengthScale(sceneClass);
+    final frontScale = isFrontCamera ? 0.97 : 1.0;
+    return (base * sceneScale * frontScale).clamp(0.55, 1.0);
+  }
+
   double _sceneTemperatureOffset(SceneClass scene) {
     switch (scene) {
       case SceneClass.lowLight:
@@ -623,6 +646,12 @@ class PreviewRenderParams {
         'paperUvScale2': paperUvScale2,
         'paperWeight1': paperWeight1,
         'paperWeight2': paperWeight2,
+        if (defaultLook.baseLut?.isNotEmpty == true)
+          'baseLut': defaultLook.baseLut,
+        if (defaultLook.baseLut?.isNotEmpty == true)
+          'lutStrength': effectiveLutStrength,
+        'highlightRolloff2': defaultLook.highlightRolloff2.clamp(0.0, 1.0),
+        'toneCurveStrength': defaultLook.toneCurveStrength.clamp(0.0, 1.0),
         'halationAmount': effectiveHalation,
         'lensVignette': effectiveVignette,
         'exposureOffset': exposureOffset + effectiveLensExposure,

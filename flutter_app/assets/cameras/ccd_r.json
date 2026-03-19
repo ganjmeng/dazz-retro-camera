@@ -14,6 +14,7 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/ccd_r.cube",
+    "lutStrength": 0.9,
     "exposure": 0.0,
     "contrast": 1.12,
     "saturation": 1.14,

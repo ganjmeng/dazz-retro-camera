@@ -314,6 +314,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
 
         // ── Inst C / SQC 拍立得专属参数（其他相机也可复用）──────────────────────────────────────────────────────
         if let v = params["highlightRolloff"]   as? Float { ccdParams.highlightRolloff   = v }
+        if let v = num("highlightRolloff2") { ccdParams.highlightRolloff2 = v }
         if let v = params["paperTexture"]        as? Float { ccdParams.paperTexture        = v }
         if let v = params["edgeFalloff"]         as? Float { ccdParams.edgeFalloff         = v }
         if let v = params["exposureVariation"]   as? Float { ccdParams.exposureVariation   = v }
@@ -327,6 +328,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = params["skinSatProtect"]      as? Float { ccdParams.skinSatProtect      = v }
         if let v = params["skinLumaSoften"]      as? Float { ccdParams.skinLumaSoften      = v }
         if let v = params["skinRedLimit"]        as? Float { ccdParams.skinRedLimit        = v }
+        if let v = num("toneCurveStrength") { ccdParams.toneCurveStrength = v }
 
         // ── FIX: Lightroom 风格曲线参数 ─────────────────────────────────────────────────────────────────
         if let v = params["highlights"]  as? Float { ccdParams.highlights  = v }
@@ -378,6 +380,16 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
                     self?.grainTexture = texture
                 }
             }
+        }
+
+        ccdParams.lutEnabled = lutTexture != nil ? 1.0 : 0.0
+        if let v = num("lutStrength") {
+            ccdParams.lutStrength = max(0.0, min(1.0, v))
+        }
+        if let v = num("lutSize") {
+            ccdParams.lutSize = max(8.0, min(128.0, v))
+        } else {
+            ccdParams.lutSize = 33.0
         }
     }
 

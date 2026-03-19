@@ -14,6 +14,7 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/bw_trix400.cube",
+    "lutStrength": 0.92,
     "saturation": 0.0,
     "vibrance": 0.0,
     "exposure": 0.0,

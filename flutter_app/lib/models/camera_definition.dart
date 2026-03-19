@@ -210,6 +210,7 @@ class SensorConfig {
 
 class DefaultLook {
   final String? baseLut;
+  final double lutStrength; // 0.0 ~ 1.0 LUT 混合强度
   final double temperature; // -100 (cool) ~ +100 (warm)
   final double tint; // -100 (green) ~ +100 (magenta)
   final double contrast; // 0.5 ~ 1.8 multiplier
@@ -236,6 +237,7 @@ class DefaultLook {
   // ── 拍立得即时成像专属参数（Instax / Polaroid 通用——所有拍立得机型均可复用）───────────────
   // 化学显影特性组
   final double highlightRolloff; // 0.0 ~ 1.0 高光柔和滴落（Inst C=0.20，SQC=0.28）
+  final double highlightRolloff2; // 0.0 ~ 1.0 二段高光滚落（胶片高光保护）
   final double paperTexture; // 0.0 ~ 1.0 相纸纹理强度（Inst C=0.06，SQC=0.05）
   final double paperUvScale1;
   final double paperUvScale2;
@@ -275,6 +277,7 @@ class DefaultLook {
 
   const DefaultLook({
     this.baseLut,
+    this.lutStrength = 1.0,
     required this.temperature,
     this.tint = 0,
     required this.contrast,
@@ -300,6 +303,7 @@ class DefaultLook {
     this.sharpness = 1.0,
     // 拍立得即时成像专属字段（默认为 0，不影响其他相机）
     this.highlightRolloff = 0,
+    this.highlightRolloff2 = 0,
     this.paperTexture = 0,
     this.paperUvScale1 = 8.0,
     this.paperUvScale2 = 32.0,
@@ -352,6 +356,7 @@ class DefaultLook {
 
   factory DefaultLook.fromJson(Map<String, dynamic> json) => DefaultLook(
         baseLut: json['baseLut'] as String?,
+        lutStrength: (json['lutStrength'] as num? ?? 1.0).toDouble(),
         temperature: (json['temperature'] as num? ?? 0).toDouble(),
         tint: (json['tint'] as num? ?? 0).toDouble(),
         contrast: (json['contrast'] as num? ?? 1.0).toDouble(),
@@ -379,6 +384,7 @@ class DefaultLook {
         sharpness: (json['sharpness'] as num? ?? 1.0).toDouble(),
         // 拍立得即时成像专属字段
         highlightRolloff: (json['highlightRolloff'] as num? ?? 0).toDouble(),
+        highlightRolloff2: (json['highlightRolloff2'] as num? ?? 0).toDouble(),
         paperTexture: (json["paperTexture"] as num? ?? 0).toDouble(),
         paperUvScale1: (json["paperUvScale1"] as num? ?? 8.0).toDouble(),
         paperUvScale2: (json["paperUvScale2"] as num? ?? 32.0).toDouble(),
@@ -418,6 +424,7 @@ class DefaultLook {
 
   Map<String, dynamic> toJson() => {
         if (baseLut != null) 'baseLut': baseLut,
+        if (baseLut != null || lutStrength != 1.0) 'lutStrength': lutStrength,
         'temperature': temperature,
         'tint': tint,
         'contrast': contrast,
@@ -443,6 +450,7 @@ class DefaultLook {
         'sharpness': sharpness,
         // 拍立得即时成像专属字段（默认为 0 时不影响其他相机）
         if (highlightRolloff != 0) 'highlightRolloff': highlightRolloff,
+        if (highlightRolloff2 != 0) 'highlightRolloff2': highlightRolloff2,
         if (paperTexture != 0) 'paperTexture': paperTexture,
         if (edgeFalloff != 0) 'edgeFalloff': edgeFalloff,
         if (exposureVariation != 0) 'exposureVariation': exposureVariation,

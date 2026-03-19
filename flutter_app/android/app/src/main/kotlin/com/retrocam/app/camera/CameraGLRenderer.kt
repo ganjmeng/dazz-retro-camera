@@ -1288,8 +1288,9 @@ void main() {
         (params["skinSatProtect"]      as? Number)?.let { skinSatProtect      = it.toFloat() }
         (params["skinLumaSoften"]      as? Number)?.let { skinLumaSoften      = it.toFloat() }
         (params["skinRedLimit"]        as? Number)?.let { skinRedLimit        = it.toFloat() }
-        (params["highlightRolloff"]     as? Number)?.let { highlightRolloff2    = it.toFloat() }
+        (params["highlightRolloff2"]    as? Number)?.let { highlightRolloff2    = it.toFloat() }
         (params["toneCurveStrength"]    as? Number)?.let { toneCurveStrength    = it.toFloat() }
+        (params["lutStrength"]          as? Number)?.let { lutStrength          = it.toFloat().coerceIn(0.0f, 1.0f) }
         (params["lensVignette"]         as? Number)?.let { vignetteAmount      = it.toFloat() }
         (params["exposureOffset"]       as? Number)?.let { exposureOffset       = it.toFloat() }
         (params["softFocus"]            as? Number)?.let { /* TODO: 添加 softFocus uniform */ }
@@ -1335,7 +1336,6 @@ void main() {
                         }
                     }
                     lutEnabled = if (lutTextureId != 0) 1.0f else 0.0f
-                    lutStrength = (params["lutStrength"] as? Number)?.toFloat() ?: 1.0f
                     lutSize = 33.0f
                 }
             } else {

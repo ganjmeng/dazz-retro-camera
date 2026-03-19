@@ -14,6 +14,7 @@
   },
   "defaultLook": {
     "baseLut": "assets/lut/cameras/fisheye.cube",
+    "lutStrength": 0.84,
     "distortion": 0.6,
     "chromaticAberration": 0.08,
     "flare": 0.03,
