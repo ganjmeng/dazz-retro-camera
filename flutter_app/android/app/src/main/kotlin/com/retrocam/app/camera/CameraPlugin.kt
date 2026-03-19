@@ -575,6 +575,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             result.error("NOT_INITIALIZED", "Camera not initialized", null)
             return
         }
+        val deviceQuarter = (call.argument<Int>("deviceQuarter") ?: 0).coerceIn(0, 3)
+        runCatching {
+            capture.targetRotation = quarterToSurfaceRotation(deviceQuarter)
+        }.onFailure {
+            Log.w(TAG, "set targetRotation failed: ${it.message}")
+        }
         pendingShotStartNs = System.nanoTime()
         pendingShotLevel = currentSharpenLevel
         val context = flutterPluginBinding.applicationContext
@@ -587,13 +593,18 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                         val buffer = image.planes[0].buffer
                         val jpegBytes = ByteArray(buffer.remaining())
                         buffer.get(jpegBytes)
-                        val rotationDegrees = image.imageInfo.rotationDegrees
+                        val rawRotationDegrees = image.imageInfo.rotationDegrees
+                        val rotationDegrees = if (rawRotationDegrees == 0 && deviceQuarter != 0) {
+                            deviceQuarter * 90
+                        } else {
+                            rawRotationDegrees
+                        }
                         val isFront = currentLensPosition == CameraSelector.LENS_FACING_FRONT
                         val captureW = image.width
                         val captureH = image.height
                         val elapsedMs = ((System.nanoTime() - pendingShotStartNs) / 1_000_000L).coerceAtLeast(0L)
                         image.close()
-                        Log.d(TAG, "takePhoto(mem): ${captureW}x${captureH} rot=${rotationDegrees} front=${isFront}")
+                        Log.d(TAG, "takePhoto(mem): ${captureW}x${captureH} rot=${rotationDegrees} rawRot=${rawRotationDegrees} quarter=${deviceQuarter} front=${isFront}")
                         maybeRecordMidCapturePerf(captureW, captureH, elapsedMs)
                         // 异步写入 cache，保持 filePath 接口兼容性
                         val ts = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
@@ -630,6 +641,15 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 }
             }
         )
+    }
+
+    private fun quarterToSurfaceRotation(quarter: Int): Int {
+        return when (quarter) {
+            1 -> Surface.ROTATION_90
+            2 -> Surface.ROTATION_180
+            3 -> Surface.ROTATION_270
+            else -> Surface.ROTATION_0
+        }
     }
 
     // ─────────────────────────────────────────────

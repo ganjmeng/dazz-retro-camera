@@ -30,6 +30,9 @@ class CaptureResult {
 
 class CapturePipeline {
   final CameraDefinition camera;
+  static const int _kFrameTextureCacheMaxEntries = 6;
+  static final Map<String, ui.Image> _frameTextureCache = <String, ui.Image>{};
+  static final List<String> _frameTextureLru = <String>[];
 
   /// 输出图像最大边长（像素）。超过此値时等比缩小画布。
   /// 各清晰度档位的输出最大边长（像素）
@@ -42,6 +45,31 @@ class CapturePipeline {
   static const int kJpegQualityHigh = 90;
 
   CapturePipeline({required this.camera});
+
+  Future<ui.Image> _getFrameTexture(String assetPath, int targetWidth, int targetHeight) async {
+    final key = '$assetPath@$targetWidth@$targetHeight';
+    final cached = _frameTextureCache[key];
+    if (cached != null) {
+      _frameTextureLru.remove(key);
+      _frameTextureLru.add(key);
+      return cached;
+    }
+    final assetData = await rootBundle.load(assetPath);
+    final frameCodec = await ui.instantiateImageCodec(
+      assetData.buffer.asUint8List(),
+      targetWidth: targetWidth,
+      targetHeight: targetHeight,
+    );
+    final frame = await frameCodec.getNextFrame();
+    _frameTextureCache[key] = frame.image;
+    _frameTextureLru.remove(key);
+    _frameTextureLru.add(key);
+    while (_frameTextureLru.length > _kFrameTextureCacheMaxEntries) {
+      final evictKey = _frameTextureLru.removeAt(0);
+      _frameTextureCache.remove(evictKey);
+    }
+    return frame.image;
+  }
 
   /// 处理拍摄的图片文件，返回包含 JPEG 字节和输出分辨率的 CaptureResult
     static const MethodChannel _channel = MethodChannel("com.retrocam.app/camera_control");
@@ -468,18 +496,16 @@ class CapturePipeline {
       // ── 4f. 相框纹理 PNG 叠加 ──────────────────────────────────────────────────
       if (frameOpt != null && resolvedAsset != null && resolvedAsset.isNotEmpty) {
         try {
-          final assetData = await rootBundle.load(resolvedAsset);
-          final frameCodec = await ui.instantiateImageCodec(
-            assetData.buffer.asUint8List(),
-            targetWidth: canvasW.toInt(),
-            targetHeight: canvasH.toInt(),
+          final frameImg = await _getFrameTexture(
+            resolvedAsset,
+            canvasW.toInt(),
+            canvasH.toInt(),
           );
-          final frameImgFrame = await frameCodec.getNextFrame();
           canvas.drawImageRect(
-            frameImgFrame.image,
+            frameImg,
             Rect.fromLTWH(0, 0,
-              frameImgFrame.image.width.toDouble(),
-              frameImgFrame.image.height.toDouble()),
+              frameImg.width.toDouble(),
+              frameImg.height.toDouble()),
             Rect.fromLTWH(0, 0, canvasW, canvasH),
             Paint()..filterQuality = FilterQuality.high,
           );

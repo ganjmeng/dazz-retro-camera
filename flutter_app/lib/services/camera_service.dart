@@ -274,10 +274,12 @@ class CameraService extends StateNotifier<CameraState> {
   }
 
   /// 触发拍照，返回 {filePath, captureWidth, captureHeight}
-  Future<Map<String, dynamic>?> takePhoto() async {
+  /// [deviceQuarter] 设备方向：0=竖屏, 1=左横屏, 2=倒竖, 3=右横屏
+  Future<Map<String, dynamic>?> takePhoto({int deviceQuarter = 0}) async {
     try {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('takePhoto', {
         'flashMode': 'auto',
+        'deviceQuarter': deviceQuarter,
       });
       if (result == null) return null;
       return {

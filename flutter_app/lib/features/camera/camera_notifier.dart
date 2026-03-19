@@ -933,8 +933,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
     try {
       final captureSw = Stopwatch()..start();
-      final photoResult =
-          await _ref.read(cameraServiceProvider.notifier).takePhoto();
+      final photoResult = await _ref
+          .read(cameraServiceProvider.notifier)
+          .takePhoto(deviceQuarter: deviceQuarter);
       captureSw.stop();
       captureMs = captureSw.elapsedMilliseconds;
       final path = photoResult?['filePath'] as String?;
