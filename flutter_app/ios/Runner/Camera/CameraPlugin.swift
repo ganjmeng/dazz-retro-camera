@@ -16,6 +16,11 @@ import MetalKit
 // - setFlash: AVCaptureFlashMode
 // ─────────────────────────────────────────────────────────────────────────────
 public class RetroCamPlugin: NSObject, FlutterPlugin {
+    private static let frameImageCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 8
+        return cache
+    }()
 
     private var cameraManager: CameraSessionManager?
     private var renderer: MetalRenderer?
@@ -631,7 +636,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             if let frameAssetPath = args["frameAssetPath"] as? String, !frameAssetPath.isEmpty {
                 let bundlePath = Bundle.main.bundlePath
                 let fullPath = bundlePath + "/Frameworks/App.framework/flutter_assets/" + frameAssetPath
-                if let frameImage = UIImage(contentsOfFile: fullPath) {
+                if let frameImage = Self.cachedFrameImage(at: fullPath) {
                     frameImage.draw(in: CGRect(x: 0, y: 0, width: canvasW, height: canvasH))
                 }
             }
@@ -734,6 +739,16 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let g = CGFloat((value >> 8) & 0xFF) / 255.0
         let b = CGFloat(value & 0xFF) / 255.0
         return UIColor(red: r, green: g, blue: b, alpha: a)
+    }
+
+    private static func cachedFrameImage(at fullPath: String) -> UIImage? {
+        let key = fullPath as NSString
+        if let cached = frameImageCache.object(forKey: key) {
+            return cached
+        }
+        guard let image = UIImage(contentsOfFile: fullPath) else { return nil }
+        frameImageCache.setObject(image, forKey: key)
+        return image
     }
 
     // ─────────────────────────────────────────────

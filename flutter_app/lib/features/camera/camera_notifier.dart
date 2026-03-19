@@ -1004,18 +1004,30 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             debugPrint(
                 '[CameraNotifier] Starting post-process: ratio=${state.activeRatioId}, frame=${state.activeFrameId}, wm=${state.activeWatermarkId}');
             final pipeline = CapturePipeline(camera: state.camera!);
-            // 按清晰度档位选择输出尺寸和 JPEG 质量
-            // sharpenLevel: 0=低(1080px/q82), 1=中(1440px/q82), 2=高(4096px/q90)
-            final maxDim = switch (state.sharpenLevel) {
+            // 按清晰度档位选择输出尺寸和 JPEG 质量，并做超高像素机型自适应。
+            int maxDim = switch (state.sharpenLevel) {
               0 => CapturePipeline.kMaxDimLow,
               2 => CapturePipeline.kMaxDimHigh,
               _ => CapturePipeline.kMaxDimMid,
             };
-            final jpegQ = switch (state.sharpenLevel) {
+            int jpegQ = switch (state.sharpenLevel) {
               0 => CapturePipeline.kJpegQualityLow,
               2 => CapturePipeline.kJpegQualityHigh,
               _ => CapturePipeline.kJpegQualityMid,
             };
+            final hasOverlay = (state.activeFrameId?.isNotEmpty == true &&
+                    state.activeFrameId != 'frame_none' &&
+                    state.activeFrameId != 'none') ||
+                (state.activeWatermarkId?.isNotEmpty == true &&
+                    state.activeWatermarkId != 'none');
+            final rawPixels = captureW * captureH;
+            // 自适应策略：当原始输入非常大且有相框/水印时，适度下调输出档位以提升稳定速度。
+            if (hasOverlay && rawPixels >= 24 * 1000 * 1000 && state.sharpenLevel >= 1) {
+              maxDim = maxDim.clamp(0, 3072).toInt();
+              jpegQ = (jpegQ - 2).clamp(70, 95).toInt();
+              debugPrint(
+                  '[CameraNotifier] adaptive quality applied: raw=${captureW}x$captureH maxDim=$maxDim jpegQ=$jpegQ');
+            }
 
             // ── 双重曝光处理逻辑 ──────────────────────────────────────────────────────────────
             if (state.doubleExpEnabled) {

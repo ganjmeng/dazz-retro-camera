@@ -58,6 +58,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         private const val METHOD_CHANNEL = "com.retrocam.app/camera_control"
         private const val EVENT_CHANNEL = "com.retrocam.app/camera_events"
         private const val DAZZ_ALBUM = "DAZZ"
+        private const val FRAME_BITMAP_CACHE_MAX = 6
+        private val frameBitmapCache = LinkedHashMap<String, Bitmap>()
+        private val frameBitmapLru = ArrayList<String>()
     }
 
     // Flutter bindings
@@ -1366,20 +1369,15 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 val frameAssetPath = call.argument<String>("frameAssetPath") ?: ""
                 if (frameAssetPath.isNotEmpty()) {
                     runCatching {
-                        flutterPluginBinding.applicationContext.assets
-                            .open(frameAssetPath.removePrefix("assets/"))
-                            .use { input ->
-                                val frameBitmap = BitmapFactory.decodeStream(input)
-                                if (frameBitmap != null) {
-                                    canvas.drawBitmap(
-                                        frameBitmap,
-                                        null,
-                                        Rect(0, 0, canvasW, canvasH),
-                                        Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
-                                    )
-                                    frameBitmap.recycle()
-                                }
-                            }
+                        val frameBitmap = getOrLoadFrameBitmap(frameAssetPath)
+                        if (frameBitmap != null) {
+                            canvas.drawBitmap(
+                                frameBitmap,
+                                null,
+                                Rect(0, 0, canvasW, canvasH),
+                                Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+                            )
+                        }
                     }.onFailure {
                         Log.w(TAG, "composeOverlay frame load failed: ${it.message}")
                     }
@@ -1492,6 +1490,31 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             val v = if (value.startsWith("#")) value else "#$value"
             Color.parseColor(v)
         }.getOrDefault(fallback)
+    }
+
+    private fun getOrLoadFrameBitmap(frameAssetPath: String): Bitmap? {
+        synchronized(frameBitmapCache) {
+            val cached = frameBitmapCache[frameAssetPath]
+            if (cached != null && !cached.isRecycled) {
+                frameBitmapLru.remove(frameAssetPath)
+                frameBitmapLru.add(frameAssetPath)
+                return cached
+            }
+        }
+        val decoded = flutterPluginBinding.applicationContext.assets
+            .open(frameAssetPath.removePrefix("assets/"))
+            .use { input -> BitmapFactory.decodeStream(input) }
+            ?: return null
+        synchronized(frameBitmapCache) {
+            frameBitmapCache[frameAssetPath] = decoded
+            frameBitmapLru.remove(frameAssetPath)
+            frameBitmapLru.add(frameAssetPath)
+            while (frameBitmapLru.size > FRAME_BITMAP_CACHE_MAX) {
+                val evictKey = frameBitmapLru.removeAt(0)
+                frameBitmapCache.remove(evictKey)?.recycle()
+            }
+        }
+        return decoded
     }
 
     private fun handleDispose(result: MethodChannel.Result) {
