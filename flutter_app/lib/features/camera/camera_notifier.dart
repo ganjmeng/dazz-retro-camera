@@ -1123,62 +1123,67 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                 return null;
               } else {
                 // 第二张：合成两张照片
-                final processed2 = await pipeline.process(
-                  imagePath: path,
-                  selectedRatioId: state.activeRatioId ?? '',
-                  selectedFrameId: 'frame_none',
-                  selectedWatermarkId: 'none',
-                  renderParams: state.renderParams,
-                  minimapNormalizedRect: minimapNormalizedRect,
-                  deviceQuarter: deviceQuarter,
-                  maxDimension: maxDim,
-                  jpegQuality: jpegQ,
-                  fisheyeMode: state.fisheyeMode,
-                );
-                if (processed2 != null) {
-                  // 合成两张照片
-                  final blended = await CapturePipeline.blendDoubleExposure(
-                    firstImagePath: firstPath,
-                    secondImageBytes: processed2.bytes,
-                    blend: state.doubleExpBlend,
+                String? tmpBlendPath;
+                try {
+                  final processed2 = await pipeline.process(
+                    imagePath: path,
+                    selectedRatioId: state.activeRatioId ?? '',
+                    selectedFrameId: 'frame_none',
+                    selectedWatermarkId: 'none',
+                    renderParams: state.renderParams,
+                    minimapNormalizedRect: minimapNormalizedRect,
+                    deviceQuarter: deviceQuarter,
+                    maxDimension: maxDim,
+                    jpegQuality: jpegQ,
+                    fisheyeMode: state.fisheyeMode,
                   );
-                  if (blended != null) {
-                    // 将合成结果再过一遍完整的 pipeline（加相框、水印等）
-                    final tmpBlendPath =
-                        '${Directory.systemTemp.path}/dazz_blend_${DateTime.now().millisecondsSinceEpoch}.jpg';
-                    await File(tmpBlendPath).writeAsBytes(blended);
-                    final finalProcessed = await pipeline.process(
-                      imagePath: tmpBlendPath,
-                      selectedRatioId: state.activeRatioId ?? '',
-                      selectedFrameId: state.activeFrameId ?? '',
-                      selectedWatermarkId: state.activeWatermarkId ?? '',
-                      frameBackgroundColor: state.frameBackgroundColor,
-                      watermarkColorOverride: state.watermarkColor,
-                      watermarkPositionOverride: state.watermarkPosition,
-                      watermarkSizeOverride: state.watermarkSize,
-                      watermarkDirectionOverride: state.watermarkDirection,
-                      watermarkStyleOverride: state.watermarkStyle,
-                      renderParams: null, // 已经应用过滞色矩阵，不重复
-                      deviceQuarter: 0, // 已经旋转过
-                      maxDimension: maxDim,
-                      jpegQuality: jpegQ,
-                      fisheyeMode: state.fisheyeMode,
+                  if (processed2 != null) {
+                    // 合成两张照片
+                    final blended = await CapturePipeline.blendDoubleExposure(
+                      firstImagePath: firstPath,
+                      secondImageBytes: processed2.bytes,
+                      blend: state.doubleExpBlend,
                     );
-                    if (finalProcessed != null) {
-                      await File(path).writeAsBytes(finalProcessed.bytes);
-                      state = state.copyWith(
-                        lastCaptureOutput:
-                            '${finalProcessed.outputWidth}×${finalProcessed.outputHeight}',
+                    if (blended != null) {
+                      // 将合成结果再过一遍完整的 pipeline（加相框、水印等）
+                      tmpBlendPath =
+                          '${Directory.systemTemp.path}/dazz_blend_${DateTime.now().millisecondsSinceEpoch}.jpg';
+                      await File(tmpBlendPath).writeAsBytes(blended);
+                      final finalProcessed = await pipeline.process(
+                        imagePath: tmpBlendPath,
+                        selectedRatioId: state.activeRatioId ?? '',
+                        selectedFrameId: state.activeFrameId ?? '',
+                        selectedWatermarkId: state.activeWatermarkId ?? '',
+                        frameBackgroundColor: state.frameBackgroundColor,
+                        watermarkColorOverride: state.watermarkColor,
+                        watermarkPositionOverride: state.watermarkPosition,
+                        watermarkSizeOverride: state.watermarkSize,
+                        watermarkDirectionOverride: state.watermarkDirection,
+                        watermarkStyleOverride: state.watermarkStyle,
+                        renderParams: null, // 已经应用过滞色矩阵，不重复
+                        deviceQuarter: 0, // 已经旋转过
+                        maxDimension: maxDim,
+                        jpegQuality: jpegQ,
+                        fisheyeMode: state.fisheyeMode,
                       );
-                    } else {
-                      await File(path).writeAsBytes(blended);
+                      if (finalProcessed != null) {
+                        await File(path).writeAsBytes(finalProcessed.bytes);
+                        state = state.copyWith(
+                          lastCaptureOutput:
+                              '${finalProcessed.outputWidth}×${finalProcessed.outputHeight}',
+                        );
+                      } else {
+                        await File(path).writeAsBytes(blended);
+                      }
                     }
-                    // 清理临时文件
+                  }
+                } finally {
+                  if (tmpBlendPath != null) {
                     try {
                       File(tmpBlendPath).deleteSync();
                     } catch (_) {}
                   }
-                  // 清理第一张临时文件
+                  // 无论成功与否都清理第一张临时文件，避免残留
                   try {
                     File(firstPath).deleteSync();
                   } catch (_) {}

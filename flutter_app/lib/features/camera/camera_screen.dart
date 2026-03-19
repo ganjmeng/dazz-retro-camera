@@ -935,6 +935,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         ((availableH - viewfinderH) / 2).clamp(0.0, availableH);
     // 取景框水平居中
     final viewfinderLeft = (screenW - viewfinderW) / 2;
+    final overlayCacheWidth =
+        (viewfinderW * mq.devicePixelRatio).round().clamp(720, 2160).toInt();
 
     return Scaffold(
       backgroundColor: _kBlack,
@@ -1007,7 +1009,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     }
                   });
                   return _buildViewfinderArea(
-                      st, camSvc, viewfinderH, viewfinderW, s);
+                    st,
+                    camSvc,
+                    viewfinderH,
+                    viewfinderW,
+                    s,
+                    overlayCacheWidth: overlayCacheWidth,
+                  );
                 }),
               ),
             ),
@@ -1168,7 +1176,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ── 取景框区域（上段）──────────────────────────────────────────────────────────────
   // 布局：圆角取景框，内部只有预览画面和网格线（控制胶囊已移到取景框外部）
   Widget _buildViewfinderArea(CameraAppState st, CameraState camSvc,
-      double areaH, double screenW, S s) {
+      double areaH, double screenW, S s,
+      {required int overlayCacheWidth}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.hardEdge, // 强制裁剪，防止 OverflowBox 内容溢出圆角边界
@@ -1348,6 +1357,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     File(st.doubleExpFirstPath!),
                     fit: BoxFit.cover,
                     gaplessPlayback: true,
+                    cacheWidth: overlayCacheWidth,
+                    filterQuality: FilterQuality.low,
                   ),
                 ),
               ),

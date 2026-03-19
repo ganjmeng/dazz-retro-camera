@@ -1792,113 +1792,18 @@ class CapturePipeline {
     double blend = 0.5,
   }) async {
     try {
-      // 解码两张图片
       final firstBytes = await File(firstImagePath).readAsBytes();
-      final firstCodec = await ui.instantiateImageCodec(firstBytes);
-      final firstFrame = await firstCodec.getNextFrame();
-      final firstImg = firstFrame.image;
-
-      final secondCodec = await ui.instantiateImageCodec(secondImageBytes);
-      final secondFrame = await secondCodec.getNextFrame();
-      final secondImg = secondFrame.image;
-
-      // 以第一张尺寸为基准
-      final w = firstImg.width;
-      final h = firstImg.height;
-
-      // 创建画布
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-
-      // ── 双重曝光合成算法 ──────────────────────────────────────────────────────────────
-      // 第一张：降曝光到 blend 权重（默认 0.5）
-      // 第二张：降曝光到 (1-blend) 权重
-      // 用 BlendMode.screen 叠加：亮部叠加增强，暗部透出对方细节
-      // 这最接近胶片相机在同一张胶片上曝光两次的物理效果
-
-      final destRect = Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble());
-      final srcRect1 = Rect.fromLTWH(
-          0, 0, firstImg.width.toDouble(), firstImg.height.toDouble());
-      final srcRect2 = Rect.fromLTWH(
-          0, 0, secondImg.width.toDouble(), secondImg.height.toDouble());
-
-      // 第一张：默认模式绘制，降亮度到 blend 权重
-      canvas.drawImageRect(
-        firstImg,
-        srcRect1,
-        destRect,
-        Paint()
-          ..filterQuality = FilterQuality.high
-          ..colorFilter = ColorFilter.matrix([
-            blend,
-            0,
-            0,
-            0,
-            0,
-            0,
-            blend,
-            0,
-            0,
-            0,
-            0,
-            0,
-            blend,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-          ]),
+      final result = await compute(
+        _blendDoubleExposureIsolate,
+        _DoubleExposureBlendParams(
+          firstBytes: firstBytes,
+          secondBytes: secondImageBytes,
+          blend: blend.clamp(0.0, 1.0),
+          quality: 90,
+        ),
       );
-
-      // 第二张：用 BlendMode.screen 叠加，降亮度到 (1-blend) 权重
-      final secondBlend = 1.0 - blend;
-      canvas.drawImageRect(
-        secondImg,
-        srcRect2,
-        destRect,
-        Paint()
-          ..filterQuality = FilterQuality.high
-          ..blendMode = BlendMode.screen
-          ..colorFilter = ColorFilter.matrix([
-            secondBlend,
-            0,
-            0,
-            0,
-            0,
-            0,
-            secondBlend,
-            0,
-            0,
-            0,
-            0,
-            0,
-            secondBlend,
-            0,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-          ]),
-      );
-
-      // 输出图像
-      final picture = recorder.endRecording();
-      final outputImage = await picture.toImage(w, h);
-      final byteData =
-          await outputImage.toByteData(format: ui.ImageByteFormat.rawRgba);
-      if (byteData == null) return null;
-      final rgba = byteData.buffer.asUint8List();
-
-      // 编码为 JPEG
-      final result =
-          await compute(_encodeJpegIsolate, _JpegEncodeParams(rgba, w, h, 90));
-      debugPrint(
-          '[DoubleExp] Blend complete: ${w}x${h}, ${result.length} bytes');
+      if (result == null) return null;
+      debugPrint('[DoubleExp] Blend complete: ${result.length} bytes');
       return result;
     } catch (e, st) {
       debugPrint('[DoubleExp] blendDoubleExposure error: $e\n$st');
@@ -1908,6 +1813,19 @@ class CapturePipeline {
 }
 
 // ── Isolate 顶层函数（必须是顶层函数，不能是类方法）────────────────────────────────────
+class _DoubleExposureBlendParams {
+  final Uint8List firstBytes;
+  final Uint8List secondBytes;
+  final double blend;
+  final int quality;
+  const _DoubleExposureBlendParams({
+    required this.firstBytes,
+    required this.secondBytes,
+    required this.blend,
+    required this.quality,
+  });
+}
+
 class _JpegEncodeParams {
   final Uint8List rgba;
   final int w;
@@ -1926,4 +1844,58 @@ Uint8List _encodeJpegIsolate(_JpegEncodeParams p) {
   );
   final jpegBytes = img_lib.encodeJpg(image, quality: p.quality);
   return Uint8List.fromList(jpegBytes);
+}
+
+Uint8List? _blendDoubleExposureIsolate(_DoubleExposureBlendParams p) {
+  final first = img_lib.decodeImage(p.firstBytes);
+  final second = img_lib.decodeImage(p.secondBytes);
+  if (first == null || second == null) return null;
+
+  final w = first.width;
+  final h = first.height;
+  if (w <= 0 || h <= 0) return null;
+
+  final secondAligned = (second.width == w && second.height == h)
+      ? second
+      : img_lib.copyResize(
+          second,
+          width: w,
+          height: h,
+          interpolation: img_lib.Interpolation.linear,
+        );
+
+  final out = img_lib.Image(width: w, height: h, numChannels: 4);
+  final firstWeight = p.blend.clamp(0.0, 1.0);
+  final secondWeight = (1.0 - firstWeight).clamp(0.0, 1.0);
+
+  for (int y = 0; y < h; y++) {
+    for (int x = 0; x < w; x++) {
+      final c1 = first.getPixel(x, y);
+      final c2 = secondAligned.getPixel(x, y);
+
+      final r1 = c1.r.toDouble() * firstWeight;
+      final g1 = c1.g.toDouble() * firstWeight;
+      final b1 = c1.b.toDouble() * firstWeight;
+
+      final r2 = c2.r.toDouble() * secondWeight;
+      final g2 = c2.g.toDouble() * secondWeight;
+      final b2 = c2.b.toDouble() * secondWeight;
+
+      final r = _screenBlendByte(r1, r2);
+      final g = _screenBlendByte(g1, g2);
+      final b = _screenBlendByte(b1, b2);
+      final a = math.max(c1.a.toDouble(), c2.a.toDouble()).clamp(0.0, 255.0);
+
+      out.setPixelRgba(x, y, r, g, b, a);
+    }
+  }
+
+  final jpegBytes = img_lib.encodeJpg(out, quality: p.quality);
+  return Uint8List.fromList(jpegBytes);
+}
+
+double _screenBlendByte(double lhs, double rhs) {
+  final l = lhs.clamp(0.0, 255.0);
+  final r = rhs.clamp(0.0, 255.0);
+  return (255.0 - ((255.0 - l) * (255.0 - r) / 255.0)).clamp(0.0, 255.0);
 }
