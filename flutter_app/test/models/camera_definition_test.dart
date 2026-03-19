@@ -87,9 +87,27 @@ Map<String, dynamic> _makeMinimalCameraJson({
         }
       ],
       'ratios': [
-        {'id': 'ratio_1_1', 'label': '1:1', 'width': 1, 'height': 1, 'supportsFrame': true},
-        {'id': 'ratio_3_4', 'label': '3:4', 'width': 3, 'height': 4, 'supportsFrame': true},
-        {'id': 'ratio_9_16', 'label': '9:16', 'width': 9, 'height': 16, 'supportsFrame': false},
+        {
+          'id': 'ratio_1_1',
+          'label': '1:1',
+          'width': 1,
+          'height': 1,
+          'supportsFrame': true
+        },
+        {
+          'id': 'ratio_3_4',
+          'label': '3:4',
+          'width': 3,
+          'height': 4,
+          'supportsFrame': true
+        },
+        {
+          'id': 'ratio_9_16',
+          'label': '9:16',
+          'width': 9,
+          'height': 16,
+          'supportsFrame': false
+        },
       ],
       'frames': [
         {
@@ -209,6 +227,27 @@ void main() {
       expect(cam.focalLengthLabel, '28mm');
     });
 
+    test('数字字符串字段可兼容解析（不触发 String→num 强转崩溃）', () {
+      final json = _makeMinimalCameraJson();
+      json['supportsPhoto'] = '1';
+      json['supportsVideo'] = '0';
+      json['sensor']['dynamicRange'] = '11';
+      json['sensor']['baseNoise'] = '0.15';
+      json['sensor']['colorDepth'] = '12';
+      json['defaultLook']['contrast'] = '1.18';
+      json['defaultLook']['saturation'] = '0.95';
+      json['defaultLook']['temperature'] = '2.0';
+      json['defaultLook']['noiseAmount'] = '0.06';
+
+      final cam = CameraDefinition.fromJson(json);
+      expect(cam.supportsPhoto, isTrue);
+      expect(cam.supportsVideo, isFalse);
+      expect(cam.sensor.dynamicRange, 11);
+      expect(cam.sensor.baseNoise, closeTo(0.15, 0.001));
+      expect(cam.defaultLook.contrast, closeTo(1.18, 0.001));
+      expect(cam.defaultLook.noiseAmount, closeTo(0.06, 0.001));
+    });
+
     test('sensor 字段解析正确', () {
       final cam = CameraDefinition.fromJson(_makeMinimalCameraJson());
       expect(cam.sensor.type, 'cmos');
@@ -300,8 +339,20 @@ void main() {
       );
       // 拍立得只有两个比例，且有 width/height（修复后）
       json['modules']['ratios'] = [
-        {'id': 'ratio_1_1', 'label': '1:1', 'width': 1, 'height': 1, 'supportsFrame': true},
-        {'id': 'ratio_3_4', 'label': '3:4', 'width': 3, 'height': 4, 'supportsFrame': true},
+        {
+          'id': 'ratio_1_1',
+          'label': '1:1',
+          'width': 1,
+          'height': 1,
+          'supportsFrame': true
+        },
+        {
+          'id': 'ratio_3_4',
+          'label': '3:4',
+          'width': 3,
+          'height': 4,
+          'supportsFrame': true
+        },
       ];
       json['defaultSelection']['frameId'] = 'instant_default';
       json['uiCapabilities']['enableFilter'] = false;
@@ -309,7 +360,8 @@ void main() {
     }
 
     test('拍立得相机 ratios 解析成功（不抛出异常）', () {
-      expect(() => CameraDefinition.fromJson(_makeInstantCameraJson()), returnsNormally);
+      expect(() => CameraDefinition.fromJson(_makeInstantCameraJson()),
+          returnsNormally);
     });
 
     test('拍立得相机只有 2 个比例', () {
@@ -439,11 +491,13 @@ void main() {
     });
 
     test('assetForRatio 优先返回 ratioAssets 中的路径', () {
-      expect(frame.assetForRatio('ratio_1_1'), 'assets/frames/frame_default_1x1.png');
+      expect(frame.assetForRatio('ratio_1_1'),
+          'assets/frames/frame_default_1x1.png');
     });
 
     test('assetForRatio 回退到 asset 当 ratioAssets 无对应比例', () {
-      expect(frame.assetForRatio('ratio_3_4'), 'assets/frames/frame_default.png');
+      expect(
+          frame.assetForRatio('ratio_3_4'), 'assets/frames/frame_default.png');
     });
 
     test('assetForRatio 回退到 asset 当 ratioId 为 null', () {

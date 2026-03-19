@@ -1,5 +1,11 @@
 /// 代表一台"虚拟相机"，包含其视觉效果的完整配置。
 
+double _presetToDouble(dynamic v, [double fallback = 0.0]) {
+  if (v is num) return v.toDouble();
+  if (v is String) return double.tryParse(v.trim()) ?? fallback;
+  return fallback;
+}
+
 // ─── DateStamp 配置 ───────────────────────────────────────────────────────────
 
 class DateStampConfig {
@@ -15,7 +21,8 @@ class DateStampConfig {
     this.position = 'bottomRight',
   });
 
-  factory DateStampConfig.fromJson(Map<String, dynamic> json) => DateStampConfig(
+  factory DateStampConfig.fromJson(Map<String, dynamic> json) =>
+      DateStampConfig(
         enabled: json['enabled'] as bool? ?? false,
         format: json['format'] as String? ?? 'yyyy MM dd',
         color: json['color'] as String? ?? '#FFFFA500',
@@ -50,14 +57,14 @@ class PresetParams {
   final double scanlineAmount;
   final DateStampConfig dateStamp;
   // ── FQS / CPM35 专用字段 ──────────────────────────────────────────────────
-  final double colorBiasR;          // RGB Channel Shift R（FQS=-0.04, CPM35=+0.04）
-  final double colorBiasG;          // RGB Channel Shift G（FQS=+0.05, CPM35=+0.02）
-  final double colorBiasB;          // RGB Channel Shift B（FQS=+0.02, CPM35=-0.04）
-  final double grainSize;           // 颗粒大小（FQS=1.8, CPM35=1.6）
-  final double sharpness;           // 锐度倍数（FQS=0.85, CPM35=1.04）
+  final double colorBiasR; // RGB Channel Shift R（FQS=-0.04, CPM35=+0.04）
+  final double colorBiasG; // RGB Channel Shift G（FQS=+0.05, CPM35=+0.02）
+  final double colorBiasB; // RGB Channel Shift B（FQS=+0.02, CPM35=-0.04）
+  final double grainSize; // 颗粒大小（FQS=1.8, CPM35=1.6）
+  final double sharpness; // 锐度倍数（FQS=0.85, CPM35=1.04）
   final double highlightWarmAmount; // CPM35 暖高光推送（CPM35=0.06）
-  final double luminanceNoise;      // 亮度噪声（FQS=0.08, CPM35=0.05）
-  final double chromaNoise;         // 色度噪声（FQS=0.05, CPM35=0.03）
+  final double luminanceNoise; // 亮度噪声（FQS=0.08, CPM35=0.05）
+  final double chromaNoise; // 色度噪声（FQS=0.05, CPM35=0.03）
 
   const PresetParams({
     this.exposureBias = 0.0,
@@ -87,31 +94,31 @@ class PresetParams {
   });
 
   factory PresetParams.fromJson(Map<String, dynamic> json) => PresetParams(
-        exposureBias: (json['exposureBias'] as num?)?.toDouble() ?? 0.0,
-        contrast: (json['contrast'] as num?)?.toDouble() ?? 1.0,
-        saturation: (json['saturation'] as num?)?.toDouble() ?? 1.0,
-        temperatureShift: (json['temperatureShift'] as num?)?.toDouble() ?? 0.0,
-        tintShift: (json['tintShift'] as num?)?.toDouble() ?? 0.0,
-        sharpen: (json['sharpen'] as num?)?.toDouble() ?? 0.0,
-        blurRadius: (json['blurRadius'] as num?)?.toDouble() ?? 0.0,
-        grainAmount: (json['grainAmount'] as num?)?.toDouble() ?? 0.0,
-        noiseAmount: (json['noiseAmount'] as num?)?.toDouble() ?? 0.0,
-        vignetteAmount: (json['vignetteAmount'] as num?)?.toDouble() ?? 0.0,
-        chromaticAberration: (json['chromaticAberration'] as num?)?.toDouble() ?? 0.0,
-        bloomAmount: (json['bloomAmount'] as num?)?.toDouble() ?? 0.0,
-        halationAmount: (json['halationAmount'] as num?)?.toDouble() ?? 0.0,
-        jpegArtifacts: (json['jpegArtifacts'] as num?)?.toDouble() ?? 0.0,
-        scanlineAmount: (json['scanlineAmount'] as num?)?.toDouble() ?? 0.0,
+        exposureBias: _presetToDouble(json['exposureBias'], 0.0),
+        contrast: _presetToDouble(json['contrast'], 1.0),
+        saturation: _presetToDouble(json['saturation'], 1.0),
+        temperatureShift: _presetToDouble(json['temperatureShift'], 0.0),
+        tintShift: _presetToDouble(json['tintShift'], 0.0),
+        sharpen: _presetToDouble(json['sharpen'], 0.0),
+        blurRadius: _presetToDouble(json['blurRadius'], 0.0),
+        grainAmount: _presetToDouble(json['grainAmount'], 0.0),
+        noiseAmount: _presetToDouble(json['noiseAmount'], 0.0),
+        vignetteAmount: _presetToDouble(json['vignetteAmount'], 0.0),
+        chromaticAberration: _presetToDouble(json['chromaticAberration'], 0.0),
+        bloomAmount: _presetToDouble(json['bloomAmount'], 0.0),
+        halationAmount: _presetToDouble(json['halationAmount'], 0.0),
+        jpegArtifacts: _presetToDouble(json['jpegArtifacts'], 0.0),
+        scanlineAmount: _presetToDouble(json['scanlineAmount'], 0.0),
         dateStamp: DateStampConfig.fromJson(
             json['dateStamp'] as Map<String, dynamic>? ?? {}),
-        colorBiasR: (json['colorBiasR'] as num?)?.toDouble() ?? 0.0,
-        colorBiasG: (json['colorBiasG'] as num?)?.toDouble() ?? 0.0,
-        colorBiasB: (json['colorBiasB'] as num?)?.toDouble() ?? 0.0,
-        grainSize: (json['grainSize'] as num?)?.toDouble() ?? 1.0,
-        sharpness: (json['sharpness'] as num?)?.toDouble() ?? 1.0,
-        highlightWarmAmount: (json['highlightWarmAmount'] as num?)?.toDouble() ?? 0.0,
-        luminanceNoise: (json['luminanceNoise'] as num?)?.toDouble() ?? 0.0,
-        chromaNoise: (json['chromaNoise'] as num?)?.toDouble() ?? 0.0,
+        colorBiasR: _presetToDouble(json['colorBiasR'], 0.0),
+        colorBiasG: _presetToDouble(json['colorBiasG'], 0.0),
+        colorBiasB: _presetToDouble(json['colorBiasB'], 0.0),
+        grainSize: _presetToDouble(json['grainSize'], 1.0),
+        sharpness: _presetToDouble(json['sharpness'], 1.0),
+        highlightWarmAmount: _presetToDouble(json['highlightWarmAmount'], 0.0),
+        luminanceNoise: _presetToDouble(json['luminanceNoise'], 0.0),
+        chromaNoise: _presetToDouble(json['chromaNoise'], 0.0),
       );
 
   Map<String, dynamic> toJson() => {
@@ -157,7 +164,8 @@ class PresetResources {
     this.frameOverlayName,
   });
 
-  factory PresetResources.fromJson(Map<String, dynamic> json) => PresetResources(
+  factory PresetResources.fromJson(Map<String, dynamic> json) =>
+      PresetResources(
         lutName: json['lutName'] as String? ?? '',
         grainTextureName: json['grainTextureName'] as String? ?? '',
         leakTextureNames: (json['leakTextureNames'] as List<dynamic>?)
@@ -318,17 +326,23 @@ class Preset {
   final String id;
   final String name;
   final String category;
+
   /// V3: 输出类型，'photo' | 'video' | 'both'
   final String outputType;
+
   /// V3: 基础机型名称（用于 UI 展示）
   final String baseModel;
   final bool isPremium;
+
   /// V3: 动态选项组（胶卷/镜头/相纸/比例/水印）
   final List<OptionGroup> optionGroups;
+
   /// V3: UI 能力声明（控制哪些选项按钮可见）
   final UiCapabilities uiCapabilities;
+
   /// 渲染资源（兼容旧版 JSON）
   final PresetResources? resources;
+
   /// 渲染参数（兼容旧版 JSON）
   final PresetParams? params;
 
@@ -386,7 +400,9 @@ class Preset {
               .toList();
           final defaultItem = items.firstWhere(
             (i) => i.isDefault,
-            orElse: () => items.isNotEmpty ? items.first : const OptionItem(id: '', name: ''),
+            orElse: () => items.isNotEmpty
+                ? items.first
+                : const OptionItem(id: '', name: ''),
           );
           optionGroupsList.add(OptionGroup(
             type: keyStr,
@@ -405,28 +421,31 @@ class Preset {
 
     // 解析 uiCapabilities
     final uiCap = json['uiCapabilities'] != null
-        ? UiCapabilities.fromJson(json['uiCapabilities'] as Map<String, dynamic>)
+        ? UiCapabilities.fromJson(
+            json['uiCapabilities'] as Map<String, dynamic>)
         : UiCapabilities(
             showFilmSelector: optionGroupsList.any((g) => g.type == 'films'),
             showLensSelector: optionGroupsList.any((g) => g.type == 'lenses'),
             showPaperSelector: optionGroupsList.any((g) => g.type == 'papers'),
             showRatioSelector: optionGroupsList.any((g) => g.type == 'ratios'),
-            showWatermarkSelector: optionGroupsList.any((g) => g.type == 'watermarks'),
+            showWatermarkSelector:
+                optionGroupsList.any((g) => g.type == 'watermarks'),
           );
 
     // 解析 resources（可选）
     final resourcesJson = json['resources'] as Map<String, dynamic>?;
-    final resources = resourcesJson != null ? PresetResources.fromJson(resourcesJson) : null;
+    final resources =
+        resourcesJson != null ? PresetResources.fromJson(resourcesJson) : null;
 
     // 解析 params（可选）
     final paramsJson = json['params'] as Map<String, dynamic>?;
-    final params = paramsJson != null ? PresetParams.fromJson(paramsJson) : null;
+    final params =
+        paramsJson != null ? PresetParams.fromJson(paramsJson) : null;
 
     // 解析 baseModel：V3 可能是 Map，兼容 String
     final rawBaseModel = json['baseModel'];
-    final baseModel = rawBaseModel is String
-        ? rawBaseModel
-        : (json['name'] as String? ?? '');
+    final baseModel =
+        rawBaseModel is String ? rawBaseModel : (json['name'] as String? ?? '');
 
     return Preset(
       id: json['id'] as String,
