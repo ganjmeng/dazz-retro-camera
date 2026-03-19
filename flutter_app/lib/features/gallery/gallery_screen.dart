@@ -1,4 +1,5 @@
 // ignore_for_file: use_build_context_synchronously
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,6 +28,63 @@ class _ThumbCache {
 
   static void remove(String id) => _cache.remove(id);
   static void clear() => _cache.clear();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 缩略图并发加载队列（限流 + 去重，避免滚动时瞬间并发导致抖动）
+// ─────────────────────────────────────────────────────────────────────────────
+class _ThumbLoadQueue {
+  static const int _maxConcurrent = 4;
+  static int _running = 0;
+  static final List<Future<void> Function()> _pending = [];
+  static final Set<String> _inflight = <String>{};
+
+  static Future<Uint8List?> load(
+    AssetEntity asset, {
+    required ThumbnailSize size,
+  }) async {
+    final id = asset.id;
+    final cached = _ThumbCache.get(id);
+    if (cached != null) return cached;
+
+    if (_inflight.contains(id)) {
+      while (_inflight.contains(id)) {
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+      }
+      return _ThumbCache.get(id);
+    }
+
+    final completer = Completer<Uint8List?>();
+    _inflight.add(id);
+
+    Future<void> task() async {
+      try {
+        final data = await asset.thumbnailDataWithSize(size);
+        if (data != null) {
+          _ThumbCache.set(id, data);
+        }
+        completer.complete(data);
+      } catch (_) {
+        completer.complete(null);
+      } finally {
+        _inflight.remove(id);
+        _running--;
+        _drain();
+      }
+    }
+
+    _pending.add(task);
+    _drain();
+    return completer.future;
+  }
+
+  static void _drain() {
+    while (_running < _maxConcurrent && _pending.isNotEmpty) {
+      final task = _pending.removeAt(0);
+      _running++;
+      task();
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -85,7 +143,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
   bool _isLoading = true;
   bool _isSelectionMode = false;
   bool _isDeletingSelection = false;
-  Set<String> _selectedIds = {};
+  final ValueNotifier<Set<String>> _selectedIdsNotifier =
+      ValueNotifier<Set<String>>(<String>{});
   bool _showAlbumDropdown = false;
   String _currentAlbumId = 'all';
   String _currentAlbumName = '';
@@ -111,6 +170,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   void dispose() {
     PhotoManager.removeChangeCallback(_onMediaChange);
     PhotoManager.stopChangeNotify();
+    _selectedIdsNotifier.dispose();
     super.dispose();
   }
 
@@ -211,9 +271,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
     for (int i = 0; i < toLoad.length; i += batchSize) {
       final batch = toLoad.skip(i).take(batchSize).toList();
       await Future.wait(batch.map((asset) async {
-        final data =
-            await asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
-        if (data != null) _ThumbCache.set(asset.id, data);
+        await _ThumbLoadQueue.load(
+          asset,
+          size: const ThumbnailSize(300, 300),
+        );
       }));
     }
   }
@@ -297,18 +358,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   void _toggleSelection(String id) {
-    setState(() {
-      if (_selectedIds.contains(id)) {
-        _selectedIds.remove(id);
-      } else {
-        _selectedIds.add(id);
-      }
-    });
+    final next = Set<String>.from(_selectedIdsNotifier.value);
+    if (next.contains(id)) {
+      next.remove(id);
+    } else {
+      next.add(id);
+    }
+    _selectedIdsNotifier.value = next;
   }
 
   Future<void> _deleteSelected() async {
-    if (_selectedIds.isEmpty || _isDeletingSelection) return;
-    final toDelete = List<String>.from(_selectedIds);
+    final selected = _selectedIdsNotifier.value;
+    if (selected.isEmpty || _isDeletingSelection) return;
+    final toDelete = List<String>.from(selected);
     setState(() => _isDeletingSelection = true);
     try {
       // 大批量删除分段执行，避免一次性传超大列表导致 UI 卡顿。
@@ -327,7 +389,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         final deleted = toDelete.toSet();
         _assets.removeWhere((a) => deleted.contains(a.id));
         _allDazzAssets.removeWhere((a) => deleted.contains(a.id));
-        _selectedIds.clear();
+        _selectedIdsNotifier.value = <String>{};
         _isSelectionMode = false;
       });
     } finally {
@@ -338,17 +400,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   bool get _isAllSelected =>
-      _assets.isNotEmpty && _selectedIds.length == _assets.length;
+      _assets.isNotEmpty && _selectedIdsNotifier.value.length == _assets.length;
 
   void _toggleSelectAll() {
     if (_isDeletingSelection) return;
-    setState(() {
-      if (_isAllSelected) {
-        _selectedIds.clear();
-      } else {
-        _selectedIds = _assets.map((a) => a.id).toSet();
-      }
-    });
+    if (_isAllSelected) {
+      _selectedIdsNotifier.value = <String>{};
+    } else {
+      _selectedIdsNotifier.value = _assets.map((a) => a.id).toSet();
+    }
   }
 
   S _s() => sOf(ProviderScope.containerOf(context).read(languageProvider));
@@ -444,10 +504,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 ? Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        '${_selectedIds.length}/${_assets.length}',
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 13),
+                      ValueListenableBuilder<Set<String>>(
+                        valueListenable: _selectedIdsNotifier,
+                        builder: (_, selected, __) {
+                          return Text(
+                            '${selected.length}/${_assets.length}',
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 13),
+                          );
+                        },
                       ),
                       IconButton(
                         icon: Icon(
@@ -458,26 +523,31 @@ class _GalleryScreenState extends State<GalleryScreen> {
                         ),
                         onPressed: _toggleSelectAll,
                       ),
-                      if (_selectedIds.isNotEmpty)
-                        IconButton(
-                          icon: _isDeletingSelection
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Icon(Icons.delete_outline,
-                                  color: Colors.white),
-                          onPressed:
-                              _isDeletingSelection ? null : _deleteSelected,
-                        ),
+                      ValueListenableBuilder<Set<String>>(
+                        valueListenable: _selectedIdsNotifier,
+                        builder: (_, selected, __) {
+                          if (selected.isEmpty) return const SizedBox.shrink();
+                          return IconButton(
+                            icon: _isDeletingSelection
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white),
+                                  )
+                                : const Icon(Icons.delete_outline,
+                                    color: Colors.white),
+                            onPressed:
+                                _isDeletingSelection ? null : _deleteSelected,
+                          );
+                        },
+                      ),
                       TextButton(
                         onPressed: _isDeletingSelection
                             ? null
                             : () => setState(() {
                                   _isSelectionMode = false;
-                                  _selectedIds.clear();
+                                  _selectedIdsNotifier.value = <String>{};
                                 }),
                         child: Text(_s().cancel,
                             style: const TextStyle(
@@ -569,8 +639,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
         }
 
         final asset = _assets[index - 1];
-        final isSelected = _selectedIds.contains(asset.id);
-
         return GestureDetector(
           onTap: () {
             if (_isSelectionMode) {
@@ -585,13 +653,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
               HapticFeedback.mediumImpact();
               setState(() {
                 _isSelectionMode = true;
-                _selectedIds.add(asset.id);
               });
+              _toggleSelection(asset.id);
             }
           },
           child: _RetroPhotoCell(
             asset: asset,
-            isSelected: isSelected,
+            selectedListenable: _selectedIdsNotifier,
             isSelectionMode: _isSelectionMode,
           ),
         );
@@ -708,12 +776,12 @@ class _GalleryScreenState extends State<GalleryScreen> {
 // ─────────────────────────────────────────────────────────────────────────────
 class _RetroPhotoCell extends StatefulWidget {
   final AssetEntity asset;
-  final bool isSelected;
+  final ValueNotifier<Set<String>> selectedListenable;
   final bool isSelectionMode;
 
   const _RetroPhotoCell({
     required this.asset,
-    required this.isSelected,
+    required this.selectedListenable,
     required this.isSelectionMode,
   });
 
@@ -737,10 +805,11 @@ class _RetroPhotoCellState extends State<_RetroPhotoCell> {
   }
 
   Future<void> _loadThumb() async {
-    final data =
-        await widget.asset.thumbnailDataWithSize(const ThumbnailSize(300, 300));
+    final data = await _ThumbLoadQueue.load(
+      widget.asset,
+      size: const ThumbnailSize(300, 300),
+    );
     if (data != null) {
-      _ThumbCache.set(widget.asset.id, data);
       if (mounted) setState(() => _thumb = data);
     }
   }
@@ -770,23 +839,28 @@ class _RetroPhotoCellState extends State<_RetroPhotoCell> {
             ),
           ),
         if (widget.isSelectionMode)
-          Positioned(
-            top: 4,
-            right: 4,
-            child: Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: widget.isSelected
-                    ? Colors.blue
-                    : Colors.black.withAlpha(100),
-                border: Border.all(color: Colors.white, width: 1.5),
-              ),
-              child: widget.isSelected
-                  ? const Icon(Icons.check, color: Colors.white, size: 14)
-                  : null,
-            ),
+          ValueListenableBuilder<Set<String>>(
+            valueListenable: widget.selectedListenable,
+            builder: (_, selected, __) {
+              final isSelected = selected.contains(widget.asset.id);
+              return Positioned(
+                top: 4,
+                right: 4,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color:
+                        isSelected ? Colors.blue : Colors.black.withAlpha(100),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                  child: isSelected
+                      ? const Icon(Icons.check, color: Colors.white, size: 14)
+                      : null,
+                ),
+              );
+            },
           ),
       ],
     );
