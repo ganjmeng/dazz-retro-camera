@@ -812,7 +812,7 @@ void main() {
 
             // 7. 映射 PBO 内存，读取像素（此时 GPU 传输已完成）
             val mappedBuf = GLES30.glMapBufferRange(
-                GLES30.GL_PIXEL_PACK_BUFFER, 0, (width * height * 4).toLong(),
+                GLES30.GL_PIXEL_PACK_BUFFER, 0, width * height * 4,
                 GLES30.GL_MAP_READ_BIT
             ) as? ByteBuffer
             val outBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -938,7 +938,7 @@ void main() {
 
             // 7. 映射 PBO 内存读取像素
             val mappedBuf = GLES30.glMapBufferRange(
-                GLES30.GL_PIXEL_PACK_BUFFER, 0, (width * height * 4).toLong(),
+                GLES30.GL_PIXEL_PACK_BUFFER, 0, width * height * 4,
                 GLES30.GL_MAP_READ_BIT
             ) as? ByteBuffer
             val outBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
