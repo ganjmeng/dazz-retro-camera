@@ -153,22 +153,37 @@ class CapturePipeline {
             final hasMinimap = minimapNormalizedRect != null;
             if (!hasFrame && !hasWatermark && !hasMinimap) {
               final gpuBytes = await File(newPath).readAsBytes();
-              try {
-                File(newPath).deleteSync();
-              } catch (_) {}
               final gpuSize = _readJpegDimensions(gpuBytes);
               final gpuW = gpuSize?[0] ?? 0;
               final gpuH = gpuSize?[1] ?? 0;
+              final fullRect =
+                  Rect.fromLTWH(0, 0, gpuW.toDouble(), gpuH.toDouble());
+              final ratioCropRect = _calcCropRect(
+                  gpuW.toDouble(), gpuH.toDouble(), selectedRatioId);
+              final needsRatioCrop =
+                  (ratioCropRect.width - fullRect.width).abs() > 1.0 ||
+                      (ratioCropRect.height - fullRect.height).abs() > 1.0;
+              if (!needsRatioCrop) {
+                try {
+                  File(newPath).deleteSync();
+                } catch (_) {}
+                debugPrint(
+                    '[CapturePipeline] Fast path: GPU output returned directly (ratio already matched), ${gpuW}x${gpuH}');
+                return CaptureResult(
+                    bytes: gpuBytes, outputWidth: gpuW, outputHeight: gpuH);
+              }
+              // 比例不一致时不能走“直接返回”，否则会出现取景框改了比例、成片仍是固定 9:16/16:9。
+              gpuOutputBytes = gpuBytes;
+              gpuProcessed = true;
               debugPrint(
-                  '[CapturePipeline] Fast path: GPU output returned directly (no frame/watermark), ${gpuW}x${gpuH}');
-              return CaptureResult(
-                  bytes: gpuBytes, outputWidth: gpuW, outputHeight: gpuH);
+                  '[CapturePipeline] Fast path bypassed: ratio crop required (${selectedRatioId}) from ${gpuW}x${gpuH}');
+            } else {
+              // 有相框/水印/小窗裁剪：优先尝试原生叠加路径，失败再回退 Dart Canvas
+              gpuOutputBytes = await File(newPath).readAsBytes();
+              gpuProcessed = true;
+              debugPrint(
+                  "[CapturePipeline] GPU pipeline successful, preparing native overlay path.");
             }
-            // 有相框/水印/小窗裁剪：优先尝试原生叠加路径，失败再回退 Dart Canvas
-            gpuOutputBytes = await File(newPath).readAsBytes();
-            gpuProcessed = true;
-            debugPrint(
-                "[CapturePipeline] GPU pipeline successful, preparing native overlay path.");
           }
         } catch (e) {
           debugPrint(
