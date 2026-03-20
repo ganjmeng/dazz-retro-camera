@@ -145,6 +145,12 @@ class _LivePhotoSupport {
     0x22,
   ];
   static const List<int> _ftypMarker = <int>[0x66, 0x74, 0x79, 0x70];
+  static final RegExp _microVideoOffsetPattern = RegExp(
+    r'Camera:MicroVideoOffset="(\d+)"',
+  );
+  static final RegExp _containerItemLengthPattern = RegExp(
+    r'Item:Semantic="MotionPhoto"[\s\S]*?Item:Length="(\d+)"',
+  );
 
   static final Map<String, bool> _liveAssetCache = <String, bool>{};
   static final Map<String, Future<bool>> _liveAssetInflight =
@@ -240,13 +246,34 @@ class _LivePhotoSupport {
     final raf = await imageFile.open();
     try {
       final length = await raf.length();
-      final probeStart = math.max(0, length - 512 * 1024);
-      await raf.setPosition(probeStart);
-      final tail = await raf.read(length - probeStart);
-      final startInTail = _lastIndexOfBytes(tail, _ftypMarker);
-      if (startInTail < 4) return null;
-      final start = probeStart + startInTail - 4;
-      if (start < 0 || start >= length) return null;
+      final headProbeLength = math.min(length, 512 * 1024);
+      final head = await raf.read(headProbeLength);
+      final xmpOffset = _extractMotionVideoOffset(head);
+
+      int? start;
+      if (xmpOffset != null && xmpOffset > 0 && xmpOffset < length) {
+        final candidate = length - xmpOffset;
+        if (await _isValidMp4Start(raf, candidate, length)) {
+          start = candidate;
+        }
+      }
+
+      if (start == null) {
+        final probeStart = math.max(0, length - 1024 * 1024);
+        await raf.setPosition(probeStart);
+        final tail = await raf.read(length - probeStart);
+        final startInTail = _lastIndexOfBytes(tail, _ftypMarker);
+        if (startInTail >= 4) {
+          final candidate = probeStart + startInTail - 4;
+          if (candidate >= 0 &&
+              candidate < length &&
+              await _isValidMp4Start(raf, candidate, length)) {
+            start = candidate;
+          }
+        }
+      }
+
+      if (start == null) return null;
       await raf.setPosition(start);
       final mp4Bytes = await raf.read(length - start);
       final tempFile = File(
@@ -288,6 +315,37 @@ class _LivePhotoSupport {
       if (matched) return i;
     }
     return -1;
+  }
+
+  static int? _extractMotionVideoOffset(List<int> head) {
+    if (head.isEmpty) return null;
+    final text = String.fromCharCodes(head);
+    final microVideoMatch = _microVideoOffsetPattern.firstMatch(text);
+    final microVideoOffset = int.tryParse(microVideoMatch?.group(1) ?? '');
+    if (microVideoOffset != null && microVideoOffset > 0) {
+      return microVideoOffset;
+    }
+    final containerMatch = _containerItemLengthPattern.firstMatch(text);
+    final containerOffset = int.tryParse(containerMatch?.group(1) ?? '');
+    if (containerOffset != null && containerOffset > 0) {
+      return containerOffset;
+    }
+    return null;
+  }
+
+  static Future<bool> _isValidMp4Start(
+    RandomAccessFile raf,
+    int start,
+    int fileLength,
+  ) async {
+    if (start < 0 || start + 8 > fileLength) return false;
+    await raf.setPosition(start);
+    final header = await raf.read(12);
+    if (header.length < 8) return false;
+    return header[4] == 0x66 &&
+        header[5] == 0x74 &&
+        header[6] == 0x79 &&
+        header[7] == 0x70;
   }
 }
 
@@ -1441,6 +1499,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     final ready = await _ensureLiveVideoReady(asset);
     if (!ready) return;
     if (!_isHoldingLivePlayback) return;
+    HapticFeedback.selectionClick();
     await _videoCtrl?.seekTo(Duration.zero);
     await _videoCtrl?.play();
     if (!mounted) return;
@@ -1453,6 +1512,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     final asset = _safeCurrentAsset;
     final ready = await _ensureLiveVideoReady(asset);
     if (!ready) return;
+    HapticFeedback.selectionClick();
     await _videoCtrl?.seekTo(Duration.zero);
     await _videoCtrl?.play();
     if (!mounted) return;
