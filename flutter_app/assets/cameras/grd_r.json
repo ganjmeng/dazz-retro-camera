@@ -21,13 +21,13 @@
     "saturation": 0.9,
     "temperature": -20,
     "tint": -4,
-    "highlights": -24,
-    "shadows": -8,
+    "highlights": -22,
+    "shadows": -7,
     "whites": -11,
-    "blacks": -14,
-    "clarity": 9,
-    "dehaze": 3.0,
-    "sharpness": 1.2,
+    "blacks": -15,
+    "clarity": 8,
+    "dehaze": 2.6,
+    "sharpness": 1.18,
     "colorBiasR": -0.028,
     "colorBiasG": 0.0,
     "colorBiasB": 0.012,
@@ -39,7 +39,7 @@
     "vignette": 0.12,
     "chromaticAberration": 0.035,
     "distortion": 0.0,
-    "sharpen": 0.1,
+    "sharpen": 0.08,
     "centerGain": 0.005,
     "edgeFalloff": 0.03,
     "exposureVariation": 0.01,
@@ -65,11 +65,11 @@
       ],
       [
         64,
-        46
+        40
       ],
       [
         96,
-        84
+        78
       ],
       [
         128,
@@ -77,11 +77,11 @@
       ],
       [
         160,
-        184
+        176
       ],
       [
         192,
-        220
+        214
       ],
       [
         224,
