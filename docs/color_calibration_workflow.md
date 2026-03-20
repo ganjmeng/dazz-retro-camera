@@ -43,6 +43,16 @@ dart run tool/color_calibration_cli.dart reference.csv measured.csv
 - `wbBiasAvg <= 0.06`
 
 ## Device-Level Calibration Policy
+- Shipped builds should default to local family calibration for all users.
+- Exact per-device profiles are optional local overrides for verified hot devices.
+- Hot exact overrides should be organized by device line:
+  - iPhone
+  - Samsung Ultra
+  - Xiaomi Ultra
+- First-wave exact override targets:
+  - iPhone 15 Pro / 15 Pro Max / 16 Pro / 16 Pro Max
+  - Galaxy S23 Ultra / S24 Ultra / S25 Ultra
+  - Xiaomi 13 Ultra / 14 Ultra / 15 Ultra
 - Every target device must be calibrated in three scenes:
   - daylight outdoor
   - indoor warm light
@@ -50,6 +60,10 @@ dart run tool/color_calibration_cli.dart reference.csv measured.csv
 - A device profile is not considered production-ready until all three scenes pass the gates.
 - Exact profiles should be added to:
   - `flutter_app/lib/features/camera/device_calibration_profiles.dart`
+- Family profiles should stay broad and conservative so replica mode remains stable.
+- Smart mode should apply a parameter audit layer so scene adaptation cannot
+  over-push contrast, saturation, highlight recovery, shadow lift, clarity,
+  vibrance, LUT strength, temperature, or skin protection deltas.
 - Match keys should be at least:
   - device brand
   - device model

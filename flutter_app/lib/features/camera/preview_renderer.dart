@@ -62,6 +62,47 @@ class DeviceColorProfile {
 
   static const neutral = DeviceColorProfile(id: 'neutral');
 
+  factory DeviceColorProfile.fromExactProfile(
+    ExactDeviceCalibrationProfile exact,
+    SceneCalibrationDelta sceneDelta,
+  ) {
+    return DeviceColorProfile(
+      id: 'exact:${exact.brand}/${exact.model}/${exact.runtimeCameraId.isEmpty ? "default" : exact.runtimeCameraId}',
+      temperatureOffset: exact.temperatureOffset + sceneDelta.temperatureOffset,
+      tintOffset: exact.tintOffset + sceneDelta.tintOffset,
+      contrastScale: exact.contrastScale * sceneDelta.contrastScale,
+      saturationScale: exact.saturationScale * sceneDelta.saturationScale,
+      colorBiasROffset: exact.colorBiasROffset + sceneDelta.colorBiasROffset,
+      colorBiasGOffset: exact.colorBiasGOffset + sceneDelta.colorBiasGOffset,
+      colorBiasBOffset: exact.colorBiasBOffset + sceneDelta.colorBiasBOffset,
+      ccm: exact.ccm,
+      whiteScaleR: exact.whiteScaleR,
+      whiteScaleG: exact.whiteScaleG,
+      whiteScaleB: exact.whiteScaleB,
+      gamma: exact.gamma,
+    );
+  }
+
+  factory DeviceColorProfile.fromFamilyProfile(
+    DeviceFamilyCalibrationProfile family,
+  ) {
+    return DeviceColorProfile(
+      id: family.id,
+      temperatureOffset: family.temperatureOffset,
+      tintOffset: family.tintOffset,
+      contrastScale: family.contrastScale,
+      saturationScale: family.saturationScale,
+      colorBiasROffset: family.colorBiasROffset,
+      colorBiasGOffset: family.colorBiasGOffset,
+      colorBiasBOffset: family.colorBiasBOffset,
+      ccm: family.ccm,
+      whiteScaleR: family.whiteScaleR,
+      whiteScaleG: family.whiteScaleG,
+      whiteScaleB: family.whiteScaleB,
+      gamma: family.gamma,
+    );
+  }
+
   static DeviceColorProfile resolve({
     required String brand,
     required String model,
@@ -70,198 +111,31 @@ class DeviceColorProfile {
     required double sensorMp,
     required CalibrationScene calibrationScene,
   }) {
-    final b = brand.toLowerCase();
-    final m = model.toLowerCase();
-    for (final exact in kExactDeviceCalibrationProfiles) {
-      if (exact.matches(
-        brand: b,
-        model: m,
-        cameraId: cameraId,
-        runtimeCameraId: runtimeCameraId,
-        sensorMp: sensorMp,
-      )) {
-        final sceneDelta = switch (calibrationScene) {
-          CalibrationScene.daylight => exact.daylight,
-          CalibrationScene.indoorWarm => exact.indoor,
-          CalibrationScene.backlit => exact.backlit,
-          CalibrationScene.balanced => const SceneCalibrationDelta(),
-        };
-        return DeviceColorProfile(
-          id: 'exact:${exact.brand}/${exact.model}/${exact.runtimeCameraId.isEmpty ? "default" : exact.runtimeCameraId}',
-          temperatureOffset:
-              exact.temperatureOffset + sceneDelta.temperatureOffset,
-          tintOffset: exact.tintOffset + sceneDelta.tintOffset,
-          contrastScale: exact.contrastScale * sceneDelta.contrastScale,
-          saturationScale: exact.saturationScale * sceneDelta.saturationScale,
-          colorBiasROffset:
-              exact.colorBiasROffset + sceneDelta.colorBiasROffset,
-          colorBiasGOffset:
-              exact.colorBiasGOffset + sceneDelta.colorBiasGOffset,
-          colorBiasBOffset:
-              exact.colorBiasBOffset + sceneDelta.colorBiasBOffset,
-          ccm: exact.ccm,
-          whiteScaleR: exact.whiteScaleR,
-          whiteScaleG: exact.whiteScaleG,
-          whiteScaleB: exact.whiteScaleB,
-          gamma: exact.gamma,
-        );
+    final fingerprint = DeviceFingerprint.normalized(
+      brand: brand,
+      model: model,
+      cameraId: cameraId,
+      runtimeCameraId: runtimeCameraId,
+      sensorMp: sensorMp,
+    );
+
+    for (final exact in kLocalExactDeviceCalibrationProfiles) {
+      if (!exact.matches(fingerprint)) continue;
+      final sceneDelta = switch (calibrationScene) {
+        CalibrationScene.daylight => exact.daylight,
+        CalibrationScene.indoorWarm => exact.indoor,
+        CalibrationScene.backlit => exact.backlit,
+        CalibrationScene.balanced => const SceneCalibrationDelta(),
+      };
+      return DeviceColorProfile.fromExactProfile(exact, sceneDelta);
+    }
+
+    for (final family in kDeviceFamilyCalibrationProfiles) {
+      if (family.matches(fingerprint)) {
+        return DeviceColorProfile.fromFamilyProfile(family);
       }
     }
-    if (b.contains('xiaomi') || b.contains('redmi') || b.contains('poco')) {
-      return DeviceColorProfile(
-        id: 'xiaomi_family',
-        temperatureOffset: -5.0,
-        tintOffset: -2.5,
-        contrastScale: 1.02,
-        saturationScale: 0.97,
-        colorBiasROffset: -0.008,
-        colorBiasGOffset: 0.003,
-        colorBiasBOffset: 0.006,
-        ccm: const [
-          1.018,
-          -0.014,
-          -0.004,
-          -0.008,
-          1.012,
-          -0.004,
-          -0.010,
-          -0.006,
-          1.016
-        ],
-        whiteScaleR: 1.012,
-        whiteScaleG: 1.000,
-        whiteScaleB: 0.992,
-        gamma: 2.24,
-      );
-    }
-    if (b.contains('samsung')) {
-      return DeviceColorProfile(
-        id: 'samsung_family',
-        temperatureOffset: 2.0,
-        tintOffset: -0.8,
-        contrastScale: 0.99,
-        saturationScale: 0.98,
-        colorBiasROffset: -0.003,
-        colorBiasGOffset: 0.001,
-        colorBiasBOffset: 0.002,
-        ccm: const [
-          1.010,
-          -0.007,
-          -0.003,
-          -0.006,
-          1.008,
-          -0.002,
-          -0.004,
-          -0.004,
-          1.012
-        ],
-        whiteScaleR: 1.006,
-        whiteScaleG: 1.000,
-        whiteScaleB: 0.996,
-        gamma: 2.20,
-      );
-    }
-    if (b.contains('vivo') || b.contains('oppo') || b.contains('oneplus')) {
-      return DeviceColorProfile(
-        id: 'bbk_family',
-        temperatureOffset: -2.0,
-        tintOffset: -1.0,
-        contrastScale: 1.00,
-        saturationScale: 0.98,
-        colorBiasROffset: -0.004,
-        colorBiasGOffset: 0.001,
-        colorBiasBOffset: 0.002,
-        ccm: const [
-          1.012,
-          -0.009,
-          -0.003,
-          -0.007,
-          1.010,
-          -0.003,
-          -0.006,
-          -0.003,
-          1.012
-        ],
-        whiteScaleR: 1.008,
-        whiteScaleG: 1.000,
-        whiteScaleB: 0.995,
-        gamma: 2.22,
-      );
-    }
-    if (b.contains('huawei') || b.contains('honor')) {
-      return DeviceColorProfile(
-        id: 'huawei_family',
-        temperatureOffset: 1.2,
-        tintOffset: -0.6,
-        contrastScale: 0.99,
-        saturationScale: 0.99,
-        ccm: const [
-          1.008,
-          -0.006,
-          -0.002,
-          -0.004,
-          1.006,
-          -0.002,
-          -0.004,
-          -0.002,
-          1.009
-        ],
-        whiteScaleR: 1.004,
-        whiteScaleG: 1.000,
-        whiteScaleB: 0.998,
-        gamma: 2.20,
-      );
-    }
-    if (b.contains('apple') || m.contains('iphone')) {
-      return DeviceColorProfile(
-        id: 'apple_iphone',
-        temperatureOffset: 0.6,
-        tintOffset: 0.2,
-        contrastScale: 1.0,
-        saturationScale: 1.0,
-        ccm: const [
-          1.004,
-          -0.003,
-          -0.001,
-          -0.002,
-          1.003,
-          -0.001,
-          -0.002,
-          -0.001,
-          1.004
-        ],
-        whiteScaleR: 1.002,
-        whiteScaleG: 1.000,
-        whiteScaleB: 0.999,
-        gamma: 2.18,
-      );
-    }
-    if (sensorMp >= 150.0) {
-      // 高频高像素传感器泛型补偿
-      return DeviceColorProfile(
-        id: 'generic_200mp',
-        temperatureOffset: -2.0,
-        tintOffset: -0.8,
-        saturationScale: 0.98,
-        colorBiasROffset: -0.004,
-        colorBiasBOffset: 0.003,
-        ccm: const [
-          1.014,
-          -0.010,
-          -0.004,
-          -0.007,
-          1.010,
-          -0.003,
-          -0.008,
-          -0.004,
-          1.014
-        ],
-        whiteScaleR: 1.009,
-        whiteScaleG: 1.000,
-        whiteScaleB: 0.994,
-        gamma: 2.24,
-      );
-    }
+
     return neutral;
   }
 }
@@ -513,7 +387,7 @@ class PreviewRenderParams {
     final filter = activeFilter?.contrast ?? 1.0;
     final lens =
         activeLens?.contrast ?? 0.0; // lens.contrast is additive offset
-    final adapted = _sceneContrastScale(sceneClass);
+    final adapted = _auditedSceneContrastScale(sceneClass);
     final gammaComp =
         ((2.2 / _deviceProfile.gamma) * 0.06 + 1.0).clamp(0.96, 1.04);
     return ((base * filter + lens) *
@@ -528,7 +402,7 @@ class PreviewRenderParams {
     final filter = activeFilter?.saturation ?? 1.0;
     final lens =
         activeLens?.saturation ?? 0.0; // lens.saturation is additive offset
-    final adapted = _sceneSaturationScale(sceneClass);
+    final adapted = _auditedSceneSaturationScale(sceneClass);
     return ((base * filter + lens) * _deviceProfile.saturationScale * adapted)
         .clamp(0.0, 2.0);
   }
@@ -542,37 +416,37 @@ class PreviewRenderParams {
     return (defaultLook.temperature +
             temperatureOffset +
             _deviceProfile.temperatureOffset +
-            _sceneTemperatureOffset(sceneClass) * _sceneAdaptiveMix)
+            _auditedSceneTemperatureOffset(sceneClass) * _sceneAdaptiveMix)
         .clamp(-100.0, 100.0);
   }
 
   double get effectiveTint =>
       (defaultLook.tint + _deviceProfile.tintOffset).clamp(-100.0, 100.0);
   double get effectiveHighlights => (defaultLook.highlights +
-          _sceneHighlightOffset(sceneClass) *
+          _auditedSceneHighlightOffset(sceneClass) *
               defaultLook.sceneHighlightResponse *
               _exposureProtectionMix)
       .clamp(-100.0, 100.0);
   double get effectiveShadows => (defaultLook.shadows +
-          _sceneShadowsOffset(sceneClass) *
+          _auditedSceneShadowsOffset(sceneClass) *
               defaultLook.sceneShadowResponse *
               _exposureProtectionMix)
       .clamp(-100.0, 100.0);
   double get effectiveWhites => (defaultLook.whites +
-          _sceneWhitesOffset(sceneClass) *
+          _auditedSceneWhitesOffset(sceneClass) *
               defaultLook.sceneWhitesResponse *
               _exposureProtectionMix)
       .clamp(-100.0, 100.0);
   double get effectiveBlacks => defaultLook.blacks.clamp(-100.0, 100.0);
   double get effectiveClarity => (defaultLook.clarity +
-          _sceneClarityOffset(sceneClass) * _sceneAdaptiveMix)
+          _auditedSceneClarityOffset(sceneClass) * _sceneAdaptiveMix)
       .clamp(-100.0, 100.0);
   double get effectiveVibrance => (defaultLook.vibrance +
-          _sceneVibranceOffset(sceneClass) * _sceneAdaptiveMix)
+          _auditedSceneVibranceOffset(sceneClass) * _sceneAdaptiveMix)
       .clamp(-100.0, 100.0);
   double get effectiveGrain =>
       ((defaultLook.grain + _filterGrainAmount(activeFilter?.grain)) *
-              _sceneGrainScale(sceneClass))
+              _auditedSceneGrainScale(sceneClass))
           .clamp(0.0, 1.0);
   double get effectiveGrainSize {
     final filterSize = activeFilter?.grainSize ?? defaultLook.grainSize;
@@ -850,7 +724,7 @@ class PreviewRenderParams {
 
   double get effectiveLutStrength {
     final base = defaultLook.lutStrength.clamp(0.0, 1.0);
-    final sceneScale = _sceneLutStrengthScale(sceneClass);
+    final sceneScale = _auditedSceneLutStrengthScale(sceneClass);
     final frontScale = isFrontCamera ? 0.97 : 1.0;
     return (base * sceneScale * frontScale).clamp(0.55, 1.0);
   }
@@ -877,7 +751,10 @@ class PreviewRenderParams {
       SceneClass.lowLight => 0.03,
       _ => 0.0,
     };
-    return 0.10 * warmWeight + 0.06 * lowLightWeight + sceneBoost;
+    return _auditSmartSkinDelta(
+      0.10 * warmWeight + 0.06 * lowLightWeight + sceneBoost,
+      maxDelta: 0.12,
+    );
   }
 
   double _dynamicSkinLumaDelta() {
@@ -889,7 +766,10 @@ class PreviewRenderParams {
       SceneClass.lowLight => 0.03,
       _ => 0.0,
     };
-    return 0.03 * lowLightWeight + sceneBoost;
+    return _auditSmartSkinDelta(
+      0.03 * lowLightWeight + sceneBoost,
+      maxDelta: 0.045,
+    );
   }
 
   double _dynamicSkinRedLimitDelta() {
@@ -901,7 +781,10 @@ class PreviewRenderParams {
             ? 1.0
             : 0.0;
     final lowLightBoost = sceneClass == SceneClass.lowLight ? 0.02 : 0.0;
-    return 0.03 * warmWeight + 0.02 * dynamicWeight + lowLightBoost;
+    return _auditSmartSkinDelta(
+      0.03 * warmWeight + 0.02 * dynamicWeight + lowLightBoost,
+      maxDelta: 0.05,
+    );
   }
 
   double get paperTexture => defaultLook.paperTexture.clamp(0.0, 1.0);
@@ -911,6 +794,60 @@ class PreviewRenderParams {
       renderStyleMode == RenderStyleMode.smart ? 1.0 : 0.0;
   double get _exposureProtectionMix =>
       renderStyleMode == RenderStyleMode.smart ? 1.0 : 0.22;
+  bool get _isSmartMode => renderStyleMode == RenderStyleMode.smart;
+
+  double _auditSmartOffset(
+    double value, {
+    required double min,
+    required double max,
+  }) {
+    if (!_isSmartMode) return value;
+    return value.clamp(min, max);
+  }
+
+  double _auditSmartScale(
+    double value, {
+    required double min,
+    required double max,
+  }) {
+    if (!_isSmartMode) return value;
+    return value.clamp(min, max);
+  }
+
+  double _auditSmartSkinDelta(double value, {required double maxDelta}) {
+    if (!_isSmartMode) return value;
+    return value.clamp(0.0, maxDelta);
+  }
+
+  double _auditedSceneHighlightOffset(SceneClass scene) =>
+      _auditSmartOffset(_sceneHighlightOffset(scene), min: -18.0, max: 0.0);
+
+  double _auditedSceneShadowsOffset(SceneClass scene) =>
+      _auditSmartOffset(_sceneShadowsOffset(scene), min: 0.0, max: 14.0);
+
+  double _auditedSceneWhitesOffset(SceneClass scene) =>
+      _auditSmartOffset(_sceneWhitesOffset(scene), min: -12.0, max: 0.0);
+
+  double _auditedSceneContrastScale(SceneClass scene) =>
+      _auditSmartScale(_sceneContrastScale(scene), min: 0.97, max: 1.01);
+
+  double _auditedSceneSaturationScale(SceneClass scene) =>
+      _auditSmartScale(_sceneSaturationScale(scene), min: 0.95, max: 1.02);
+
+  double _auditedSceneClarityOffset(SceneClass scene) =>
+      _auditSmartOffset(_sceneClarityOffset(scene), min: -6.0, max: 1.0);
+
+  double _auditedSceneVibranceOffset(SceneClass scene) =>
+      _auditSmartOffset(_sceneVibranceOffset(scene), min: -8.0, max: 2.0);
+
+  double _auditedSceneGrainScale(SceneClass scene) =>
+      _auditSmartScale(_sceneGrainScale(scene), min: 0.78, max: 1.0);
+
+  double _auditedSceneLutStrengthScale(SceneClass scene) =>
+      _auditSmartScale(_sceneLutStrengthScale(scene), min: 0.95, max: 1.0);
+
+  double _auditedSceneTemperatureOffset(SceneClass scene) =>
+      _auditSmartOffset(_sceneTemperatureOffset(scene), min: -1.5, max: 0.8);
 
   double _filterGrainAmount(String? grain) {
     switch ((grain ?? '').toLowerCase()) {
@@ -1034,6 +971,16 @@ class PreviewRenderParams {
         'deviceCcm20': _deviceProfile.ccm[6],
         'deviceCcm21': _deviceProfile.ccm[7],
         'deviceCcm22': _deviceProfile.ccm[8],
+        'smartAuditEnabled': _isSmartMode,
+        'smartAuditContrastScale': _auditedSceneContrastScale(sceneClass),
+        'smartAuditSaturationScale': _auditedSceneSaturationScale(sceneClass),
+        'smartAuditHighlightOffset': _auditedSceneHighlightOffset(sceneClass),
+        'smartAuditShadowOffset': _auditedSceneShadowsOffset(sceneClass),
+        'smartAuditWhitesOffset': _auditedSceneWhitesOffset(sceneClass),
+        'smartAuditClarityOffset': _auditedSceneClarityOffset(sceneClass),
+        'smartAuditVibranceOffset': _auditedSceneVibranceOffset(sceneClass),
+        'smartAuditTemperatureOffset':
+            _auditedSceneTemperatureOffset(sceneClass),
       };
 }
 
