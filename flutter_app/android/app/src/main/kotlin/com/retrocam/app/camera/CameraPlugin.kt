@@ -201,6 +201,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "saveToGallery"      -> handleSaveToGallery(call, result)
             "replaceGalleryImage"-> handleReplaceGalleryImage(call, result)
             "composeOverlay"     -> handleComposeOverlay(call, result)
+            "blendDoubleExposure"-> handleBlendDoubleExposure(call, result)
             "dispose"            -> handleDispose(result)
             "processWithGpu"   -> {
                 if (captureProcessor == null) {
@@ -1543,6 +1544,95 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 mainExecutor.execute { result.error("COMPOSE_FAILED", e.message, null) }
             }
         }
+    }
+
+    private fun handleBlendDoubleExposure(call: MethodCall, result: MethodChannel.Result) {
+        bgExecutor.execute {
+            try {
+                val firstImagePath = call.argument<String>("firstImagePath")
+                val secondImageBytes = call.argument<ByteArray>("secondImageBytes")
+                val blend = ((call.argument<Double>("blend") ?: 0.5).coerceIn(0.0, 1.0)).toFloat()
+                val jpegQuality = (call.argument<Int>("jpegQuality") ?: 90).coerceIn(60, 95)
+                if (firstImagePath.isNullOrEmpty() || secondImageBytes == null || secondImageBytes.isEmpty()) {
+                    result.error("INVALID_ARG", "firstImagePath and secondImageBytes are required", null)
+                    return@execute
+                }
+
+                val first = BitmapFactory.decodeFile(firstImagePath)
+                    ?: run {
+                        result.error("DECODE_FAILED", "failed to decode first image", null)
+                        return@execute
+                    }
+                val secondRaw = BitmapFactory.decodeByteArray(secondImageBytes, 0, secondImageBytes.size)
+                    ?: run {
+                        first.recycle()
+                        result.error("DECODE_FAILED", "failed to decode second image", null)
+                        return@execute
+                    }
+                val second = if (secondRaw.width != first.width || secondRaw.height != first.height) {
+                    Bitmap.createScaledBitmap(secondRaw, first.width, first.height, true).also {
+                        if (it !== secondRaw) secondRaw.recycle()
+                    }
+                } else {
+                    secondRaw
+                }
+
+                val out = blendDoubleExposureScreen(first, second, blend)
+
+                val outputFile = File(
+                    flutterPluginBinding.applicationContext.cacheDir,
+                    "double_exp_${System.currentTimeMillis()}.jpg"
+                )
+                java.io.FileOutputStream(outputFile).use { fos ->
+                    out.compress(Bitmap.CompressFormat.JPEG, jpegQuality, fos)
+                }
+
+                first.recycle()
+                second.recycle()
+                out.recycle()
+
+                val mainExecutor = ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
+                mainExecutor.execute {
+                    result.success(mapOf("filePath" to outputFile.absolutePath))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "blendDoubleExposure failed", e)
+                val mainExecutor = ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
+                mainExecutor.execute {
+                    result.error("BLEND_FAILED", e.message, null)
+                }
+            }
+        }
+    }
+
+    private fun blendDoubleExposureScreen(first: Bitmap, second: Bitmap, blend: Float): Bitmap {
+        val w = first.width
+        val h = first.height
+        val firstWeight = blend.coerceIn(0f, 1f)
+        val secondWeight = (1f - firstWeight).coerceIn(0f, 1f)
+        val inA = IntArray(w * h)
+        val inB = IntArray(w * h)
+        val out = IntArray(w * h)
+        first.getPixels(inA, 0, w, 0, 0, w, h)
+        second.getPixels(inB, 0, w, 0, 0, w, h)
+        for (i in out.indices) {
+            val p1 = inA[i]
+            val p2 = inB[i]
+            val r1 = ((p1 shr 16) and 0xFF) / 255f * firstWeight
+            val g1 = ((p1 shr 8) and 0xFF) / 255f * firstWeight
+            val b1 = (p1 and 0xFF) / 255f * firstWeight
+            val r2 = ((p2 shr 16) and 0xFF) / 255f * secondWeight
+            val g2 = ((p2 shr 8) and 0xFF) / 255f * secondWeight
+            val b2 = (p2 and 0xFF) / 255f * secondWeight
+            val rr = (1f - (1f - r1) * (1f - r2)).coerceIn(0f, 1f)
+            val gg = (1f - (1f - g1) * (1f - g2)).coerceIn(0f, 1f)
+            val bb = (1f - (1f - b1) * (1f - b2)).coerceIn(0f, 1f)
+            out[i] = (0xFF shl 24) or
+                ((rr * 255f).toInt().coerceIn(0, 255) shl 16) or
+                ((gg * 255f).toInt().coerceIn(0, 255) shl 8) or
+                ((bb * 255f).toInt().coerceIn(0, 255))
+        }
+        return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
     }
 
     private fun drawWatermarkOnCanvas(canvas: Canvas, call: MethodCall) {

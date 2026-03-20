@@ -3,6 +3,7 @@ import UIKit
 import AVFoundation
 import Photos
 import MetalKit
+import CoreImage
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RetroCamPlugin — iOS 相机 MethodChannel 插件
@@ -31,6 +32,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
 
     // 当前闪光灯模式
     private var currentFlashMode: AVCaptureDevice.FlashMode = .off
+    private let ciContext = CIContext(options: [.priorityRequestLow: false])
 
     // takePhoto 的回调（等待 AVCapturePhotoCaptureDelegate）
     private var pendingPhotoResult: FlutterResult?
@@ -101,6 +103,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleProcessWithGpu(call: call, result: result)
         case "composeOverlay":
             handleComposeOverlay(call: call, result: result)
+        case "blendDoubleExposure":
+            handleBlendDoubleExposure(call: call, result: result)
         case "dispose":
             handleDispose(result: result)
         default:
@@ -740,6 +744,93 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             result(["filePath": outputURL.path])
         } catch {
             result(FlutterError(code: "COMPOSE_FAILED", message: error.localizedDescription, details: nil))
+        }
+    }
+
+    private func handleBlendDoubleExposure(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let firstImagePath = args["firstImagePath"] as? String,
+              let secondData = (args["secondImageBytes"] as? FlutterStandardTypedData)?.data else {
+            result(FlutterError(code: "INVALID_ARG", message: "firstImagePath and secondImageBytes are required", details: nil))
+            return
+        }
+        let blend = max(0.0, min(1.0, (args["blend"] as? Double) ?? 0.5))
+        let qualityInt = (args["jpegQuality"] as? Int) ?? 90
+        let quality = CGFloat(max(60, min(95, qualityInt))) / 100.0
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let firstImage = UIImage(contentsOfFile: firstImagePath),
+                  let firstCI = CIImage(image: firstImage),
+                  let secondUIImage = UIImage(data: secondData),
+                  let secondCIBase = CIImage(image: secondUIImage) else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "DECODE_FAILED", message: "failed to decode blend inputs", details: nil))
+                }
+                return
+            }
+
+            let targetRect = firstCI.extent
+            if targetRect.width < 1 || targetRect.height < 1 {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "INVALID_SIZE", message: "invalid first image size", details: nil))
+                }
+                return
+            }
+
+            let sx = targetRect.width / max(secondCIBase.extent.width, 1)
+            let sy = targetRect.height / max(secondCIBase.extent.height, 1)
+            let secondScaled = secondCIBase.transformed(by: CGAffineTransform(scaleX: sx, y: sy))
+
+            let firstWeight = CGFloat(blend)
+            let secondWeight = CGFloat(1.0 - blend)
+            let firstWeighted = firstCI.applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: firstWeight, y: 0, z: 0, w: 0),
+                "inputGVector": CIVector(x: 0, y: firstWeight, z: 0, w: 0),
+                "inputBVector": CIVector(x: 0, y: 0, z: firstWeight, w: 0),
+                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
+            ])
+            let secondWeighted = secondScaled.applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: secondWeight, y: 0, z: 0, w: 0),
+                "inputGVector": CIVector(x: 0, y: secondWeight, z: 0, w: 0),
+                "inputBVector": CIVector(x: 0, y: 0, z: secondWeight, w: 0),
+                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
+            ])
+
+            guard let screen = CIFilter(name: "CIScreenBlendMode") else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "FILTER_MISSING", message: "CIScreenBlendMode unavailable", details: nil))
+                }
+                return
+            }
+            screen.setValue(secondWeighted, forKey: kCIInputImageKey)
+            screen.setValue(firstWeighted, forKey: kCIInputBackgroundImageKey)
+            guard let outCI = screen.outputImage?.cropped(to: targetRect),
+                  let cgImage = self.ciContext.createCGImage(outCI, from: targetRect) else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "BLEND_FAILED", message: "failed to render blended image", details: nil))
+                }
+                return
+            }
+
+            let outUIImage = UIImage(cgImage: cgImage)
+            guard let jpegData = outUIImage.jpegData(compressionQuality: quality) else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "ENCODE_FAILED", message: "failed to encode blended jpeg", details: nil))
+                }
+                return
+            }
+            let outputURL = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("double_exp_\(UUID().uuidString).jpg")
+            do {
+                try jpegData.write(to: outputURL)
+                DispatchQueue.main.async {
+                    result(["filePath": outputURL.path])
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "WRITE_FAILED", message: error.localizedDescription, details: nil))
+                }
+            }
         }
     }
 

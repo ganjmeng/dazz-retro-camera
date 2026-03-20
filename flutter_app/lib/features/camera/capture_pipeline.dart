@@ -1855,6 +1855,31 @@ class CapturePipeline {
     double blend = 0.5,
   }) async {
     try {
+      // Best-practice: use native blend pipeline on mobile platforms
+      // to avoid large pixel transfers/loops in Dart isolate.
+      if (Platform.isAndroid || Platform.isIOS) {
+        final native = await _channel.invokeMethod<Map>(
+          "blendDoubleExposure",
+          {
+            "firstImagePath": firstImagePath,
+            "secondImageBytes": secondImageBytes,
+            "blend": blend.clamp(0.0, 1.0),
+            "jpegQuality": 90,
+          },
+        );
+        final nativePath = native?["filePath"] as String?;
+        if (nativePath != null && nativePath.isNotEmpty) {
+          final bytes = await File(nativePath).readAsBytes();
+          try {
+            File(nativePath).deleteSync();
+          } catch (_) {}
+          debugPrint(
+              '[DoubleExp] Native blend complete: ${bytes.length} bytes');
+          return bytes;
+        }
+      }
+
+      // Non-mobile fallback.
       final firstBytes = await File(firstImagePath).readAsBytes();
       final result = await compute(
         _blendDoubleExposureIsolate,
@@ -1866,7 +1891,8 @@ class CapturePipeline {
         ),
       );
       if (result == null) return null;
-      debugPrint('[DoubleExp] Blend complete: ${result.length} bytes');
+      debugPrint(
+          '[DoubleExp] Dart blend fallback complete: ${result.length} bytes');
       return result;
     } catch (e, st) {
       debugPrint('[DoubleExp] blendDoubleExposure error: $e\n$st');
