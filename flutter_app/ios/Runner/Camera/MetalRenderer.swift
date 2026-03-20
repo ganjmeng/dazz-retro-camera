@@ -314,7 +314,6 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
 
         // ── Inst C / SQC 拍立得专属参数（其他相机也可复用）──────────────────────────────────────────────────────
         if let v = num("highlightRolloff") { ccdParams.highlightRolloff = v }
-        if let v = num("highlightRolloff2") { ccdParams.highlightRolloff2 = v }
         if let v = num("paperTexture") { ccdParams.paperTexture = v }
         if let v = num("edgeFalloff") { ccdParams.edgeFalloff = v }
         if let v = num("exposureVariation") { ccdParams.exposureVariation = v }
