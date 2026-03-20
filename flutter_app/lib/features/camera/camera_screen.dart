@@ -30,6 +30,7 @@ import 'camera_notifier.dart';
 import 'camera_manager_screen.dart';
 import '../settings/settings_screen.dart';
 import 'preview_renderer.dart';
+import 'render_style_mode.dart';
 import '../gallery/gallery_screen.dart';
 import 'camera_config_sheet.dart';
 import '../../services/shutter_sound_service.dart';
@@ -60,7 +61,7 @@ const kSliderAreaH = 72.0; // 胶囊下方滑条展开区域预留高度（不�
 const kViewfinderHPadding = 8.0; // 取景框左右边距（参考图约8px，贴边显示）
 const kTopBarH = 44.0;
 const _kSceneHintCandidateHold = Duration(milliseconds: 420);
-const _kSceneHintMinVisible = Duration(milliseconds: 1400);
+const _kSceneHintMinVisible = Duration(seconds: 10);
 const _kStartupInitDelay = Duration(milliseconds: 60);
 const _kStartupTransitionTail = Duration(milliseconds: 120);
 const _kLifecycleResumeTail = Duration(milliseconds: 40);
@@ -480,6 +481,21 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   void _scheduleSceneHintRefresh(CameraAppState st, CameraState camSvc) {
+    if (st.renderStyleMode != RenderStyleMode.smart) {
+      _sceneHintSignal = '';
+      _pendingSceneHintKey = null;
+      _sceneHintBootstrapped = false;
+      _sceneHintCommitTimer?.cancel();
+      _sceneHintHideTimer?.cancel();
+      if (_showSceneHint) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(() => _showSceneHint = false);
+        });
+      }
+      return;
+    }
+
     final info = camSvc.activeCameraDebugInfo;
     final rawSensorMp = info['sensorMp'];
     final sensorMp = rawSensorMp is num
