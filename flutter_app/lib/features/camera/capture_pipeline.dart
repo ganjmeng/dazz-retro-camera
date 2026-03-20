@@ -915,9 +915,9 @@ class CapturePipeline {
     var m = _identity();
 
     // 1. 曝光
-    final expMul = math
-        .pow(2.0, params.exposureOffset + params.effectiveLensExposure)
-        .toDouble();
+    // `params.exposureOffset` already includes lens exposure in toJson(),
+    // avoid double-applying lens gain on Dart fallback path.
+    final expMul = math.pow(2.0, params.exposureOffset).toDouble();
     m = _multiply(m, _exposureMatrix(expMul));
     // 2. 色温
     if (params.policy.enableTemperature) {

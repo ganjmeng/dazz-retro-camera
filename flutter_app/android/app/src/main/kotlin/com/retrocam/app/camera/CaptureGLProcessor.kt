@@ -278,7 +278,9 @@ vec3 applyClarity(vec3 c, float clarity, sampler2D tex, vec2 uv) {
     blurred += texture(tex, uv + vec2( w,  h)).rgb * 0.0625;
     float midMask = 1.0 - abs(luminance(c) * 2.0 - 1.0);
     vec3 detail = c - blurred;
-    return clamp(c + detail * clarity * 0.3 * midMask, 0.0, 1.0);
+    // Keep capture path aligned with preview shader intensity (0.003),
+    // otherwise clarity can over-amplify highlights and cause white clipping.
+    return clamp(c + detail * clarity * 0.003 * midMask, 0.0, 1.0);
 }
 
 // ── Pass 7: 饱和度 + Vibrance ─────────────────────────────────────────
