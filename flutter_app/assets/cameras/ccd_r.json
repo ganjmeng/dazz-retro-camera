@@ -35,7 +35,7 @@
     "sharpness": 1.06,
     "flare": 0.0,
     "vignette": 0.10,
-    "highlightRolloff": 0.14,
+    "highlightRolloff": 0.10,
     "bloom": 0.04,
     "halation": 0.04,
     "grain": 0.15,
