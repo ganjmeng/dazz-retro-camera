@@ -63,6 +63,9 @@ dependencies:
   # 手势缩放查看器（详情页双指缩放）
   photo_view: ^0.15.0
 
+  # Live Photo / Motion Photo 播放
+  video_player: ^2.9.5
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

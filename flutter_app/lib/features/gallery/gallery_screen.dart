@@ -1,11 +1,14 @@
 // ignore_for_file: use_build_context_synchronously
 import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:video_player/video_player.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/camera_registry.dart';
 import '../../core/l10n.dart';
@@ -110,6 +113,174 @@ class _GalleryCache {
   static void invalidate() {
     _assets = null;
     _loadedAt = null;
+  }
+}
+
+class _LivePhotoSupport {
+  static const List<int> _motionPhotoMarker = <int>[
+    0x43,
+    0x61,
+    0x6D,
+    0x65,
+    0x72,
+    0x61,
+    0x3A,
+    0x4D,
+    0x6F,
+    0x74,
+    0x69,
+    0x6F,
+    0x6E,
+    0x50,
+    0x68,
+    0x6F,
+    0x74,
+    0x6F,
+    0x3D,
+    0x22,
+    0x31,
+    0x22,
+  ];
+  static const List<int> _ftypMarker = <int>[0x66, 0x74, 0x79, 0x70];
+
+  static final Map<String, bool> _liveAssetCache = <String, bool>{};
+  static final Map<String, Future<bool>> _liveAssetInflight =
+      <String, Future<bool>>{};
+  static final Map<String, String> _playbackPathCache = <String, String>{};
+  static final Map<String, Future<String?>> _playbackInflight =
+      <String, Future<String?>>{};
+
+  static bool getCachedLiveFlag(String id) => _liveAssetCache[id] ?? false;
+
+  static Future<bool> isLiveAsset(AssetEntity asset) {
+    final cached = _liveAssetCache[asset.id];
+    if (cached != null) return Future<bool>.value(cached);
+    final inflight = _liveAssetInflight[asset.id];
+    if (inflight != null) return inflight;
+    final future = _resolveIsLiveAsset(asset);
+    _liveAssetInflight[asset.id] = future;
+    future.whenComplete(() => _liveAssetInflight.remove(asset.id));
+    return future;
+  }
+
+  static Future<bool> _resolveIsLiveAsset(AssetEntity asset) async {
+    if (asset.type != AssetType.image) {
+      _liveAssetCache[asset.id] = false;
+      return false;
+    }
+    if (Platform.isIOS || Platform.isMacOS) {
+      final isLive = asset.isLivePhoto;
+      _liveAssetCache[asset.id] = isLive;
+      return isLive;
+    }
+    if (!Platform.isAndroid) {
+      _liveAssetCache[asset.id] = false;
+      return false;
+    }
+
+    try {
+      final file = await asset.originFile;
+      if (file == null || !await file.exists()) {
+        _liveAssetCache[asset.id] = false;
+        return false;
+      }
+      final raf = await file.open();
+      try {
+        final probeLength = math.min((await raf.length()).toInt(), 256 * 1024);
+        final head = await raf.read(probeLength);
+        final isLive = _indexOfBytes(head, _motionPhotoMarker) >= 0;
+        _liveAssetCache[asset.id] = isLive;
+        return isLive;
+      } finally {
+        await raf.close();
+      }
+    } catch (_) {
+      _liveAssetCache[asset.id] = false;
+      return false;
+    }
+  }
+
+  static Future<String?> resolvePlaybackPath(AssetEntity asset) {
+    final inflight = _playbackInflight[asset.id];
+    if (inflight != null) return inflight;
+    final future = _resolvePlaybackPath(asset);
+    _playbackInflight[asset.id] = future;
+    future.whenComplete(() => _playbackInflight.remove(asset.id));
+    return future;
+  }
+
+  static Future<String?> _resolvePlaybackPath(AssetEntity asset) async {
+    if (!await isLiveAsset(asset)) return null;
+
+    final cached = _playbackPathCache[asset.id];
+    if (cached != null && await File(cached).exists()) {
+      return cached;
+    }
+
+    if (Platform.isIOS || Platform.isMacOS) {
+      if (!await asset.isLocallyAvailable(withSubtype: true)) {
+        await asset.originFileWithSubtype;
+      }
+      final mediaUrl = await asset.getMediaUrl();
+      if (mediaUrl == null || mediaUrl.isEmpty) return null;
+      final uri = Uri.parse(mediaUrl);
+      if (uri.scheme == 'file') {
+        return uri.toFilePath();
+      }
+      return null;
+    }
+
+    if (!Platform.isAndroid) return null;
+
+    final imageFile = await asset.originFile;
+    if (imageFile == null || !await imageFile.exists()) return null;
+    final bytes = await imageFile.readAsBytes();
+    final start = _findMotionVideoStart(bytes);
+    if (start == null) return null;
+    final tempFile = File(
+      '${Directory.systemTemp.path}/dazz_live_${asset.id}_${imageFile.lastModifiedSync().millisecondsSinceEpoch}.mp4',
+    );
+    await tempFile.writeAsBytes(bytes.sublist(start), flush: true);
+    _playbackPathCache[asset.id] = tempFile.path;
+    return tempFile.path;
+  }
+
+  static int? _findMotionVideoStart(List<int> bytes) {
+    final ftypIndex = _lastIndexOfBytes(bytes, _ftypMarker);
+    if (ftypIndex < 4) return null;
+    final start = ftypIndex - 4;
+    if (start < 0 || start >= bytes.length) return null;
+    return start;
+  }
+
+  static int _indexOfBytes(List<int> source, List<int> pattern) {
+    if (pattern.isEmpty || source.length < pattern.length) return -1;
+    for (int i = 0; i <= source.length - pattern.length; i++) {
+      bool matched = true;
+      for (int j = 0; j < pattern.length; j++) {
+        if (source[i + j] != pattern[j]) {
+          matched = false;
+          break;
+        }
+      }
+      if (matched) return i;
+    }
+    return -1;
+  }
+
+  static int _lastIndexOfBytes(List<int> source, List<int> pattern) {
+    if (pattern.isEmpty || source.length < pattern.length) return -1;
+    for (int i = source.length - pattern.length; i >= 0; i--) {
+      bool matched = true;
+      for (int j = 0; j < pattern.length; j++) {
+        if (source[i + j] != pattern[j]) {
+          matched = false;
+          break;
+        }
+      }
+      if (matched) return i;
+    }
+    return -1;
   }
 }
 
@@ -792,6 +963,7 @@ class _RetroPhotoCell extends StatefulWidget {
 
 class _RetroPhotoCellState extends State<_RetroPhotoCell> {
   Uint8List? _thumb;
+  bool _isLivePhoto = false;
 
   @override
   void initState() {
@@ -803,6 +975,7 @@ class _RetroPhotoCellState extends State<_RetroPhotoCell> {
     } else {
       _loadThumb();
     }
+    _loadLiveFlag();
   }
 
   Future<void> _loadThumb() async {
@@ -813,6 +986,17 @@ class _RetroPhotoCellState extends State<_RetroPhotoCell> {
     if (data != null) {
       if (mounted) setState(() => _thumb = data);
     }
+  }
+
+  Future<void> _loadLiveFlag() async {
+    final cached = _LivePhotoSupport.getCachedLiveFlag(widget.asset.id);
+    if (cached) {
+      _isLivePhoto = true;
+      return;
+    }
+    final isLive = await _LivePhotoSupport.isLiveAsset(widget.asset);
+    if (!mounted || isLive == _isLivePhoto) return;
+    setState(() => _isLivePhoto = isLive);
   }
 
   @override
@@ -838,6 +1022,12 @@ class _RetroPhotoCellState extends State<_RetroPhotoCell> {
                 style: const TextStyle(color: Colors.white, fontSize: 11),
               ),
             ),
+          ),
+        if (_isLivePhoto)
+          Positioned(
+            top: 6,
+            left: 6,
+            child: _LiveBadge(compact: true),
           ),
         if (widget.isSelectionMode)
           ValueListenableBuilder<Set<String>>(
@@ -897,6 +1087,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   late int _currentIndex;
   late PageController _pageController;
   String _cameraName = '';
+  bool _currentAssetIsLivePhoto = false;
 
   S _s() => sOf(ProviderScope.containerOf(context).read(languageProvider));
 
@@ -919,6 +1110,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     if (_currentIndex < 0) _currentIndex = 0;
     _pageController = PageController(initialPage: _currentIndex);
     _parseCameraName(widget.asset);
+    _syncCurrentAssetLiveFlag();
     // 预加载当前页 + 相邻页
     _preloadPages(_currentIndex);
   }
@@ -983,6 +1175,20 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
       setState(() => _fullDataCache[asset.id] = data);
     }
   }
+
+  Future<void> _syncCurrentAssetLiveFlag() async {
+    final asset = widget.allAssets.isEmpty
+        ? widget.asset
+        : widget.allAssets[_currentIndex];
+    final isLive = await _LivePhotoSupport.isLiveAsset(asset);
+    if (!mounted || asset.id != _currentDisplayedAsset.id) return;
+    if (isLive != _currentAssetIsLivePhoto) {
+      setState(() => _currentAssetIsLivePhoto = isLive);
+    }
+  }
+
+  AssetEntity get _currentDisplayedAsset =>
+      widget.allAssets.isEmpty ? widget.asset : widget.allAssets[_currentIndex];
 
   void _evictFarPageCaches(int centerIndex) {
     final keepIds = <String>{};
@@ -1135,6 +1341,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
                     _isZoomed = false;
                   });
                   _parseCameraName(widget.allAssets[i]);
+                  _syncCurrentAssetLiveFlag();
                   _preloadPages(i);
                 },
                 itemBuilder: (ctx, i) {
@@ -1169,6 +1376,12 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
                 height: mq.padding.top,
                 child: Container(color: Colors.black),
               ),
+              if (_currentAssetIsLivePhoto)
+                Positioned(
+                  top: mq.padding.top + 14,
+                  left: 16,
+                  child: const _LiveBadge(),
+                ),
 
               // ── 底部操作栏 ──
               Positioned(
@@ -1262,6 +1475,10 @@ class _PhotoViewPageState extends State<_PhotoViewPage> {
       PhotoViewScaleStateController();
   bool _isZoomed = false;
   int _activePointers = 0;
+  bool _isLivePhoto = false;
+  bool _isPreparingLiveVideo = false;
+  bool _isPlayingLiveVideo = false;
+  VideoPlayerController? _videoCtrl;
 
   @override
   void initState() {
@@ -1273,13 +1490,110 @@ class _PhotoViewPageState extends State<_PhotoViewPage> {
       setState(() => _isZoomed = zoomed);
       widget.onScaleChanged(zoomed);
     });
+    _loadLiveFlag();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PhotoViewPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.asset.id != widget.asset.id) {
+      _stopPlayback();
+      _disposeVideoController();
+      _isLivePhoto = false;
+      _isPreparingLiveVideo = false;
+      _isPlayingLiveVideo = false;
+      _loadLiveFlag();
+    }
   }
 
   @override
   void dispose() {
+    _disposeVideoController();
     _photoCtrl.dispose();
     _scaleStateCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadLiveFlag() async {
+    final assetId = widget.asset.id;
+    final cached = _LivePhotoSupport.getCachedLiveFlag(widget.asset.id);
+    if (cached) {
+      if (mounted) setState(() => _isLivePhoto = true);
+      return;
+    }
+    final isLive = await _LivePhotoSupport.isLiveAsset(widget.asset);
+    if (!mounted || widget.asset.id != assetId) return;
+    if (isLive != _isLivePhoto) {
+      setState(() => _isLivePhoto = isLive);
+    }
+  }
+
+  Future<void> _toggleLivePlayback() async {
+    if (!_isLivePhoto) return;
+    if (_isPlayingLiveVideo) {
+      await _stopPlayback();
+      return;
+    }
+    if (_videoCtrl == null) {
+      setState(() => _isPreparingLiveVideo = true);
+      final path = await _LivePhotoSupport.resolvePlaybackPath(widget.asset);
+      if (!mounted) return;
+      if (path == null || path.isEmpty) {
+        setState(() => _isPreparingLiveVideo = false);
+        return;
+      }
+      try {
+        final controller = VideoPlayerController.file(File(path));
+        await controller.initialize();
+        await controller.setLooping(false);
+        controller.addListener(_handleVideoState);
+        if (!mounted) {
+          await controller.dispose();
+          return;
+        }
+        setState(() {
+          _videoCtrl = controller;
+          _isPreparingLiveVideo = false;
+        });
+      } catch (_) {
+        if (mounted) {
+          setState(() => _isPreparingLiveVideo = false);
+        }
+        return;
+      }
+    }
+    await _videoCtrl?.seekTo(Duration.zero);
+    await _videoCtrl?.play();
+    if (!mounted) return;
+    setState(() => _isPlayingLiveVideo = true);
+    widget.onInteractionChanged?.call(false);
+  }
+
+  Future<void> _stopPlayback() async {
+    await _videoCtrl?.pause();
+    await _videoCtrl?.seekTo(Duration.zero);
+    if (!mounted) return;
+    if (_isPlayingLiveVideo) {
+      setState(() => _isPlayingLiveVideo = false);
+    }
+  }
+
+  void _handleVideoState() {
+    final value = _videoCtrl?.value;
+    if (value == null || !mounted) return;
+    if (!value.isInitialized) return;
+    final ended = !value.isPlaying &&
+        value.duration > Duration.zero &&
+        value.position >= value.duration - const Duration(milliseconds: 60);
+    if (ended && _isPlayingLiveVideo) {
+      setState(() => _isPlayingLiveVideo = false);
+    }
+  }
+
+  void _disposeVideoController() {
+    _videoCtrl?.removeListener(_handleVideoState);
+    _videoCtrl?.dispose();
+    _videoCtrl = null;
   }
 
   @override
@@ -1318,29 +1632,157 @@ class _PhotoViewPageState extends State<_PhotoViewPage> {
                 _activePointers = 0;
                 widget.onInteractionChanged?.call(false);
               },
-              child: PhotoView(
-                imageProvider: MemoryImage(widget.data!),
-                controller: _photoCtrl,
-                scaleStateController: _scaleStateCtrl,
-                backgroundDecoration: const BoxDecoration(color: Colors.black),
-                minScale: PhotoViewComputedScale.contained,
-                initialScale: PhotoViewComputedScale.contained,
-                maxScale: PhotoViewComputedScale.contained * 5.0,
-                tightMode: true,
-                enableRotation: false,
-                basePosition: Alignment.center,
-                filterQuality: FilterQuality.medium,
-                scaleStateChangedCallback: (state) {
-                  final zoomed = state != PhotoViewScaleState.initial;
-                  if (zoomed != _isZoomed) {
-                    setState(() => _isZoomed = zoomed);
-                    widget.onScaleChanged(zoomed);
-                  }
-                },
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  PhotoView(
+                    imageProvider: MemoryImage(widget.data!),
+                    controller: _photoCtrl,
+                    scaleStateController: _scaleStateCtrl,
+                    backgroundDecoration:
+                        const BoxDecoration(color: Colors.black),
+                    minScale: PhotoViewComputedScale.contained,
+                    initialScale: PhotoViewComputedScale.contained,
+                    maxScale: PhotoViewComputedScale.contained * 5.0,
+                    tightMode: true,
+                    enableRotation: false,
+                    basePosition: Alignment.center,
+                    filterQuality: FilterQuality.medium,
+                    scaleStateChangedCallback: (state) {
+                      final zoomed = state != PhotoViewScaleState.initial;
+                      if (zoomed != _isZoomed) {
+                        setState(() => _isZoomed = zoomed);
+                        widget.onScaleChanged(zoomed);
+                      }
+                    },
+                  ),
+                  if (_videoCtrl?.value.isInitialized == true)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        ignoring: !_isPlayingLiveVideo,
+                        child: AnimatedOpacity(
+                          opacity: _isPlayingLiveVideo ? 1 : 0,
+                          duration: const Duration(milliseconds: 180),
+                          child: FittedBox(
+                            fit: BoxFit.contain,
+                            child: SizedBox(
+                              width: _videoCtrl!.value.size.width,
+                              height: _videoCtrl!.value.size.height,
+                              child: VideoPlayer(_videoCtrl!),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (_isLivePhoto && !_isZoomed && !_isPlayingLiveVideo)
+                    Positioned(
+                      right: 20,
+                      bottom: 20,
+                      child: GestureDetector(
+                        onTap:
+                            _isPreparingLiveVideo ? null : _toggleLivePlayback,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOut,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withAlpha(160),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.white.withAlpha(35),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_isPreparingLiveVideo)
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              else
+                                const Icon(
+                                  Icons.play_arrow_rounded,
+                                  color: Color(0xFFFF9F0A),
+                                  size: 18,
+                                ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _isPreparingLiveVideo ? '加载中' : '播放实况',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (_isPlayingLiveVideo)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _stopPlayback,
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
           const SizedBox(height: 90), // 底部操作栏占位
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Live Photo 标识
+// ─────────────────────────────────────────────────────────────────────────────
+class _LiveBadge extends StatelessWidget {
+  final bool compact;
+
+  const _LiveBadge({this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 6 : 10,
+        vertical: compact ? 3 : 5,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.black.withAlpha(150),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withAlpha(30)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.motion_photos_on_rounded,
+            color: const Color(0xFFFF9F0A),
+            size: compact ? 12 : 15,
+          ),
+          SizedBox(width: compact ? 3 : 5),
+          Text(
+            'LIVE',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: compact ? 10 : 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+          ),
         ],
       ),
     );
