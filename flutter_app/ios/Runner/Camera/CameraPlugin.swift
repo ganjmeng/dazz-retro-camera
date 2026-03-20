@@ -661,7 +661,13 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let imageTop = CGFloat((args["imageTop"] as? Double) ?? 0)
         let imageWidth = CGFloat((args["imageWidth"] as? Double) ?? Double(canvasW))
         let imageHeight = CGFloat((args["imageHeight"] as? Double) ?? Double(canvasH))
-        if let frameAssetPath = args["frameAssetPath"] as? String, !frameAssetPath.isEmpty {
+        let frameAssetPath = (args["frameAssetPath"] as? String) ?? ""
+        let frameAssetBytes = (args["frameAssetBytes"] as? FlutterStandardTypedData)?.data
+        var frameImageFromBytes: UIImage? = nil
+        if let bytes = frameAssetBytes, !bytes.isEmpty {
+            frameImageFromBytes = UIImage(data: bytes)
+        }
+        if !frameAssetPath.isEmpty && frameImageFromBytes == nil {
             guard let fullPath = resolveFlutterAssetPath(frameAssetPath),
                   Self.cachedFrameImage(at: fullPath) != nil else {
                 result(FlutterError(code: "FRAME_ASSET_MISSING", message: "frame asset not found: \(frameAssetPath)", details: nil))
@@ -707,9 +713,11 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
                 srcImage.draw(in: CGRect(x: imageLeft, y: imageTop, width: imageWidth, height: imageHeight))
             }
 
-            if let frameAssetPath = args["frameAssetPath"] as? String, !frameAssetPath.isEmpty {
-                if let fullPath = resolveFlutterAssetPath(frameAssetPath),
-                   let frameImage = Self.cachedFrameImage(at: fullPath) {
+            if !frameAssetPath.isEmpty {
+                if let frameImage = frameImageFromBytes {
+                    frameImage.draw(in: CGRect(x: 0, y: 0, width: canvasW, height: canvasH))
+                } else if let fullPath = resolveFlutterAssetPath(frameAssetPath),
+                          let frameImage = Self.cachedFrameImage(at: fullPath) {
                     frameImage.draw(in: CGRect(x: 0, y: 0, width: canvasW, height: canvasH))
                 }
             }

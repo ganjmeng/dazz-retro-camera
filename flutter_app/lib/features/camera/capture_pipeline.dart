@@ -357,6 +357,17 @@ class CapturePipeline {
           frameOpt != null &&
           resolvedAsset != null &&
           resolvedAsset.isNotEmpty;
+      Uint8List? nativeFrameAssetBytes;
+      if (hasPngAssetForSize &&
+          resolvedAsset != null &&
+          resolvedAsset.isNotEmpty) {
+        try {
+          nativeFrameAssetBytes = await _getFrameAssetBytes(resolvedAsset);
+        } catch (e) {
+          debugPrint(
+              '[CapturePipeline] frame asset bytes preload failed: $resolvedAsset, $e');
+        }
+      }
 
       // 最终输出画布尺寸（含 outerPadding）
       double canvasW =
@@ -486,6 +497,7 @@ class CapturePipeline {
             "frameBgColor": frameBgHexSrc,
             "frameCornerRadius": frameCornerRadiusPx,
             "frameAssetPath": resolvedAsset ?? "",
+            "frameAssetBytes": nativeFrameAssetBytes,
             "watermarkText": watermarkText,
             "watermarkColor": watermarkColorHex,
             "watermarkPosition": watermarkPosition,
@@ -514,10 +526,32 @@ class CapturePipeline {
               outputHeight: canvasH.toInt(),
             );
           }
-          // compose 未返回文件：继续走 Dart Canvas 路径，保证比例/边框/水印仍然生效。
+          if (gpuProcessed) {
+            final fallbackBytes = gpuOutputBytes ??
+                await File(nativeComposeSourcePath).readAsBytes();
+            final fallbackSize = _readJpegDimensions(fallbackBytes);
+            final fw = fallbackSize?[0] ?? 0;
+            final fh = fallbackSize?[1] ?? 0;
+            return CaptureResult(
+              bytes: fallbackBytes,
+              outputWidth: fw,
+              outputHeight: fh,
+            );
+          }
         } catch (e) {
           debugPrint('[CapturePipeline] native compose failed: $e');
-          // 原生合成失败时继续走 Dart Canvas 路径，避免“选了边框但成片没有”。
+          if (gpuProcessed) {
+            final fallbackBytes = gpuOutputBytes ??
+                await File(nativeComposeSourcePath).readAsBytes();
+            final fallbackSize = _readJpegDimensions(fallbackBytes);
+            final fw = fallbackSize?[0] ?? 0;
+            final fh = fallbackSize?[1] ?? 0;
+            return CaptureResult(
+              bytes: fallbackBytes,
+              outputWidth: fw,
+              outputHeight: fh,
+            );
+          }
         }
       }
 

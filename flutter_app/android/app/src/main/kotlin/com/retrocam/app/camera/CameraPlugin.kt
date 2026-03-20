@@ -1502,14 +1502,21 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
                 val frameAssetPath = call.argument<String>("frameAssetPath") ?: ""
                 if (frameAssetPath.isNotEmpty()) {
-                    val frameBitmap = getOrLoadFrameBitmap(frameAssetPath)
-                        ?: throw IllegalStateException("frame asset not found: $frameAssetPath")
+                    val frameAssetBytes = call.argument<ByteArray>("frameAssetBytes")
+                    val frameBitmap = if (frameAssetBytes != null && frameAssetBytes.isNotEmpty()) {
+                        BitmapFactory.decodeByteArray(frameAssetBytes, 0, frameAssetBytes.size)
+                    } else {
+                        getOrLoadFrameBitmap(frameAssetPath)
+                    } ?: throw IllegalStateException("frame asset not found: $frameAssetPath")
                     canvas.drawBitmap(
                         frameBitmap,
                         null,
                         Rect(0, 0, canvasW, canvasH),
                         Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
                     )
+                    if (frameAssetBytes != null && frameAssetBytes.isNotEmpty() && !frameBitmap.isRecycled) {
+                        frameBitmap.recycle()
+                    }
                 }
 
                 val watermarkText = call.argument<String>("watermarkText") ?: ""
