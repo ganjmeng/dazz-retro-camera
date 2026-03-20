@@ -105,6 +105,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private var cachedRenderParams: Map<String, Any> = emptyMap()
     private var cachedRenderVersion: Int = 0
     private var currentSharpenLevel: Float = 0.5f
+    private var currentPreviewResolution: String = "720p"
     private var currentCameraId: String = ""
     @Volatile private var pendingShotStartNs: Long = 0L
     @Volatile private var pendingShotLevel: Float = 0.5f
@@ -231,6 +232,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
     private fun handleInitCamera(call: MethodCall, result: MethodChannel.Result) {
         val lensArg = call.argument<String>("lens") ?: "back"
+        currentPreviewResolution = call.argument<String>("resolution") ?: "720p"
         lensFacing = if (lensArg == "front") CameraSelector.LENS_FACING_FRONT
                      else CameraSelector.LENS_FACING_BACK
         currentLensPosition = lensFacing
@@ -349,7 +351,31 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val latch = CountDownLatch(1)
         rendererReadyLatch = latch
 
-        preview = Preview.Builder().build().also { prev ->
+        val previewBuilder = Preview.Builder()
+        val targetPreviewSize = when (currentPreviewResolution) {
+            "1080p" -> Size(1920, 1080)
+            else -> Size(1280, 720)
+        }
+        previewBuilder.setResolutionSelector(
+            ResolutionSelector.Builder()
+                .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
+                .setResolutionFilter { supportedSizes, _ ->
+                    supportedSizes.sortedWith(
+                        compareBy<Size> {
+                            val area = it.width.toLong() * it.height.toLong()
+                            val targetArea =
+                                targetPreviewSize.width.toLong() * targetPreviewSize.height.toLong()
+                            kotlin.math.abs(area - targetArea)
+                        }.thenBy {
+                            kotlin.math.abs(it.width - targetPreviewSize.width) +
+                                kotlin.math.abs(it.height - targetPreviewSize.height)
+                        }
+                    )
+                }
+                .build()
+        )
+
+        preview = previewBuilder.build().also { prev ->
             // GL 渲染模式：相机帧 → CameraGLRenderer（EGL + 着色器）→ Flutter SurfaceTexture
             prev.setSurfaceProvider(cameraExecutor) { request ->
                 val w = request.resolution.width

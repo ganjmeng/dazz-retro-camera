@@ -162,6 +162,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   ProviderSubscription<CameraState>? _cameraServiceSubscription;
   Timer? _nativeReadyReplayTimer;
   String _lastNativeReplaySignal = '';
+  DateTime? _lastLivePhotoCapturedAt;
 
   // Options 弹框控制器
   late AnimationController _optionsAnim;
@@ -458,8 +459,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _transitionTimer?.cancel();
     setState(() => _showTransition = true);
     await Future.delayed(_kPagePauseTransitionLead);
+    final recentLiveCapture = _lastLivePhotoCapturedAt != null &&
+        DateTime.now().difference(_lastLivePhotoCapturedAt!) <
+            const Duration(seconds: 2);
+    final shouldPausePreview = !recentLiveCapture;
     // 2. 暂停原生相机预览（释放 GPU/CPU 资源）
-    await ref.read(cameraServiceProvider.notifier).stopPreview();
+    if (shouldPausePreview) {
+      await ref.read(cameraServiceProvider.notifier).stopPreview();
+    }
     // 3. push 到二级页面，await 等待返回
     if (!mounted) return;
     await Navigator.of(context).push(
@@ -467,6 +474,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     );
     // 4. 返回后统一重建并同步完整相机链路
     if (!mounted) return;
+    if (!shouldPausePreview) {
+      _transitionTimer = Timer(_kPageResumeTransitionTail, () {
+        if (mounted) setState(() => _showTransition = false);
+      });
+      return;
+    }
     await Future.delayed(_kPageResumeReinitLead);
     if (!mounted) return;
     await _reinitAndSyncCameraPipeline();
@@ -1217,6 +1230,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _loadLatestThumbWithRetry();
       }
       if (result.isLivePhoto) {
+        _lastLivePhotoCapturedAt = DateTime.now();
         _showViewfinderTopHint(_s().livePhotoEffect);
       }
     }

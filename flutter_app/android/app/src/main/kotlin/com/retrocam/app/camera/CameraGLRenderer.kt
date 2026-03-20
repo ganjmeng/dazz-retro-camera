@@ -1133,11 +1133,6 @@ void main() {
         GLES30.glDisableVertexAttribArray(copyAPositionLoc)
         GLES30.glDisableVertexAttribArray(copyATexCoordLoc)
 
-        // ── 同步屏障：确保 Pass 1 的 FBO 写入完全完成 ──────────────────────
-        // 在 tile-based GPU（Mali/Adreno）上，如果不显式同步，
-        // Pass 2 可能读到 FBO 中部分更新的数据，导致上下运动的斜条纹。
-        GLES30.glFinish()
-
         // ════════════════════════════════════════════════════════════════════
         // Pass 2: 效果处理（从稳定的 2D 纹理采样）
         // ════════════════════════════════════════════════════════════════════

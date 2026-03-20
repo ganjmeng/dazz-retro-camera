@@ -1173,6 +1173,8 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   bool _isPreparingLiveVideo = false;
   bool _isPlayingLiveVideo = false;
   bool _isHoldingLivePlayback = false;
+  Timer? _livePressTimer;
+  Offset? _livePressDownPosition;
   VideoPlayerController? _videoCtrl;
   final Map<String, ImageProvider<Object>> _detailImageProviderCache =
       <String, ImageProvider<Object>>{};
@@ -1202,6 +1204,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
 
   @override
   void dispose() {
+    _livePressTimer?.cancel();
     _disposeVideoController();
     _pageController.dispose();
     _detailImageProviderCache.clear();
@@ -1321,26 +1324,21 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     }
   }
 
-  Future<void> _startLivePlaybackHold() async {
-    if (!_currentAssetIsLivePhoto) return;
-    _isHoldingLivePlayback = true;
-    final asset = _safeCurrentAsset;
+  Future<bool> _ensureLiveVideoReady(AssetEntity asset) async {
     if (_videoCtrl == null) {
       if (mounted) {
         setState(() => _isPreparingLiveVideo = true);
       }
       final path = await _LivePhotoSupport.resolvePlaybackPath(asset);
-      if (!mounted ||
-          asset.id != _safeCurrentAsset.id ||
-          !_isHoldingLivePlayback) {
+      if (!mounted || asset.id != _safeCurrentAsset.id) {
         if (mounted && _isPreparingLiveVideo) {
           setState(() => _isPreparingLiveVideo = false);
         }
-        return;
+        return false;
       }
       if (path == null || path.isEmpty) {
         setState(() => _isPreparingLiveVideo = false);
-        return;
+        return false;
       }
       try {
         final controller = VideoPlayerController.file(File(path));
@@ -1349,7 +1347,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
         controller.addListener(_handleVideoState);
         if (!mounted) {
           await controller.dispose();
-          return;
+          return false;
         }
         setState(() {
           _videoCtrl = controller;
@@ -1359,10 +1357,31 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
         if (mounted) {
           setState(() => _isPreparingLiveVideo = false);
         }
-        return;
+        return false;
       }
     }
+    return _videoCtrl != null;
+  }
+
+  Future<void> _startLivePlaybackHold() async {
+    if (!_currentAssetIsLivePhoto) return;
+    _isHoldingLivePlayback = true;
+    final asset = _safeCurrentAsset;
+    final ready = await _ensureLiveVideoReady(asset);
+    if (!ready) return;
     if (!_isHoldingLivePlayback) return;
+    await _videoCtrl?.seekTo(Duration.zero);
+    await _videoCtrl?.play();
+    if (!mounted) return;
+    setState(() => _isPlayingLiveVideo = true);
+  }
+
+  Future<void> _playLiveOnce() async {
+    if (!_currentAssetIsLivePhoto) return;
+    _isHoldingLivePlayback = false;
+    final asset = _safeCurrentAsset;
+    final ready = await _ensureLiveVideoReady(asset);
+    if (!ready) return;
     await _videoCtrl?.seekTo(Duration.zero);
     await _videoCtrl?.play();
     if (!mounted) return;
@@ -1371,6 +1390,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
 
   Future<void> _stopLivePlaybackHold() async {
     _isHoldingLivePlayback = false;
+    _livePressTimer?.cancel();
     await _stopPlayback();
   }
 
@@ -1398,12 +1418,43 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   }
 
   void _disposeVideoController() {
+    _livePressTimer?.cancel();
     _videoCtrl?.removeListener(_handleVideoState);
     _videoCtrl?.dispose();
     _videoCtrl = null;
     _isHoldingLivePlayback = false;
     _isPreparingLiveVideo = false;
     _isPlayingLiveVideo = false;
+  }
+
+  void _handleLivePointerDown(PointerDownEvent event) {
+    if (!_currentAssetIsLivePhoto || _isZoomed || _isPreparingLiveVideo) return;
+    _livePressDownPosition = event.position;
+    _livePressTimer?.cancel();
+    _livePressTimer = Timer(const Duration(milliseconds: 260), () {
+      unawaited(_startLivePlaybackHold());
+    });
+  }
+
+  void _handleLivePointerMove(PointerMoveEvent event) {
+    final start = _livePressDownPosition;
+    if (start == null) return;
+    final dx = (event.position.dx - start.dx).abs();
+    final dy = (event.position.dy - start.dy).abs();
+    if (dx > 12 || dy > 12) {
+      _livePressTimer?.cancel();
+      _livePressDownPosition = null;
+    }
+  }
+
+  void _handleLivePointerUp(PointerEvent event) {
+    _livePressTimer?.cancel();
+    _livePressDownPosition = null;
+    if (_isHoldingLivePlayback ||
+        _isPreparingLiveVideo ||
+        _isPlayingLiveVideo) {
+      unawaited(_stopLivePlaybackHold());
+    }
   }
 
   @override
@@ -1426,18 +1477,12 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
         onDismissed: () => Navigator.of(context).pop(),
         child: Stack(
           children: [
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onLongPressStart:
-                  _currentAssetIsLivePhoto && !_isPreparingLiveVideo
-                      ? (_) => unawaited(_startLivePlaybackHold())
-                      : null,
-              onLongPressEnd: _currentAssetIsLivePhoto
-                  ? (_) => unawaited(_stopLivePlaybackHold())
-                  : null,
-              onLongPressCancel: _currentAssetIsLivePhoto
-                  ? () => unawaited(_stopLivePlaybackHold())
-                  : null,
+            Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: _handleLivePointerDown,
+              onPointerMove: _handleLivePointerMove,
+              onPointerUp: _handleLivePointerUp,
+              onPointerCancel: _handleLivePointerUp,
               child: PhotoViewGallery.builder(
                 pageController: _pageController,
                 itemCount: galleryAssets.length,
@@ -1520,48 +1565,64 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
               Positioned(
                 right: 20,
                 bottom: mq.padding.bottom + 110,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOut,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withAlpha(160),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: Colors.white.withAlpha(35),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _isPreparingLiveVideo
+                      ? null
+                      : () {
+                          if (_isPlayingLiveVideo) {
+                            unawaited(_stopPlayback());
+                          } else {
+                            unawaited(_playLiveOnce());
+                          }
+                        },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
                     ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_isPreparingLiveVideo)
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      else
-                        const Icon(
-                          Icons.play_arrow_rounded,
-                          color: Color(0xFFFF9F0A),
-                          size: 18,
-                        ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _isPreparingLiveVideo ? '加载中' : '播放实况',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withAlpha(160),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: Colors.white.withAlpha(35),
                       ),
-                    ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isPreparingLiveVideo)
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        else
+                          Icon(
+                            _isPlayingLiveVideo
+                                ? Icons.stop_rounded
+                                : Icons.play_arrow_rounded,
+                            color: const Color(0xFFFF9F0A),
+                            size: 18,
+                          ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _isPreparingLiveVideo
+                              ? '加载中'
+                              : (_isPlayingLiveVideo ? '停止实况' : '播放实况'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -9,6 +9,7 @@ import '../../core/l10n.dart';
 import '../camera/camera_notifier.dart';
 import '../../services/camera_service.dart';
 import '../camera/render_style_mode.dart';
+import '../camera/preview_performance_mode.dart';
 import '../../services/retain_settings_service.dart';
 
 // ─── 设置状态 Provider ────────────────────────────────────────────────────────
@@ -260,6 +261,21 @@ class SettingsScreen extends ConsumerWidget {
                             onChanged: (mode) {
                               if (mode != null) {
                                 camNotifier.setRenderStyleMode(mode);
+                              }
+                            },
+                          ),
+                        ),
+                        _SettingsDivider(),
+                        _SettingsRow(
+                          title: s.previewMode,
+                          subtitle: s.previewModeHint,
+                          trailing: _PreviewModeSegment(
+                            value: camState.previewPerformanceMode,
+                            lightweightLabel: s.previewModeLightweightShort,
+                            performanceLabel: s.previewModePerformanceShort,
+                            onChanged: (mode) {
+                              if (mode != null) {
+                                camNotifier.setPreviewPerformanceMode(mode);
                               }
                             },
                           ),
@@ -561,6 +577,7 @@ class _SettingsDivider extends StatelessWidget {
 // ─── 单行设置项 ───────────────────────────────────────────────────────────────
 class _SettingsRow extends StatelessWidget {
   final String title;
+  final String? subtitle;
   final bool titleBold;
   final Widget? trailing;
   final String? trailingLabel;
@@ -568,6 +585,7 @@ class _SettingsRow extends StatelessWidget {
 
   const _SettingsRow({
     required this.title,
+    this.subtitle,
     this.titleBold = false,
     this.trailing,
     this.trailingLabel,
@@ -582,15 +600,35 @@ class _SettingsRow extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
+          crossAxisAlignment: subtitle != null
+              ? CrossAxisAlignment.start
+              : CrossAxisAlignment.center,
           children: [
             Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  color: _kWhite,
-                  fontSize: 16,
-                  fontWeight: titleBold ? FontWeight.w700 : FontWeight.w400,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: _kWhite,
+                      fontSize: 16,
+                      fontWeight: titleBold ? FontWeight.w700 : FontWeight.w400,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle!,
+                      style: const TextStyle(
+                        color: _kGray,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             if (trailingLabel != null) ...[
@@ -658,6 +696,46 @@ class _RenderModeSegment extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: Text(
             smartLabel,
+            style: const TextStyle(color: _kWhite, fontSize: 12),
+          ),
+        ),
+      },
+    );
+  }
+}
+
+class _PreviewModeSegment extends StatelessWidget {
+  final PreviewPerformanceMode value;
+  final String lightweightLabel;
+  final String performanceLabel;
+  final ValueChanged<PreviewPerformanceMode?> onChanged;
+
+  const _PreviewModeSegment({
+    required this.value,
+    required this.lightweightLabel,
+    required this.performanceLabel,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoSlidingSegmentedControl<PreviewPerformanceMode>(
+      backgroundColor: const Color(0xFF2C2C2E),
+      thumbColor: _kRed,
+      groupValue: value,
+      onValueChanged: onChanged,
+      children: {
+        PreviewPerformanceMode.lightweight: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            lightweightLabel,
+            style: const TextStyle(color: _kWhite, fontSize: 12),
+          ),
+        ),
+        PreviewPerformanceMode.performance: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            performanceLabel,
             style: const TextStyle(color: _kWhite, fontSize: 12),
           ),
         ),

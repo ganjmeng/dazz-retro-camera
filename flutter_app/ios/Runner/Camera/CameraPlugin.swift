@@ -136,7 +136,10 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     private func handleInitCamera(call: FlutterMethodCall, result: @escaping FlutterResult) {
         let args = call.arguments as? [String: Any]
         let lensStr = args?["lens"] as? String ?? "back"
+        let resolutionStr = args?["resolution"] as? String ?? "720p"
         let lens: AVCaptureDevice.Position = (lensStr == "front") ? .front : .back
+        let previewPreset: AVCaptureSession.Preset =
+            (resolutionStr == "1080p") ? .hd1920x1080 : .hd1280x720
 
         // 释放旧资源
         cameraManager?.stopSession()
@@ -160,7 +163,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
 
         // 设置帧回调并启动相机会话
         cameraManager?.sampleBufferDelegate = renderer!
-        cameraManager?.configure(lens: lens)
+        cameraManager?.configure(lens: lens, resolution: previewPreset)
         cameraManager?.startSession()
         reapplyRuntimeStateToRenderer()
         startRuntimeStatsTimer()

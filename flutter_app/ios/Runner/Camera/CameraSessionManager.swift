@@ -33,7 +33,11 @@ class CameraSessionManager: NSObject {
             guard let self = self else { return }
 
             self.session.beginConfiguration()
-            self.session.sessionPreset = resolution
+            if self.session.canSetSessionPreset(resolution) {
+                self.session.sessionPreset = resolution
+            } else {
+                self.session.sessionPreset = .photo
+            }
 
             // 配置视频输入
             if let device = self.captureDevice(for: lens),
