@@ -13,7 +13,7 @@ import com.retrocam.app.R
 
 data class WidgetCamera(val id: String, val label: String)
 
-private val kWidgetCameraOrder = listOf(
+val kWidgetCameraOrder = listOf(
     WidgetCamera("fxn_r", "FXN R"),
     WidgetCamera("cpm35", "CPM35"),
     WidgetCamera("inst_sqc", "INST SQC"),
