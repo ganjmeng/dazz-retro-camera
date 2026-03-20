@@ -1077,53 +1077,68 @@ class PreviewFilterWidget extends StatelessWidget {
   /// 目标比例（用户选择，如 1:1/3:4/9:16）——只用于取景框容器大小计算
   final double aspectRatio;
 
-  /// 相机传感器实际输出比例（固定为 3/4）——用于 cover 缩放计算
-  static const double _kSensorAspect = 3.0 / 4.0; // CameraX 默认输出 4:3
+  /// 相机预览源实际比例（短边/长边，竖屏口径）——用于 cover 缩放计算
+  final double sourceAspectRatio;
 
   const PreviewFilterWidget({
     super.key,
     required this.textureId,
     required this.params,
     this.aspectRatio = 3 / 4,
+    this.sourceAspectRatio = 3 / 4,
   });
 
   @override
   Widget build(BuildContext context) {
-    // 普通镜头使用 cover，保证取景填满容器。
-    // 鱼眼镜头需要保留完整圆域，使用 contain，避免圆形边界被裁出取景框。
+    // 后置保持满幅 cover，前置优先保持原始几何比例，避免人物被横向/纵向拉伸。
     return LayoutBuilder(
       builder: (context, constraints) {
         final containerW = constraints.maxWidth;
         final containerH = constraints.maxHeight;
-        const sensorAspect = _kSensorAspect;
+        final sensorAspect =
+            sourceAspectRatio > 0.01 ? sourceAspectRatio : 3 / 4;
         final containerAspect = containerW / containerH;
-        double overflowW, overflowH;
-        // 鱼眼预览也使用 cover。
-        // 之前为了保留完整圆域改成了 contain，结果圆面会明显缩小，
-        // 视觉上更像“小窗”而不是贴近取景框的鱼眼镜头。
-        if (containerAspect >= sensorAspect) {
-          overflowW = containerW;
-          overflowH = containerW / sensorAspect;
+        final keepSourceAspect = params.isFrontCamera;
+        double contentW, contentH;
+
+        if (keepSourceAspect) {
+          if (containerAspect >= sensorAspect) {
+            contentH = containerH;
+            contentW = containerH * sensorAspect;
+          } else {
+            contentW = containerW;
+            contentH = containerW / sensorAspect;
+          }
+        } else if (containerAspect >= sensorAspect) {
+          contentW = containerW;
+          contentH = containerW / sensorAspect;
         } else {
-          overflowH = containerH;
-          overflowW = containerH * sensorAspect;
+          contentH = containerH;
+          contentW = containerH * sensorAspect;
         }
+
         return ColoredBox(
           color: Colors.black,
           child: Center(
-            child: ClipRect(
-              child: OverflowBox(
-                maxWidth: overflowW,
-                maxHeight: overflowH,
-                child: SizedBox(
-                  width: overflowW,
-                  height: overflowH,
-                  // Phase 2 重构：所有渲染特效已下沉到 Native GPU Shader
-                  // Flutter 层仅显示纯 Texture，不再做像素级渲染
-                  child: Texture(textureId: textureId),
-                ),
-              ),
-            ),
+            child: keepSourceAspect
+                ? SizedBox(
+                    width: contentW,
+                    height: contentH,
+                    child: Texture(textureId: textureId),
+                  )
+                : ClipRect(
+                    child: OverflowBox(
+                      maxWidth: contentW,
+                      maxHeight: contentH,
+                      child: SizedBox(
+                        width: contentW,
+                        height: contentH,
+                        // Phase 2 重构：所有渲染特效已下沉到 Native GPU Shader
+                        // Flutter 层仅显示纯 Texture，不再做像素级渲染
+                        child: Texture(textureId: textureId),
+                      ),
+                    ),
+                  ),
           ),
         );
       },

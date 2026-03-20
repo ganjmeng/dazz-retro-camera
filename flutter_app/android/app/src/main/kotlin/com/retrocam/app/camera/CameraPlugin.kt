@@ -93,6 +93,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     @Volatile private var pendingStopPreview: Boolean = false
     private var supportsLivePhoto: Boolean = false
     private var lensFacing: Int = CameraSelector.LENS_FACING_BACK
+    private var previewStreamWidth: Int = 0
+    private var previewStreamHeight: Int = 0
 
     // Flutter texture
     private var textureEntry: TextureRegistry.SurfaceTextureEntry? = null
@@ -382,6 +384,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             prev.setSurfaceProvider(cameraExecutor) { request ->
                 val w = request.resolution.width
                 val h = request.resolution.height
+                previewStreamWidth = w
+                previewStreamHeight = h
 
                 // 在 cameraExecutor 上初始化 GL（initialize 内部用 glExecutor 异步完成，
                 // 并通过 CountDownLatch 同步等待，cameraExecutor 上阻塞是安全的）
@@ -492,6 +496,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 "sensorMp" to String.format("%.1f", sensorW * sensorH / 1_000_000.0),
                 "focalLengths" to focalStr,
                 "facing" to facingStr,
+                "previewWidth" to previewStreamWidth,
+                "previewHeight" to previewStreamHeight,
+                "previewAspectRatio" to (
+                    if (previewStreamWidth > 0 && previewStreamHeight > 0) {
+                        minOf(previewStreamWidth, previewStreamHeight).toFloat() /
+                            maxOf(previewStreamWidth, previewStreamHeight).toFloat()
+                    } else {
+                        0.75f
+                    }
+                ),
                 "brand" to Build.BRAND,
                 "model" to Build.MODEL,
                 "manufacturer" to Build.MANUFACTURER,

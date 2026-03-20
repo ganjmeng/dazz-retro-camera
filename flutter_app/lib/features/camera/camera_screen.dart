@@ -2109,6 +2109,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         textureId: camSvc.textureId!,
         params: params,
         aspectRatio: st.previewAspectRatio,
+        sourceAspectRatio: camSvc.previewSourceAspectRatio,
       );
     }
     // 未初始化时显示占位提示

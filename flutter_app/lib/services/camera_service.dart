@@ -26,6 +26,30 @@ class CameraState {
   final Map<String, dynamic> activeCameraDebugInfo;
   final bool supportsLivePhoto;
 
+  double get previewSourceAspectRatio {
+    final rawAspect = activeCameraDebugInfo['previewAspectRatio'];
+    final parsedAspect = rawAspect is num
+        ? rawAspect.toDouble()
+        : double.tryParse(rawAspect?.toString() ?? '');
+    if (parsedAspect != null && parsedAspect > 0.01) {
+      return parsedAspect;
+    }
+    final rawWidth = activeCameraDebugInfo['previewWidth'];
+    final rawHeight = activeCameraDebugInfo['previewHeight'];
+    final width = rawWidth is num
+        ? rawWidth.toDouble()
+        : double.tryParse(rawWidth?.toString() ?? '');
+    final height = rawHeight is num
+        ? rawHeight.toDouble()
+        : double.tryParse(rawHeight?.toString() ?? '');
+    if (width != null && height != null && width > 0 && height > 0) {
+      final shortEdge = width < height ? width : height;
+      final longEdge = width > height ? width : height;
+      return shortEdge / longEdge;
+    }
+    return 3 / 4;
+  }
+
   const CameraState({
     this.isReady = false,
     this.isLoading = false,
