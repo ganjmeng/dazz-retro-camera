@@ -368,10 +368,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _handleLifecyclePause() async {
     if (!mounted) return;
-    // App 进入后台：保存快照并停预览，避免后台持有相机资源
+    // App 进入后台：直接销毁原生相机与 renderer，避免旧 texture / 旧 shader 状态残留。
     _lastNativeReplaySignal = '';
+    _nativeReadyReplayTimer?.cancel();
     ref.read(cameraAppProvider.notifier).saveCurrentSnapshot();
-    await ref.read(cameraServiceProvider.notifier).stopPreview();
+    await ref.read(cameraServiceProvider.notifier).disposeCamera();
   }
 
   Future<void> _handleLifecycleResume() async {
@@ -402,7 +403,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<void> _reinitAndSyncCameraPipeline() async {
     if (!mounted) return;
     _lastNativeReplaySignal = '';
+    _nativeReadyReplayTimer?.cancel();
     final svc = ref.read(cameraServiceProvider.notifier);
+    // 强制完整重建：先释放旧 texture / renderer，再初始化新相机实例。
+    await svc.disposeCamera();
     await svc.initCamera();
     if (!mounted) return;
     await _syncPipelineAfterCameraInit();
@@ -419,8 +423,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _transitionTimer?.cancel();
     setState(() => _showTransition = true);
     await Future.delayed(_kPagePauseTransitionLead);
-    // 2. 暂停原生相机预览（释放 GPU/CPU 资源）
-    await ref.read(cameraServiceProvider.notifier).stopPreview();
+    // 2. 直接销毁原生相机，返回时再完整重建，避免页面往返后预览特效丢失。
+    await ref.read(cameraServiceProvider.notifier).disposeCamera();
     // 3. push 到二级页面，await 等待返回
     if (!mounted) return;
     await Navigator.of(context).push(

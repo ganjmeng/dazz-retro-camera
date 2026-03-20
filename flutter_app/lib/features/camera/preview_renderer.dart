@@ -934,7 +934,6 @@ class PreviewRenderParams {
         'distortion': effectiveDistortion,
         'fisheyeMode': effectiveFisheyeMode ? 1.0 : 0.0,
         'softFocus': effectiveSoftFocus,
-        'distortion': effectiveDistortion,
         'grainSize': effectiveGrainSize,
         'luminanceNoise': defaultLook.luminanceNoise.clamp(0.0, 0.5),
         'chromaNoise': defaultLook.chromaNoise.clamp(0.0, 0.5),
