@@ -122,6 +122,7 @@ class CapturePipeline {
     bool fisheyeMode = false, // 鱼眼圆圈模式：在成片四角绘制默色阒罩
   }) async {
     try {
+      final isLandscapeCapture = deviceQuarter == 1 || deviceQuarter == 3;
       // ── 1. 先尝试 GPU 快速路径（无相框/水印时完全跳过 Dart 解码）─────────────
       bool gpuProcessed = false;
       bool decodedWithScale = false;
@@ -376,10 +377,14 @@ class CapturePipeline {
           frameOpt = null;
         }
       }
+      final landscapeFrameOpt = isLandscapeCapture ? frameOpt : null;
+      final synthesizeLandscapeFrame = landscapeFrameOpt != null;
 
       // ── 3b. 外层背景间距计算 ────────────────────────────────────────────────────
       double outerPadPx = 0;
-      if (frameOpt != null && frameOpt.outerPadding > 0) {
+      if (frameOpt != null &&
+          frameOpt.outerPadding > 0 &&
+          !synthesizeLandscapeFrame) {
         final refSize = math.min(outW, outH);
         final scale = refSize / 1080.0;
         outerPadPx = frameOpt.outerPadding * scale;
@@ -394,6 +399,7 @@ class CapturePipeline {
           selectedFrameId != 'frame_none' &&
           selectedFrameId != 'none' &&
           frameOpt != null &&
+          !synthesizeLandscapeFrame &&
           resolvedAsset != null &&
           resolvedAsset.isNotEmpty;
       Uint8List? nativeFrameAssetBytes;
@@ -516,6 +522,7 @@ class CapturePipeline {
         gpuProcessed: gpuProcessed,
       );
       if ((gpuProcessed || hasNativeOverlayNeed) &&
+          !synthesizeLandscapeFrame &&
           nativeComposeSourcePath != null &&
           (Platform.isAndroid || Platform.isIOS)) {
         try {
@@ -643,7 +650,9 @@ class CapturePipeline {
       }
 
       // ── 4b. 填充相框背景色（无 PNG 边框时）────────────────────────────────────────
-      if (frameOpt != null && !hasPngAssetForSize) {
+      if (frameOpt != null &&
+          !hasPngAssetForSize &&
+          !synthesizeLandscapeFrame) {
         Color bgColor = const Color(0xFFF5F2EA);
         try {
           if (frameBgHexSrc.toLowerCase() == 'transparent') {
@@ -778,14 +787,16 @@ class CapturePipeline {
       }
 
       // ── 4c2. 内嵌阴影（拟物相纸厚度感）──────────────────────────────────────
-      if (frameOpt != null && frameOpt.innerShadow) {
+      if (frameOpt != null &&
+          frameOpt.innerShadow &&
+          !synthesizeLandscapeFrame) {
         _drawInnerShadow(
             canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
       }
 
       // ── 4d. 漏光效果 ──────────────────────────────────────────────────────────
       final lightLeakStrength = frameOpt?.lightLeak ?? 0.0;
-      if (lightLeakStrength > 0.01) {
+      if (lightLeakStrength > 0.01 && !synthesizeLandscapeFrame) {
         _drawLightLeak(canvas, frameOffsetX + leftPx, frameOffsetY + topPx,
             outW, outH, lightLeakStrength);
       }
@@ -835,6 +846,7 @@ class CapturePipeline {
       // ── 4f. 相框纹理 PNG 叠加 ──────────────────────────────────────────────────
       if (frameOpt != null &&
           resolvedAsset != null &&
+          !synthesizeLandscapeFrame &&
           resolvedAsset.isNotEmpty) {
         try {
           final frameImg = await _getFrameTexture(
@@ -857,7 +869,9 @@ class CapturePipeline {
       }
 
       // ── 4g. 水印 ──────────────────────────────────────────────────────────────
-      if (selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none') {
+      if (selectedWatermarkId.isNotEmpty &&
+          selectedWatermarkId != 'none' &&
+          !synthesizeLandscapeFrame) {
         _drawWatermark(
           canvas,
           frameOffsetX + leftPx,
@@ -911,6 +925,22 @@ class CapturePipeline {
         finalImage = await rotPicture.toImage(rotW.toInt(), rotH.toInt());
         debugPrint(
             '[CapturePipeline] rotated: quarter=$effectiveQuarter, ${rotW.toInt()}x${rotH.toInt()}');
+      }
+
+      if (synthesizeLandscapeFrame) {
+        final wrapped = await _wrapLandscapeFrame(
+          image: finalImage,
+          frame: landscapeFrameOpt,
+          ratioId: selectedRatioId,
+          frameBackgroundColor: frameBackgroundColor,
+          selectedWatermarkId: selectedWatermarkId,
+          watermarkColorOverride: watermarkColorOverride,
+          watermarkPositionOverride: watermarkPositionOverride,
+          watermarkSizeOverride: watermarkSizeOverride,
+          watermarkDirectionOverride: watermarkDirectionOverride,
+          watermarkStyleOverride: watermarkStyleOverride,
+        );
+        finalImage = wrapped;
       }
 
       // ── 5b-2. 应用 GL Shader 中缺失的效果 (已移动到 Canvas 绘制前) ────────────
@@ -1067,6 +1097,123 @@ class CapturePipeline {
       quality: jpegQuality,
     );
     return (bytes: jpegBytes, width: rotW.toInt(), height: rotH.toInt());
+  }
+
+  Future<ui.Image> _wrapLandscapeFrame({
+    required ui.Image image,
+    required FrameDefinition frame,
+    required String ratioId,
+    String? frameBackgroundColor,
+    required String selectedWatermarkId,
+    String? watermarkColorOverride,
+    String? watermarkPositionOverride,
+    String? watermarkSizeOverride,
+    String? watermarkDirectionOverride,
+    String? watermarkStyleOverride,
+  }) async {
+    final imageW = image.width.toDouble();
+    final imageH = image.height.toDouble();
+    final inset = frame.insetForRatio(ratioId);
+    final scale = math.min(imageW, imageH) / 1080.0;
+
+    // 横屏相框不再复用竖版 PNG 模板，而是把竖版模板的“上下厚度”
+    // 均分到横版左右两侧，得到更自然的横版拍立得边框。
+    final horizontalPad =
+        ((inset.top + inset.bottom) / 2.0 * scale).clamp(0.0, imageW);
+    final verticalPad =
+        ((inset.left + inset.right) / 2.0 * scale).clamp(0.0, imageH);
+    final canvasW = imageW + horizontalPad * 2;
+    final canvasH = imageH + verticalPad * 2;
+    final frameBgHex =
+        (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
+            ? frameBackgroundColor
+            : frame.backgroundColor;
+    final canvasBgHex =
+        (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
+            ? frameBackgroundColor
+            : frame.outerBackgroundColor;
+    final cornerRadius =
+        frame.cornerRadius * (math.min(imageW, imageH) / 1080.0);
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, canvasW, canvasH));
+
+    Color canvasBg = Colors.white;
+    try {
+      final hex = canvasBgHex.replaceAll('#', '');
+      canvasBg = Color(int.parse('FF$hex', radix: 16));
+    } catch (_) {}
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, canvasW, canvasH),
+      Paint()..color = canvasBg,
+    );
+
+    Color frameBg = const Color(0xFFF5F2EA);
+    try {
+      if (frameBgHex.toLowerCase() == 'transparent' ||
+          frameBgHex.toLowerCase() == '#00000000') {
+        frameBg = Colors.transparent;
+      } else {
+        final hex = frameBgHex.replaceAll('#', '');
+        frameBg = Color(int.parse('FF$hex', radix: 16));
+      }
+    } catch (_) {}
+
+    if (frameBg != Colors.transparent) {
+      final frameRect = Rect.fromLTWH(0, 0, canvasW, canvasH);
+      if (cornerRadius > 0) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(frameRect, Radius.circular(cornerRadius)),
+          Paint()..color = frameBg,
+        );
+      } else {
+        canvas.drawRect(frameRect, Paint()..color = frameBg);
+      }
+    }
+
+    final imageRect = Rect.fromLTWH(horizontalPad, verticalPad, imageW, imageH);
+    canvas.drawImage(image, Offset(horizontalPad, verticalPad), Paint());
+
+    if (frame.innerShadow) {
+      _drawInnerShadow(
+        canvas,
+        imageRect.left,
+        imageRect.top,
+        imageRect.width,
+        imageRect.height,
+      );
+    }
+
+    if (frame.lightLeak > 0.01) {
+      _drawLightLeak(
+        canvas,
+        imageRect.left,
+        imageRect.top,
+        imageRect.width,
+        imageRect.height,
+        frame.lightLeak,
+      );
+    }
+
+    if (selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none') {
+      _drawWatermark(
+        canvas,
+        imageRect.left,
+        imageRect.top,
+        imageRect.width,
+        imageRect.height,
+        selectedWatermarkId,
+        colorOverride: watermarkColorOverride,
+        positionOverride: watermarkPositionOverride,
+        sizeOverride: watermarkSizeOverride,
+        directionOverride: watermarkDirectionOverride,
+        styleOverride: watermarkStyleOverride,
+        hasFrame: true,
+      );
+    }
+
+    final picture = recorder.endRecording();
+    return picture.toImage(canvasW.toInt(), canvasH.toInt());
   }
 
   // ── 颜色矩阵（与预览一致）────────────────────────────────────────────────────
