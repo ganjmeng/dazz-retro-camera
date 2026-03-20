@@ -8,6 +8,7 @@ import '../../services/subscription_service.dart';
 import '../../core/l10n.dart';
 import '../camera/camera_notifier.dart';
 import '../../services/camera_service.dart';
+import '../../services/location_service.dart';
 import '../camera/render_style_mode.dart';
 import '../camera/preview_performance_mode.dart';
 import '../../services/retain_settings_service.dart';
@@ -91,6 +92,68 @@ const _kDivider = Color(0xFF3A3A3C);
 // ─── 主界面 ───────────────────────────────────────────────────────────────────
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
+
+  Future<void> _toggleLocationPermission(
+    BuildContext context,
+    WidgetRef ref,
+    S s,
+  ) async {
+    final result = await ref.read(cameraAppProvider.notifier).toggleLocation();
+    if (!context.mounted) return;
+
+    switch (result) {
+      case LocationToggleResult.enabled:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.locationEnabled)),
+        );
+        break;
+      case LocationToggleResult.disabled:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.locationDisabled)),
+        );
+        break;
+      case LocationToggleResult.permissionDenied:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(s.locationDenied)),
+        );
+        break;
+      case LocationToggleResult.permissionDeniedForever:
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF1C1C1E),
+            title: Text(
+              s.locationPermTitle,
+              style: const TextStyle(color: Colors.white),
+            ),
+            content: Text(
+              s.locationPermDesc,
+              style: const TextStyle(color: Colors.grey),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(
+                  s.cancel,
+                  style: const TextStyle(color: Colors.grey),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  LocationService.instance.openSettings();
+                },
+                child: Text(
+                  s.goToSettings,
+                  style: const TextStyle(color: Color(0xFFFF9500)),
+                ),
+              ),
+            ],
+          ),
+        );
+        break;
+    }
+  }
 
   Future<void> _copyCalibrationInfo(
     BuildContext context,
@@ -308,9 +371,8 @@ class SettingsScreen extends ConsumerWidget {
                           title: s.saveLocation,
                           trailing: _RedSwitch(
                             value: camState.locationEnabled,
-                            onChanged: (_) {
-                              camNotifier.setLocationEnabled(
-                                  !camState.locationEnabled);
+                            onChanged: (_) async {
+                              await _toggleLocationPermission(context, ref, s);
                             },
                           ),
                         ),
