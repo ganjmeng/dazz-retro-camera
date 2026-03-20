@@ -22,6 +22,8 @@ class CameraSessionManager: NSObject {
     private var livePhotoCaptureCallback: ((Data?, URL?) -> Void)?
     private var pendingLivePhotoPhotoData: Data?
     private var pendingLivePhotoMovieURL: URL?
+    private var isLivePhotoCaptureInFlight = false
+    private var pendingStopSession = false
 
     // MARK: - Setup
 
@@ -95,6 +97,10 @@ class CameraSessionManager: NSObject {
     func stopSession() {
         sessionQueue.async { [weak self] in
             guard let self = self, self.session.isRunning else { return }
+            if self.isLivePhotoCaptureInFlight {
+                self.pendingStopSession = true
+                return
+            }
             self.session.stopRunning()
         }
     }
@@ -384,6 +390,8 @@ class CameraSessionManager: NSObject {
         livePhotoCaptureCallback = completion
         pendingLivePhotoPhotoData = nil
         pendingLivePhotoMovieURL = nil
+        isLivePhotoCaptureInFlight = true
+        pendingStopSession = false
 
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
@@ -508,6 +516,9 @@ extension CameraSessionManager: AVCapturePhotoCaptureDelegate {
     func photoOutput(_ output: AVCapturePhotoOutput,
                      didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings,
                      error: Error?) {
+        let pendingStop = pendingStopSession
+        pendingStopSession = false
+        isLivePhotoCaptureInFlight = false
         if let callback = livePhotoCaptureCallback {
             let photoData = pendingLivePhotoPhotoData
             let movieURL = pendingLivePhotoMovieURL
@@ -520,6 +531,9 @@ extension CameraSessionManager: AVCapturePhotoCaptureDelegate {
             } else {
                 callback(photoData, movieURL)
             }
+        }
+        if pendingStop, session.isRunning {
+            session.stopRunning()
         }
     }
 }

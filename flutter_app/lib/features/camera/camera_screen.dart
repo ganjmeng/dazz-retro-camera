@@ -453,20 +453,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     await _replayPreviewStateWithSettle(includePreset: false);
   }
 
-  /// 进入二级页面时默认保留相机会话，避免 stopPreview 与原生相机状态竞态。
-  /// 只有显式要求时才暂停预览并在返回后重建。
+  /// 进入二级页面时暂停预览并在返回后重建。
+  /// 原生层会在拍摄/Live Photo 收尾窗口内延迟停机，避免竞态崩溃。
   Future<void> _pushWithCameraPause(
     Widget page, {
-    bool pausePreview = false,
+    bool pausePreview = true,
   }) async {
     // 1. 显示过渡动画（黑屏 + icon）
     _transitionTimer?.cancel();
     setState(() => _showTransition = true);
     await Future.delayed(_kPagePauseTransitionLead);
-    final recentLiveCapture = _lastLivePhotoCapturedAt != null &&
-        DateTime.now().difference(_lastLivePhotoCapturedAt!) <
-            const Duration(seconds: 2);
-    final shouldPausePreview = pausePreview && !recentLiveCapture;
+    final shouldPausePreview = pausePreview;
     // 2. 暂停原生相机预览（释放 GPU/CPU 资源）
     if (shouldPausePreview) {
       await ref.read(cameraServiceProvider.notifier).stopPreview();

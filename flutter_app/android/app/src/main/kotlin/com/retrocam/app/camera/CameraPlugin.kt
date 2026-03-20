@@ -89,6 +89,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private var activeCameraDebugInfo: Map<String, Any> = emptyMap()
     private var videoCapture: VideoCapture<Recorder>? = null
     private var recording: Recording? = null
+    @Volatile private var isPhotoCaptureInFlight: Boolean = false
+    @Volatile private var pendingStopPreview: Boolean = false
     private var supportsLivePhoto: Boolean = false
     private var lensFacing: Int = CameraSelector.LENS_FACING_BACK
 
@@ -561,11 +563,27 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
     private fun handleStopPreview(result: MethodChannel.Result) {
         try {
-            cameraProvider?.unbind(preview)
+            stopPreviewSession()
             result.success(null)
         } catch (e: Exception) {
             result.error("STOP_PREVIEW_FAILED", e.message, null)
         }
+    }
+
+    private fun stopPreviewSession() {
+        if (isPhotoCaptureInFlight || recording != null) {
+            pendingStopPreview = true
+            recording?.stop()
+            return
+        }
+        pendingStopPreview = false
+        cameraProvider?.unbindAll()
+        camera = null
+        preview = null
+        imageCapture = null
+        imageAnalysis = null
+        videoCapture = null
+        supportsLivePhoto = false
     }
 
     // ─────────────────────────────────────────────
@@ -757,6 +775,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             .onFailure { Log.w(TAG, "reapply flashMode failed: ${it.message}") }
         pendingShotStartNs = System.nanoTime()
         pendingShotLevel = currentSharpenLevel
+        isPhotoCaptureInFlight = true
         val context = flutterPluginBinding.applicationContext
         // 使用 OnImageCapturedCallback 内存模式，跳过磁盘写入
         capture.takePicture(
@@ -777,6 +796,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                         val captureH = image.height
                         val elapsedMs = ((System.nanoTime() - pendingShotStartNs) / 1_000_000L).coerceAtLeast(0L)
                         image.close()
+                        isPhotoCaptureInFlight = false
                         Log.d(TAG, "takePhoto(mem): ${captureW}x${captureH} rot=${rotationDegrees} rawRot=${rawRotationDegrees} quarter=${deviceQuarter} front=${isFront}")
                         maybeRecordMidCapturePerf(captureW, captureH, elapsedMs)
                         // 异步写入 cache，保持 filePath 接口兼容性
@@ -802,15 +822,25 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                                 "captureWidth" to captureW,
                                 "captureHeight" to captureH
                             ))
+                            if (pendingStopPreview) {
+                                stopPreviewSession()
+                            }
                         }
                     } catch (e: Exception) {
                         image.close()
+                        isPhotoCaptureInFlight = false
                         Log.e(TAG, "takePhoto(mem) failed", e)
                         val mainExecutor = ContextCompat.getMainExecutor(context)
-                        mainExecutor.execute { result.error("CAPTURE_FAILED", e.message, null) }
+                        mainExecutor.execute {
+                            result.error("CAPTURE_FAILED", e.message, null)
+                            if (pendingStopPreview) {
+                                stopPreviewSession()
+                            }
+                        }
                     }
                 }
                 override fun onError(exception: ImageCaptureException) {
+                    isPhotoCaptureInFlight = false
                     Log.e(TAG, "takePhoto failed", exception)
                     val mainExecutor = ContextCompat.getMainExecutor(context)
                     mainExecutor.execute {
@@ -818,6 +848,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                             reapplyPresetToRenderer(renderer)
                         }
                         result.error("CAPTURE_FAILED", exception.message, null)
+                        if (pendingStopPreview) {
+                            stopPreviewSession()
+                        }
                     }
                 }
             }
@@ -1689,6 +1722,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                         }
                         sendEvent("onRecordingStateChanged", mapOf("isRecording" to false))
                         recording = null
+                        if (pendingStopPreview) {
+                            val mainExecutor =
+                                ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
+                            mainExecutor.execute { stopPreviewSession() }
+                        }
                     }
                     else -> {}
                 }
