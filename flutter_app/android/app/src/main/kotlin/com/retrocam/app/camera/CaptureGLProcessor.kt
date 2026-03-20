@@ -316,7 +316,7 @@ vec3 applyDeviceCalibration(vec3 c, vec3 whiteScale, mat3 ccm, float gammaVal) {
 // ── Pass 9: Bloom（空间扩散光晕）───────────────────────────────────────────
 vec3 applyBloom(vec3 c, float amount, vec2 uv) {
     if (amount < 0.001) return c;
-    float bloomRadius = amount * 12.0;
+    float bloomRadius = amount * 8.0;
     vec3 bloomColor = vec3(0.0);
     float totalWeight = 0.0;
     for (int i = -1; i <= 1; i++) {
@@ -324,21 +324,21 @@ vec3 applyBloom(vec3 c, float amount, vec2 uv) {
             vec2 offset = vec2(float(i), float(j)) * uTexelSize * bloomRadius;
             vec3 sample_c = texture(uInputTexture, uv + offset).rgb;
             float sLum = luminance(sample_c);
-            float highlight = clamp((sLum - 0.7) / 0.3, 0.0, 1.0);
+            float highlight = smoothstep(0.82, 0.98, sLum);
             float w = (i == 0 && j == 0) ? 4.0 : (abs(i) + abs(j) == 1 ? 2.0 : 1.0);
             bloomColor += sample_c * highlight * w;
             totalWeight += w;
         }
     }
     bloomColor /= totalWeight;
-    bloomColor *= vec3(1.0, 0.9, 0.7);
-    c = clamp(c + bloomColor * amount * 1.5, 0.0, 1.0);
+    bloomColor *= vec3(0.75, 0.68, 0.56);
+    c = clamp(c + bloomColor * amount * 0.55, 0.0, 1.0);
     return c;
 }
 // ── Pass 10: Halation（红橙色胶片辉光，空间扩散）───────────────────────
 vec3 applyHalation(vec3 c, float amount, vec2 uv) {
     if (amount < 0.001) return c;
-    float haloRadius = amount * 18.0;
+    float haloRadius = amount * 12.0;
     vec3 haloColor = vec3(0.0);
     float totalWeight = 0.0;
     for (int i = -2; i <= 2; i++) {
@@ -347,7 +347,7 @@ vec3 applyHalation(vec3 c, float amount, vec2 uv) {
             vec2 offset = vec2(float(i), float(j)) * uTexelSize * haloRadius;
             vec3 sample_c = texture(uInputTexture, uv + offset).rgb;
             float sLum = luminance(sample_c);
-            float highlight = clamp((sLum - 0.6) / 0.4, 0.0, 1.0);
+            float highlight = smoothstep(0.84, 0.99, sLum);
             float dist = float(abs(i) + abs(j));
             float w = 1.0 / (1.0 + dist);
             haloColor += sample_c * highlight * w;
@@ -356,9 +356,9 @@ vec3 applyHalation(vec3 c, float amount, vec2 uv) {
     }
     haloColor /= totalWeight;
     float haloLum = luminance(haloColor);
-    c.r = clamp(c.r + haloLum * amount * 1.2, 0.0, 1.0);
-    c.g = clamp(c.g + haloLum * amount * 0.35, 0.0, 1.0);
-    c.b = clamp(c.b + haloLum * amount * 0.05, 0.0, 1.0);
+    c.r = clamp(c.r + haloLum * amount * 0.55, 0.0, 1.0);
+    c.g = clamp(c.g + haloLum * amount * 0.16, 0.0, 1.0);
+    c.b = clamp(c.b + haloLum * amount * 0.02, 0.0, 1.0);
     return c;
 }
 
@@ -366,9 +366,14 @@ vec3 applyHalation(vec3 c, float amount, vec2 uv) {
 vec3 applyHighlightRolloff(vec3 c, float rolloff) {
     if (rolloff < 0.001) return c;
     float lum = luminance(c);
-    float mask = smoothstep(0.7, 1.0, lum);
-    float compress = 1.0 - mask * rolloff * 0.3;
-    return clamp(c * compress + vec3(mask * rolloff * 0.05), 0.0, 1.0);
+    if (lum <= 0.76) return c;
+    float mask = smoothstep(0.76, 1.0, lum);
+    vec3 compressed = vec3(
+        c.r * (1.0 - mask * rolloff * 0.12),
+        c.g * (1.0 - mask * rolloff * 0.16),
+        c.b * (1.0 - mask * rolloff * 0.22)
+    );
+    return clamp(mix(c, compressed, mask * 0.85), 0.0, 1.0);
 }
 
 // ── Pass 11b: Highlight Rolloff 2（FXN-R 专属，二次压缩）────────────────────
@@ -402,7 +407,7 @@ vec3 applyDevelopmentSoften(vec3 c, vec2 uv, float softness) {
         texture(uInputTexture, uv + vec2( uTexelSize.x, 0.0)).rgb * 0.25 +
         texture(uInputTexture, uv + vec2(0.0, -uTexelSize.y)).rgb * 0.25 +
         texture(uInputTexture, uv + vec2(0.0,  uTexelSize.y)).rgb * 0.25;
-    return mix(c, blurred, softness * 0.5);
+    return mix(c, blurred, softness * 0.24);
 }
 
 // ── Pass 12: Center Gain ────────────────────────────────────────────

@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../models/camera_definition.dart';
 import 'device_calibration_profiles.dart';
 import 'render_style_mode.dart';
+import 'preview_performance_mode.dart';
 
 enum SceneClass {
   balanced,
@@ -349,8 +350,9 @@ class PreviewRenderParams {
     final base = defaultLook.bloom;
     final lens = activeLens?.bloom ?? 0;
     final sceneScale = switch (sceneClass) {
-      SceneClass.lowLight => 0.92,
-      SceneClass.backlit || SceneClass.highDynamic => 0.82,
+      SceneClass.lowLight => 0.52,
+      SceneClass.backlit || SceneClass.highDynamic => 0.44,
+      SceneClass.indoor => 0.78,
       _ => 1.0,
     };
     return ((base + lens) * defaultLook.bloomResponse * sceneScale)
@@ -360,8 +362,9 @@ class PreviewRenderParams {
   double get effectiveHalation {
     final filterHalation = activeFilter?.halation ?? 0.0;
     final sceneScale = switch (sceneClass) {
-      SceneClass.lowLight => 0.95,
-      SceneClass.backlit || SceneClass.highDynamic => 0.85,
+      SceneClass.lowLight => 0.56,
+      SceneClass.backlit || SceneClass.highDynamic => 0.48,
+      SceneClass.indoor => 0.82,
       _ => 1.0,
     };
     return ((defaultLook.halation + filterHalation) *
@@ -529,8 +532,8 @@ class PreviewRenderParams {
 
   double get effectiveHighlightRolloff2 {
     final sceneScale = switch (sceneClass) {
-      SceneClass.lowLight => 0.92,
-      SceneClass.backlit || SceneClass.highDynamic => 0.82,
+      SceneClass.lowLight => 0.84,
+      SceneClass.backlit || SceneClass.highDynamic => 0.76,
       _ => 1.0,
     };
     return (defaultLook.highlightRolloff2 *
@@ -553,8 +556,9 @@ class PreviewRenderParams {
 
   double get effectiveFadeAmount {
     final sceneScale = switch (sceneClass) {
-      SceneClass.lowLight => 0.90,
-      SceneClass.backlit || SceneClass.highDynamic => 0.82,
+      SceneClass.lowLight => 0.42,
+      SceneClass.backlit || SceneClass.highDynamic => 0.36,
+      SceneClass.indoor => 0.72,
       _ => 1.0,
     };
     return (defaultLook.fadeAmount * defaultLook.fadeResponse * sceneScale)
@@ -790,9 +794,25 @@ class PreviewRenderParams {
     );
   }
 
-  double get paperTexture => defaultLook.paperTexture.clamp(0.0, 1.0);
-  double get developmentSoftness =>
-      defaultLook.developmentSoftness.clamp(0.0, 1.0);
+  double get paperTexture {
+    final sceneScale = switch (sceneClass) {
+      SceneClass.lowLight => 0.7,
+      SceneClass.backlit || SceneClass.highDynamic => 0.82,
+      _ => 1.0,
+    };
+    return (defaultLook.paperTexture * sceneScale).clamp(0.0, 1.0);
+  }
+
+  double get developmentSoftness {
+    final sceneScale = switch (sceneClass) {
+      SceneClass.lowLight => 0.55,
+      SceneClass.backlit || SceneClass.highDynamic => 0.68,
+      SceneClass.indoor => 0.86,
+      _ => 1.0,
+    };
+    return (defaultLook.developmentSoftness * sceneScale).clamp(0.0, 1.0);
+  }
+
   double get _sceneAdaptiveMix =>
       renderStyleMode == RenderStyleMode.smart ? 1.0 : 0.0;
   double get _exposureProtectionMix =>
@@ -986,6 +1006,34 @@ class PreviewRenderParams {
         'smartAuditTemperatureOffset':
             _auditedSceneTemperatureOffset(sceneClass),
       };
+
+  Map<String, dynamic> toPreviewJson({
+    required PreviewPerformanceMode mode,
+  }) {
+    final json = Map<String, dynamic>.from(toJson());
+    if (!mode.isLightweight) return json;
+
+    json['clarity'] = 0.0;
+    json['grainAmount'] = 0.0;
+    json['noiseAmount'] = 0.0;
+    json['chromaticAberration'] = 0.0;
+    json['bloomAmount'] = 0.0;
+    json['paperTexture'] = 0.0;
+    json['developmentSoftness'] = 0.0;
+    json['chemicalIrregularity'] = 0.0;
+    json['halationAmount'] = 0.0;
+    json['sharpen'] = 0.0;
+    json['sharpness'] = 1.0;
+    json['dehaze'] = 0.0;
+    json['highlightWarmAmount'] = 0.0;
+    json['softFocus'] = 0.0;
+    json['grainSize'] = 1.0;
+    json['luminanceNoise'] = 0.0;
+    json['chromaNoise'] = 0.0;
+    json['exposureVariation'] = 0.0;
+    json['vignetteAmount'] = effectiveVignette.clamp(0.0, 0.18);
+    return json;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

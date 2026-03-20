@@ -1766,11 +1766,11 @@ class CapturePipeline {
     double softFocus,
     PreviewRenderParams renderParams,
   ) {
-    final opacity = (bloomStrength * 0.25 + softFocus * 0.15).clamp(0.0, 0.5);
+    final opacity = (bloomStrength * 0.12 + softFocus * 0.08).clamp(0.0, 0.22);
     if (opacity < 0.01) return;
 
     // 模拟模糊：用 4 个小偏移叠加模拟柔焦效果
-    final blurRadius = (bloomStrength * 12 + softFocus * 20).clamp(0.0, 30.0);
+    final blurRadius = (bloomStrength * 7 + softFocus * 12).clamp(0.0, 16.0);
     final shifts = [
       Offset(-blurRadius * 0.5, -blurRadius * 0.5),
       Offset(blurRadius * 0.5, -blurRadius * 0.5),
@@ -1793,19 +1793,19 @@ class CapturePipeline {
         Paint()
           ..filterQuality = FilterQuality.low
           ..colorFilter = ColorFilter.matrix([
-            1.2,
+            1.08,
             0,
             0,
             0,
             0,
             0,
-            1.1,
+            1.04,
             0,
             0,
             0,
             0,
             0,
-            0.9,
+            0.88,
             0,
             0,
             0,

@@ -236,9 +236,9 @@ static float3 cp_deviceCalibration(float3 color, constant CaptureParams& params)
 static float3 cp_bloom(float3 color, float bloomAmount) {
     if (bloomAmount < 0.001) return color;
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
-    if (lum > 0.75) {
-        float bloom = clamp((lum - 0.75) * bloomAmount * 2.5, 0.0, 0.25);
-        color = clamp(color + float3(bloom * 0.9, bloom * 0.8, bloom * 0.6), 0.0, 1.0);
+    if (lum > 0.82) {
+        float bloom = clamp((lum - 0.82) * bloomAmount * 1.35, 0.0, 0.12);
+        color = clamp(color + float3(bloom * 0.55, bloom * 0.48, bloom * 0.38), 0.0, 1.0);
     }
     return color;
 }
@@ -247,14 +247,14 @@ static float3 cp_bloom(float3 color, float bloomAmount) {
 static float3 cp_highlightRolloff(float3 color, float rolloff) {
     if (rolloff < 0.001) return color;
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
-    if (lum > 0.70) {
-        float mask = smoothstep(0.70, 1.0, lum);
+    if (lum > 0.76) {
+        float mask = smoothstep(0.76, 1.0, lum);
         float3 compressed = float3(
-            color.r * (1.0 - mask * rolloff * 0.15),
-            color.g * (1.0 - mask * rolloff * 0.20),
-            color.b * (1.0 - mask * rolloff * 0.30)
+            color.r * (1.0 - mask * rolloff * 0.10),
+            color.g * (1.0 - mask * rolloff * 0.13),
+            color.b * (1.0 - mask * rolloff * 0.18)
         );
-        color = clamp(mix(color, compressed, mask * rolloff), 0.0, 1.0);
+        color = clamp(mix(color, compressed, mask * rolloff * 0.75), 0.0, 1.0);
     }
     return color;
 }
