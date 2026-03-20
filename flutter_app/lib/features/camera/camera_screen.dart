@@ -67,6 +67,11 @@ const _kLifecycleResumeTail = Duration(milliseconds: 90);
 const _kPagePauseTransitionLead = Duration(milliseconds: 24);
 const _kPageResumeTransitionTail = Duration(milliseconds: 100);
 const _kActionTransitionLead = Duration(milliseconds: 24);
+const _kPageResumeReinitLead = Duration(milliseconds: 80);
+const _kLifecycleResumeReinitLead = Duration(milliseconds: 120);
+const _kFlipCameraTransitionLead = Duration(milliseconds: 200);
+const _kNativeReplayBurstGap = Duration(milliseconds: 160);
+const _kNativeReplayFinalGap = Duration(milliseconds: 320);
 // 宽屏适配：取景框最大宽度（平板/折叠屏展开态限制取景框不超过此宽度，避免画面过宽失调）
 // 普通手机最宽约 430dp，此值确保宽屏设备取景框宽度与手机体验一致
 const kMaxViewfinderW = 520.0;
@@ -378,6 +383,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (!mounted) return;
     _transitionTimer?.cancel();
     setState(() => _showTransition = true);
+    await Future.delayed(_kLifecycleResumeReinitLead);
+    if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
     await _reinitAndSyncCameraPipeline();
     if (!mounted) return;
     _transitionTimer = Timer(_kLifecycleResumeTail, () {
@@ -393,9 +400,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
     const sharpenLevels = [0.0, 0.5, 1.0];
     await svc.setSharpen(sharpenLevels[sharpenLevel]);
-    await ref
-        .read(cameraAppProvider.notifier)
-        .replayCurrentPreviewStateToNative();
+    await _replayPreviewStateWithSettle(includePreset: true);
     _ensurePreviewHealthWatchdog();
   }
 
@@ -410,7 +415,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 这里延后做一次幂等重放，确保预览效果不会随机丢失。
     await Future.delayed(const Duration(milliseconds: 140));
     if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
-    await _syncPipelineAfterCameraInit();
+    await _replayPreviewStateWithSettle(includePreset: false);
   }
 
   /// 进入二级页面时暂停相机预览，返回后自动恢复，并显示过渡动画。
@@ -427,6 +432,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       MaterialPageRoute(builder: (_) => page),
     );
     // 4. 返回后统一重建并同步完整相机链路
+    if (!mounted) return;
+    await Future.delayed(_kPageResumeReinitLead);
     if (!mounted) return;
     await _reinitAndSyncCameraPipeline();
     // 5. 淡出过渡动画（setSharpen 完成后再淡出，确保分辨率已切换）
@@ -634,9 +641,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _softResyncPreviewParams() async {
     if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
-    await ref
-        .read(cameraAppProvider.notifier)
-        .replayCurrentPreviewStateToNative();
+    await _replayPreviewStateWithSettle(includePreset: true);
   }
 
   void _handleCameraServiceStateChanged(
@@ -675,24 +680,35 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _scheduleNativeReadyReplay() {
     _nativeReadyReplayTimer?.cancel();
-    _nativeReadyReplayTimer =
-        Timer(const Duration(milliseconds: 110), () async {
+    _nativeReadyReplayTimer = Timer(_kNativeReplayBurstGap, () async {
       if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
-      final camSvc = ref.read(cameraServiceProvider);
-      if (!camSvc.isReady || camSvc.lifecyclePhase != 'running') return;
-      await ref
-          .read(cameraAppProvider.notifier)
-          .replayCurrentPreviewStateToNative();
-      await Future.delayed(const Duration(milliseconds: 180));
-      if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
-      final stillRunning = ref.read(cameraServiceProvider);
-      if (!stillRunning.isReady || stillRunning.lifecyclePhase != 'running') {
-        return;
-      }
-      await ref
-          .read(cameraAppProvider.notifier)
-          .replayCurrentPreviewStateToNative(replayPreset: false);
+      await _replayPreviewStateWithSettle(includePreset: true);
     });
+  }
+
+  Future<void> _replayPreviewStateWithSettle({
+    required bool includePreset,
+  }) async {
+    if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
+    final notifier = ref.read(cameraAppProvider.notifier);
+    final camSvc = ref.read(cameraServiceProvider);
+    if (!camSvc.isReady || camSvc.lifecyclePhase != 'running') return;
+
+    await notifier.replayCurrentPreviewStateToNative(
+      replayPreset: includePreset,
+    );
+
+    await Future.delayed(_kNativeReplayBurstGap);
+    if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
+    final midSvc = ref.read(cameraServiceProvider);
+    if (!midSvc.isReady || midSvc.lifecyclePhase != 'running') return;
+    await notifier.replayCurrentPreviewStateToNative(replayPreset: false);
+
+    await Future.delayed(_kNativeReplayFinalGap);
+    if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
+    final finalSvc = ref.read(cameraServiceProvider);
+    if (!finalSvc.isReady || finalSvc.lifecyclePhase != 'running') return;
+    await notifier.replayCurrentPreviewStateToNative(replayPreset: false);
   }
 
   void _enqueueSceneHint(String nextKey) {
@@ -2127,7 +2143,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   icon: Icons.flip_camera_ios_outlined,
                   label: _s().rear,
                   onTap: () => _showCameraTransition(
-                    () => ref.read(cameraAppProvider.notifier).flipCamera(),
+                    () async {
+                      await Future.delayed(_kFlipCameraTransitionLead);
+                      await ref.read(cameraAppProvider.notifier).flipCamera();
+                    },
                     minVisible: const Duration(milliseconds: 220),
                   ),
                 ),

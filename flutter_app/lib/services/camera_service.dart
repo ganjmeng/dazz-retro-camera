@@ -103,9 +103,13 @@ class CameraService extends StateNotifier<CameraState> {
   Future<void> initCamera() async {
     await _serializeLifecycle(() async {
       state = state.copyWith(
+        isReady: false,
         isLoading: true,
         error: null,
+        textureId: null,
         lifecyclePhase: 'initializing',
+        runtimeStatsUpdatedAtMs: 0,
+        activeCameraDebugInfo: const {},
       );
 
       // 相机权限已在 CameraScreen._requestPermissions() 中一次性请求
@@ -146,13 +150,17 @@ class CameraService extends StateNotifier<CameraState> {
           isReady: true,
           textureId: textureId,
           lifecyclePhase: 'running',
+          runtimeStatsUpdatedAtMs: 0,
         );
         await _channel.invokeMethod('startPreview');
       } catch (e) {
         state = state.copyWith(
+          isReady: false,
           isLoading: false,
           error: 'Failed to init camera: $e',
+          textureId: null,
           lifecyclePhase: 'idle',
+          runtimeStatsUpdatedAtMs: 0,
         );
       }
     });
@@ -162,7 +170,10 @@ class CameraService extends StateNotifier<CameraState> {
     await _serializeLifecycle(() async {
       try {
         await _channel.invokeMethod('startPreview');
-        state = state.copyWith(lifecyclePhase: 'running');
+        state = state.copyWith(
+          isReady: state.textureId != null,
+          lifecyclePhase: 'running',
+        );
       } catch (e) {
         print('Error starting preview: $e');
       }
@@ -173,9 +184,20 @@ class CameraService extends StateNotifier<CameraState> {
     await _serializeLifecycle(() async {
       try {
         await _channel.invokeMethod('stopPreview');
-        state = state.copyWith(lifecyclePhase: 'paused');
+        state = state.copyWith(
+          isReady: false,
+          textureId: null,
+          lifecyclePhase: 'paused',
+          runtimeStatsUpdatedAtMs: 0,
+        );
       } catch (e) {
         print('Error stopping preview: $e');
+        state = state.copyWith(
+          isReady: false,
+          textureId: null,
+          lifecyclePhase: 'paused',
+          runtimeStatsUpdatedAtMs: 0,
+        );
       }
     });
   }
@@ -463,7 +485,9 @@ class CameraService extends StateNotifier<CameraState> {
             isReady: false,
             textureId: null,
             isRecording: false,
-            lifecyclePhase: 'idle');
+            lifecyclePhase: 'idle',
+            runtimeStatsUpdatedAtMs: 0,
+            activeCameraDebugInfo: const {});
       } catch (e) {
         print('Error disposing camera: $e');
       }
