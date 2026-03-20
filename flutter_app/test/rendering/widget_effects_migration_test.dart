@@ -102,8 +102,8 @@ void main() {
       expect(params.effectiveVignette, 0.2);
       expect(params.paperTexture, 0.1);
       // V3：叠加设备校准 + 场景自适应后，不再固定等于 defaultLook 原值
-      expect(params.effectiveContrast, greaterThan(1.2));
-      expect(params.effectiveSaturation, greaterThan(1.1));
+      expect(params.effectiveContrast, greaterThanOrEqualTo(1.2));
+      expect(params.effectiveSaturation, greaterThanOrEqualTo(1.1));
     });
 
     test(

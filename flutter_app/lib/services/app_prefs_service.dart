@@ -5,6 +5,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/camera_registry.dart';
 import '../features/camera/render_style_mode.dart';
+import '../features/camera/preview_performance_mode.dart';
 
 const _kSharpenLevel = 'pref_sharpen_level';
 const _kLocationEnabled = 'pref_location_enabled';
@@ -16,6 +17,7 @@ const _kLastCameraId = 'pref_last_camera_id';
 const _kMirrorFrontCamera = 'pref_mirror_front_camera';
 const _kMirrorBackCamera = 'pref_mirror_back_camera';
 const _kRenderStyleMode = 'pref_render_style_mode';
+const _kPreviewPerformanceMode = 'pref_preview_performance_mode';
 
 class AppPrefs {
   final int sharpenLevel; // 0=低 1=中 2=高，默认1
@@ -28,6 +30,7 @@ class AppPrefs {
   final bool mirrorFrontCamera; // 默认 true
   final bool mirrorBackCamera; // 默认 false
   final RenderStyleMode renderStyleMode; // 默认复刻模式
+  final PreviewPerformanceMode previewPerformanceMode; // 默认轻量预览
 
   const AppPrefs({
     this.sharpenLevel = 1,
@@ -41,6 +44,7 @@ class AppPrefs {
     this.mirrorFrontCamera = true,
     this.mirrorBackCamera = false,
     this.renderStyleMode = RenderStyleMode.replica,
+    this.previewPerformanceMode = PreviewPerformanceMode.lightweight,
   });
 }
 
@@ -62,6 +66,9 @@ class AppPrefsService {
       mirrorBackCamera: p.getBool(_kMirrorBackCamera) ?? false,
       renderStyleMode: RenderStyleModeX.fromStorage(
         p.getString(_kRenderStyleMode),
+      ),
+      previewPerformanceMode: PreviewPerformanceModeX.fromStorage(
+        p.getString(_kPreviewPerformanceMode),
       ),
     );
   }
@@ -96,4 +103,8 @@ class AppPrefsService {
   Future<void> setRenderStyleMode(RenderStyleMode mode) async =>
       (await SharedPreferences.getInstance())
           .setString(_kRenderStyleMode, mode.storageValue);
+
+  Future<void> setPreviewPerformanceMode(PreviewPerformanceMode mode) async =>
+      (await SharedPreferences.getInstance())
+          .setString(_kPreviewPerformanceMode, mode.storageValue);
 }

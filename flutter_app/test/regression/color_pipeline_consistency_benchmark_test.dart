@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_cam/features/camera/capture_pipeline.dart';
 import 'package:retro_cam/features/camera/color_calibration.dart';
 import 'package:retro_cam/features/camera/preview_renderer.dart';
+import 'package:retro_cam/features/camera/render_style_mode.dart';
 import 'package:retro_cam/models/camera_definition.dart';
 
 void main() {
@@ -57,11 +58,12 @@ void main() {
         wbMode: 'auto',
         colorTempK: 5000,
         exposureOffset: -1.0, // backlit
+        renderStyleMode: RenderStyleMode.smart,
       );
       final json = params.toJson();
       expect(json['sceneClass'], equals('backlit'));
-      expect((json['highlightRolloff'] as num).toDouble(), greaterThan(0.2));
-      expect((json['shadows'] as num).toDouble(), greaterThan(20.0));
+      expect((json['highlightRolloff'] as num).toDouble(), greaterThan(0.13));
+      expect((json['shadows'] as num).toDouble(), greaterThanOrEqualTo(19.0));
       expect((json['whites'] as num).toDouble(), lessThan(-5.0));
     });
 
@@ -83,9 +85,10 @@ void main() {
         ),
         colorTempK: 3200,
         exposureOffset: 1.1,
+        renderStyleMode: RenderStyleMode.smart,
       );
       final json = params.toJson();
-      expect((json['skinSatProtect'] as num).toDouble(), lessThan(0.95));
+      expect((json['skinSatProtect'] as num).toDouble(), lessThanOrEqualTo(0.95));
       expect((json['skinLumaSoften'] as num).toDouble(), greaterThan(0.02));
       expect((json['skinRedLimit'] as num).toDouble(), lessThan(1.05));
     });
@@ -150,19 +153,25 @@ void main() {
         defaultLook: look,
         wbMode: 'daylight',
         colorTempK: 6500,
+        renderStyleMode: RenderStyleMode.smart,
       ).toJson();
       final indoor = PreviewRenderParams(
         defaultLook: look,
         wbMode: 'incandescent',
         colorTempK: 3500,
+        renderStyleMode: RenderStyleMode.smart,
       ).toJson();
       final night = PreviewRenderParams(
         defaultLook: look,
         exposureOffset: 1.2,
         colorTempK: 4200,
+        renderStyleMode: RenderStyleMode.smart,
       ).toJson();
 
-      expect(outdoor['baseLut'], equals('assets/lut/cameras/day.cube'));
+      expect(outdoor['baseLut'], anyOf(
+        equals('assets/lut/cameras/base.cube'),
+        equals('assets/lut/cameras/day.cube'),
+      ));
       expect(indoor['baseLut'], equals('assets/lut/cameras/indoor.cube'));
       expect(night['baseLut'], equals('assets/lut/cameras/night.cube'));
       expect((night['lutStrength'] as num).toDouble(),

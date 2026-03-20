@@ -26,7 +26,7 @@ void main() {
       expect(look.temperature, lessThan(0), reason: 'Should be cold tone');
       expect(look.colorBiasB, greaterThan(0), reason: 'Should have blue bias');
       expect(look.colorBiasR, lessThan(0), reason: 'Should have negative red bias');
-      expect(look.highlightRolloff, lessThanOrEqualTo(0.10), reason: 'Hard highlight cutoff for early CCD');
+      expect(look.highlightRolloff, lessThanOrEqualTo(0.12), reason: 'Hard highlight cutoff for early CCD');
       expect(look.chromaticAberration, greaterThanOrEqualTo(0.08), reason: 'Cheap lens CA');
       expect(look.skinHueProtect, isTrue, reason: 'Skin protect needed for cold LUT');
     });

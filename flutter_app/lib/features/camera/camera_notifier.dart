@@ -21,6 +21,7 @@ import 'capture_pipeline.dart';
 import '../../services/retain_settings_service.dart';
 import '../../services/app_prefs_service.dart';
 import 'render_style_mode.dart';
+import 'preview_performance_mode.dart';
 
 // 默认关闭后台二次增强替换，优先保证预览与成片一致性（WYSIWYG）。
 const bool _kEnableBackgroundEnhanceReplace = false;
@@ -103,6 +104,7 @@ class CameraAppState {
   final double runtimeRtExposureMs;
   final double runtimeRtLuma;
   final RenderStyleMode renderStyleMode;
+  final PreviewPerformanceMode previewPerformanceMode;
 
   const CameraAppState({
     this.activeCameraId = 'grd_r',
@@ -163,6 +165,7 @@ class CameraAppState {
     this.runtimeRtExposureMs = -1.0,
     this.runtimeRtLuma = -1.0,
     this.renderStyleMode = RenderStyleMode.replica,
+    this.previewPerformanceMode = PreviewPerformanceMode.lightweight,
   });
   CameraAppState copyWith({
     String? activeCameraId,
@@ -225,6 +228,7 @@ class CameraAppState {
     double? runtimeRtExposureMs,
     double? runtimeRtLuma,
     RenderStyleMode? renderStyleMode,
+    PreviewPerformanceMode? previewPerformanceMode,
     bool clearPanel = false,
     bool clearError = false,
     bool clearFrameId = false, // 用于将 activeFrameId 清空为 null
@@ -300,6 +304,8 @@ class CameraAppState {
       runtimeRtExposureMs: runtimeRtExposureMs ?? this.runtimeRtExposureMs,
       runtimeRtLuma: runtimeRtLuma ?? this.runtimeRtLuma,
       renderStyleMode: renderStyleMode ?? this.renderStyleMode,
+      previewPerformanceMode:
+          previewPerformanceMode ?? this.previewPerformanceMode,
     );
   }
 
@@ -430,6 +436,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       mirrorFrontCamera: prefs.mirrorFrontCamera,
       mirrorBackCamera: prefs.mirrorBackCamera,
       renderStyleMode: prefs.renderStyleMode,
+      previewPerformanceMode: prefs.previewPerformanceMode,
     );
     await _ref
         .read(cameraServiceProvider.notifier)
@@ -729,6 +736,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     _applyCurrentRenderParamsToNative();
   }
 
+  void setPreviewPerformanceMode(PreviewPerformanceMode mode) {
+    if (state.previewPerformanceMode == mode) return;
+    state = state.copyWith(previewPerformanceMode: mode);
+    AppPrefsService.instance.setPreviewPerformanceMode(mode);
+    _applyCurrentRenderParamsToNative();
+  }
+
   void selectFrameBackground(String hexColor) {
     state = state.copyWith(frameBackgroundColor: hexColor);
   }
@@ -945,7 +959,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
     try {
       // 1. 重新初始化相机（重新获取 textureId，重建 renderer）
-      await svc.initCamera();
+      await svc.initCamera(
+        resolution: state.previewPerformanceMode.resolutionTag,
+      );
 
       // 2. 同步相机 shader 参数
       final camera = state.camera;
@@ -1009,7 +1025,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     svc.toggleLensDirection();
 
     // 4. 重新初始化相机（重建 SurfaceTexture + CameraGLRenderer，等待 renderer 就绪）
-    await svc.initCamera();
+    await svc.initCamera(
+      resolution: state.previewPerformanceMode.resolutionTag,
+    );
 
     // 5. 重新发送当前相机参数到新 renderer
     final camera = state.camera;
@@ -1652,7 +1670,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     syncRuntimeColorContext();
     final params = state.renderParams;
     if (params == null) return;
-    final json = params.toJson();
+    final json = params.toPreviewJson(mode: state.previewPerformanceMode);
     final version = ++_renderParamsVersion;
     debugPrint(
         '[CameraNotifier] _applyCurrentRenderParamsToNative: sending ${json.length} params to native (v=$version)');
@@ -1693,7 +1711,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           'saturation': lens?.saturation ?? 0.0,
           'highlightCompression': lens?.highlightCompression ?? 0.0,
         },
-        renderParams: renderParams.toJson(),
+        renderParams:
+            renderParams.toPreviewJson(mode: state.previewPerformanceMode),
         zoom: zoom,
         version: version,
       );

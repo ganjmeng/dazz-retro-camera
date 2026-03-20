@@ -105,7 +105,9 @@ class CameraService extends StateNotifier<CameraState> {
   }
 
   /// 初始化相机，获取 Texture ID 并开始预览
-  Future<void> initCamera() async {
+  Future<void> initCamera({
+    String resolution = '720p',
+  }) async {
     await _serializeLifecycle(() async {
       state = state.copyWith(
         isReady: false,
@@ -140,7 +142,7 @@ class CameraService extends StateNotifier<CameraState> {
         final result = await _channel.invokeMethod<Map<dynamic, dynamic>>(
           'initCamera',
           {
-            'resolution': '1080p',
+            'resolution': resolution,
             'lens': state.currentLens,
           },
         );
