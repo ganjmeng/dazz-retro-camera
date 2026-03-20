@@ -313,6 +313,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
   List<AssetEntity> _allDazzAssets = [];
   List<AssetEntity> _assets = [];
   bool _isLoading = true;
+  bool _isFetchingAssets = false;
+  int _fetchGeneration = 0;
   bool _isSelectionMode = false;
   bool _isDeletingSelection = false;
   final ValueNotifier<Set<String>> _selectedIdsNotifier =
@@ -357,19 +359,101 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   Future<void> _fetchAssets() async {
-    // 有缓存时立即显示，无需 loading
-    if (_GalleryCache.isValid && _GalleryCache.assets != null) {
-      final cached = _GalleryCache.assets!;
-      _rebuildFromAssets(cached, showLoading: false);
-      return;
+    if (_isFetchingAssets) return;
+    _isFetchingAssets = true;
+    final fetchGeneration = ++_fetchGeneration;
+
+    void finishFetch() {
+      if (_fetchGeneration == fetchGeneration) {
+        _isFetchingAssets = false;
+      }
     }
 
-    setState(() => _isLoading = true);
+    try {
+      // 有缓存时立即显示，无需 loading
+      if (_GalleryCache.isValid && _GalleryCache.assets != null) {
+        final cached = _GalleryCache.assets!;
+        _rebuildFromAssets(cached, showLoading: false);
+        return;
+      }
 
-    final ps = await PhotoManager.requestPermissionExtend();
-    if (!ps.hasAccess) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => _isLoading = true);
+      }
+
+      final ps = await PhotoManager.requestPermissionExtend();
+      if (!ps.hasAccess) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(_s().galleryPermissionHint),
+              backgroundColor: const Color(0xFF3A3A3C),
+            ),
+          );
+        }
+        return;
+      }
+
+      final allPaths = await PhotoManager.getAssetPathList(
+        type: RequestType.image,
+        hasAll: true,
+        onlyAll: false,
+        filterOption: FilterOptionGroup(
+          orders: [
+            const OrderOption(type: OrderOptionType.createDate, asc: false)
+          ],
+        ),
+      );
+
+      if (allPaths.isEmpty) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      AssetPathEntity? dazzPath;
+      for (final p in allPaths) {
+        final upper = p.name.toUpperCase();
+        if (upper == 'DAZZ' ||
+            upper.endsWith('/DAZZ') ||
+            upper.contains('DAZZ')) {
+          dazzPath = p;
+          break;
+        }
+      }
+
+      List<AssetEntity> assets;
+      if (dazzPath == null) {
+        final rootPath =
+            allPaths.firstWhere((p) => p.isAll, orElse: () => allPaths.first);
+        final rootCount = await rootPath.assetCountAsync;
+        final rootAssets = await rootPath.getAssetListRange(
+            start: 0, end: rootCount.clamp(0, 5000));
+        assets = rootAssets.where((a) {
+          final title = (a.title ?? '').toLowerCase();
+          return title.startsWith('dazz_') || title.contains('dazz');
+        }).toList();
+      } else {
+        final count = await dazzPath.assetCountAsync;
+        assets = await dazzPath.getAssetListRange(
+          start: 0,
+          end: count.clamp(0, 5000),
+        );
+      }
+
+      if (!mounted || _fetchGeneration != fetchGeneration) return;
+
+      _GalleryCache.set(assets);
+      _rebuildFromAssets(assets, showLoading: false);
+      unawaited(_prefetchThumbs(assets.take(30).toList()));
+    } catch (e, st) {
+      debugPrint('[GalleryScreen] _fetchAssets failed: $e\n$st');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _allDazzAssets = const [];
+          _assets = const [];
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(_s().galleryPermissionHint),
@@ -377,77 +461,29 @@ class _GalleryScreenState extends State<GalleryScreen> {
           ),
         );
       }
-      return;
+    } finally {
+      finishFetch();
     }
-
-    // 直接查询，新照片由 changeCallback 触发刷新（移除 releaseCache 避免不必要的延迟）
-    final allPaths = await PhotoManager.getAssetPathList(
-      type: RequestType.image,
-      hasAll: true,
-      onlyAll: false,
-      filterOption: FilterOptionGroup(
-        orders: [
-          const OrderOption(type: OrderOptionType.createDate, asc: false)
-        ],
-      ),
-    );
-
-    if (allPaths.isEmpty) {
-      if (mounted) setState(() => _isLoading = false);
-      return;
-    }
-
-    // 查找 DAZZ 相册
-    AssetPathEntity? dazzPath;
-    for (final p in allPaths) {
-      final upper = p.name.toUpperCase();
-      if (upper == 'DAZZ' ||
-          upper.endsWith('/DAZZ') ||
-          upper.contains('DAZZ')) {
-        dazzPath = p;
-        break;
-      }
-    }
-
-    List<AssetEntity> assets;
-
-    if (dazzPath == null) {
-      // 从根相册过滤文件名包含 dazz 的照片
-      final rootPath =
-          allPaths.firstWhere((p) => p.isAll, orElse: () => allPaths.first);
-      final rootCount = await rootPath.assetCountAsync;
-      final rootAssets = await rootPath.getAssetListRange(
-          start: 0, end: rootCount.clamp(0, 5000));
-      assets = rootAssets.where((a) {
-        final title = (a.title ?? '').toLowerCase();
-        return title.startsWith('dazz_') || title.contains('dazz');
-      }).toList();
-    } else {
-      final count = await dazzPath.assetCountAsync;
-      assets =
-          await dazzPath.getAssetListRange(start: 0, end: count.clamp(0, 5000));
-    }
-
-    _GalleryCache.set(assets);
-    _rebuildFromAssets(assets, showLoading: false);
-
-    // 后台预生成前 30 张缩略图，加快首屏渲染
-    _prefetchThumbs(assets.take(30).toList());
   }
 
   /// 后台并行预生成缩略图（不阻塞 UI，最多 8 并发）
   Future<void> _prefetchThumbs(List<AssetEntity> assets) async {
-    // 分批并行，每批 8 张，避免一次性占用过多线程
-    const batchSize = 8;
-    final toLoad = assets.where((a) => _ThumbCache.get(a.id) == null).toList();
-    for (int i = 0; i < toLoad.length; i += batchSize) {
-      final batch = toLoad.skip(i).take(batchSize).toList();
-      await Future.wait(batch.map((asset) async {
-        await _ThumbLoadQueue.load(
-          asset,
-          size: const ThumbnailSize(300, 300),
-        );
-      }));
+    try {
+      // 分批并行，每批 8 张，避免一次性占用过多线程
+      const batchSize = 8;
+      final toLoad =
+          assets.where((a) => _ThumbCache.get(a.id) == null).toList();
+      for (int i = 0; i < toLoad.length; i += batchSize) {
+        final batch = toLoad.skip(i).take(batchSize).toList();
+        await Future.wait(batch.map((asset) async {
+          await _ThumbLoadQueue.load(
+            asset,
+            size: const ThumbnailSize(300, 300),
+          );
+        }));
+      }
+    } catch (e) {
+      debugPrint('[GalleryScreen] _prefetchThumbs failed: $e');
     }
   }
 
@@ -1115,6 +1151,12 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     _preloadPages(_currentIndex);
   }
 
+  AssetEntity get _safeCurrentAsset {
+    if (widget.allAssets.isEmpty) return widget.asset;
+    final safeIndex = _currentIndex.clamp(0, widget.allAssets.length - 1);
+    return widget.allAssets[safeIndex];
+  }
+
   @override
   void dispose() {
     _pageController.dispose();
@@ -1136,12 +1178,14 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
 
   /// 预加载当前页及相邻 ±1 页
   void _preloadPages(int index) {
-    final indices = [index - 1, index, index + 1].where((i) {
+    final indices = [index - 2, index - 1, index, index + 1, index + 2].where((
+      i,
+    ) {
       return i >= 0 && i < widget.allAssets.length;
     }).toList();
     for (final i in indices) {
       final asset = widget.allAssets[i];
-      // 相邻页预览图优先（快速滑动更稳）
+      _loadAssetThumb(asset);
       _loadAssetPreview(asset);
       if (i == index) {
         // 当前页加载原图，保证放大细节
@@ -1149,6 +1193,28 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
       }
     }
     _evictFarPageCaches(index);
+  }
+
+  Future<void> _loadAssetThumb(AssetEntity asset) async {
+    if (_thumbDataCache.containsKey(asset.id) ||
+        _ThumbCache.get(asset.id) != null) {
+      final cached = _ThumbCache.get(asset.id);
+      if (cached != null) {
+        _thumbDataCache[asset.id] = cached;
+      }
+      return;
+    }
+    try {
+      final thumb = await _ThumbLoadQueue.load(
+        asset,
+        size: const ThumbnailSize(300, 300),
+      );
+      if (thumb != null && mounted) {
+        setState(() => _thumbDataCache[asset.id] = thumb);
+      }
+    } catch (e) {
+      debugPrint('[PhotoDetailPage] _loadAssetThumb failed: ${asset.id}, $e');
+    }
   }
 
   Future<void> _loadAssetPreview(AssetEntity asset) async {
@@ -1161,25 +1227,31 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
       _thumbDataCache[asset.id] = thumb;
     }
     // 预览图按 2K 级别加载，明显降低大图 IO/解码抖动。
-    final data =
-        await asset.thumbnailDataWithSize(const ThumbnailSize(2048, 2048));
-    if (data != null && mounted) {
-      setState(() => _previewDataCache[asset.id] = data);
+    try {
+      final data =
+          await asset.thumbnailDataWithSize(const ThumbnailSize(2048, 2048));
+      if (data != null && mounted) {
+        setState(() => _previewDataCache[asset.id] = data);
+      }
+    } catch (e) {
+      debugPrint('[PhotoDetailPage] _loadAssetPreview failed: ${asset.id}, $e');
     }
   }
 
   Future<void> _loadAssetFull(AssetEntity asset) async {
     if (_fullDataCache.containsKey(asset.id)) return;
-    final data = await asset.originBytes;
-    if (data != null && mounted) {
-      setState(() => _fullDataCache[asset.id] = data);
+    try {
+      final data = await asset.originBytes;
+      if (data != null && mounted) {
+        setState(() => _fullDataCache[asset.id] = data);
+      }
+    } catch (e) {
+      debugPrint('[PhotoDetailPage] _loadAssetFull failed: ${asset.id}, $e');
     }
   }
 
   Future<void> _syncCurrentAssetLiveFlag() async {
-    final asset = widget.allAssets.isEmpty
-        ? widget.asset
-        : widget.allAssets[_currentIndex];
+    final asset = _safeCurrentAsset;
     final isLive = await _LivePhotoSupport.isLiveAsset(asset);
     if (!mounted || asset.id != _currentDisplayedAsset.id) return;
     if (isLive != _currentAssetIsLivePhoto) {
@@ -1187,8 +1259,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     }
   }
 
-  AssetEntity get _currentDisplayedAsset =>
-      widget.allAssets.isEmpty ? widget.asset : widget.allAssets[_currentIndex];
+  AssetEntity get _currentDisplayedAsset => _safeCurrentAsset;
 
   void _evictFarPageCaches(int centerIndex) {
     final keepIds = <String>{};
@@ -1206,14 +1277,13 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   Uint8List? _getDisplayData(String assetId) {
     return _fullDataCache[assetId] ??
         _previewDataCache[assetId] ??
-        _thumbDataCache[assetId];
+        _thumbDataCache[assetId] ??
+        _ThumbCache.get(assetId);
   }
 
   Future<void> _shareAsset() async {
     try {
-      final asset = widget.allAssets.isEmpty
-          ? widget.asset
-          : widget.allAssets[_currentIndex];
+      final asset = widget.allAssets.isEmpty ? widget.asset : _safeCurrentAsset;
       final file = await asset.originFile;
       if (file == null) return;
       await Share.shareXFiles(
@@ -1243,7 +1313,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   }
 
   Future<void> _deleteAsset() async {
-    final asset = widget.allAssets[_currentIndex];
+    final asset = _safeCurrentAsset;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1276,7 +1346,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    final canDismissByDrag = !_isZoomed && !_isPhotoInteracting;
+    final canDismissByDrag = !_isZoomed;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -1339,8 +1409,13 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
                   setState(() {
                     _currentIndex = i;
                     _isZoomed = false;
+                    _isPhotoInteracting = false;
                   });
-                  _parseCameraName(widget.allAssets[i]);
+                  _parseCameraName(
+                    widget.allAssets.isEmpty
+                        ? widget.asset
+                        : widget.allAssets[i],
+                  );
                   _syncCurrentAssetLiveFlag();
                   _preloadPages(i);
                 },
@@ -1618,13 +1693,15 @@ class _PhotoViewPageState extends State<_PhotoViewPage> {
             child: Listener(
               onPointerDown: (_) {
                 _activePointers++;
-                widget.onInteractionChanged?.call(true);
+                if (_activePointers >= 2) {
+                  widget.onInteractionChanged?.call(true);
+                }
               },
               onPointerUp: (_) {
                 if (_activePointers > 0) {
                   _activePointers--;
                 }
-                if (_activePointers == 0) {
+                if (_activePointers < 2) {
                   widget.onInteractionChanged?.call(false);
                 }
               },
@@ -1654,6 +1731,9 @@ class _PhotoViewPageState extends State<_PhotoViewPage> {
                         setState(() => _isZoomed = zoomed);
                         widget.onScaleChanged(zoomed);
                       }
+                      widget.onInteractionChanged?.call(
+                        zoomed || _activePointers >= 2,
+                      );
                     },
                   ),
                   if (_videoCtrl?.value.isInitialized == true)
