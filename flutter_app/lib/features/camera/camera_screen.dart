@@ -31,6 +31,7 @@ import 'camera_manager_screen.dart';
 import '../settings/settings_screen.dart';
 import 'preview_renderer.dart';
 import 'render_style_mode.dart';
+import 'preview_performance_mode.dart';
 import '../gallery/gallery_screen.dart';
 import 'camera_config_sheet.dart';
 import '../../services/shutter_sound_service.dart';
@@ -230,7 +231,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       // 权限已授予：短暂等待后初始化相机（避免首次授权后系统层尚未稳定）
       await Future.delayed(_kStartupInitDelay);
       if (!mounted) return;
-      await ref.read(cameraServiceProvider.notifier).initCamera();
+      final previewMode = ref.read(cameraAppProvider).previewPerformanceMode;
+      await ref
+          .read(cameraServiceProvider.notifier)
+          .initCamera(resolution: previewMode.resolutionTag);
 
       // ── FIX: 首次授权 bug 修复 ──
       // 场景：首次启动 → 权限弹窗 → 用户同意。此时 iOS/Android 系统层才真正将相机权限授予进程。
@@ -240,7 +244,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       final isFirstTimeGrant = !wasGrantedBefore && cameraGranted;
       if (isFirstTimeGrant) {
         if (!mounted) return;
-        await ref.read(cameraServiceProvider.notifier).initCamera();
+        final previewMode = ref.read(cameraAppProvider).previewPerformanceMode;
+        await ref
+            .read(cameraServiceProvider.notifier)
+            .initCamera(resolution: previewMode.resolutionTag);
       }
 
       await _syncPipelineAfterCameraInit();
@@ -412,7 +419,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (!mounted) return;
     _lastNativeReplaySignal = '';
     final svc = ref.read(cameraServiceProvider.notifier);
-    await svc.initCamera();
+    final previewMode = ref.read(cameraAppProvider).previewPerformanceMode;
+    await svc.initCamera(resolution: previewMode.resolutionTag);
     if (!mounted) return;
     await _syncPipelineAfterCameraInit();
     // 某些机型在前后台频繁切换时，renderer 就绪与参数下发仍可能出现时间竞态。
@@ -492,9 +500,31 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     });
   }
 
-  void _toggleLivePhoto(CameraAppState st, CameraState camSvc) {
+  Future<bool> _ensureLivePhotoMicrophonePermission() async {
+    final status = await Permission.microphone.status;
+    if (status.isGranted) return true;
+
+    final nextStatus = await Permission.microphone.request();
+    if (nextStatus.isGranted) {
+      if (mounted) {
+        _showViewfinderTopHint(_s().livePhotoMicRequired);
+      }
+      return true;
+    }
+
+    if (mounted) {
+      _showViewfinderTopHint(_s().livePhotoMicDenied);
+    }
+    return false;
+  }
+
+  Future<void> _toggleLivePhoto(CameraAppState st, CameraState camSvc) async {
     if (!camSvc.supportsLivePhoto) return;
     final next = !st.livePhotoEnabled;
+    if (next) {
+      final granted = await _ensureLivePhotoMicrophonePermission();
+      if (!granted) return;
+    }
     ref.read(cameraAppProvider.notifier).toggleLivePhoto();
     _showViewfinderHint(next ? _s().livePhotoOn : _s().livePhotoOff);
     if (next) {

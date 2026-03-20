@@ -124,11 +124,17 @@ class S {
   String get livePhotoEffect => get('livePhotoEffect');
   String get livePhotoOn => get('livePhotoOn');
   String get livePhotoOff => get('livePhotoOff');
+  String get livePhotoMicRequired => get('livePhotoMicRequired');
+  String get livePhotoMicDenied => get('livePhotoMicDenied');
   String get livePhotoNoOverlay => get('livePhotoNoOverlay');
   String get saveLocation => get('saveLocation');
   String get renderMode => get('renderMode');
   String get replicaModeShort => get('replicaModeShort');
   String get smartModeShort => get('smartModeShort');
+  String get previewMode => get('previewMode');
+  String get previewModeHint => get('previewModeHint');
+  String get previewModeLightweightShort => get('previewModeLightweightShort');
+  String get previewModePerformanceShort => get('previewModePerformanceShort');
   String get silentCapture => get('silentCapture');
   String get shutterVibration => get('shutterVibration');
   String get shutterSound => get('shutterSound');
@@ -420,6 +426,24 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.ja: 'Live Photo オフ',
     AppLanguage.ko: '라이브 포토 꺼짐',
   },
+  'livePhotoMicRequired': {
+    AppLanguage.zhHans: '开启实况需要麦克风权限以录制声音',
+    AppLanguage.zhHant: '開啟實況需要麥克風權限以錄製聲音',
+    AppLanguage.en: 'Microphone access is required to record Live Photo audio',
+    AppLanguage.ms: 'Akses mikrofon diperlukan untuk merakam audio Live Photo',
+    AppLanguage.ja: 'Live Photo の音声録音にはマイク権限が必要です',
+    AppLanguage.ko: '라이브 포토 오디오 녹음에는 마이크 권한이 필요합니다',
+  },
+  'livePhotoMicDenied': {
+    AppLanguage.zhHans: '未授予麦克风权限，实况将无法录制声音',
+    AppLanguage.zhHant: '未授予麥克風權限，實況將無法錄製聲音',
+    AppLanguage.en:
+        'Microphone permission denied. Live Photo audio will not be recorded',
+    AppLanguage.ms:
+        'Kebenaran mikrofon ditolak. Audio Live Photo tidak akan dirakam',
+    AppLanguage.ja: 'マイク権限がないため、Live Photo の音声は録音されません',
+    AppLanguage.ko: '마이크 권한이 없어 라이브 포토 오디오를 녹음할 수 없습니다',
+  },
   'livePhotoNoOverlay': {
     AppLanguage.zhHans: 'Live Photo 不支持边框 水印',
     AppLanguage.zhHant: 'Live Photo 不支援邊框 浮水印',
@@ -459,6 +483,42 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.ms: 'Pintar',
     AppLanguage.ja: 'スマート',
     AppLanguage.ko: '스마트',
+  },
+  'previewMode': {
+    AppLanguage.zhHans: '预览模式',
+    AppLanguage.zhHant: '預覽模式',
+    AppLanguage.en: 'Preview Mode',
+    AppLanguage.ms: 'Mod Pratonton',
+    AppLanguage.ja: 'プレビューモード',
+    AppLanguage.ko: '미리보기 모드',
+  },
+  'previewModeHint': {
+    AppLanguage.zhHans: '轻量模式默认使用 720p 并关闭部分重效果，明显降低发热；性能模式预览更完整，但更耗电、更容易发热。',
+    AppLanguage.zhHant: '輕量模式預設使用 720p 並關閉部分重效果，可明顯降低發熱；效能模式預覽更完整，但更耗電、更容易發熱。',
+    AppLanguage.en:
+        'Lightweight mode uses 720p preview and disables heavier effects to reduce heat. Performance mode shows fuller preview effects, but uses more power and runs hotter.',
+    AppLanguage.ms:
+        'Mod ringan menggunakan pratonton 720p dan mematikan kesan berat untuk mengurangkan haba. Mod prestasi memberi pratonton lebih lengkap, tetapi lebih menggunakan kuasa dan lebih panas.',
+    AppLanguage.ja:
+        '軽量モードは 720p プレビューと一部の重い効果の無効化で発熱を抑えます。性能モードはプレビュー効果がより完全ですが、消費電力と発熱が増えます。',
+    AppLanguage.ko:
+        '경량 모드는 720p 미리보기와 일부 무거운 효과 비활성화로 발열을 줄입니다. 성능 모드는 미리보기 효과가 더 완전하지만 전력 소모와 발열이 더 큽니다.',
+  },
+  'previewModeLightweightShort': {
+    AppLanguage.zhHans: '轻量',
+    AppLanguage.zhHant: '輕量',
+    AppLanguage.en: 'Light',
+    AppLanguage.ms: 'Ringan',
+    AppLanguage.ja: '軽量',
+    AppLanguage.ko: '경량',
+  },
+  'previewModePerformanceShort': {
+    AppLanguage.zhHans: '性能',
+    AppLanguage.zhHant: '效能',
+    AppLanguage.en: 'Performance',
+    AppLanguage.ms: 'Prestasi',
+    AppLanguage.ja: '性能',
+    AppLanguage.ko: '성능',
   },
   'silentCapture': {
     AppLanguage.zhHans: '静音拍摄',
