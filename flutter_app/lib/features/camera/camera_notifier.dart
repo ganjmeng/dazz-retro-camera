@@ -535,21 +535,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       // 关键修复：加载相机后立即将 defaultLook 色彩参数同步到原生 GPU shader
       // 修复 FQS 紫色偏色问题：确保 colorBiasR/G/B、grainSize、sharpness 等专用字段正确传递
       await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
-      // 同步默认镜头参数到原生 GPU shader
-      final defaultLens = camera.lensById(defaults.lensId);
-      _ref.read(cameraServiceProvider.notifier).updateLensParams(
-            distortion: defaultLens?.distortion ?? 0.0,
-            vignette: defaultLens?.vignette ?? 0.0,
-            zoomFactor: defaultLens?.zoomFactor ?? 1.0,
-            fisheyeMode: defaultLens?.fisheyeMode ?? false,
-            chromaticAberration: defaultLens?.chromaticAberration ?? 0.0,
-            bloom: defaultLens?.bloom ?? 0.0,
-            softFocus: defaultLens?.softFocus ?? 0.0,
-            exposure: defaultLens?.exposure ?? 0.0,
-            contrast: defaultLens?.contrast ?? 0.0,
-            saturation: defaultLens?.saturation ?? 0.0,
-            highlightCompression: defaultLens?.highlightCompression ?? 0.0,
-          );
+      await _syncCurrentPreviewStateToNative();
     } catch (e) {
       state =
           state.copyWith(isLoading: false, error: 'Failed to load camera: $e');
@@ -1395,6 +1381,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             '[Perf][takePhoto] total=${totalSw.elapsedMilliseconds} ms (finally)');
       }
       state = state.copyWith(isTakingPhoto: false);
+      unawaited(_syncCurrentPreviewStateToNative());
     }
   }
 
@@ -1577,6 +1564,61 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         _lastAckedRenderParamsVersion = ackVersion;
       }
     });
+  }
+
+  Future<void> _syncCurrentPreviewStateToNative() async {
+    syncRuntimeColorContext();
+    final camera = state.camera;
+    if (camera == null) return;
+    final lens = camera.lensById(state.activeLensId);
+    final renderParams = state.renderParams;
+    final zoom = state.zoomLevel;
+    final svc = _ref.read(cameraServiceProvider.notifier);
+
+    if (renderParams != null) {
+      final version = ++_renderParamsVersion;
+      final ackVersion = await svc.syncRuntimeState(
+        lensParams: {
+          'distortion': lens?.distortion ?? 0.0,
+          'vignette': lens?.vignette ?? 0.0,
+          'zoomFactor': lens?.zoomFactor ?? 1.0,
+          'fisheyeMode': lens?.fisheyeMode ?? false,
+          'chromaticAberration': lens?.chromaticAberration ?? 0.0,
+          'bloom': lens?.bloom ?? 0.0,
+          'softFocus': lens?.softFocus ?? 0.0,
+          'exposure': lens?.exposure ?? 0.0,
+          'contrast': lens?.contrast ?? 0.0,
+          'saturation': lens?.saturation ?? 0.0,
+          'highlightCompression': lens?.highlightCompression ?? 0.0,
+        },
+        renderParams: renderParams.toJson(),
+        zoom: zoom,
+        version: version,
+      );
+      if (ackVersion != null &&
+          ackVersion >= version &&
+          ackVersion > _lastAckedRenderParamsVersion) {
+        _lastAckedRenderParamsVersion = ackVersion;
+      }
+      return;
+    }
+
+    await svc.updateLensParams(
+      distortion: lens?.distortion ?? 0.0,
+      vignette: lens?.vignette ?? 0.0,
+      zoomFactor: lens?.zoomFactor ?? 1.0,
+      fisheyeMode: lens?.fisheyeMode ?? false,
+      chromaticAberration: lens?.chromaticAberration ?? 0.0,
+      bloom: lens?.bloom ?? 0.0,
+      softFocus: lens?.softFocus ?? 0.0,
+      exposure: lens?.exposure ?? 0.0,
+      contrast: lens?.contrast ?? 0.0,
+      saturation: lens?.saturation ?? 0.0,
+      highlightCompression: lens?.highlightCompression ?? 0.0,
+    );
+    if (zoom != 1.0) {
+      await svc.setZoom(zoom);
+    }
   }
 
   void _pushZoomToNative(double zoom, {bool immediate = false}) {

@@ -521,7 +521,15 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private fun handleSetPreset(call: MethodCall, result: MethodChannel.Result) {
         val preset = call.argument<Map<*, *>>("preset")
         val cameraId = (preset?.get("cameraId") as? String) ?: (preset?.get("id") as? String) ?: ""
+        val cameraChanged = cameraId.isNotEmpty() && cameraId != currentCameraId
         if (cameraId.isNotEmpty()) {
+            if (cameraChanged) {
+                cachedRenderParams = emptyMap()
+                cachedRenderVersion = 0
+                cachedLensFisheyeMode = false
+                cachedLensVignette = 0.0
+                cachedLensDistortion = 0.0
+            }
             currentPresetJson = preset
             currentCameraId = cameraId
         }

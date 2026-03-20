@@ -39,6 +39,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     private var cachedLensParams: [String: Any] = [:]
     private var cachedZoom: Double = 1.0
     private var cachedRenderVersion: Int = 0
+    private var currentCameraId: String = ""
 
     // takePhoto 的回调（等待 AVCapturePhotoCaptureDelegate）
     private var pendingPhotoResult: FlutterResult?
@@ -71,6 +72,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleInitCamera(call: call, result: result)
         case "startPreview":
             cameraManager?.startSession()
+            reapplyRuntimeStateToRenderer()
             result(nil)
         case "stopPreview":
             cameraManager?.stopSession()
@@ -187,6 +189,16 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
               let presetJson = args["preset"] as? [String: Any] else {
             result(FlutterError(code: "INVALID_ARG", message: "Invalid preset parameters", details: nil))
             return
+        }
+        let cameraId = (presetJson["cameraId"] as? String) ?? (presetJson["id"] as? String) ?? ""
+        let cameraChanged = !cameraId.isEmpty && cameraId != currentCameraId
+        if cameraChanged {
+            cachedRenderParams = [:]
+            cachedLensParams = [:]
+            cachedRenderVersion = 0
+        }
+        if !cameraId.isEmpty {
+            currentCameraId = cameraId
         }
         cachedPresetJson = presetJson
         let shaderParams = buildShaderParams(from: presetJson)
@@ -402,6 +414,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         ) { [weak self] imageData in
             guard let data = imageData else {
                 DispatchQueue.main.async {
+                    self?.reapplyRuntimeStateToRenderer()
                     result(FlutterError(code: "CAPTURE_FAILED", message: "Failed to capture photo", details: nil))
                 }
                 return
@@ -409,10 +422,12 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             do {
                 try data.write(to: fileURL)
                 DispatchQueue.main.async {
+                    self?.reapplyRuntimeStateToRenderer()
                     result(["filePath": fileURL.path])
                 }
             } catch {
                 DispatchQueue.main.async {
+                    self?.reapplyRuntimeStateToRenderer()
                     result(FlutterError(code: "WRITE_FAILED", message: error.localizedDescription, details: nil))
                 }
             }
@@ -952,6 +967,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cachedPresetShaderParams = [:]
         cachedZoom = 1.0
         cachedRenderVersion = 0
+        currentCameraId = ""
         result(nil)
     }
 
