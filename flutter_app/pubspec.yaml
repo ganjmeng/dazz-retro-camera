@@ -62,6 +62,8 @@ dependencies:
 
   # 手势缩放查看器（详情页双指缩放）
   photo_view: ^0.15.0
+  dismissible_page: ^1.0.2
+  photo_manager_image_provider: ^2.2.0
 
   # Live Photo / Motion Photo 播放
   video_player: ^2.9.5

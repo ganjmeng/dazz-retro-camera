@@ -3,10 +3,13 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
+import 'package:dismissible_page/dismissible_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import 'package:photo_view/photo_view.dart';
+import 'package:photo_view/photo_view_gallery.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,7 +34,6 @@ class _ThumbCache {
   }
 
   static void remove(String id) => _cache.remove(id);
-  static void clear() => _cache.clear();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -234,23 +236,27 @@ class _LivePhotoSupport {
 
     final imageFile = await asset.originFile;
     if (imageFile == null || !await imageFile.exists()) return null;
-    final bytes = await imageFile.readAsBytes();
-    final start = _findMotionVideoStart(bytes);
-    if (start == null) return null;
-    final tempFile = File(
-      '${Directory.systemTemp.path}/dazz_live_${asset.id}_${imageFile.lastModifiedSync().millisecondsSinceEpoch}.mp4',
-    );
-    await tempFile.writeAsBytes(bytes.sublist(start), flush: true);
-    _playbackPathCache[asset.id] = tempFile.path;
-    return tempFile.path;
-  }
-
-  static int? _findMotionVideoStart(List<int> bytes) {
-    final ftypIndex = _lastIndexOfBytes(bytes, _ftypMarker);
-    if (ftypIndex < 4) return null;
-    final start = ftypIndex - 4;
-    if (start < 0 || start >= bytes.length) return null;
-    return start;
+    final raf = await imageFile.open();
+    try {
+      final length = await raf.length();
+      final probeStart = math.max(0, length - 512 * 1024);
+      await raf.setPosition(probeStart);
+      final tail = await raf.read(length - probeStart);
+      final startInTail = _lastIndexOfBytes(tail, _ftypMarker);
+      if (startInTail < 4) return null;
+      final start = probeStart + startInTail - 4;
+      if (start < 0 || start >= length) return null;
+      await raf.setPosition(start);
+      final mp4Bytes = await raf.read(length - start);
+      final tempFile = File(
+        '${Directory.systemTemp.path}/dazz_live_${asset.id}_${imageFile.lastModifiedSync().millisecondsSinceEpoch}.mp4',
+      );
+      await tempFile.writeAsBytes(mp4Bytes, flush: true);
+      _playbackPathCache[asset.id] = tempFile.path;
+      return tempFile.path;
+    } finally {
+      await raf.close();
+    }
   }
 
   static int _indexOfBytes(List<int> source, List<int> pattern) {
@@ -876,41 +882,81 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   Widget _buildAlbumDropdown() {
-    return GestureDetector(
-      onTap: () => setState(() => _showAlbumDropdown = false),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Container(color: Colors.black.withAlpha(100)),
-            ),
-          ),
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 52,
-            left: 0,
-            right: 0,
-            child: GestureDetector(
-              onTap: () {},
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (int i = 0; i < _cameraAlbumEntries.length; i++) ...[
-                    _buildDropdownItem(_cameraAlbumEntries[i]),
-                    if (i < _cameraAlbumEntries.length - 1)
-                      Divider(
-                        height: 1,
-                        thickness: 0.5,
-                        color: Colors.white.withAlpha(20),
-                        indent: 100,
-                        endIndent: 20,
-                      ),
-                  ],
-                ],
+    final mq = MediaQuery.of(context);
+    return Positioned.fill(
+      child: GestureDetector(
+        onTap: () => setState(() => _showAlbumDropdown = false),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.45),
+                ),
               ),
             ),
-          ),
-        ],
+            SafeArea(
+              bottom: false,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: GestureDetector(
+                  onTap: () {},
+                  child: Container(
+                    margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    height: mq.size.height * 0.78,
+                    decoration: BoxDecoration(
+                      color: const Color(0xCC111111),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      children: [
+                        Container(
+                          height: 54,
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            _s().allPhotos,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Divider(
+                          height: 1,
+                          thickness: 0.5,
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                        Expanded(
+                          child: ListView.separated(
+                            physics: const BouncingScrollPhysics(),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            itemCount: _cameraAlbumEntries.length,
+                            separatorBuilder: (_, __) => Divider(
+                              height: 1,
+                              thickness: 0.5,
+                              color: Colors.white.withValues(alpha: 0.06),
+                              indent: 96,
+                              endIndent: 16,
+                            ),
+                            itemBuilder: (_, i) =>
+                                _buildDropdownItem(_cameraAlbumEntries[i]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1124,20 +1170,15 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   late PageController _pageController;
   String _cameraName = '';
   bool _currentAssetIsLivePhoto = false;
+  bool _isPreparingLiveVideo = false;
+  bool _isPlayingLiveVideo = false;
+  VideoPlayerController? _videoCtrl;
+  final Map<String, ImageProvider<Object>> _detailImageProviderCache =
+      <String, ImageProvider<Object>>{};
 
   S _s() => sOf(ProviderScope.containerOf(context).read(languageProvider));
 
-  // 每页图片缓存（key: assetId）
-  // 业界最佳实践：先加载预览图（屏幕分辨率级别）保证秒开，仅当前页再加载原图。
-  final Map<String, Uint8List> _fullDataCache = {}; // 当前页原图
-  final Map<String, Uint8List> _previewDataCache = {}; // 相邻页预览图（约 2K）
-  final Map<String, Uint8List> _thumbDataCache = {}; // 缩略图占位
-
-  // 滑动返回相关
-  double _dragOffset = 0.0;
-  bool _isDragging = false;
   bool _isZoomed = false; // 当前页是否已缩放（缩放时禁用滑动返回）
-  bool _isPhotoInteracting = false; // 图片正处于手势交互中
 
   @override
   void initState() {
@@ -1147,8 +1188,9 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     _pageController = PageController(initialPage: _currentIndex);
     _parseCameraName(widget.asset);
     _syncCurrentAssetLiveFlag();
-    // 预加载当前页 + 相邻页
-    _preloadPages(_currentIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_precacheAround(_currentIndex));
+    });
   }
 
   AssetEntity get _safeCurrentAsset {
@@ -1159,9 +1201,9 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
 
   @override
   void dispose() {
+    _disposeVideoController();
     _pageController.dispose();
-    _fullDataCache.clear();
-    _thumbDataCache.clear();
+    _detailImageProviderCache.clear();
     super.dispose();
   }
 
@@ -1176,80 +1218,6 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     if (mounted) setState(() => _cameraName = 'DAZZ');
   }
 
-  /// 预加载当前页及相邻 ±1 页
-  void _preloadPages(int index) {
-    final indices = [index - 2, index - 1, index, index + 1, index + 2].where((
-      i,
-    ) {
-      return i >= 0 && i < widget.allAssets.length;
-    }).toList();
-    for (final i in indices) {
-      final asset = widget.allAssets[i];
-      _loadAssetThumb(asset);
-      _loadAssetPreview(asset);
-      if (i == index) {
-        // 当前页加载原图，保证放大细节
-        _loadAssetFull(asset);
-      }
-    }
-    _evictFarPageCaches(index);
-  }
-
-  Future<void> _loadAssetThumb(AssetEntity asset) async {
-    if (_thumbDataCache.containsKey(asset.id) ||
-        _ThumbCache.get(asset.id) != null) {
-      final cached = _ThumbCache.get(asset.id);
-      if (cached != null) {
-        _thumbDataCache[asset.id] = cached;
-      }
-      return;
-    }
-    try {
-      final thumb = await _ThumbLoadQueue.load(
-        asset,
-        size: const ThumbnailSize(300, 300),
-      );
-      if (thumb != null && mounted) {
-        setState(() => _thumbDataCache[asset.id] = thumb);
-      }
-    } catch (e) {
-      debugPrint('[PhotoDetailPage] _loadAssetThumb failed: ${asset.id}, $e');
-    }
-  }
-
-  Future<void> _loadAssetPreview(AssetEntity asset) async {
-    if (_previewDataCache.containsKey(asset.id) ||
-        _fullDataCache.containsKey(asset.id)) {
-      return;
-    }
-    final thumb = _ThumbCache.get(asset.id);
-    if (thumb != null) {
-      _thumbDataCache[asset.id] = thumb;
-    }
-    // 预览图按 2K 级别加载，明显降低大图 IO/解码抖动。
-    try {
-      final data =
-          await asset.thumbnailDataWithSize(const ThumbnailSize(2048, 2048));
-      if (data != null && mounted) {
-        setState(() => _previewDataCache[asset.id] = data);
-      }
-    } catch (e) {
-      debugPrint('[PhotoDetailPage] _loadAssetPreview failed: ${asset.id}, $e');
-    }
-  }
-
-  Future<void> _loadAssetFull(AssetEntity asset) async {
-    if (_fullDataCache.containsKey(asset.id)) return;
-    try {
-      final data = await asset.originBytes;
-      if (data != null && mounted) {
-        setState(() => _fullDataCache[asset.id] = data);
-      }
-    } catch (e) {
-      debugPrint('[PhotoDetailPage] _loadAssetFull failed: ${asset.id}, $e');
-    }
-  }
-
   Future<void> _syncCurrentAssetLiveFlag() async {
     final asset = _safeCurrentAsset;
     final isLive = await _LivePhotoSupport.isLiveAsset(asset);
@@ -1261,24 +1229,33 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
 
   AssetEntity get _currentDisplayedAsset => _safeCurrentAsset;
 
-  void _evictFarPageCaches(int centerIndex) {
-    final keepIds = <String>{};
-    for (int i = centerIndex - 2; i <= centerIndex + 2; i++) {
-      if (i >= 0 && i < widget.allAssets.length) {
-        keepIds.add(widget.allAssets[i].id);
-      }
-    }
-    _previewDataCache.removeWhere((k, _) => !keepIds.contains(k));
-    _fullDataCache.removeWhere((k, _) => !keepIds.contains(k));
-    _thumbDataCache.removeWhere((k, _) => !keepIds.contains(k));
+  ImageProvider<Object> _imageProviderFor(AssetEntity asset) {
+    return _detailImageProviderCache.putIfAbsent(
+      asset.id,
+      () => AssetEntityImageProvider(
+        asset,
+        isOriginal: false,
+        thumbnailSize: const ThumbnailSize(2048, 2048),
+      ),
+    );
   }
 
-  /// 获取某页应显示的图片数据：原图优先，其次缩略图，最后 null
-  Uint8List? _getDisplayData(String assetId) {
-    return _fullDataCache[assetId] ??
-        _previewDataCache[assetId] ??
-        _thumbDataCache[assetId] ??
-        _ThumbCache.get(assetId);
+  Future<void> _precacheAround(int index) async {
+    final assets = widget.allAssets.isEmpty
+        ? <AssetEntity>[widget.asset]
+        : widget.allAssets;
+    final indices = <int>[index - 1, index, index + 1]
+        .where((i) => i >= 0 && i < assets.length)
+        .toList();
+    for (final i in indices) {
+      final provider = _imageProviderFor(assets[i]);
+      try {
+        await precacheImage(provider, context);
+      } catch (e) {
+        debugPrint(
+            '[PhotoDetailPage] _precacheAround failed: ${assets[i].id}, $e');
+      }
+    }
   }
 
   Future<void> _shareAsset() async {
@@ -1343,276 +1320,17 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final mq = MediaQuery.of(context);
-    final canDismissByDrag = !_isZoomed;
-
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        // 滑动返回：向下拖动超过 120px 时返回
-        onVerticalDragStart: canDismissByDrag
-            ? (details) {
-                setState(() {
-                  _isDragging = true;
-                  _dragOffset = 0.0;
-                });
-              }
-            : null,
-        onVerticalDragUpdate: canDismissByDrag
-            ? (details) {
-                if (details.delta.dy > 0 || _dragOffset > 0) {
-                  setState(() => _dragOffset += details.delta.dy);
-                }
-              }
-            : null,
-        onVerticalDragEnd: canDismissByDrag
-            ? (details) {
-                if (_dragOffset > 120 || details.primaryVelocity! > 800) {
-                  Navigator.of(context).pop();
-                } else {
-                  setState(() {
-                    _isDragging = false;
-                    _dragOffset = 0.0;
-                  });
-                }
-              }
-            : null,
-        onVerticalDragCancel: canDismissByDrag
-            ? () {
-                setState(() {
-                  _isDragging = false;
-                  _dragOffset = 0.0;
-                });
-              }
-            : null,
-        child: AnimatedContainer(
-          duration:
-              _isDragging ? Duration.zero : const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          transform: Matrix4.translationValues(
-              0, _dragOffset.clamp(0.0, double.infinity), 0),
-          child: Stack(
-            children: [
-              // ── 照片内容（可左右滑动）──
-              PageView.builder(
-                controller: _pageController,
-                itemCount:
-                    widget.allAssets.isEmpty ? 1 : widget.allAssets.length,
-                // 缩放时禁用 PageView 的水平滑动（避免与 PhotoView 的手势冲突）
-                physics: _isZoomed
-                    ? const NeverScrollableScrollPhysics()
-                    : const PageScrollPhysics(),
-                onPageChanged: (i) {
-                  setState(() {
-                    _currentIndex = i;
-                    _isZoomed = false;
-                    _isPhotoInteracting = false;
-                  });
-                  _parseCameraName(
-                    widget.allAssets.isEmpty
-                        ? widget.asset
-                        : widget.allAssets[i],
-                  );
-                  _syncCurrentAssetLiveFlag();
-                  _preloadPages(i);
-                },
-                itemBuilder: (ctx, i) {
-                  final pageAsset = widget.allAssets.isEmpty
-                      ? widget.asset
-                      : widget.allAssets[i];
-                  final data = _getDisplayData(pageAsset.id);
-
-                  return _PhotoViewPage(
-                    asset: pageAsset,
-                    data: data,
-                    onScaleChanged: (isZoomed) {
-                      if (i == _currentIndex) {
-                        setState(() => _isZoomed = isZoomed);
-                      }
-                    },
-                    onInteractionChanged: (interacting) {
-                      if (i == _currentIndex &&
-                          interacting != _isPhotoInteracting) {
-                        setState(() => _isPhotoInteracting = interacting);
-                      }
-                    },
-                  );
-                },
-              ),
-
-              // ── 顶部状态栏区域（纯黑）──
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: mq.padding.top,
-                child: Container(color: Colors.black),
-              ),
-              if (_currentAssetIsLivePhoto)
-                Positioned(
-                  top: mq.padding.top + 14,
-                  left: 16,
-                  child: const _LiveBadge(),
-                ),
-
-              // ── 底部操作栏 ──
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  color: Colors.black,
-                  padding: EdgeInsets.only(
-                    bottom: mq.padding.bottom + 16,
-                    top: 16,
-                    left: 24,
-                    right: 24,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      if (_cameraName.isNotEmpty)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.camera_alt_outlined,
-                                color: Colors.white54, size: 14),
-                            const SizedBox(width: 5),
-                            Text(
-                              _cameraName,
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ],
-                        )
-                      else
-                        const SizedBox(),
-                      Row(
-                        children: [
-                          _ActionBtn(
-                              icon: Icons.ios_share_outlined,
-                              onTap: _shareAsset),
-                          const SizedBox(width: 12),
-                          _ActionBtn(
-                              icon: Icons.download_outlined,
-                              onTap: _saveToGallery),
-                          const SizedBox(width: 12),
-                          _ActionBtn(
-                              icon: Icons.delete_outline, onTap: _deleteAsset),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 单页照片视图
-// 业界最佳实践：使用 InteractiveViewer 处理捏合缩放，
-// 通过 transformationController 监听缩放状态，
-// 缩放 > 1 时通知父级禁用 PageView 的横向翻页手势，
-// 从而彻底解决捏合放大与左右滑动的手势冲突。
-// ─────────────────────────────────────────────────────────────────────────────
-class _PhotoViewPage extends StatefulWidget {
-  final AssetEntity asset;
-  final Uint8List? data;
-  final void Function(bool isZoomed) onScaleChanged;
-  final void Function(bool interacting)? onInteractionChanged;
-
-  const _PhotoViewPage({
-    required this.asset,
-    required this.data,
-    required this.onScaleChanged,
-    this.onInteractionChanged,
-  });
-
-  @override
-  State<_PhotoViewPage> createState() => _PhotoViewPageState();
-}
-
-class _PhotoViewPageState extends State<_PhotoViewPage> {
-  final PhotoViewController _photoCtrl = PhotoViewController();
-  final PhotoViewScaleStateController _scaleStateCtrl =
-      PhotoViewScaleStateController();
-  bool _isZoomed = false;
-  int _activePointers = 0;
-  bool _isLivePhoto = false;
-  bool _isPreparingLiveVideo = false;
-  bool _isPlayingLiveVideo = false;
-  VideoPlayerController? _videoCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _photoCtrl.outputStateStream.listen((value) {
-      final scale = value.scale ?? 1.0;
-      final zoomed = scale > 1.01;
-      if (!mounted || zoomed == _isZoomed) return;
-      setState(() => _isZoomed = zoomed);
-      widget.onScaleChanged(zoomed);
-    });
-    _loadLiveFlag();
-  }
-
-  @override
-  void didUpdateWidget(covariant _PhotoViewPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.asset.id != widget.asset.id) {
-      _stopPlayback();
-      _disposeVideoController();
-      _isLivePhoto = false;
-      _isPreparingLiveVideo = false;
-      _isPlayingLiveVideo = false;
-      _loadLiveFlag();
-    }
-  }
-
-  @override
-  void dispose() {
-    _disposeVideoController();
-    _photoCtrl.dispose();
-    _scaleStateCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadLiveFlag() async {
-    final assetId = widget.asset.id;
-    final cached = _LivePhotoSupport.getCachedLiveFlag(widget.asset.id);
-    if (cached) {
-      if (mounted) setState(() => _isLivePhoto = true);
-      return;
-    }
-    final isLive = await _LivePhotoSupport.isLiveAsset(widget.asset);
-    if (!mounted || widget.asset.id != assetId) return;
-    if (isLive != _isLivePhoto) {
-      setState(() => _isLivePhoto = isLive);
-    }
-  }
-
   Future<void> _toggleLivePlayback() async {
-    if (!_isLivePhoto) return;
+    if (!_currentAssetIsLivePhoto) return;
     if (_isPlayingLiveVideo) {
       await _stopPlayback();
       return;
     }
+    final asset = _safeCurrentAsset;
     if (_videoCtrl == null) {
       setState(() => _isPreparingLiveVideo = true);
-      final path = await _LivePhotoSupport.resolvePlaybackPath(widget.asset);
-      if (!mounted) return;
+      final path = await _LivePhotoSupport.resolvePlaybackPath(asset);
+      if (!mounted || asset.id != _safeCurrentAsset.id) return;
       if (path == null || path.isEmpty) {
         setState(() => _isPreparingLiveVideo = false);
         return;
@@ -1641,7 +1359,6 @@ class _PhotoViewPageState extends State<_PhotoViewPage> {
     await _videoCtrl?.play();
     if (!mounted) return;
     setState(() => _isPlayingLiveVideo = true);
-    widget.onInteractionChanged?.call(false);
   }
 
   Future<void> _stopPlayback() async {
@@ -1654,13 +1371,15 @@ class _PhotoViewPageState extends State<_PhotoViewPage> {
   }
 
   void _handleVideoState() {
-    final value = _videoCtrl?.value;
-    if (value == null || !mounted) return;
+    if (!mounted) return;
+    final controller = _videoCtrl;
+    if (controller == null) return;
+    final value = controller.value;
     if (!value.isInitialized) return;
     final ended = !value.isPlaying &&
         value.duration > Duration.zero &&
         value.position >= value.duration - const Duration(milliseconds: 60);
-    if (ended && _isPlayingLiveVideo) {
+    if (ended && _isPlayingLiveVideo && mounted) {
       setState(() => _isPlayingLiveVideo = false);
     }
   }
@@ -1669,157 +1388,228 @@ class _PhotoViewPageState extends State<_PhotoViewPage> {
     _videoCtrl?.removeListener(_handleVideoState);
     _videoCtrl?.dispose();
     _videoCtrl = null;
+    _isPreparingLiveVideo = false;
+    _isPlayingLiveVideo = false;
   }
 
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
+    final galleryAssets = widget.allAssets.isEmpty
+        ? <AssetEntity>[widget.asset]
+        : widget.allAssets;
 
-    if (widget.data == null) {
-      return Container(
-        color: Colors.black,
-        child: const Center(
-          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-        ),
-      );
-    }
-
-    return Container(
-      color: Colors.black,
-      child: Column(
-        children: [
-          SizedBox(height: mq.padding.top),
-          Expanded(
-            child: Listener(
-              onPointerDown: (_) {
-                _activePointers++;
-                if (_activePointers >= 2) {
-                  widget.onInteractionChanged?.call(true);
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: DismissiblePage(
+        direction: DismissiblePageDismissDirection.down,
+        isFullScreen: true,
+        disabled: _isZoomed || _isPlayingLiveVideo,
+        minRadius: 12,
+        maxTransformValue: 0.15,
+        dragSensitivity: 1.0,
+        backgroundColor: Colors.black,
+        onDismissed: () => Navigator.of(context).pop(),
+        child: Stack(
+          children: [
+            PhotoViewGallery.builder(
+              pageController: _pageController,
+              itemCount: galleryAssets.length,
+              backgroundDecoration: const BoxDecoration(color: Colors.black),
+              scrollPhysics: _isZoomed
+                  ? const NeverScrollableScrollPhysics()
+                  : const BouncingScrollPhysics(),
+              loadingBuilder: (_, __) => const Center(
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              ),
+              scaleStateChangedCallback: (state) {
+                final zoomed = state == PhotoViewScaleState.zoomedIn ||
+                    state == PhotoViewScaleState.covering ||
+                    state == PhotoViewScaleState.originalSize;
+                if (zoomed != _isZoomed && mounted) {
+                  setState(() => _isZoomed = zoomed);
                 }
               },
-              onPointerUp: (_) {
-                if (_activePointers > 0) {
-                  _activePointers--;
-                }
-                if (_activePointers < 2) {
-                  widget.onInteractionChanged?.call(false);
-                }
+              onPageChanged: (i) {
+                setState(() {
+                  _currentIndex = i;
+                  _isZoomed = false;
+                });
+                _disposeVideoController();
+                _parseCameraName(galleryAssets[i]);
+                _syncCurrentAssetLiveFlag();
+                unawaited(_precacheAround(i));
               },
-              onPointerCancel: (_) {
-                _activePointers = 0;
-                widget.onInteractionChanged?.call(false);
+              builder: (ctx, i) {
+                final pageAsset = galleryAssets[i];
+                return PhotoViewGalleryPageOptions(
+                  imageProvider: _imageProviderFor(pageAsset),
+                  minScale: PhotoViewComputedScale.contained,
+                  initialScale: PhotoViewComputedScale.contained,
+                  maxScale: PhotoViewComputedScale.contained * 5.0,
+                  tightMode: true,
+                  basePosition: Alignment.center,
+                  filterQuality: FilterQuality.medium,
+                  gestureDetectorBehavior: HitTestBehavior.opaque,
+                  heroAttributes: PhotoViewHeroAttributes(tag: pageAsset.id),
+                );
               },
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  PhotoView(
-                    imageProvider: MemoryImage(widget.data!),
-                    controller: _photoCtrl,
-                    scaleStateController: _scaleStateCtrl,
-                    backgroundDecoration:
-                        const BoxDecoration(color: Colors.black),
-                    minScale: PhotoViewComputedScale.contained,
-                    initialScale: PhotoViewComputedScale.contained,
-                    maxScale: PhotoViewComputedScale.contained * 5.0,
-                    tightMode: true,
-                    enableRotation: false,
-                    basePosition: Alignment.center,
-                    filterQuality: FilterQuality.medium,
-                    scaleStateChangedCallback: (state) {
-                      final zoomed = state != PhotoViewScaleState.initial;
-                      if (zoomed != _isZoomed) {
-                        setState(() => _isZoomed = zoomed);
-                        widget.onScaleChanged(zoomed);
-                      }
-                      widget.onInteractionChanged?.call(
-                        zoomed || _activePointers >= 2,
-                      );
-                    },
+            ),
+            if (_videoCtrl?.value.isInitialized == true)
+              Positioned.fill(
+                child: IgnorePointer(
+                  ignoring: !_isPlayingLiveVideo,
+                  child: AnimatedOpacity(
+                    opacity: _isPlayingLiveVideo ? 1 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: FittedBox(
+                      fit: BoxFit.contain,
+                      child: SizedBox(
+                        width: _videoCtrl!.value.size.width,
+                        height: _videoCtrl!.value.size.height,
+                        child: VideoPlayer(_videoCtrl!),
+                      ),
+                    ),
                   ),
-                  if (_videoCtrl?.value.isInitialized == true)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        ignoring: !_isPlayingLiveVideo,
-                        child: AnimatedOpacity(
-                          opacity: _isPlayingLiveVideo ? 1 : 0,
-                          duration: const Duration(milliseconds: 180),
-                          child: FittedBox(
-                            fit: BoxFit.contain,
-                            child: SizedBox(
-                              width: _videoCtrl!.value.size.width,
-                              height: _videoCtrl!.value.size.height,
-                              child: VideoPlayer(_videoCtrl!),
+                ),
+              ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: mq.padding.top,
+              child: Container(color: Colors.black),
+            ),
+            if (_currentAssetIsLivePhoto)
+              Positioned(
+                top: mq.padding.top + 14,
+                left: 16,
+                child: const _LiveBadge(),
+              ),
+            if (_currentAssetIsLivePhoto && !_isZoomed && !_isPlayingLiveVideo)
+              Positioned(
+                right: 20,
+                bottom: mq.padding.bottom + 110,
+                child: GestureDetector(
+                  onTap: _isPreparingLiveVideo ? null : _toggleLivePlayback,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withAlpha(160),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: Colors.white.withAlpha(35),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isPreparingLiveVideo)
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
                             ),
+                          )
+                        else
+                          const Icon(
+                            Icons.play_arrow_rounded,
+                            color: Color(0xFFFF9F0A),
+                            size: 18,
+                          ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _isPreparingLiveVideo ? '加载中' : '播放实况',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                  if (_isLivePhoto && !_isZoomed && !_isPlayingLiveVideo)
-                    Positioned(
-                      right: 20,
-                      bottom: 20,
-                      child: GestureDetector(
-                        onTap:
-                            _isPreparingLiveVideo ? null : _toggleLivePlayback,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOut,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
+                  ),
+                ),
+              ),
+            if (_isPlayingLiveVideo)
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _stopPlayback,
+                ),
+              ),
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                color: Colors.black,
+                padding: EdgeInsets.only(
+                  bottom: mq.padding.bottom + 16,
+                  top: 16,
+                  left: 24,
+                  right: 24,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    if (_cameraName.isNotEmpty)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.camera_alt_outlined,
+                            color: Colors.white54,
+                            size: 14,
                           ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withAlpha(160),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: Colors.white.withAlpha(35),
+                          const SizedBox(width: 5),
+                          Text(
+                            _cameraName,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.3,
                             ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (_isPreparingLiveVideo)
-                                const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              else
-                                const Icon(
-                                  Icons.play_arrow_rounded,
-                                  color: Color(0xFFFF9F0A),
-                                  size: 18,
-                                ),
-                              const SizedBox(width: 6),
-                              Text(
-                                _isPreparingLiveVideo ? '加载中' : '播放实况',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
+                        ],
+                      )
+                    else
+                      const SizedBox(),
+                    Row(
+                      children: [
+                        _ActionBtn(
+                          icon: Icons.ios_share_outlined,
+                          onTap: _shareAsset,
                         ),
-                      ),
+                        const SizedBox(width: 12),
+                        _ActionBtn(
+                          icon: Icons.download_outlined,
+                          onTap: _saveToGallery,
+                        ),
+                        const SizedBox(width: 12),
+                        _ActionBtn(
+                          icon: Icons.delete_outline,
+                          onTap: _deleteAsset,
+                        ),
+                      ],
                     ),
-                  if (_isPlayingLiveVideo)
-                    Positioned.fill(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _stopPlayback,
-                      ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 90), // 底部操作栏占位
-        ],
+          ],
+        ),
       ),
     );
   }
