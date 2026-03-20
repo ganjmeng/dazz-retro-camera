@@ -159,7 +159,11 @@ class CapturePipeline {
               final fullRect =
                   Rect.fromLTWH(0, 0, gpuW.toDouble(), gpuH.toDouble());
               final ratioCropRect = _calcCropRect(
-                  gpuW.toDouble(), gpuH.toDouble(), selectedRatioId);
+                gpuW.toDouble(),
+                gpuH.toDouble(),
+                selectedRatioId,
+                preferLandscapeOutput: deviceQuarter == 1 || deviceQuarter == 3,
+              );
               final needsRatioCrop =
                   (ratioCropRect.width - fullRect.width).abs() > 1.0 ||
                       (ratioCropRect.height - fullRect.height).abs() > 1.0;
@@ -284,7 +288,12 @@ class CapturePipeline {
           '[CapturePipeline] decoded: ${srcW.toInt()}x${srcH.toInt()}, ratio=$selectedRatioId, frame=$selectedFrameId, wm=$selectedWatermarkId');
 
       // ── 2. 计算裁剪区域（保持中心裁剪）────────────────────────────────────────────
-      Rect cropRect = _calcCropRect(srcW, srcH, selectedRatioId);
+      Rect cropRect = _calcCropRect(
+        srcW,
+        srcH,
+        selectedRatioId,
+        preferLandscapeOutput: deviceQuarter == 1 || deviceQuarter == 3,
+      );
       // ── 2b. 小窗模式：将裁剪区域进一步缩小到小窗内容 ──────────────────────────────
       if (minimapNormalizedRect != null) {
         final mmLeft =
@@ -889,7 +898,12 @@ class CapturePipeline {
 
   // ── 比例裁剪（中心裁剪，保持目标宽高比）────────────────────────────────────────
 
-  Rect _calcCropRect(double w, double h, String ratioId) {
+  Rect _calcCropRect(
+    double w,
+    double h,
+    String ratioId, {
+    bool preferLandscapeOutput = false,
+  }) {
     RatioDefinition? ratioOpt;
     if (ratioId.isNotEmpty) {
       try {
@@ -901,7 +915,10 @@ class CapturePipeline {
 
     if (ratioOpt == null) return Rect.fromLTWH(0, 0, w, h);
 
-    final targetRatio = ratioOpt.width.toDouble() / ratioOpt.height.toDouble();
+    var targetRatio = ratioOpt.width.toDouble() / ratioOpt.height.toDouble();
+    if (preferLandscapeOutput && targetRatio != 1.0) {
+      targetRatio = 1.0 / targetRatio;
+    }
     final srcRatio = w / h;
 
     double cropW, cropH, cropX, cropY;

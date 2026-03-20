@@ -31,10 +31,11 @@ class GrdCameraState {
 
   // User adjustments
   final double temperatureOffset; // -100..100
-  final double exposureValue;     // -2.0..2.0
+  final double exposureValue; // -2.0..2.0
 
   // UI state
-  final String? activePanel; // null | 'filter' | 'lens' | 'ratio' | 'frame' | 'watermark'
+  final String?
+      activePanel; // null | 'filter' | 'lens' | 'ratio' | 'frame' | 'watermark'
   final bool gridEnabled;
   final bool showTopMenu;
   final String flashMode; // 'off' | 'on' | 'auto'
@@ -117,7 +118,8 @@ class GrdCameraState {
   LensDefinition? get activeLens => camera?.lensById(activeLensId);
   RatioDefinition? get activeRatio => camera?.ratioById(activeRatioId);
   FrameDefinition? get activeFrame => camera?.frameById(activeFrameId);
-  WatermarkPreset? get activeWatermark => camera?.watermarkById(activeWatermarkId);
+  WatermarkPreset? get activeWatermark =>
+      camera?.watermarkById(activeWatermarkId);
 
   PreviewRenderParams? get renderParams {
     if (camera == null) return null;
@@ -128,6 +130,7 @@ class GrdCameraState {
       temperatureOffset: temperatureOffset,
       exposureOffset: exposureValue,
       policy: camera!.previewPolicy,
+      cameraId: camera!.id,
     );
   }
 
@@ -141,11 +144,16 @@ class GrdCameraState {
     final lens = activeLens;
     if (lens == null) return 'x1';
     switch (lens.id) {
-      case 'wide': return 'x2';
-      case 'vintage': return 'x1';
-      case 'dream': return 'x1';
-      case 'prism': return 'x1';
-      default: return 'x1';
+      case 'wide':
+        return 'x2';
+      case 'vintage':
+        return 'x1';
+      case 'dream':
+        return 'x1';
+      case 'prism':
+        return 'x1';
+      default:
+        return 'x1';
     }
   }
 }
@@ -176,7 +184,8 @@ class GrdCameraNotifier extends StateNotifier<GrdCameraState> {
         activeWatermarkId: defaults.watermarkPresetId,
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: 'Failed to load camera: $e');
+      state =
+          state.copyWith(isLoading: false, error: 'Failed to load camera: $e');
     }
   }
 
@@ -217,10 +226,10 @@ class GrdCameraNotifier extends StateNotifier<GrdCameraState> {
     }
     // Notify native layer about lens optical change
     _ref.read(cameraServiceProvider.notifier).setPreset(
-      // We pass lens id as part of preset metadata
-      // The native layer uses this for zoom hint
-      _buildNativePreset(),
-    );
+          // We pass lens id as part of preset metadata
+          // The native layer uses this for zoom hint
+          _buildNativePreset(),
+        );
   }
 
   void selectRatio(String id) {
@@ -281,7 +290,8 @@ class GrdCameraNotifier extends StateNotifier<GrdCameraState> {
         await Future.delayed(Duration(seconds: state.timerSeconds));
       }
 
-      final _photoResult = await _ref.read(cameraServiceProvider.notifier).takePhoto();
+      final _photoResult =
+          await _ref.read(cameraServiceProvider.notifier).takePhoto();
       final path = _photoResult?['filePath'] as String?;
 
       if (path != null) {
@@ -298,12 +308,17 @@ class GrdCameraNotifier extends StateNotifier<GrdCameraState> {
               imagePath: path,
               selectedRatioId: state.activeRatioId ?? '',
               selectedFrameId: state.activeFrameId ?? '',
-              selectedWatermarkId: _ref.read(cameraAppProvider).activeWatermarkId ?? '',
-              watermarkColorOverride: _ref.read(cameraAppProvider).watermarkColor,
-              watermarkPositionOverride: _ref.read(cameraAppProvider).watermarkPosition,
+              selectedWatermarkId:
+                  _ref.read(cameraAppProvider).activeWatermarkId ?? '',
+              watermarkColorOverride:
+                  _ref.read(cameraAppProvider).watermarkColor,
+              watermarkPositionOverride:
+                  _ref.read(cameraAppProvider).watermarkPosition,
               watermarkSizeOverride: _ref.read(cameraAppProvider).watermarkSize,
-              watermarkDirectionOverride: _ref.read(cameraAppProvider).watermarkDirection,
-              watermarkStyleOverride: _ref.read(cameraAppProvider).watermarkStyle,
+              watermarkDirectionOverride:
+                  _ref.read(cameraAppProvider).watermarkDirection,
+              watermarkStyleOverride:
+                  _ref.read(cameraAppProvider).watermarkStyle,
             );
             if (result != null) {
               await File(path).writeAsBytes(result.bytes);

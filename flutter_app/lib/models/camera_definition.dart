@@ -308,6 +308,15 @@ class DefaultLook {
   final double luminanceNoise; // 0.0 ~ 0.5 亮度噪声
   final double chromaNoise; // 0.0 ~ 0.5 色度噪声
   final double toneCurveStrength; // 0.0 ~ 1.0 Tone Curve 强度
+  // 风格响应权重：让共享渲染算子重新回到 JSON 配置驱动。
+  final double bloomResponse; // 0.0 ~ 1.0
+  final double halationResponse; // 0.0 ~ 1.0
+  final double fadeResponse; // 0.0 ~ 1.0
+  final double highlightRolloffResponse; // 0.0 ~ 1.0
+  final double sceneShadowResponse; // 0.0 ~ 1.0
+  final double sceneHighlightResponse; // 0.0 ~ 1.0
+  final double sceneWhitesResponse; // 0.0 ~ 1.0
+  final double toneCurveResponse; // 0.0 ~ 1.0
 
   const DefaultLook({
     this.baseLut,
@@ -374,6 +383,14 @@ class DefaultLook {
     this.luminanceNoise = 0,
     this.chromaNoise = 0,
     this.toneCurveStrength = 0,
+    this.bloomResponse = 1.0,
+    this.halationResponse = 1.0,
+    this.fadeResponse = 1.0,
+    this.highlightRolloffResponse = 1.0,
+    this.sceneShadowResponse = 1.0,
+    this.sceneHighlightResponse = 1.0,
+    this.sceneWhitesResponse = 1.0,
+    this.toneCurveResponse = 1.0,
   });
 
   /// 占位默认値（相机 JSON 未加载时使用）
@@ -456,6 +473,18 @@ class DefaultLook {
         luminanceNoise: _asDouble(json['luminanceNoise']),
         chromaNoise: _asDouble(json['chromaNoise']),
         toneCurveStrength: _asDouble(json['toneCurveStrength']),
+        bloomResponse: _asDouble(json['bloomResponse'], fallback: 1.0),
+        halationResponse: _asDouble(json['halationResponse'], fallback: 1.0),
+        fadeResponse: _asDouble(json['fadeResponse'], fallback: 1.0),
+        highlightRolloffResponse:
+            _asDouble(json['highlightRolloffResponse'], fallback: 1.0),
+        sceneShadowResponse:
+            _asDouble(json['sceneShadowResponse'], fallback: 1.0),
+        sceneHighlightResponse:
+            _asDouble(json['sceneHighlightResponse'], fallback: 1.0),
+        sceneWhitesResponse:
+            _asDouble(json['sceneWhitesResponse'], fallback: 1.0),
+        toneCurveResponse: _asDouble(json['toneCurveResponse'], fallback: 1.0),
       );
 
   Map<String, dynamic> toJson() => {
@@ -516,6 +545,18 @@ class DefaultLook {
         if (luminanceNoise != 0) 'luminanceNoise': luminanceNoise,
         if (chromaNoise != 0) 'chromaNoise': chromaNoise,
         if (toneCurveStrength != 0) 'toneCurveStrength': toneCurveStrength,
+        if (bloomResponse != 1.0) 'bloomResponse': bloomResponse,
+        if (halationResponse != 1.0) 'halationResponse': halationResponse,
+        if (fadeResponse != 1.0) 'fadeResponse': fadeResponse,
+        if (highlightRolloffResponse != 1.0)
+          'highlightRolloffResponse': highlightRolloffResponse,
+        if (sceneShadowResponse != 1.0)
+          'sceneShadowResponse': sceneShadowResponse,
+        if (sceneHighlightResponse != 1.0)
+          'sceneHighlightResponse': sceneHighlightResponse,
+        if (sceneWhitesResponse != 1.0)
+          'sceneWhitesResponse': sceneWhitesResponse,
+        if (toneCurveResponse != 1.0) 'toneCurveResponse': toneCurveResponse,
       };
 }
 

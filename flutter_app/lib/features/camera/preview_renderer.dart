@@ -233,6 +233,7 @@ class PreviewRenderParams {
   final String wbMode;
   final int colorTempK;
   final bool isFrontCamera;
+  final String cameraId;
   final String runtimeDeviceBrand;
   final String runtimeDeviceModel;
   final String runtimeCameraId;
@@ -252,6 +253,7 @@ class PreviewRenderParams {
     this.wbMode = 'auto',
     this.colorTempK = 6300,
     this.isFrontCamera = false,
+    this.cameraId = '',
     this.runtimeDeviceBrand = '',
     this.runtimeDeviceModel = '',
     this.runtimeCameraId = '',
@@ -407,10 +409,24 @@ class PreviewRenderParams {
   double get effectiveBloom {
     final base = defaultLook.bloom;
     final lens = activeLens?.bloom ?? 0;
-    return (base + lens).clamp(0.0, 1.0);
+    final sceneScale = switch (sceneClass) {
+      SceneClass.lowLight => 0.92,
+      SceneClass.backlit || SceneClass.highDynamic => 0.82,
+      _ => 1.0,
+    };
+    return ((base + lens) * defaultLook.bloomResponse * sceneScale)
+        .clamp(0.0, 1.0);
   }
 
-  double get effectiveHalation => defaultLook.halation.clamp(0.0, 1.0);
+  double get effectiveHalation {
+    final sceneScale = switch (sceneClass) {
+      SceneClass.lowLight => 0.95,
+      SceneClass.backlit || SceneClass.highDynamic => 0.85,
+      _ => 1.0,
+    };
+    return (defaultLook.halation * defaultLook.halationResponse * sceneScale)
+        .clamp(0.0, 1.0);
+  }
 
   double get effectiveSoftFocus {
     return (activeLens?.softFocus ?? 0).clamp(0.0, 1.0);
@@ -464,15 +480,16 @@ class PreviewRenderParams {
 
   double get effectiveTint =>
       (defaultLook.tint + _deviceProfile.tintOffset).clamp(-100.0, 100.0);
-  double get effectiveHighlights =>
-      (defaultLook.highlights + _sceneHighlightOffset(sceneClass))
-          .clamp(-100.0, 100.0);
-  double get effectiveShadows =>
-      (defaultLook.shadows + _sceneShadowsOffset(sceneClass))
-          .clamp(-100.0, 100.0);
-  double get effectiveWhites =>
-      (defaultLook.whites + _sceneWhitesOffset(sceneClass))
-          .clamp(-100.0, 100.0);
+  double get effectiveHighlights => (defaultLook.highlights +
+          _sceneHighlightOffset(sceneClass) *
+              defaultLook.sceneHighlightResponse)
+      .clamp(-100.0, 100.0);
+  double get effectiveShadows => (defaultLook.shadows +
+          _sceneShadowsOffset(sceneClass) * defaultLook.sceneShadowResponse)
+      .clamp(-100.0, 100.0);
+  double get effectiveWhites => (defaultLook.whites +
+          _sceneWhitesOffset(sceneClass) * defaultLook.sceneWhitesResponse)
+      .clamp(-100.0, 100.0);
   double get effectiveBlacks => defaultLook.blacks.clamp(-100.0, 100.0);
   double get effectiveClarity =>
       (defaultLook.clarity + _sceneClarityOffset(sceneClass))
@@ -514,9 +531,45 @@ class PreviewRenderParams {
   }
 
   // ── 拍立得即时成像专属参数 getter ──────────────────────────────────────────────
-  double get highlightRolloff =>
-      (defaultLook.highlightRolloff + _sceneHighlightRolloffBoost(sceneClass))
-          .clamp(0.0, 1.0);
+  double get highlightRolloff => ((defaultLook.highlightRolloff +
+              _sceneHighlightRolloffBoost(sceneClass)) *
+          defaultLook.highlightRolloffResponse)
+      .clamp(0.0, 1.0);
+
+  double get effectiveHighlightRolloff2 {
+    final sceneScale = switch (sceneClass) {
+      SceneClass.lowLight => 0.92,
+      SceneClass.backlit || SceneClass.highDynamic => 0.82,
+      _ => 1.0,
+    };
+    return (defaultLook.highlightRolloff2 *
+            defaultLook.highlightRolloffResponse *
+            sceneScale)
+        .clamp(0.0, 1.0);
+  }
+
+  double get effectiveToneCurveStrength {
+    final sceneScale = switch (sceneClass) {
+      SceneClass.lowLight => 0.95,
+      SceneClass.backlit || SceneClass.highDynamic => 0.88,
+      _ => 1.0,
+    };
+    return (defaultLook.toneCurveStrength *
+            defaultLook.toneCurveResponse *
+            sceneScale)
+        .clamp(0.0, 1.0);
+  }
+
+  double get effectiveFadeAmount {
+    final sceneScale = switch (sceneClass) {
+      SceneClass.lowLight => 0.90,
+      SceneClass.backlit || SceneClass.highDynamic => 0.82,
+      _ => 1.0,
+    };
+    return (defaultLook.fadeAmount * defaultLook.fadeResponse * sceneScale)
+        .clamp(0.0, 0.5);
+  }
+
   double get centerGain => defaultLook.centerGain.clamp(0.0, 0.2);
   double get edgeFalloff => defaultLook.edgeFalloff.clamp(0.0, 1.0);
   double get cornerWarmShift => defaultLook.cornerWarmShift.clamp(0.0, 5.0);
@@ -788,8 +841,8 @@ class PreviewRenderParams {
         if (effectiveBaseLut?.isNotEmpty == true) 'baseLut': effectiveBaseLut,
         if (effectiveBaseLut?.isNotEmpty == true)
           'lutStrength': effectiveLutStrength,
-        'highlightRolloff2': defaultLook.highlightRolloff2.clamp(0.0, 1.0),
-        'toneCurveStrength': defaultLook.toneCurveStrength.clamp(0.0, 1.0),
+        'highlightRolloff2': effectiveHighlightRolloff2,
+        'toneCurveStrength': effectiveToneCurveStrength,
         'halationAmount': effectiveHalation,
         'lensVignette': effectiveVignette,
         'exposureOffset': exposureOffset + effectiveLensExposure,
@@ -800,8 +853,8 @@ class PreviewRenderParams {
         'chromaNoise': defaultLook.chromaNoise.clamp(0.0, 0.5),
         'exposureVariation': defaultLook.exposureVariation.clamp(0.0, 0.1),
         // ── 新增：Fade / Split Toning / Light Leak ──
-        'fadeAmount': defaultLook.fadeAmount.clamp(0.0, 0.5),
-        'fade': defaultLook.fadeAmount.clamp(0.0, 0.5),
+        'fadeAmount': effectiveFadeAmount,
+        'fade': effectiveFadeAmount,
         'shadowTintR': defaultLook.shadowTintR.clamp(-0.2, 0.2),
         'shadowTintG': defaultLook.shadowTintG.clamp(-0.2, 0.2),
         'shadowTintB': defaultLook.shadowTintB.clamp(-0.2, 0.2),
@@ -810,6 +863,7 @@ class PreviewRenderParams {
         'highlightTintB': defaultLook.highlightTintB.clamp(-0.2, 0.2),
         'splitToneBalance': defaultLook.splitToneBalance.clamp(0.0, 1.0),
         'lightLeakAmount': defaultLook.lightLeakAmount.clamp(0.0, 1.0),
+        if (cameraId.isNotEmpty) 'cameraId': cameraId,
         // runtime calibration/debug context
         'sceneClass': sceneClass.name,
         'protectionMode': protectionMode,

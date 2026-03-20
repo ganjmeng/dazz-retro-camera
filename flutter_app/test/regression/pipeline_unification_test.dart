@@ -105,6 +105,7 @@ void main() {
   group('Regression: Phase 2 渲染逻辑下沉', () {
     test('PreviewRenderParams.toJson 应包含所有 Native Shader 需要的参数', () {
       final params = PreviewRenderParams(
+        cameraId: 'ccd_r',
         defaultLook: const DefaultLook(
           temperature: -15,
           contrast: 1.2,
@@ -177,6 +178,7 @@ void main() {
       expect(json.containsKey('softFocus'), isTrue);
       expect(json.containsKey('distortion'), isTrue);
       expect(json.containsKey('lensVignette'), isTrue);
+      expect(json['cameraId'], 'ccd_r');
 
       // 肤色保护参数
       expect(json.containsKey('skinHueProtect'), isTrue);

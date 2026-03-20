@@ -308,6 +308,7 @@ class CameraAppState {
       temperatureOffset: temperatureOffset,
       exposureOffset: exposureValue,
       policy: camera!.previewPolicy,
+      cameraId: camera!.id,
       wbMode: wbMode,
       colorTempK: colorTempK,
       isFrontCamera: isFrontCamera,

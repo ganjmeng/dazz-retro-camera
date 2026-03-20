@@ -79,7 +79,15 @@
     "highlightTintG": 0.02,
     "highlightTintB": 0.0,
     "splitToneBalance": 0.42,
-    "lightLeakAmount": 0.02
+    "lightLeakAmount": 0.02,
+    "bloomResponse": 0.45,
+    "halationResponse": 0.55,
+    "fadeResponse": 0.40,
+    "highlightRolloffResponse": 0.72,
+    "sceneShadowResponse": 0.82,
+    "sceneHighlightResponse": 0.78,
+    "sceneWhitesResponse": 0.82,
+    "toneCurveResponse": 0.0
   },
   "modules": {
     "filters": [
