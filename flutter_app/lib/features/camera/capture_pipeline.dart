@@ -384,14 +384,9 @@ class CapturePipeline {
         debugPrint(
             '[CapturePipeline] frame inset (ratio=$selectedRatioId): t=$topPx r=$rightPx b=$bottomPx l=$leftPx');
       }
-      final landscapeFrameOpt = isLandscapeCapture ? frameOpt : null;
-      final synthesizeLandscapeFrame = landscapeFrameOpt != null;
-
       // ── 3b. 外层背景间距计算 ────────────────────────────────────────────────────
       double outerPadPx = 0;
-      if (frameOpt != null &&
-          frameOpt.outerPadding > 0 &&
-          !synthesizeLandscapeFrame) {
+      if (frameOpt != null && frameOpt.outerPadding > 0) {
         final refSize = math.min(outW, outH);
         final scale = refSize / 1080.0;
         outerPadPx = frameOpt.outerPadding * scale;
@@ -406,7 +401,6 @@ class CapturePipeline {
           selectedFrameId != 'frame_none' &&
           selectedFrameId != 'none' &&
           frameOpt != null &&
-          !synthesizeLandscapeFrame &&
           resolvedAsset != null &&
           resolvedAsset.isNotEmpty;
       Uint8List? nativeFrameAssetBytes;
@@ -522,14 +516,15 @@ class CapturePipeline {
       final nativeComposeSourcePath = gpuProcessed
           ? gpuOutputPath
           : ((!decodedWithScale && renderParams == null) ? imagePath : null);
-      final nativeEffectiveQuarter = _resolveEffectiveQuarter(
-        canvasW: canvasW,
-        canvasH: canvasH,
-        deviceQuarter: deviceQuarter,
-        gpuProcessed: gpuProcessed,
-      );
+      final nativeEffectiveQuarter = frameOpt != null
+          ? 0
+          : _resolveEffectiveQuarter(
+              canvasW: canvasW,
+              canvasH: canvasH,
+              deviceQuarter: deviceQuarter,
+              gpuProcessed: gpuProcessed,
+            );
       if ((gpuProcessed || hasNativeOverlayNeed) &&
-          !synthesizeLandscapeFrame &&
           nativeComposeSourcePath != null &&
           (Platform.isAndroid || Platform.isIOS)) {
         try {
@@ -657,9 +652,7 @@ class CapturePipeline {
       }
 
       // ── 4b. 填充相框背景色（无 PNG 边框时）────────────────────────────────────────
-      if (frameOpt != null &&
-          !hasPngAssetForSize &&
-          !synthesizeLandscapeFrame) {
+      if (frameOpt != null && !hasPngAssetForSize) {
         Color bgColor = const Color(0xFFF5F2EA);
         try {
           if (frameBgHexSrc.toLowerCase() == 'transparent') {
@@ -794,16 +787,14 @@ class CapturePipeline {
       }
 
       // ── 4c2. 内嵌阴影（拟物相纸厚度感）──────────────────────────────────────
-      if (frameOpt != null &&
-          frameOpt.innerShadow &&
-          !synthesizeLandscapeFrame) {
+      if (frameOpt != null && frameOpt.innerShadow) {
         _drawInnerShadow(
             canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
       }
 
       // ── 4d. 漏光效果 ──────────────────────────────────────────────────────────
       final lightLeakStrength = frameOpt?.lightLeak ?? 0.0;
-      if (lightLeakStrength > 0.01 && !synthesizeLandscapeFrame) {
+      if (lightLeakStrength > 0.01) {
         _drawLightLeak(canvas, frameOffsetX + leftPx, frameOffsetY + topPx,
             outW, outH, lightLeakStrength);
       }
@@ -853,7 +844,6 @@ class CapturePipeline {
       // ── 4f. 相框纹理 PNG 叠加 ──────────────────────────────────────────────────
       if (frameOpt != null &&
           resolvedAsset != null &&
-          !synthesizeLandscapeFrame &&
           resolvedAsset.isNotEmpty) {
         try {
           final frameImg = await _getFrameTexture(
@@ -876,9 +866,7 @@ class CapturePipeline {
       }
 
       // ── 4g. 水印 ──────────────────────────────────────────────────────────────
-      if (selectedWatermarkId.isNotEmpty &&
-          selectedWatermarkId != 'none' &&
-          !synthesizeLandscapeFrame) {
+      if (selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none') {
         _drawWatermark(
           canvas,
           frameOffsetX + leftPx,
@@ -903,12 +891,14 @@ class CapturePipeline {
       //      // ── 5b. 根据设备方向旋转图片 ────────────────────────────────────
       // GPU 路径默认已处理方向，但部分机型仍会出现横竖错向。
       // 采用自适应策略：仅当当前输出朝向与设备朝向不一致时补旋转，避免双重旋转。
-      final effectiveQuarter = _resolveEffectiveQuarter(
-        canvasW: canvasW,
-        canvasH: canvasH,
-        deviceQuarter: deviceQuarter,
-        gpuProcessed: gpuProcessed,
-      );
+      final effectiveQuarter = frameOpt != null
+          ? 0
+          : _resolveEffectiveQuarter(
+              canvasW: canvasW,
+              canvasH: canvasH,
+              deviceQuarter: deviceQuarter,
+              gpuProcessed: gpuProcessed,
+            );
       ui.Image finalImage = outputImage;
       if (effectiveQuarter != 0) {
         // quarter 定义：1=左横屏(逆时针), 3=右横屏(顺时针)。
@@ -932,23 +922,6 @@ class CapturePipeline {
         finalImage = await rotPicture.toImage(rotW.toInt(), rotH.toInt());
         debugPrint(
             '[CapturePipeline] rotated: quarter=$effectiveQuarter, ${rotW.toInt()}x${rotH.toInt()}');
-      }
-
-      if (synthesizeLandscapeFrame) {
-        final wrapped = await _wrapLandscapeFrame(
-          image: finalImage,
-          frame: landscapeFrameOpt,
-          ratioId: selectedRatioId,
-          effectiveQuarter: effectiveQuarter,
-          frameBackgroundColor: frameBackgroundColor,
-          selectedWatermarkId: selectedWatermarkId,
-          watermarkColorOverride: watermarkColorOverride,
-          watermarkPositionOverride: watermarkPositionOverride,
-          watermarkSizeOverride: watermarkSizeOverride,
-          watermarkDirectionOverride: watermarkDirectionOverride,
-          watermarkStyleOverride: watermarkStyleOverride,
-        );
-        finalImage = wrapped;
       }
 
       // ── 5b-2. 应用 GL Shader 中缺失的效果 (已移动到 Canvas 绘制前) ────────────
@@ -1004,7 +977,8 @@ class CapturePipeline {
 
     if (ratioOpt == null) return Rect.fromLTWH(0, 0, w, h);
 
-    final portraitRatio = ratioOpt.width.toDouble() / ratioOpt.height.toDouble();
+    final portraitRatio =
+        ratioOpt.width.toDouble() / ratioOpt.height.toDouble();
     final targetRatio = preferLandscapeOutput && portraitRatio != 1.0
         ? 1.0 / portraitRatio
         : portraitRatio;
@@ -1118,171 +1092,6 @@ class CapturePipeline {
       quality: jpegQuality,
     );
     return (bytes: jpegBytes, width: rotW.toInt(), height: rotH.toInt());
-  }
-
-  Future<ui.Image> _wrapLandscapeFrame({
-    required ui.Image image,
-    required FrameDefinition frame,
-    required String ratioId,
-    required int effectiveQuarter,
-    String? frameBackgroundColor,
-    required String selectedWatermarkId,
-    String? watermarkColorOverride,
-    String? watermarkPositionOverride,
-    String? watermarkSizeOverride,
-    String? watermarkDirectionOverride,
-    String? watermarkStyleOverride,
-  }) async {
-    final imageW = image.width.toDouble();
-    final imageH = image.height.toDouble();
-    final inset = frame.insetForRatio(ratioId);
-    final scale = math.min(imageW, imageH) / 1080.0;
-    final rotatedInset =
-        _resolveLandscapeFrameInset(inset, effectiveQuarter, scale);
-    final canvasW = imageW + rotatedInset.left + rotatedInset.right;
-    final canvasH = imageH + rotatedInset.top + rotatedInset.bottom;
-    final frameBgHex =
-        (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
-            ? frameBackgroundColor
-            : frame.backgroundColor;
-    final canvasBgHex =
-        (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
-            ? frameBackgroundColor
-            : frame.outerBackgroundColor;
-    final cornerRadius =
-        frame.cornerRadius * (math.min(imageW, imageH) / 1080.0);
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, canvasW, canvasH));
-
-    Color canvasBg = Colors.white;
-    try {
-      final hex = canvasBgHex.replaceAll('#', '');
-      canvasBg = Color(int.parse('FF$hex', radix: 16));
-    } catch (_) {}
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, canvasW, canvasH),
-      Paint()..color = canvasBg,
-    );
-
-    Color frameBg = const Color(0xFFF5F2EA);
-    try {
-      if (frameBgHex.toLowerCase() == 'transparent' ||
-          frameBgHex.toLowerCase() == '#00000000') {
-        frameBg = Colors.transparent;
-      } else {
-        final hex = frameBgHex.replaceAll('#', '');
-        frameBg = Color(int.parse('FF$hex', radix: 16));
-      }
-    } catch (_) {}
-
-    if (frameBg != Colors.transparent) {
-      final frameRect = Rect.fromLTWH(0, 0, canvasW, canvasH);
-      if (cornerRadius > 0) {
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(frameRect, Radius.circular(cornerRadius)),
-          Paint()..color = frameBg,
-        );
-      } else {
-        canvas.drawRect(frameRect, Paint()..color = frameBg);
-      }
-    }
-
-    final imageRect = Rect.fromLTWH(
-      rotatedInset.left,
-      rotatedInset.top,
-      imageW,
-      imageH,
-    );
-    canvas.drawImage(image, Offset(imageRect.left, imageRect.top), Paint());
-
-    if (frame.innerShadow) {
-      _drawInnerShadow(
-        canvas,
-        imageRect.left,
-        imageRect.top,
-        imageRect.width,
-        imageRect.height,
-      );
-    }
-
-    if (frame.lightLeak > 0.01) {
-      _drawLightLeak(
-        canvas,
-        imageRect.left,
-        imageRect.top,
-        imageRect.width,
-        imageRect.height,
-        frame.lightLeak,
-      );
-    }
-
-    if (selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none') {
-      _drawWatermark(
-        canvas,
-        imageRect.left,
-        imageRect.top,
-        imageRect.width,
-        imageRect.height,
-        selectedWatermarkId,
-        colorOverride: watermarkColorOverride,
-        positionOverride: watermarkPositionOverride,
-        sizeOverride: watermarkSizeOverride,
-        directionOverride: watermarkDirectionOverride,
-        styleOverride: watermarkStyleOverride,
-        hasFrame: true,
-      );
-    }
-
-    final picture = recorder.endRecording();
-    return picture.toImage(canvasW.toInt(), canvasH.toInt());
-  }
-
-  ({double top, double right, double bottom, double left})
-      _resolveLandscapeFrameInset(
-    FrameInset inset,
-    int effectiveQuarter,
-    double scale,
-  ) {
-    final scaled = (
-      top: inset.top * scale,
-      right: inset.right * scale,
-      bottom: inset.bottom * scale,
-      left: inset.left * scale,
-    );
-
-    return switch (effectiveQuarter) {
-      1 => (
-          top: scaled.right,
-          right: scaled.bottom,
-          bottom: scaled.left,
-          left: scaled.top,
-        ),
-      3 => (
-          top: scaled.left,
-          right: scaled.top,
-          bottom: scaled.right,
-          left: scaled.bottom,
-        ),
-      _ => scaled,
-    };
-  }
-
-  @visibleForTesting
-  ({double top, double right, double bottom, double left})
-      debugResolveLandscapeFrameInset(
-    FrameInset inset, {
-    required int effectiveQuarter,
-    double scale = 1.0,
-  }) {
-    final resolved =
-        _resolveLandscapeFrameInset(inset, effectiveQuarter, scale);
-    return (
-      top: resolved.top,
-      right: resolved.right,
-      bottom: resolved.bottom,
-      left: resolved.left,
-    );
   }
 
   // ── 颜色矩阵（与预览一致）────────────────────────────────────────────────────
