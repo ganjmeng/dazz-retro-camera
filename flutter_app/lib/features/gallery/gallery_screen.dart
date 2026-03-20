@@ -1172,6 +1172,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   bool _currentAssetIsLivePhoto = false;
   bool _isPreparingLiveVideo = false;
   bool _isPlayingLiveVideo = false;
+  bool _isHoldingLivePlayback = false;
   VideoPlayerController? _videoCtrl;
   final Map<String, ImageProvider<Object>> _detailImageProviderCache =
       <String, ImageProvider<Object>>{};
@@ -1320,17 +1321,23 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     }
   }
 
-  Future<void> _toggleLivePlayback() async {
+  Future<void> _startLivePlaybackHold() async {
     if (!_currentAssetIsLivePhoto) return;
-    if (_isPlayingLiveVideo) {
-      await _stopPlayback();
-      return;
-    }
+    _isHoldingLivePlayback = true;
     final asset = _safeCurrentAsset;
     if (_videoCtrl == null) {
-      setState(() => _isPreparingLiveVideo = true);
+      if (mounted) {
+        setState(() => _isPreparingLiveVideo = true);
+      }
       final path = await _LivePhotoSupport.resolvePlaybackPath(asset);
-      if (!mounted || asset.id != _safeCurrentAsset.id) return;
+      if (!mounted ||
+          asset.id != _safeCurrentAsset.id ||
+          !_isHoldingLivePlayback) {
+        if (mounted && _isPreparingLiveVideo) {
+          setState(() => _isPreparingLiveVideo = false);
+        }
+        return;
+      }
       if (path == null || path.isEmpty) {
         setState(() => _isPreparingLiveVideo = false);
         return;
@@ -1355,10 +1362,16 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
         return;
       }
     }
+    if (!_isHoldingLivePlayback) return;
     await _videoCtrl?.seekTo(Duration.zero);
     await _videoCtrl?.play();
     if (!mounted) return;
     setState(() => _isPlayingLiveVideo = true);
+  }
+
+  Future<void> _stopLivePlaybackHold() async {
+    _isHoldingLivePlayback = false;
+    await _stopPlayback();
   }
 
   Future<void> _stopPlayback() async {
@@ -1388,6 +1401,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     _videoCtrl?.removeListener(_handleVideoState);
     _videoCtrl?.dispose();
     _videoCtrl = null;
+    _isHoldingLivePlayback = false;
     _isPreparingLiveVideo = false;
     _isPlayingLiveVideo = false;
   }
@@ -1494,7 +1508,11 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
                 right: 20,
                 bottom: mq.padding.bottom + 110,
                 child: GestureDetector(
-                  onTap: _isPreparingLiveVideo ? null : _toggleLivePlayback,
+                  onLongPressStart: _isPreparingLiveVideo
+                      ? null
+                      : (_) => unawaited(_startLivePlaybackHold()),
+                  onLongPressEnd: (_) => unawaited(_stopLivePlaybackHold()),
+                  onLongPressCancel: () => unawaited(_stopLivePlaybackHold()),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     curve: Curves.easeOut,
