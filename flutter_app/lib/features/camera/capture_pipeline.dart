@@ -120,8 +120,10 @@ class CapturePipeline {
     int maxDimension = kMaxDimMid, // 输出最大边长（由调用方按清晰度档位传入）
     int jpegQuality = kJpegQualityMid, // JPEG 编码质量（由调用方按清晰度档位传入）
     bool fisheyeMode = false, // 鱼眼圆圈模式：在成片四角绘制默色阒罩
+    bool circularFisheye = false,
   }) async {
     try {
+      final useCircularFisheye = circularFisheye && fisheyeMode;
       final isLandscapeCapture = deviceQuarter == 1 || deviceQuarter == 3;
       // ── 1. 先尝试 GPU 快速路径（无相框/水印时完全跳过 Dart 解码）─────────────
       bool gpuProcessed = false;
@@ -144,6 +146,7 @@ class CapturePipeline {
           final gpuParams = <String, dynamic>{
             ...?renderParams?.toJson(),
             if (fisheyeMode) 'fisheyeMode': 1.0,
+            if (fisheyeMode) 'circularFisheye': useCircularFisheye ? 1.0 : 0.0,
           };
           final gpuResult = await _channel.invokeMethod<Map>("processWithGpu", {
             "filePath": imagePath,
@@ -723,7 +726,7 @@ class CapturePipeline {
 
       // 鱼眼模式：先 save/clipPath 圆形区域，使图片只在圆内绘制（与 GL shader 一致）
       // GPU 已处理时，原生 shader 已在圆外输出纯黑，无需 Flutter Canvas 再做圆形裁切
-      if (fisheyeMode && !gpuProcessed) {
+      if (useCircularFisheye && !gpuProcessed) {
         canvas.save();
         final fisheyeCenter = Offset(
           frameOffsetX + leftPx + outW / 2,
@@ -762,7 +765,7 @@ class CapturePipeline {
       }
 
       // 鱼眼模式：恢复 canvas（圆形 clip 结束，仅 Dart 降级时执行）
-      if (fisheyeMode && !gpuProcessed) {
+      if (useCircularFisheye && !gpuProcessed) {
         canvas.restore();
       }
 
@@ -836,7 +839,7 @@ class CapturePipeline {
       // ── 4e3. 鱼眼四角黑色遮罩 ────────────────────────────────────────────
       // GPU 已处理时，原生 shader 已在圆外输出纯黑，无需 Flutter Canvas 再绘制遮罩
       // Dart 降级时仍由 _drawFisheyeMask 补充（与预览层 _FisheyeCirclePainter 对齐）
-      if (fisheyeMode && !gpuProcessed) {
+      if (useCircularFisheye && !gpuProcessed) {
         _drawFisheyeMask(
             canvas, frameOffsetX + leftPx, frameOffsetY + topPx, outW, outH);
       }

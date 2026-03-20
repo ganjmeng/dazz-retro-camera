@@ -93,6 +93,7 @@ struct CCDParams {
     float deviceCcm20;
     float deviceCcm21;
     float deviceCcm22;
+    float circularFisheye;
 };
 
 // MARK: - 工具函数
@@ -184,6 +185,20 @@ float2 fisheyeUV(float2 uv, float aspect) {
         sinTheta * sin(phi)
     );
     return texCoord * 0.5 + 0.5;
+}
+
+float2 fisheyeRectUV(float2 uv, float aspect) {
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+    float r = length(p);
+    float rCorner = length(float2(aspect, 1.0));
+    float rn = clamp(r / max(rCorner, 0.0001), 0.0, 1.0);
+    float theta = rn * 1.5707963;
+    float phi = atan2(p.y, p.x);
+    float sinTheta = sin(theta);
+    float2 mapped = float2(sinTheta * cos(phi), sinTheta * sin(phi));
+    mapped.x /= max(aspect, 0.0001);
+    return clamp(mapped * 0.5 + 0.5, float2(0.0), float2(1.0));
 }
 
 float2 barrelDistortUV(float2 uv, float strength, float aspect) {
@@ -436,13 +451,18 @@ fragment float4 ccdFragmentShader(
     float2 uv = in.texCoord;
 
     // 鱼眼模式：重映射 UV 坐标
-    if (params.fisheyeMode > 0.5) {
-        float2 fUV = fisheyeUV(uv, params.aspectRatio);
-        if (fUV.x < 0.0) {
-            // 圆形以外：输出纯黑
-            return float4(0.0, 0.0, 0.0, 1.0);
+    bool isFisheye = params.fisheyeMode > 0.5;
+    bool useCircularFisheye = params.circularFisheye > 0.5;
+    if (isFisheye) {
+        if (useCircularFisheye) {
+            float2 fUV = fisheyeUV(uv, params.aspectRatio);
+            if (fUV.x < 0.0) {
+                return float4(0.0, 0.0, 0.0, 1.0);
+            }
+            uv = fUV;
+        } else {
+            uv = fisheyeRectUV(uv, params.aspectRatio);
         }
-        uv = fUV;
     } else if (fabs(params.lensDistortion) > 0.0001) {
         uv = clamp(barrelDistortUV(uv, params.lensDistortion, params.aspectRatio), float2(0.0), float2(1.0));
     }
@@ -587,7 +607,7 @@ fragment float4 ccdFragmentShader(
 
     // === Pass 9: 暗角 (Vignette) ===
     // 鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗
-    if (params.fisheyeMode < 0.5) {
+    if (!isFisheye || !useCircularFisheye) {
         float vignette = vignetteEffect(uv, params.vignetteAmount);
         color *= vignette;
     }

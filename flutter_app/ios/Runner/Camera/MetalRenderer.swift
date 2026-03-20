@@ -79,6 +79,7 @@ struct CCDParams {
     var deviceCcm20: Float = 0.0
     var deviceCcm21: Float = 0.0
     var deviceCcm22: Float = 1.0
+    var circularFisheye: Float = 0.0
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -578,6 +579,12 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
     func setFisheyeMode(_ enabled: Bool) {
         paramsLock.lock()
         ccdParams.fisheyeMode = enabled ? 1.0 : 0.0
+        paramsLock.unlock()
+    }
+
+    func setCircularFisheye(_ enabled: Bool) {
+        paramsLock.lock()
+        ccdParams.circularFisheye = enabled ? 1.0 : 0.0
         paramsLock.unlock()
     }
 

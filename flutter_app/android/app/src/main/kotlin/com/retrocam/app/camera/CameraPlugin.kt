@@ -115,6 +115,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     @Volatile private var pendingShotLevel: Float = 0.5f
     // ── 缓存 lens 参数，供 switchLens 后重新应用 ──
     private var cachedLensFisheyeMode: Boolean = false
+    private var cachedLensCircularFisheye: Boolean = false
     private var cachedLensVignette: Double = 0.0
     private var cachedLensDistortion: Double = 0.0
     // GL Renderer
@@ -614,6 +615,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 cachedRenderParams = emptyMap()
                 cachedRenderVersion = 0
                 cachedLensFisheyeMode = false
+                cachedLensCircularFisheye = false
                 cachedLensVignette = 0.0
                 cachedLensDistortion = 0.0
             }
@@ -1590,6 +1592,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
     private fun handleUpdateLensParams(call: MethodCall, result: MethodChannel.Result) {
         val fisheyeMode           = call.argument<Boolean>("fisheyeMode") ?: false
+        val circularFisheye       = call.argument<Boolean>("circularFisheye") ?: fisheyeMode
         val vignette              = call.argument<Double>("vignette")    ?: 0.0
         val chromaticAberration   = call.argument<Double>("chromaticAberration") ?: 0.0
         val bloom                 = call.argument<Double>("bloom") ?: 0.0
@@ -1603,11 +1606,13 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
         // ── 缓存 lens 参数，供 switchLens 后重新应用 ──
         cachedLensFisheyeMode = fisheyeMode
+        cachedLensCircularFisheye = circularFisheye
         cachedLensVignette = vignette
         cachedLensDistortion = distortion
 
         // 将鱼眼模式传递到 GL 渲染器
         glRenderer?.setFisheyeMode(fisheyeMode)
+        glRenderer?.setCircularFisheye(circularFisheye)
 
         // ── FIX: 将所有镜头参数传递到 GL 渲染器（之前只传了 vignette）──
         val params = mutableMapOf<String, Any>(
@@ -1621,7 +1626,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         // 但仍然需要缓存以供 switchLens 后重新应用
         glRenderer?.updateParams(params)
 
-        Log.d(TAG, "updateLensParams: fisheyeMode=$fisheyeMode, vignette=$vignette, " +
+        Log.d(TAG, "updateLensParams: fisheyeMode=$fisheyeMode, circularFisheye=$circularFisheye, vignette=$vignette, " +
             "chromaticAberration=$chromaticAberration, bloom=$bloom, softFocus=$softFocus, " +
             "distortion=$distortion, exposure=$exposure, contrast=$contrast, " +
             "saturation=$saturation, zoomFactor=$zoomFactor")
@@ -1650,6 +1655,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val version = (call.argument<Int>("version") ?: cachedRenderVersion).coerceAtLeast(0)
 
         val fisheyeMode = (lensParams["fisheyeMode"] as? Boolean) ?: false
+        val circularFisheye =
+            (lensParams["circularFisheye"] as? Boolean) ?: fisheyeMode
         val vignette = (lensParams["vignette"] as? Number)?.toDouble() ?: 0.0
         val distortion = (lensParams["distortion"] as? Number)?.toDouble() ?: 0.0
         val chromaticAberration =
@@ -1659,6 +1666,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
         // 缓存 lens 参数，供重建 renderer 后恢复
         cachedLensFisheyeMode = fisheyeMode
+        cachedLensCircularFisheye = circularFisheye
         cachedLensVignette = vignette
         cachedLensDistortion = distortion
 
@@ -1669,6 +1677,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
 
         glRenderer?.setFisheyeMode(fisheyeMode)
+        glRenderer?.setCircularFisheye(circularFisheye)
 
         val merged = mutableMapOf<String, Any>()
         merged.putAll(renderParams)
@@ -2263,11 +2272,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         // 此时 glRenderer 仍为 null，导致 lens 参数丢失。
         // 因此必须在此处从缓存中恢复 lens 参数。
         renderer.setFisheyeMode(cachedLensFisheyeMode)
+        renderer.setCircularFisheye(cachedLensCircularFisheye)
         renderer.updateParams(mapOf(
             "vignette" to cachedLensVignette,
             "distortion" to cachedLensDistortion
         ))
-        Log.d(TAG, "reapplyPresetToRenderer: restored lens params fisheyeMode=$cachedLensFisheyeMode, vignette=$cachedLensVignette, distortion=$cachedLensDistortion")
+        Log.d(TAG, "reapplyPresetToRenderer: restored lens params fisheyeMode=$cachedLensFisheyeMode, circularFisheye=$cachedLensCircularFisheye, vignette=$cachedLensVignette, distortion=$cachedLensDistortion")
     }
 
     private fun sendEvent(type: String, payload: Map<String, Any>) {

@@ -109,6 +109,7 @@ struct CaptureParams {
     float deviceCcm20;
     float deviceCcm21;
     float deviceCcm22;
+    float circularFisheye;
 };
 
 // ── 工具函数 ─────────────────────────────────────────────────────────────
@@ -128,6 +129,20 @@ static float2 cp_fisheyeUV(float2 uv, float aspect) {
     float sinTheta = sin(theta);
     float2 texCoord = float2(sinTheta * cos(phi), sinTheta * sin(phi));
     return texCoord * 0.5 + 0.5;
+}
+
+static float2 cp_fisheyeRectUV(float2 uv, float aspect) {
+    float2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+    float r = length(p);
+    float rCorner = length(float2(aspect, 1.0));
+    float rn = clamp(r / max(rCorner, 0.0001), 0.0, 1.0);
+    float theta = rn * 1.5707963;
+    float phi = atan2(p.y, p.x);
+    float sinTheta = sin(theta);
+    float2 mapped = float2(sinTheta * cos(phi), sinTheta * sin(phi));
+    mapped.x /= max(aspect, 0.0001);
+    return clamp(mapped * 0.5 + 0.5, float2(0.0), float2(1.0));
 }
 
 static float2 cp_barrelDistortUV(float2 uv, float strength, float aspect) {
@@ -443,14 +458,18 @@ kernel void capturePipeline(
 
     // ── Pass 0: 鱼眼模式 — UV 重映射 + 圆形遮罩（与预览 Shader 完全一致）─────────
     bool isFisheye = params.fisheyeMode > 0.5;
+    bool useCircularFisheye = params.circularFisheye > 0.5;
     if (isFisheye) {
-        float2 fUV = cp_fisheyeUV(uv, params.aspectRatio);
-        if (fUV.x < 0.0) {
-            // 圆形以外：输出纯黑
-            outTexture.write(float4(0.0, 0.0, 0.0, 1.0), gid);
-            return;
+        if (useCircularFisheye) {
+            float2 fUV = cp_fisheyeUV(uv, params.aspectRatio);
+            if (fUV.x < 0.0) {
+                outTexture.write(float4(0.0, 0.0, 0.0, 1.0), gid);
+                return;
+            }
+            uv = fUV;
+        } else {
+            uv = cp_fisheyeRectUV(uv, params.aspectRatio);
         }
-        uv = fUV;
     } else if (fabs(params.lensDistortion) > 0.0001) {
         uv = clamp(cp_barrelDistortUV(uv, params.lensDistortion, params.aspectRatio), float2(0.0), float2(1.0));
     }
@@ -543,7 +562,7 @@ kernel void capturePipeline(
 
     // ── Pass 17: Vignette（暗角）──────────────────────────────────────────────────
     // 鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗（与预览 Shader 一致）
-    if (params.vignetteAmount > 0.001 && !isFisheye) {
+    if (params.vignetteAmount > 0.001 && (!isFisheye || !useCircularFisheye)) {
         color *= cp_vignette(uv, params.vignetteAmount);
     }
 

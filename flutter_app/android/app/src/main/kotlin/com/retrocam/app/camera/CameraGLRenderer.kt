@@ -97,7 +97,8 @@ uniform float uGrainAmount;
 uniform float uSharpen;
 uniform float uTime;
 uniform vec2  uTexelSize;   // 1/width, 1/height
-uniform float uFisheyeMode; // 1.0=圆形鱼眼模式, 0.0=普通模式
+uniform float uFisheyeMode; // 1.0=启用鱼眼投影, 0.0=普通模式
+uniform float uCircularFisheye; // 1.0=圆形裁切, 0.0=保留矩形画面
 uniform float uAspectRatio; // 宽/高 比例（用于保持圆形）
 uniform float uLensDistortion; // 轻量桶形畸变（非圆形鱼眼）
 uniform float uMirrorX; // 1.0=水平镜像, 0.0=不镜像
@@ -305,6 +306,24 @@ vec2 fisheyeUV(vec2 uv, float aspect) {
     return texCoord;
 }
 
+vec2 fisheyeRectUV(vec2 uv, float aspect) {
+    vec2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+    float r = length(p);
+    float rCorner = length(vec2(aspect, 1.0));
+    float rn = clamp(r / max(rCorner, 0.0001), 0.0, 1.0);
+    float theta = rn * 1.5707963;
+    float phi = atan(p.y, p.x);
+    float sinTheta = sin(theta);
+    vec2 texCoord = vec2(
+        sinTheta * cos(phi),
+        sinTheta * sin(phi)
+    );
+    texCoord.x /= max(aspect, 0.0001);
+    texCoord = texCoord * 0.5 + 0.5;
+    return clamp(texCoord, vec2(0.0), vec2(1.0));
+}
+
 vec2 barrelDistortUV(vec2 uv, float strength, float aspect) {
     vec2 p = (uv - 0.5) * 2.0;
     p.x *= aspect;
@@ -499,8 +518,10 @@ void main() {
 
     // 鱼眼模式：重映射 UV 坐标
     if (uFisheyeMode > 0.5) {
-        vec2 fUV = fisheyeUV(uv, uAspectRatio);
-        if (fUV.x < 0.0) {
+        vec2 fUV = uCircularFisheye > 0.5
+            ? fisheyeUV(uv, uAspectRatio)
+            : fisheyeRectUV(uv, uAspectRatio);
+        if (uCircularFisheye > 0.5 && fUV.x < 0.0) {
             fragColor = vec4(0.0, 0.0, 0.0, 1.0);
             return;
         }
@@ -645,7 +666,7 @@ void main() {
     color = applyLightLeak(color, uv, uLightLeakAmount, uLightLeakSeed);
 
     // Pass 23: 暗角（鱼眼模式下不叠加额外暗角）
-    if (uFisheyeMode < 0.5) {
+    if (uFisheyeMode < 0.5 || uCircularFisheye < 0.5) {
         float vignette = vignetteEffect(uv, uVignetteAmount);
         color *= vignette;
     }
@@ -701,6 +722,7 @@ void main() {
     private var uTime: Int = -1
     private var uTexelSize: Int = -1
     private var uFisheyeMode: Int = -1
+    private var uCircularFisheye: Int = -1
     private var uAspectRatio: Int = -1
     private var uLensDistortion: Int = -1
     private var uMirrorX: Int = -1
@@ -779,6 +801,7 @@ void main() {
     @Volatile private var sharpen: Float = 0.0f
     @Volatile private var time: Float = 0.0f
     @Volatile private var fisheyeMode: Float = 0.0f
+    @Volatile private var circularFisheye: Float = 0.0f
     @Volatile private var previewMirrorX: Float = 0.0f
     @Volatile private var lensDistortion: Float = 0.0f
     @Volatile private var highlights: Float = 0.0f
@@ -1026,6 +1049,7 @@ void main() {
         uTime                 = GLES30.glGetUniformLocation(programId, "uTime")
         uTexelSize            = GLES30.glGetUniformLocation(programId, "uTexelSize")
         uFisheyeMode          = GLES30.glGetUniformLocation(programId, "uFisheyeMode")
+        uCircularFisheye      = GLES30.glGetUniformLocation(programId, "uCircularFisheye")
         uAspectRatio          = GLES30.glGetUniformLocation(programId, "uAspectRatio")
         uLensDistortion       = GLES30.glGetUniformLocation(programId, "uLensDistortion")
         uMirrorX              = GLES30.glGetUniformLocation(programId, "uMirrorX")
@@ -1162,6 +1186,7 @@ void main() {
             1f / previewWidth.toFloat(),
             1f / previewHeight.toFloat())
         GLES30.glUniform1f(uFisheyeMode,         fisheyeMode)
+        GLES30.glUniform1f(uCircularFisheye,     circularFisheye)
         // FIX: use min/max so aspect is always <= 1.0 regardless of frame orientation.
         // fisheyeUV does p.x *= aspect to compress the horizontal axis to match the vertical,
         // producing a physically round circle. aspect must be shortEdge/longEdge (<= 1.0).
@@ -1366,6 +1391,10 @@ void main() {
 
     fun setFisheyeMode(enabled: Boolean) {
         fisheyeMode = if (enabled) 1.0f else 0.0f
+    }
+
+    fun setCircularFisheye(enabled: Boolean) {
+        circularFisheye = if (enabled) 1.0f else 0.0f
     }
 
     fun setPreviewMirror(enabled: Boolean) {

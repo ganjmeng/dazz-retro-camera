@@ -105,6 +105,7 @@
         "softFocus": 0.0,
         "refraction": 0.0,
         "fisheyeMode": true,
+        "circularFisheyeCrop": true,
         "iconPath": "assets/lenses/lens_fisheye.png"
       },
       {
@@ -124,7 +125,8 @@
         "flare": 0.0,
         "softFocus": 0.0,
         "refraction": 0.0,
-        "fisheyeMode": false,
+        "fisheyeMode": true,
+        "circularFisheyeCrop": false,
         "iconPath": "assets/lenses/lens_wide.png"
       },
       {

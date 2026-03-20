@@ -128,7 +128,8 @@ uniform float uSplitToneBalance;
 uniform float uLightLeakAmount;
 uniform float uLightLeakSeed;
 uniform float uExposureOffset;        // 用户曝光补偿（-2.0~+2.0）
-uniform float uFisheyeMode;           // 1.0=圆形鱼眼模式, 0.0=普通模式
+uniform float uFisheyeMode;           // 1.0=启用鱼眼投影, 0.0=普通模式
+uniform float uCircularFisheye;       // 1.0=圆形裁切, 0.0=保留矩形画面
 uniform float uAspectRatio;           // 宽/高，用于鱼眼圆形不变形
 uniform float uLensDistortion;        // 轻量桶形畸变（非圆形鱼眼）
 // ── LUT 参数 ────────────────────────────────────────────────────────────────────────────────
@@ -198,6 +199,20 @@ vec2 fisheyeUV(vec2 uv, float aspect) {
     float sinTheta = sin(theta);
     vec2 texCoord = vec2(sinTheta * cos(phi), sinTheta * sin(phi));
     return texCoord * 0.5 + 0.5;
+}
+
+vec2 fisheyeRectUV(vec2 uv, float aspect) {
+    vec2 p = (uv - 0.5) * 2.0;
+    p.x *= aspect;
+    float r = length(p);
+    float rCorner = length(vec2(aspect, 1.0));
+    float rn = clamp(r / max(rCorner, 0.0001), 0.0, 1.0);
+    float theta = rn * 1.5707963;
+    float phi = atan(p.y, p.x);
+    float sinTheta = sin(theta);
+    vec2 mapped = vec2(sinTheta * cos(phi), sinTheta * sin(phi));
+    mapped.x /= max(aspect, 0.0001);
+    return clamp(mapped * 0.5 + 0.5, vec2(0.0), vec2(1.0));
 }
 
 vec2 barrelDistortUV(vec2 uv, float strength, float aspect) {
@@ -511,13 +526,18 @@ void main() {
 
     // Pass 0: 鱼眼模式 — UV 重映射 + 圆形遮罩（与预览 Shader 完全一致）
     bool isFisheye = uFisheyeMode > 0.5;
+    bool useCircularFisheye = uCircularFisheye > 0.5;
     if (isFisheye) {
-        vec2 fUV = fisheyeUV(uv, uAspectRatio);
-        if (fUV.x < 0.0) {
-            fragColor = vec4(0.0, 0.0, 0.0, 1.0);
-            return;
+        if (useCircularFisheye) {
+            vec2 fUV = fisheyeUV(uv, uAspectRatio);
+            if (fUV.x < 0.0) {
+                fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+                return;
+            }
+            uv = fUV;
+        } else {
+            uv = fisheyeRectUV(uv, uAspectRatio);
         }
-        uv = fUV;
     } else if (abs(uLensDistortion) > 0.0001) {
         uv = clamp(barrelDistortUV(uv, uLensDistortion, uAspectRatio), vec2(0.0), vec2(1.0));
     }
@@ -648,7 +668,7 @@ void main() {
 
     // Pass 23: Vignette
     // 鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗（与预览 Shader 一致）
-    if (!isFisheye) {
+    if (!isFisheye || !useCircularFisheye) {
         float vigTotal = min(uVignetteAmount + uLensVignette, 1.0);
         color = applyVignette(color, uv, vigTotal);
     }
@@ -735,6 +755,7 @@ void main() {
     private var uLightLeakSeed = -1
     private var uExposureOffset = -1
     private var uFisheyeMode = -1
+    private var uCircularFisheye = -1
     private var uAspectRatio = -1
     private var uLensDistortion = -1
     // LUT uniform 位置缓存
@@ -1261,6 +1282,7 @@ void main() {
         uLightLeakSeed = loc("uLightLeakSeed")
         uExposureOffset = loc("uExposureOffset")
         uFisheyeMode = loc("uFisheyeMode")
+        uCircularFisheye = loc("uCircularFisheye")
         uAspectRatio = loc("uAspectRatio")
         uLensDistortion = loc("uLensDistortion")
         uLutTexture  = loc("uLutTexture")
@@ -1327,6 +1349,7 @@ void main() {
         GLES30.glUniform1f(uLightLeakSeed, f("lightLeakSeed", System.currentTimeMillis().toFloat() / 1000.0f))
         GLES30.glUniform1f(uExposureOffset, f("exposureOffset"))
         GLES30.glUniform1f(uFisheyeMode, f("fisheyeMode"))
+        GLES30.glUniform1f(uCircularFisheye, f("circularFisheye", f("fisheyeMode")))
         val lensDistortion = f("lensDistortion", f("distortion"))
         GLES30.glUniform1f(uLensDistortion, lensDistortion)
         // FIX: aspect must be min(w,h)/max(w,h) (<= 1.0) so fisheyeUV produces a round circle.

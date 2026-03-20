@@ -355,6 +355,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     private func handleUpdateLensParams(call: FlutterMethodCall, result: @escaping FlutterResult) {
         let args = call.arguments as? [String: Any]
         let fisheyeMode           = args?["fisheyeMode"] as? Bool ?? false
+        let circularFisheye       = args?["circularFisheye"] as? Bool ?? fisheyeMode
         let vignette              = args?["vignette"] as? Double ?? 0.0
         let chromaticAberration   = args?["chromaticAberration"] as? Double ?? 0.0
         let bloom                 = args?["bloom"] as? Double ?? 0.0
@@ -362,6 +363,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let distortion            = args?["distortion"] as? Double ?? 0.0
         cachedLensParams = [
             "fisheyeMode": fisheyeMode,
+            "circularFisheye": circularFisheye,
             "vignette": vignette,
             "chromaticAberration": chromaticAberration,
             "bloom": bloom,
@@ -371,6 +373,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
 
         // 将鱼眼模式传递到 Metal 渲染器
         renderer?.setFisheyeMode(fisheyeMode)
+        renderer?.setCircularFisheye(circularFisheye)
 
         // ── FIX: 将所有镜头参数传递到 Metal 渲染器（之前只传了 vignette）──
         if let r = renderer {
@@ -379,6 +382,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             p.chromaticAberration = Float(chromaticAberration)
             p.bloomAmount = Float(bloom)
             p.lensDistortion = Float(distortion)
+            p.circularFisheye = circularFisheye ? 1.0 : 0.0
             // softFocus 暂未下沉到 Metal uniform（由统一 renderParams 管线兜底）
             r.setCCDParams(p)
         }
@@ -396,6 +400,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let version = (args?["version"] as? Int) ?? cachedRenderVersion
 
         let fisheyeMode = lens["fisheyeMode"] as? Bool ?? false
+        let circularFisheye = lens["circularFisheye"] as? Bool ?? fisheyeMode
         let vignette = lens["vignette"] as? Double ?? 0.0
         let chromaticAberration = lens["chromaticAberration"] as? Double ?? 0.0
         let bloom = lens["bloom"] as? Double ?? 0.0
@@ -408,6 +413,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
 
         cameraManager?.setZoom(factor: CGFloat(zoom))
         renderer?.setFisheyeMode(fisheyeMode)
+        renderer?.setCircularFisheye(circularFisheye)
 
         var merged = render
         merged["vignette"] = Float(vignette)
@@ -415,6 +421,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         merged["bloomAmount"] = Float(bloom)
         merged["softFocus"] = Float(softFocus)
         merged["distortion"] = Float(distortion)
+        merged["circularFisheye"] = circularFisheye ? 1.0 : 0.0
         renderer?.updateParams(merged)
         result([
             "appliedVersion": cachedRenderVersion,
@@ -1114,12 +1121,16 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         if let fisheyeMode = cachedLensParams["fisheyeMode"] as? Bool {
             renderer.setFisheyeMode(fisheyeMode)
         }
+        if let circularFisheye = cachedLensParams["circularFisheye"] as? Bool {
+            renderer.setCircularFisheye(circularFisheye)
+        }
         if !cachedLensParams.isEmpty {
             var p = renderer.getCCDParams()
             if let v = cachedLensParams["vignette"] as? Double { p.vignetteAmount = Float(v) }
             if let v = cachedLensParams["chromaticAberration"] as? Double { p.chromaticAberration = Float(v) }
             if let v = cachedLensParams["bloom"] as? Double { p.bloomAmount = Float(v) }
             if let v = cachedLensParams["distortion"] as? Double { p.lensDistortion = Float(v) }
+            if let v = cachedLensParams["circularFisheye"] as? Bool { p.circularFisheye = v ? 1.0 : 0.0 }
             renderer.setCCDParams(p)
         }
         if !cachedRenderParams.isEmpty {

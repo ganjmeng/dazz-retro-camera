@@ -81,6 +81,7 @@ struct MetalCaptureParams {
     var deviceCcm20: Float = 0.0
     var deviceCcm21: Float = 0.0
     var deviceCcm22: Float = 1.0
+    var circularFisheye: Float = 0
 }
 
 /**
@@ -325,6 +326,7 @@ class CaptureProcessor {
         p.skinRedLimit       = getFloat(params, "skinRedLimit", 1.0)
         p.exposureOffset     = getFloat(params, "exposureOffset", 0)
         p.fisheyeMode        = getFloat(params, "fisheyeMode", 0)
+        p.circularFisheye    = getFloat(params, "circularFisheye", p.fisheyeMode)
         p.lensDistortion     = getFloat(params, "distortion", 0)
         p.deviceGamma        = getFloat(params, "deviceGamma", 1.0)
         p.deviceWhiteScaleR  = getFloat(params, "deviceWhiteScaleR", 1.0)

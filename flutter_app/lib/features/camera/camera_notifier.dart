@@ -650,6 +650,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           vignette: newLens?.vignette ?? 0.0,
           zoomFactor: newLens?.zoomFactor ?? 1.0,
           fisheyeMode: fisheyeMode,
+          circularFisheye: newLens?.circularFisheyeCrop ?? fisheyeMode,
           chromaticAberration: newLens?.chromaticAberration ?? 0.0,
           bloom: newLens?.bloom ?? 0.0,
           softFocus: newLens?.softFocus ?? 0.0,
@@ -1032,6 +1033,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           vignette: lens?.vignette ?? 0.0,
           zoomFactor: lens?.zoomFactor ?? 1.0,
           fisheyeMode: lens?.fisheyeMode ?? false,
+          circularFisheye:
+              lens?.circularFisheyeCrop ?? (lens?.fisheyeMode ?? false),
           chromaticAberration: lens?.chromaticAberration ?? 0.0,
           bloom: lens?.bloom ?? 0.0,
           softFocus: lens?.softFocus ?? 0.0,
@@ -1151,11 +1154,15 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     String? enhanceWatermarkStyleOverride;
     PreviewRenderParams? enhanceRenderParams;
     final captureRenderParams = state.renderParams;
+    final activeLens = state.camera?.lensById(state.activeLensId ?? '');
+    final circularFisheye =
+        activeLens?.circularFisheyeCrop ?? state.fisheyeMode;
     final livePhotoActive = state.livePhotoEnabled &&
         _ref.read(cameraServiceProvider).supportsLivePhoto &&
         !state.doubleExpEnabled &&
         state.burstCount == 0;
     bool enhanceFisheyeMode = false;
+    bool enhanceCircularFisheye = false;
     int enhanceDeviceQuarter = 0;
     Rect? enhanceMinimapRect;
     Position? capturedLocation;
@@ -1260,6 +1267,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             enhanceWatermarkStyleOverride = state.watermarkStyle;
             enhanceRenderParams = captureRenderParams;
             enhanceFisheyeMode = state.fisheyeMode;
+            enhanceCircularFisheye = circularFisheye;
             enhanceDeviceQuarter = deviceQuarter;
             enhanceMinimapRect = minimapNormalizedRect;
             debugPrint(
@@ -1326,6 +1334,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                   maxDimension: maxDim,
                   jpegQuality: jpegQ,
                   fisheyeMode: state.fisheyeMode,
+                  circularFisheye: circularFisheye,
                 );
                 if (processed != null) {
                   // 将处理后的第一张写入临时文件
@@ -1354,6 +1363,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                     maxDimension: maxDim,
                     jpegQuality: jpegQ,
                     fisheyeMode: state.fisheyeMode,
+                    circularFisheye: circularFisheye,
                   );
                   if (processed2 != null) {
                     // 合成两张照片
@@ -1383,6 +1393,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                         maxDimension: maxDim,
                         jpegQuality: jpegQ,
                         fisheyeMode: state.fisheyeMode,
+                        circularFisheye: circularFisheye,
                       );
                       if (finalProcessed != null) {
                         await File(path).writeAsBytes(finalProcessed.bytes);
@@ -1433,6 +1444,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                 maxDimension: maxDim,
                 jpegQuality: jpegQ,
                 fisheyeMode: state.fisheyeMode,
+                circularFisheye: circularFisheye,
               );
               if (processed != null) {
                 await File(path).writeAsBytes(processed.bytes);
@@ -1529,6 +1541,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             minimapNormalizedRect: enhanceMinimapRect,
             deviceQuarter: enhanceDeviceQuarter,
             fisheyeMode: enhanceFisheyeMode,
+            circularFisheye: enhanceCircularFisheye,
             capturedLocation: capturedLocation,
           ));
         }
@@ -1637,6 +1650,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     required Rect? minimapNormalizedRect,
     required int deviceQuarter,
     required bool fisheyeMode,
+    required bool circularFisheye,
     required Position? capturedLocation,
   }) async {
     String? enhancedPath;
@@ -1669,6 +1683,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         maxDimension: enhanceMaxDim,
         jpegQuality: enhanceJpegQ,
         fisheyeMode: fisheyeMode,
+        circularFisheye: circularFisheye,
       );
       if (processed == null) {
         debugPrint('[CameraNotifier] BG enhance returned null');
@@ -1822,6 +1837,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           'vignette': lens?.vignette ?? 0.0,
           'zoomFactor': lens?.zoomFactor ?? 1.0,
           'fisheyeMode': lens?.fisheyeMode ?? false,
+          'circularFisheye':
+              lens?.circularFisheyeCrop ?? (lens?.fisheyeMode ?? false),
           'chromaticAberration': lens?.chromaticAberration ?? 0.0,
           'bloom': lens?.bloom ?? 0.0,
           'softFocus': lens?.softFocus ?? 0.0,
@@ -1848,6 +1865,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       vignette: lens?.vignette ?? 0.0,
       zoomFactor: lens?.zoomFactor ?? 1.0,
       fisheyeMode: lens?.fisheyeMode ?? false,
+      circularFisheye:
+          lens?.circularFisheyeCrop ?? (lens?.fisheyeMode ?? false),
       chromaticAberration: lens?.chromaticAberration ?? 0.0,
       bloom: lens?.bloom ?? 0.0,
       softFocus: lens?.softFocus ?? 0.0,
