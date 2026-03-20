@@ -22,7 +22,8 @@ import 'dart:ui' as ui;
 
 /// 将处理后的像素数组重新编码为 ui.Image
 Future<ui.Image> _pixelsToImage(Uint8List pixels, int width, int height) async {
-  final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(pixels);
+  final ui.ImmutableBuffer buffer =
+      await ui.ImmutableBuffer.fromUint8List(pixels);
   final ui.ImageDescriptor descriptor = ui.ImageDescriptor.raw(
     buffer,
     width: width,
@@ -45,14 +46,17 @@ Future<ui.Image> _pixelsToImage(Uint8List pixels, int width, int height) async {
 ///   (0, 0.024) → (0.125, 0.133) → (0.251, 0.267) → (0.502, 0.510) → (0.753, 0.792) → (1.0, 0.973)
 /// 效果：黑位抬一点，中间调偏软，高光轻 rolloff，更像即时成像胶片。
 Future<ui.Image> drawToneCurve(ui.Image srcImage) async {
-  final ByteData? byteData = await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  final ByteData? byteData =
+      await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
   if (byteData == null) return srcImage;
 
   final Uint8List pixels = byteData.buffer.asUint8List();
   for (int i = 0; i < pixels.length; i += 4) {
-    pixels[i]     = (_toneCurve(pixels[i]     / 255.0) * 255).round().clamp(0, 255);
-    pixels[i + 1] = (_toneCurve(pixels[i + 1] / 255.0) * 255).round().clamp(0, 255);
-    pixels[i + 2] = (_toneCurve(pixels[i + 2] / 255.0) * 255).round().clamp(0, 255);
+    pixels[i] = (_toneCurve(pixels[i] / 255.0) * 255).round().clamp(0, 255);
+    pixels[i + 1] =
+        (_toneCurve(pixels[i + 1] / 255.0) * 255).round().clamp(0, 255);
+    pixels[i + 2] =
+        (_toneCurve(pixels[i + 2] / 255.0) * 255).round().clamp(0, 255);
     // alpha 通道 pixels[i + 3] 保持不变
   }
 
@@ -90,12 +94,13 @@ double _toneCurve(double x) {
 Future<ui.Image> drawHighlightRolloff(ui.Image srcImage, double rolloff) async {
   if (rolloff < 0.001) return srcImage;
 
-  final ByteData? byteData = await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  final ByteData? byteData =
+      await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
   if (byteData == null) return srcImage;
 
   final Uint8List pixels = byteData.buffer.asUint8List();
   for (int i = 0; i < pixels.length; i += 4) {
-    final double r = pixels[i]     / 255.0;
+    final double r = pixels[i] / 255.0;
     final double g = pixels[i + 1] / 255.0;
     final double b = pixels[i + 2] / 255.0;
 
@@ -107,9 +112,12 @@ Future<ui.Image> drawHighlightRolloff(ui.Image srcImage, double rolloff) async {
       mask = mask * mask * (3.0 - 2.0 * mask); // smoothstep
 
       // 偏暖压缩：R 保留最多（×0.15），G 次之（×0.20），B 压缩最多（×0.30）
-      pixels[i]     = (r * (1.0 - mask * rolloff * 0.15) * 255).round().clamp(0, 255);
-      pixels[i + 1] = (g * (1.0 - mask * rolloff * 0.20) * 255).round().clamp(0, 255);
-      pixels[i + 2] = (b * (1.0 - mask * rolloff * 0.30) * 255).round().clamp(0, 255);
+      pixels[i] =
+          (r * (1.0 - mask * rolloff * 0.15) * 255).round().clamp(0, 255);
+      pixels[i + 1] =
+          (g * (1.0 - mask * rolloff * 0.20) * 255).round().clamp(0, 255);
+      pixels[i + 2] =
+          (b * (1.0 - mask * rolloff * 0.30) * 255).round().clamp(0, 255);
     }
   }
 
@@ -129,14 +137,22 @@ Future<ui.Image> drawSensorNonUniformity(
   double centerGain,
   double edgeFalloff, {
   double cornerWarmShift = 0.0,
+  double topBottomBias = 0.0,
+  double leftRightBias = 0.0,
 }) async {
-  if (centerGain < 0.001 && edgeFalloff < 0.001) return srcImage;
+  if (centerGain < 0.001 &&
+      edgeFalloff < 0.001 &&
+      topBottomBias.abs() < 0.001 &&
+      leftRightBias.abs() < 0.001) {
+    return srcImage;
+  }
 
-  final ByteData? byteData = await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  final ByteData? byteData =
+      await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
   if (byteData == null) return srcImage;
 
   final Uint8List pixels = byteData.buffer.asUint8List();
-  final int width  = srcImage.width;
+  final int width = srcImage.width;
   final int height = srcImage.height;
 
   for (int y = 0; y < height; y++) {
@@ -144,7 +160,7 @@ Future<ui.Image> drawSensorNonUniformity(
       final int idx = (y * width + x) * 4;
 
       // 归一化坐标（0~1），中心为 (0.5, 0.5)
-      final double u = x / (width  - 1);
+      final double u = x / (width - 1);
       final double v = y / (height - 1);
       final double dx = u - 0.5;
       final double dy = v - 0.5;
@@ -160,6 +176,9 @@ Future<ui.Image> drawSensorNonUniformity(
       final double gainR = 1.0 + centerMask * centerGain * 1.2;
       final double gainG = 1.0 + centerMask * centerGain * 1.0;
       final double gainB = 1.0 + centerMask * centerGain * 0.7;
+      final double directionalBias = 1.0 +
+          (v - 0.5) * topBottomBias * 0.35 +
+          (u - 0.5) * leftRightBias * 0.35;
 
       // Corner Warm Shift：角落色温偏移（负=偏冷青，正=偏暖橙）
       // 仅在角落区域（dist2 > 0.15）应用，平滑过渡
@@ -171,13 +190,156 @@ Future<ui.Image> drawSensorNonUniformity(
         shiftB = -cornerWarmShift * cornerMask;
       }
 
-      pixels[idx]     = ((pixels[idx]     / 255.0 * falloff * gainR + shiftR) * 255).round().clamp(0, 255);
-      pixels[idx + 1] = ((pixels[idx + 1] / 255.0 * falloff * gainG + shiftG) * 255).round().clamp(0, 255);
-      pixels[idx + 2] = ((pixels[idx + 2] / 255.0 * falloff * gainB + shiftB) * 255).round().clamp(0, 255);
+      pixels[idx] =
+          ((pixels[idx] / 255.0 * falloff * gainR * directionalBias + shiftR) *
+                  255)
+              .round()
+              .clamp(0, 255);
+      pixels[idx + 1] =
+          ((pixels[idx + 1] / 255.0 * falloff * gainG * directionalBias +
+                      shiftG) *
+                  255)
+              .round()
+              .clamp(0, 255);
+      pixels[idx + 2] =
+          ((pixels[idx + 2] / 255.0 * falloff * gainB * directionalBias +
+                      shiftB) *
+                  255)
+              .round()
+              .clamp(0, 255);
     }
   }
 
   return _pixelsToImage(pixels, width, height);
+}
+
+Future<ui.Image> drawDehaze(ui.Image srcImage, double amount) async {
+  if (amount < 0.001) return srcImage;
+
+  final ByteData? byteData =
+      await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  if (byteData == null) return srcImage;
+
+  final Uint8List pixels = byteData.buffer.asUint8List();
+  final strength = amount.clamp(0.0, 1.0);
+  for (int i = 0; i < pixels.length; i += 4) {
+    final r = pixels[i] / 255.0;
+    final g = pixels[i + 1] / 255.0;
+    final b = pixels[i + 2] / 255.0;
+    final minC = min(r, min(g, b));
+    final maxC = max(r, max(g, b));
+    final haze = (minC * 0.65 + (1.0 - (maxC - minC)) * 0.35).clamp(0.0, 1.0);
+    final gain = 1.0 + strength * 0.55;
+    final offset = haze * strength * 0.12;
+    pixels[i] = (((r - offset) * gain).clamp(0.0, 1.0) * 255).round();
+    pixels[i + 1] = (((g - offset) * gain).clamp(0.0, 1.0) * 255).round();
+    pixels[i + 2] =
+        (((b - offset * 1.05) * gain).clamp(0.0, 1.0) * 255).round();
+  }
+
+  return _pixelsToImage(pixels, srcImage.width, srcImage.height);
+}
+
+Future<ui.Image> drawHighlightWarmth(ui.Image srcImage, double amount) async {
+  if (amount < 0.001) return srcImage;
+
+  final ByteData? byteData =
+      await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  if (byteData == null) return srcImage;
+
+  final Uint8List pixels = byteData.buffer.asUint8List();
+  for (int i = 0; i < pixels.length; i += 4) {
+    final r = pixels[i] / 255.0;
+    final g = pixels[i + 1] / 255.0;
+    final b = pixels[i + 2] / 255.0;
+    final lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    if (lum <= 0.55) continue;
+    final mask = _smoothstep(0.55, 1.0, lum) * amount.clamp(0.0, 1.0);
+    pixels[i] = (_lerp(r, (r + 0.08).clamp(0.0, 1.0), mask) * 255).round();
+    pixels[i + 1] =
+        (_lerp(g, (g + 0.035).clamp(0.0, 1.0), mask * 0.9) * 255).round();
+    pixels[i + 2] = (_lerp(b, (b - 0.03).clamp(0.0, 1.0), mask) * 255).round();
+  }
+
+  return _pixelsToImage(pixels, srcImage.width, srcImage.height);
+}
+
+Future<ui.Image> drawBlackAndWhiteMixer(
+  ui.Image srcImage,
+  double redWeight,
+  double greenWeight,
+  double blueWeight,
+) async {
+  final ByteData? byteData =
+      await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  if (byteData == null) return srcImage;
+
+  final Uint8List pixels = byteData.buffer.asUint8List();
+  final sum = redWeight + greenWeight + blueWeight;
+  final rW = sum <= 0.0001 ? 0.299 : redWeight / sum;
+  final gW = sum <= 0.0001 ? 0.587 : greenWeight / sum;
+  final bW = sum <= 0.0001 ? 0.114 : blueWeight / sum;
+  for (int i = 0; i < pixels.length; i += 4) {
+    final gray =
+        (pixels[i] * rW + pixels[i + 1] * gW + pixels[i + 2] * bW).round();
+    pixels[i] = gray;
+    pixels[i + 1] = gray;
+    pixels[i + 2] = gray;
+  }
+
+  return _pixelsToImage(pixels, srcImage.width, srcImage.height);
+}
+
+Future<ui.Image> drawToneCurvePoints(
+  ui.Image srcImage,
+  List<List<double>> points, {
+  double strength = 1.0,
+}) async {
+  if (points.length < 2 || strength <= 0.001) return srcImage;
+
+  final ByteData? byteData =
+      await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  if (byteData == null) return srcImage;
+
+  final Uint8List pixels = byteData.buffer.asUint8List();
+  final List<ui.Offset> curve = points
+      .where((point) => point.length >= 2)
+      .map((point) => ui.Offset(
+            point[0].clamp(0.0, 255.0),
+            point[1].clamp(0.0, 255.0),
+          ))
+      .toList()
+    ..sort((a, b) => a.dx.compareTo(b.dx));
+  if (curve.length < 2) return srcImage;
+
+  for (int i = 0; i < pixels.length; i += 4) {
+    pixels[i] = _applyCurveValue(pixels[i], curve, strength);
+    pixels[i + 1] = _applyCurveValue(pixels[i + 1], curve, strength);
+    pixels[i + 2] = _applyCurveValue(pixels[i + 2], curve, strength);
+  }
+
+  return _pixelsToImage(pixels, srcImage.width, srcImage.height);
+}
+
+int _applyCurveValue(int value, List<ui.Offset> curve, double strength) {
+  final x = value.toDouble();
+  ui.Offset prev = curve.first;
+  ui.Offset next = curve.last;
+  for (int i = 1; i < curve.length; i++) {
+    next = curve[i];
+    if (x <= next.dx) {
+      break;
+    }
+    prev = next;
+  }
+
+  final span = (next.dx - prev.dx).abs();
+  final t = span < 0.0001 ? 0.0 : ((x - prev.dx) / span).clamp(0.0, 1.0);
+  final curved = _lerp(prev.dy / 255.0, next.dy / 255.0, t) * 255.0;
+  return (_lerp(value / 255.0, curved / 255.0, strength.clamp(0.0, 1.0)) *
+          255.0)
+      .round()
+      .clamp(0, 255);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -196,17 +358,18 @@ Future<ui.Image> drawSkinHueProtect(
   double skinHueProtect, {
   double satProtect = 0.92,
   double lumaSoften = 0.0,
-  double redLimit   = 1.0,
+  double redLimit = 1.0,
 }) async {
   final double skinSatProtect = satProtect;
   if (skinHueProtect < 0.5) return srcImage;
 
-  final ByteData? byteData = await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  final ByteData? byteData =
+      await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
   if (byteData == null) return srcImage;
 
   final Uint8List pixels = byteData.buffer.asUint8List();
   for (int i = 0; i < pixels.length; i += 4) {
-    final double r = pixels[i]     / 255.0;
+    final double r = pixels[i] / 255.0;
     final double g = pixels[i + 1] / 255.0;
     final double b = pixels[i + 2] / 255.0;
 
@@ -216,9 +379,12 @@ Future<ui.Image> drawSkinHueProtect(
     final double l = hsl[2];
 
     // 肤色检测：Hue 0~50°（0.0~0.139），Sat 0.15~0.85，Lum 0.2~0.85
-    final bool isSkin = h >= 0.0 && h <= 0.139 &&
-                        s >= 0.15 && s <= 0.85 &&
-                        l >= 0.20 && l <= 0.85;
+    final bool isSkin = h >= 0.0 &&
+        h <= 0.139 &&
+        s >= 0.15 &&
+        s <= 0.85 &&
+        l >= 0.20 &&
+        l <= 0.85;
 
     if (isSkin) {
       // 饱和度保护：防止肤色过饱和变橙
@@ -226,14 +392,18 @@ Future<ui.Image> drawSkinHueProtect(
       final List<double> newRgb = _hslToRgb(h, newS, l);
 
       // 平滑混合（避免边界突变）
-      final double hueMask  = 1.0 - _smoothstep(0.10, 0.139, h);
-      final double satMask  = _smoothstep(0.15, 0.25, s) * (1.0 - _smoothstep(0.75, 0.85, s));
-      final double lumMask  = _smoothstep(0.20, 0.35, l) * (1.0 - _smoothstep(0.75, 0.85, l));
+      final double hueMask = 1.0 - _smoothstep(0.10, 0.139, h);
+      final double satMask =
+          _smoothstep(0.15, 0.25, s) * (1.0 - _smoothstep(0.75, 0.85, s));
+      final double lumMask =
+          _smoothstep(0.20, 0.35, l) * (1.0 - _smoothstep(0.75, 0.85, l));
       final double skinMask = hueMask * satMask * lumMask * 0.6;
 
-      pixels[i]     = (_lerp(r, newRgb[0], skinMask) * 255).round().clamp(0, 255);
-      pixels[i + 1] = (_lerp(g, newRgb[1], skinMask) * 255).round().clamp(0, 255);
-      pixels[i + 2] = (_lerp(b, newRgb[2], skinMask) * 255).round().clamp(0, 255);
+      pixels[i] = (_lerp(r, newRgb[0], skinMask) * 255).round().clamp(0, 255);
+      pixels[i + 1] =
+          (_lerp(g, newRgb[1], skinMask) * 255).round().clamp(0, 255);
+      pixels[i + 2] =
+          (_lerp(b, newRgb[2], skinMask) * 255).round().clamp(0, 255);
     }
   }
 
@@ -249,20 +419,22 @@ Future<ui.Image> drawSkinHueProtect(
 ///
 /// 注意：Shader 中使用低频噪声（基于 UV 坐标的伪随机），
 /// 此处使用 Random 模拟，效果近似但不完全相同（成片不需要帧间连续性）。
-Future<ui.Image> drawChemicalIrregularity(ui.Image srcImage, double amount) async {
+Future<ui.Image> drawChemicalIrregularity(
+    ui.Image srcImage, double amount) async {
   if (amount < 0.001) return srcImage;
 
-  final ByteData? byteData = await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  final ByteData? byteData =
+      await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
   if (byteData == null) return srcImage;
 
   final Uint8List pixels = byteData.buffer.asUint8List();
-  final int width  = srcImage.width;
+  final int width = srcImage.width;
   final int height = srcImage.height;
   final Random rng = Random();
 
   // 使用低频块状噪声（每 8x8 像素块共享同一随机值），模拟化学显影的空间相关性
   const int blockSize = 8;
-  final int blocksX = (width  / blockSize).ceil();
+  final int blocksX = (width / blockSize).ceil();
   final int blocksY = (height / blockSize).ceil();
 
   // 预生成块噪声
@@ -280,13 +452,20 @@ Future<ui.Image> drawChemicalIrregularity(ui.Image srcImage, double amount) asyn
 
       // 亮度变化 + 色偏（与 Shader 一致）
       final double brightVar = irregularity * 0.03;
-      final double rShift    = irregularity * 0.008;
-      final double gShift    = irregularity * 0.004;
-      final double bShift    = -irregularity * 0.006;
+      final double rShift = irregularity * 0.008;
+      final double gShift = irregularity * 0.004;
+      final double bShift = -irregularity * 0.006;
 
-      pixels[idx]     = (pixels[idx]     / 255.0 + brightVar + rShift).clamp(0.0, 1.0) * 255 ~/ 1;
-      pixels[idx + 1] = (pixels[idx + 1] / 255.0 + brightVar + gShift).clamp(0.0, 1.0) * 255 ~/ 1;
-      pixels[idx + 2] = (pixels[idx + 2] / 255.0 + brightVar + bShift).clamp(0.0, 1.0) * 255 ~/ 1;
+      pixels[idx] =
+          (pixels[idx] / 255.0 + brightVar + rShift).clamp(0.0, 1.0) * 255 ~/ 1;
+      pixels[idx + 1] =
+          (pixels[idx + 1] / 255.0 + brightVar + gShift).clamp(0.0, 1.0) *
+              255 ~/
+              1;
+      pixels[idx + 2] =
+          (pixels[idx + 2] / 255.0 + brightVar + bShift).clamp(0.0, 1.0) *
+              255 ~/
+              1;
     }
   }
 
@@ -302,7 +481,8 @@ Future<ui.Image> drawChemicalIrregularity(ui.Image srcImage, double amount) asyn
 Future<ui.Image> drawNoise(ui.Image srcImage, double amount) async {
   if (amount < 0.001) return srcImage;
 
-  final ByteData? byteData = await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  final ByteData? byteData =
+      await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
   if (byteData == null) return srcImage;
 
   final Uint8List pixels = byteData.buffer.asUint8List();
@@ -311,7 +491,7 @@ Future<ui.Image> drawNoise(ui.Image srcImage, double amount) async {
   for (int i = 0; i < pixels.length; i += 4) {
     // 亮度噪声（R/G/B 同步变化，保持色彩中性）
     final double noise = (rng.nextDouble() - 0.5) * amount * 0.5;
-    pixels[i]     = (pixels[i]     / 255.0 + noise).clamp(0.0, 1.0) * 255 ~/ 1;
+    pixels[i] = (pixels[i] / 255.0 + noise).clamp(0.0, 1.0) * 255 ~/ 1;
     pixels[i + 1] = (pixels[i + 1] / 255.0 + noise).clamp(0.0, 1.0) * 255 ~/ 1;
     pixels[i + 2] = (pixels[i + 2] / 255.0 + noise).clamp(0.0, 1.0) * 255 ~/ 1;
   }
@@ -377,14 +557,14 @@ double _smoothstep(double edge0, double edge1, double x) {
 /// 线性插值
 double _lerp(double a, double b, double t) => a + (b - a) * t;
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // 7. Paper Texture (相纸纹理)
 // ─────────────────────────────────────────────────────────────────────────────
 Future<ui.Image> drawPaperTexture(ui.Image srcImage, double amount) async {
   if (amount < 0.001) return srcImage;
 
-  final ByteData? byteData = await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  final ByteData? byteData =
+      await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
   if (byteData == null) return srcImage;
 
   final Uint8List pixels = byteData.buffer.asUint8List();
@@ -392,7 +572,7 @@ Future<ui.Image> drawPaperTexture(ui.Image srcImage, double amount) async {
 
   for (int i = 0; i < pixels.length; i += 4) {
     final double noise = (rng.nextDouble() - 0.5) * amount * 0.1;
-    pixels[i]     = (pixels[i]     / 255.0 + noise).clamp(0.0, 1.0) * 255 ~/ 1;
+    pixels[i] = (pixels[i] / 255.0 + noise).clamp(0.0, 1.0) * 255 ~/ 1;
     pixels[i + 1] = (pixels[i + 1] / 255.0 + noise).clamp(0.0, 1.0) * 255 ~/ 1;
     pixels[i + 2] = (pixels[i + 2] / 255.0 + noise).clamp(0.0, 1.0) * 255 ~/ 1;
   }
@@ -403,28 +583,29 @@ Future<ui.Image> drawPaperTexture(ui.Image srcImage, double amount) async {
 // ─────────────────────────────────────────────────────────────────────────────
 // 8. Development Softness (显影柔化)
 // ─────────────────────────────────────────────────────────────────────────────
-Future<ui.Image> drawDevelopmentSoftness(ui.Image srcImage, double amount) async {
+Future<ui.Image> drawDevelopmentSoftness(
+    ui.Image srcImage, double amount) async {
   if (amount < 0.001) return srcImage;
 
   // This is a simplified version. A proper implementation would require a blur filter.
   // For now, we apply a slight desaturation to simulate softness.
-  final ByteData? byteData = await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
+  final ByteData? byteData =
+      await srcImage.toByteData(format: ui.ImageByteFormat.rawRgba);
   if (byteData == null) return srcImage;
 
   final Uint8List pixels = byteData.buffer.asUint8List();
   for (int i = 0; i < pixels.length; i += 4) {
     final double r = pixels[i] / 255.0;
-    final double g = pixels[i+1] / 255.0;
-    final double b = pixels[i+2] / 255.0;
+    final double g = pixels[i + 1] / 255.0;
+    final double b = pixels[i + 2] / 255.0;
     final double lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     pixels[i] = ((r * (1.0 - amount)) + lum * amount) * 255 ~/ 1;
-    pixels[i+1] = ((g * (1.0 - amount)) + lum * amount) * 255 ~/ 1;
-    pixels[i+2] = ((b * (1.0 - amount)) + lum * amount) * 255 ~/ 1;
+    pixels[i + 1] = ((g * (1.0 - amount)) + lum * amount) * 255 ~/ 1;
+    pixels[i + 2] = ((b * (1.0 - amount)) + lum * amount) * 255 ~/ 1;
   }
 
   return _pixelsToImage(pixels, srcImage.width, srcImage.height);
 }
-
 
 /// 构建用于 Highlight Rolloff 的 256-entry 查找表 (LUT)
 ///
@@ -448,9 +629,13 @@ Float32List buildHighlightRolloffLUT(double rolloff) {
 /// 构建用于 Sensor Non-uniformity 的权重表
 ///
 /// 预计算每个像素的增益/衰减系数，避免逐像素坐标计算。
-Float32List buildSensorNonUniformityTable(int width, int height, double centerGain, double edgeFalloff, {double cornerWarmShift = 0.0}) {
+Float32List buildSensorNonUniformityTable(
+    int width, int height, double centerGain, double edgeFalloff,
+    {double cornerWarmShift = 0.0}) {
   final table = Float32List(width * height * 3);
-  if (centerGain < 0.001 && edgeFalloff < 0.001 && cornerWarmShift.abs() < 0.001) return table;
+  if (centerGain < 0.001 &&
+      edgeFalloff < 0.001 &&
+      cornerWarmShift.abs() < 0.001) return table;
 
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < width; x++) {
@@ -476,7 +661,7 @@ Float32List buildSensorNonUniformityTable(int width, int height, double centerGa
         shiftB = -cornerWarmShift * cornerMask;
       }
 
-      table[i * 3]     = falloff * gainR + shiftR;
+      table[i * 3] = falloff * gainR + shiftR;
       table[i * 3 + 1] = falloff * gainG;
       table[i * 3 + 2] = falloff * gainB + shiftB;
     }

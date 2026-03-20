@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'capture_pipeline_ext.dart';
 import 'package:flutter/foundation.dart';
@@ -129,6 +128,13 @@ class CapturePipeline {
       ui.Image? srcImage;
       String? gpuOutputPath;
       Uint8List? gpuOutputBytes;
+      final needsDartOnlyPost = renderParams != null &&
+          (renderParams.effectiveDehaze > 0.001 ||
+              renderParams.hasCustomToneCurve ||
+              renderParams.hasBwMixer ||
+              renderParams.highlightWarmAmount > 0.001 ||
+              renderParams.topBottomBias.abs() > 0.001 ||
+              renderParams.leftRightBias.abs() > 0.001);
 
       if (useGpu && (Platform.isIOS || Platform.isAndroid)) {
         try {
@@ -151,7 +157,10 @@ class CapturePipeline {
             final hasWatermark =
                 selectedWatermarkId.isNotEmpty && selectedWatermarkId != 'none';
             final hasMinimap = minimapNormalizedRect != null;
-            if (!hasFrame && !hasWatermark && !hasMinimap) {
+            if (!hasFrame &&
+                !hasWatermark &&
+                !hasMinimap &&
+                !needsDartOnlyPost) {
               final gpuBytes = await File(newPath).readAsBytes();
               final gpuSize = _readJpegDimensions(gpuBytes);
               final gpuW = gpuSize?[0] ?? 0;
@@ -231,12 +240,16 @@ class CapturePipeline {
               srcImage!, renderParams.highlightRolloff);
         }
         if (renderParams.centerGain > 0.001 ||
-            renderParams.edgeFalloff > 0.001) {
+            renderParams.edgeFalloff > 0.001 ||
+            renderParams.topBottomBias.abs() > 0.001 ||
+            renderParams.leftRightBias.abs() > 0.001) {
           srcImage = await drawSensorNonUniformity(
             srcImage!,
             renderParams.centerGain,
             renderParams.edgeFalloff,
             cornerWarmShift: renderParams.cornerWarmShift,
+            topBottomBias: renderParams.topBottomBias,
+            leftRightBias: renderParams.leftRightBias,
           );
         }
         if (renderParams.skinHueProtect > 0.5) {
@@ -259,6 +272,25 @@ class CapturePipeline {
         if (renderParams.developmentSoftness > 0.001) {
           srcImage = await drawDevelopmentSoftness(
               srcImage!, renderParams.developmentSoftness);
+        }
+        if (renderParams.effectiveDehaze > 0.001) {
+          srcImage = await drawDehaze(srcImage!, renderParams.effectiveDehaze);
+        }
+        if (renderParams.highlightWarmAmount > 0.001) {
+          srcImage = await drawHighlightWarmth(
+              srcImage!, renderParams.highlightWarmAmount);
+        }
+        if (renderParams.hasBwMixer) {
+          final mixer = renderParams.bwChannelMixer;
+          srcImage = await drawBlackAndWhiteMixer(
+              srcImage!, mixer[0], mixer[1], mixer[2]);
+        }
+        if (renderParams.hasCustomToneCurve) {
+          srcImage = await drawToneCurvePoints(
+            srcImage!,
+            renderParams.toneCurvePoints,
+            strength: renderParams.effectiveToneCurveStrength,
+          );
         }
         debugPrint('[CapturePipeline] Universal fallback pipeline applied.');
       }
@@ -367,9 +399,7 @@ class CapturePipeline {
           resolvedAsset != null &&
           resolvedAsset.isNotEmpty;
       Uint8List? nativeFrameAssetBytes;
-      if (hasPngAssetForSize &&
-          resolvedAsset != null &&
-          resolvedAsset.isNotEmpty) {
+      if (hasPngAssetForSize) {
         try {
           nativeFrameAssetBytes = await _getFrameAssetBytes(resolvedAsset);
         } catch (e) {
@@ -569,6 +599,7 @@ class CapturePipeline {
         final gpuFrame = await gpuCodec.getNextFrame();
         srcImage = gpuFrame.image;
       }
+      final sourceImage = srcImage!;
 
       // ── 4. 创建画布 ──────────────────────────────────────────────────────────
       final recorder = ui.PictureRecorder();
@@ -641,7 +672,7 @@ class CapturePipeline {
             frameOffsetY + topPx + dy2, outW, outH);
         // ── FIX: 绘制抖动重影效果（2层半透明位移叠加，模拟手持拍立得的运动模糊）──
         canvas.drawImageRect(
-          srcImage!,
+          sourceImage,
           cropRect,
           shakeRect1,
           Paint()
@@ -650,7 +681,7 @@ class CapturePipeline {
             ..blendMode = BlendMode.modulate,
         );
         canvas.drawImageRect(
-          srcImage!,
+          sourceImage,
           cropRect,
           shakeRect2,
           Paint()
@@ -682,7 +713,7 @@ class CapturePipeline {
       if (gpuProcessed || renderParams == null) {
         // GPU 已处理（或无渲染参数）：直接绘制，不叠加 colorMatrix
         canvas.drawImageRect(
-          srcImage!,
+          sourceImage,
           cropRect,
           destRect,
           Paint()..filterQuality = FilterQuality.high,
@@ -691,7 +722,7 @@ class CapturePipeline {
         // Dart 降级管线：通过 colorMatrix 叠加基础色彩效果
         final colorMatrix = buildColorMatrix(renderParams);
         canvas.drawImageRect(
-          srcImage!,
+          sourceImage,
           cropRect,
           destRect,
           Paint()
@@ -746,7 +777,7 @@ class CapturePipeline {
           renderParams.effectiveChromaticAberration > 0.001) {
         _drawChromaticAberration(
           canvas,
-          srcImage!,
+          sourceImage,
           cropRect,
           destRect,
           renderParams.effectiveChromaticAberration,
@@ -763,7 +794,7 @@ class CapturePipeline {
               renderParams.effectiveSoftFocus > 0.01)) {
         _drawBloom(
           canvas,
-          srcImage!,
+          sourceImage,
           cropRect,
           destRect,
           renderParams.effectiveBloom,
@@ -1006,6 +1037,10 @@ class CapturePipeline {
             params.effectiveColorBiasG,
             params.effectiveColorBiasB,
           ));
+    }
+    if (params.hasBwMixer) {
+      final mixer = params.bwChannelMixer;
+      m = _multiply(m, _bwChannelMixerMatrix(mixer[0], mixer[1], mixer[2]));
     }
     return m;
   }
@@ -1323,6 +1358,31 @@ class CapturePipeline {
       1,
       0,
       b * 30.0,
+      0,
+      0,
+      0,
+      1,
+      0,
+    ];
+  }
+
+  static List<double> _bwChannelMixerMatrix(double r, double g, double b) {
+    return [
+      r,
+      g,
+      b,
+      0,
+      0,
+      r,
+      g,
+      b,
+      0,
+      0,
+      r,
+      g,
+      b,
+      0,
+      0,
       0,
       0,
       0,

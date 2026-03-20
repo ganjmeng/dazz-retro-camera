@@ -4,35 +4,40 @@
 
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/camera_registry.dart';
+import '../features/camera/render_style_mode.dart';
 
-const _kSharpenLevel        = 'pref_sharpen_level';
-const _kLocationEnabled     = 'pref_location_enabled';
-const _kGridEnabled         = 'pref_grid_enabled';
-const _kMinimapEnabled      = 'pref_minimap_enabled';
-const _kShutterSound        = 'pref_shutter_sound';
-const _kShutterVibration    = 'pref_shutter_vibration';
-const _kLastCameraId        = 'pref_last_camera_id';
-const _kMirrorFrontCamera   = 'pref_mirror_front_camera';
+const _kSharpenLevel = 'pref_sharpen_level';
+const _kLocationEnabled = 'pref_location_enabled';
+const _kGridEnabled = 'pref_grid_enabled';
+const _kMinimapEnabled = 'pref_minimap_enabled';
+const _kShutterSound = 'pref_shutter_sound';
+const _kShutterVibration = 'pref_shutter_vibration';
+const _kLastCameraId = 'pref_last_camera_id';
+const _kMirrorFrontCamera = 'pref_mirror_front_camera';
+const _kRenderStyleMode = 'pref_render_style_mode';
 
 class AppPrefs {
-  final int    sharpenLevel;        // 0=低 1=中 2=高，默认1
-  final bool   locationEnabled;     // 默认 false
-  final bool   gridEnabled;         // 默认 false
-  final bool   minimapEnabled;      // 默认 false
-  final bool   shutterSoundEnabled; // 默认 true
-  final bool   shutterVibrationEnabled; // 默认 true
-  final String lastCameraId;        // 默认为 kDefaultCameraOrder 第一个相机
-  final bool   mirrorFrontCamera;   // 默认 true
+  final int sharpenLevel; // 0=低 1=中 2=高，默认1
+  final bool locationEnabled; // 默认 false
+  final bool gridEnabled; // 默认 false
+  final bool minimapEnabled; // 默认 false
+  final bool shutterSoundEnabled; // 默认 true
+  final bool shutterVibrationEnabled; // 默认 true
+  final String lastCameraId; // 默认为 kDefaultCameraOrder 第一个相机
+  final bool mirrorFrontCamera; // 默认 true
+  final RenderStyleMode renderStyleMode; // 默认复刻模式
 
   const AppPrefs({
-    this.sharpenLevel           = 1,
-    this.locationEnabled        = false,
-    this.gridEnabled            = false,
-    this.minimapEnabled         = false,
-    this.shutterSoundEnabled    = true,
+    this.sharpenLevel = 1,
+    this.locationEnabled = false,
+    this.gridEnabled = false,
+    this.minimapEnabled = false,
+    this.shutterSoundEnabled = true,
     this.shutterVibrationEnabled = true,
-    this.lastCameraId           = 'fxn_r',  // FIX: const default (kDefaultCameraOrder[0] is not const-evaluable)
-    this.mirrorFrontCamera      = true,
+    this.lastCameraId =
+        'fxn_r', // FIX: const default (kDefaultCameraOrder[0] is not const-evaluable)
+    this.mirrorFrontCamera = true,
+    this.renderStyleMode = RenderStyleMode.replica,
   });
 }
 
@@ -43,14 +48,17 @@ class AppPrefsService {
   Future<AppPrefs> load() async {
     final p = await SharedPreferences.getInstance();
     return AppPrefs(
-      sharpenLevel:            p.getInt(_kSharpenLevel)          ?? 1,
-      locationEnabled:         p.getBool(_kLocationEnabled)       ?? false,
-      gridEnabled:             p.getBool(_kGridEnabled)           ?? false,
-      minimapEnabled:          p.getBool(_kMinimapEnabled)        ?? false,
-      shutterSoundEnabled:     p.getBool(_kShutterSound)          ?? true,
-      shutterVibrationEnabled: p.getBool(_kShutterVibration)      ?? true,
-      lastCameraId:            p.getString(_kLastCameraId)        ?? kDefaultCameraOrder[0],
-      mirrorFrontCamera:       p.getBool(_kMirrorFrontCamera)     ?? true,
+      sharpenLevel: p.getInt(_kSharpenLevel) ?? 1,
+      locationEnabled: p.getBool(_kLocationEnabled) ?? false,
+      gridEnabled: p.getBool(_kGridEnabled) ?? false,
+      minimapEnabled: p.getBool(_kMinimapEnabled) ?? false,
+      shutterSoundEnabled: p.getBool(_kShutterSound) ?? true,
+      shutterVibrationEnabled: p.getBool(_kShutterVibration) ?? true,
+      lastCameraId: p.getString(_kLastCameraId) ?? kDefaultCameraOrder[0],
+      mirrorFrontCamera: p.getBool(_kMirrorFrontCamera) ?? true,
+      renderStyleMode: RenderStyleModeX.fromStorage(
+        p.getString(_kRenderStyleMode),
+      ),
     );
   }
 
@@ -77,4 +85,8 @@ class AppPrefsService {
 
   Future<void> setMirrorFrontCamera(bool v) async =>
       (await SharedPreferences.getInstance()).setBool(_kMirrorFrontCamera, v);
+
+  Future<void> setRenderStyleMode(RenderStyleMode mode) async =>
+      (await SharedPreferences.getInstance())
+          .setString(_kRenderStyleMode, mode.storageValue);
 }

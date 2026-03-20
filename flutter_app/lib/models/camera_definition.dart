@@ -261,13 +261,18 @@ class DefaultLook {
   final double bloom; // 0.0 ~ 1.0
   final double flare;
   final double grain; // 0.0 ~ 1.0 grain strength
+  final double dehaze; // 0.0 ~ 10.0 atmospheric dehaze strength
   final double noiseAmount; // FIX: 0.0 ~ 1.0 digital noise strength（数字噪点强度）
   final double colorBiasR; // -1.0 ~ +1.0 red channel bias
   final double colorBiasG; // -1.0 ~ +1.0 green channel bias
   final double colorBiasB; // -1.0 ~ +1.0 blue channel bias
   final double halation; // 0.0 ~ 1.0 highlight halation（胶片高光发光）
   final double grainSize; // 0.5 ~ 3.0 grain particle size（颗粒大小）
+  final double sharpen; // 0.0 ~ 2.0 unsharp mask strength
   final double sharpness; // 0.0 ~ 2.0 sharpness multiplier（锐度）
+  final double bwChannelR; // 0.0 ~ 1.0 B&W channel mixer R
+  final double bwChannelG; // 0.0 ~ 1.0 B&W channel mixer G
+  final double bwChannelB; // 0.0 ~ 1.0 B&W channel mixer B
   // ── 拍立得即时成像专属参数（Instax / Polaroid 通用——所有拍立得机型均可复用）───────────────
   // 化学显影特性组
   final double highlightRolloff; // 0.0 ~ 1.0 高光柔和滴落（Inst C=0.20，SQC=0.28）
@@ -280,6 +285,8 @@ class DefaultLook {
   final double edgeFalloff; // 0.0 ~ 1.0 边缘曝光衰减（不均匀曝光）
   final double exposureVariation; // 0.0 ~ 1.0 全局曝光不均匀幅度
   final double cornerWarmShift; // 0.0 ~ 1.0 边角偏暖（化学显影边缘特征）
+  final double topBottomBias; // -1.0 ~ 1.0 上下方向曝光偏置
+  final double leftRightBias; // -1.0 ~ 1.0 左右方向曝光偏置
   final double centerGain; // 0.0 ~ 0.2 中心增亮（内置闪光灯中心亮度，Inst C=0.02，SQC=0.03）
   final double
       developmentSoftness; // 0.0 ~ 0.2 显影柔化（化学扩散软化，Inst C=0.03，SQC=0.04）
@@ -308,6 +315,8 @@ class DefaultLook {
   final double luminanceNoise; // 0.0 ~ 0.5 亮度噪声
   final double chromaNoise; // 0.0 ~ 0.5 色度噪声
   final double toneCurveStrength; // 0.0 ~ 1.0 Tone Curve 强度
+  final double highlightWarmAmount; // 0.0 ~ 1.0 highlight warmth push
+  final List<List<double>> toneCurvePoints; // optional custom tone-curve points
   // 风格响应权重：让共享渲染算子重新回到 JSON 配置驱动。
   final double bloomResponse; // 0.0 ~ 1.0
   final double halationResponse; // 0.0 ~ 1.0
@@ -340,13 +349,18 @@ class DefaultLook {
     required this.bloom,
     required this.flare,
     this.grain = 0,
+    this.dehaze = 0,
     this.noiseAmount = 0, // FIX: 数字噪点强度
     this.colorBiasR = 0,
     this.colorBiasG = 0,
     this.colorBiasB = 0,
     this.halation = 0,
     this.grainSize = 1.0,
+    this.sharpen = 0.0,
     this.sharpness = 1.0,
+    this.bwChannelR = 0.0,
+    this.bwChannelG = 0.0,
+    this.bwChannelB = 0.0,
     // 拍立得即时成像专属字段（默认为 0，不影响其他相机）
     this.highlightRolloff = 0,
     this.highlightRolloff2 = 0,
@@ -358,6 +372,8 @@ class DefaultLook {
     this.edgeFalloff = 0,
     this.exposureVariation = 0,
     this.cornerWarmShift = 0,
+    this.topBottomBias = 0,
+    this.leftRightBias = 0,
     this.centerGain = 0,
     this.developmentSoftness = 0,
     this.chemicalIrregularity = 0,
@@ -383,6 +399,8 @@ class DefaultLook {
     this.luminanceNoise = 0,
     this.chromaNoise = 0,
     this.toneCurveStrength = 0,
+    this.highlightWarmAmount = 0,
+    this.toneCurvePoints = const [],
     this.bloomResponse = 1.0,
     this.halationResponse = 1.0,
     this.fadeResponse = 1.0,
@@ -404,6 +422,7 @@ class DefaultLook {
         bloom: 0,
         flare: 0,
         halation: 0,
+        sharpen: 0,
         grainSize: 1.0,
         sharpness: 1.0,
       );
@@ -430,13 +449,18 @@ class DefaultLook {
         bloom: _asDouble(json['bloom']),
         flare: _asDouble(json['flare']),
         grain: _asDouble(json['grain']),
+        dehaze: _asDouble(json['dehaze']),
         noiseAmount: _asDouble(json['noiseAmount']), // FIX: 数字噪点强度
         colorBiasR: _asDouble(json['colorBiasR']),
         colorBiasG: _asDouble(json['colorBiasG']),
         colorBiasB: _asDouble(json['colorBiasB']),
         halation: _asDouble(json['halation']),
         grainSize: _asDouble(json['grainSize'], fallback: 1.0),
+        sharpen: _asDouble(json['sharpen']),
         sharpness: _asDouble(json['sharpness'], fallback: 1.0),
+        bwChannelR: _asDouble(json['bwChannelR']),
+        bwChannelG: _asDouble(json['bwChannelG']),
+        bwChannelB: _asDouble(json['bwChannelB']),
         // 拍立得即时成像专属字段
         highlightRolloff: _asDouble(json['highlightRolloff']),
         highlightRolloff2: _asDouble(json['highlightRolloff2']),
@@ -448,6 +472,8 @@ class DefaultLook {
         edgeFalloff: _asDouble(json['edgeFalloff']),
         exposureVariation: _asDouble(json['exposureVariation']),
         cornerWarmShift: _asDouble(json['cornerWarmShift']),
+        topBottomBias: _asDouble(json['topBottomBias']),
+        leftRightBias: _asDouble(json['leftRightBias']),
         centerGain: _asDouble(json['centerGain']),
         developmentSoftness: _asDouble(json['developmentSoftness']),
         chemicalIrregularity: _asDouble(json["chemicalIrregularity"]),
@@ -473,6 +499,13 @@ class DefaultLook {
         luminanceNoise: _asDouble(json['luminanceNoise']),
         chromaNoise: _asDouble(json['chromaNoise']),
         toneCurveStrength: _asDouble(json['toneCurveStrength']),
+        highlightWarmAmount: _asDouble(json['highlightWarmAmount']),
+        toneCurvePoints: ((json['toneCurvePoints'] as List?) ?? const [])
+            .whereType<List>()
+            .map((point) => point.map((v) => _asDouble(v)).toList())
+            .where((point) => point.length >= 2)
+            .map((point) => [point[0], point[1]])
+            .toList(),
         bloomResponse: _asDouble(json['bloomResponse'], fallback: 1.0),
         halationResponse: _asDouble(json['halationResponse'], fallback: 1.0),
         fadeResponse: _asDouble(json['fadeResponse'], fallback: 1.0),
@@ -509,13 +542,18 @@ class DefaultLook {
         'bloom': bloom,
         'flare': flare,
         'grain': grain,
+        'dehaze': dehaze,
         'noiseAmount': noiseAmount, // FIX: 数字噪点强度
         'colorBiasR': colorBiasR,
         'colorBiasG': colorBiasG,
         'colorBiasB': colorBiasB,
         'halation': halation,
         'grainSize': grainSize,
+        'sharpen': sharpen,
         'sharpness': sharpness,
+        if (bwChannelR != 0) 'bwChannelR': bwChannelR,
+        if (bwChannelG != 0) 'bwChannelG': bwChannelG,
+        if (bwChannelB != 0) 'bwChannelB': bwChannelB,
         // 拍立得即时成像专属字段（默认为 0 时不影响其他相机）
         if (highlightRolloff != 0) 'highlightRolloff': highlightRolloff,
         if (highlightRolloff2 != 0) 'highlightRolloff2': highlightRolloff2,
@@ -523,6 +561,8 @@ class DefaultLook {
         if (edgeFalloff != 0) 'edgeFalloff': edgeFalloff,
         if (exposureVariation != 0) 'exposureVariation': exposureVariation,
         if (cornerWarmShift != 0) 'cornerWarmShift': cornerWarmShift,
+        if (topBottomBias != 0) 'topBottomBias': topBottomBias,
+        if (leftRightBias != 0) 'leftRightBias': leftRightBias,
         if (centerGain != 0) 'centerGain': centerGain,
         if (developmentSoftness != 0)
           'developmentSoftness': developmentSoftness,
@@ -545,6 +585,9 @@ class DefaultLook {
         if (luminanceNoise != 0) 'luminanceNoise': luminanceNoise,
         if (chromaNoise != 0) 'chromaNoise': chromaNoise,
         if (toneCurveStrength != 0) 'toneCurveStrength': toneCurveStrength,
+        if (highlightWarmAmount != 0)
+          'highlightWarmAmount': highlightWarmAmount,
+        if (toneCurvePoints.isNotEmpty) 'toneCurvePoints': toneCurvePoints,
         if (bloomResponse != 1.0) 'bloomResponse': bloomResponse,
         if (halationResponse != 1.0) 'halationResponse': halationResponse,
         if (fadeResponse != 1.0) 'fadeResponse': fadeResponse,

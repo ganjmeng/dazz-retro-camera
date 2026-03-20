@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/subscription_service.dart';
 import '../../core/l10n.dart';
 import '../camera/camera_notifier.dart';
+import '../../services/camera_service.dart';
+import '../camera/render_style_mode.dart';
 import '../../services/retain_settings_service.dart';
 
 // ─── 设置状态 Provider ────────────────────────────────────────────────────────
@@ -50,40 +52,106 @@ class _SettingsNotifier extends StateNotifier<_SettingsState> {
   _SettingsNotifier() : super(const _SettingsState());
   void toggle(String key) {
     switch (key) {
-      case 'saveLocation':      state = state.copyWith(saveLocation: !state.saveLocation); break;
-      case 'mirrorFrontCamera': state = state.copyWith(mirrorFrontCamera: !state.mirrorFrontCamera); break;
-      case 'guideLines':        state = state.copyWith(guideLines: !state.guideLines); break;
-      case 'shutterVibration':  state = state.copyWith(shutterVibration: !state.shutterVibration); break;
-      case 'shutterSound':      state = state.copyWith(shutterSound: !state.shutterSound); break;
-      case 'recommendApp':      state = state.copyWith(recommendApp: !state.recommendApp); break;
+      case 'saveLocation':
+        state = state.copyWith(saveLocation: !state.saveLocation);
+        break;
+      case 'mirrorFrontCamera':
+        state = state.copyWith(mirrorFrontCamera: !state.mirrorFrontCamera);
+        break;
+      case 'guideLines':
+        state = state.copyWith(guideLines: !state.guideLines);
+        break;
+      case 'shutterVibration':
+        state = state.copyWith(shutterVibration: !state.shutterVibration);
+        break;
+      case 'shutterSound':
+        state = state.copyWith(shutterSound: !state.shutterSound);
+        break;
+      case 'recommendApp':
+        state = state.copyWith(recommendApp: !state.recommendApp);
+        break;
     }
   }
 }
 
-final _settingsProvider = StateNotifierProvider<_SettingsNotifier, _SettingsState>(
+final _settingsProvider =
+    StateNotifierProvider<_SettingsNotifier, _SettingsState>(
   (ref) => _SettingsNotifier(),
 );
 
 // ─── 颜色常量 ─────────────────────────────────────────────────────────────────
-const _kBg      = Color(0xFF000000);
-const _kCard    = Color(0xFF1C1C1E);
-const _kRed     = Color(0xFFE05A4B);
-const _kWhite   = Colors.white;
-const _kGray    = Color(0xFF8E8E93);
+const _kBg = Color(0xFF000000);
+const _kCard = Color(0xFF1C1C1E);
+const _kRed = Color(0xFFE05A4B);
+const _kWhite = Colors.white;
+const _kGray = Color(0xFF8E8E93);
 const _kDivider = Color(0xFF3A3A3C);
 
 // ─── 主界面 ───────────────────────────────────────────────────────────────────
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
+  Future<void> _copyCalibrationInfo(
+    BuildContext context,
+    WidgetRef ref,
+    S s,
+  ) async {
+    final camState = ref.read(cameraAppProvider);
+    final debugInfo = ref.read(cameraServiceProvider).activeCameraDebugInfo;
+    final runtimeCameraId = (camState.runtimeCameraId.isNotEmpty
+            ? camState.runtimeCameraId
+            : debugInfo['cameraId']?.toString() ?? '')
+        .trim();
+    final brand = (camState.runtimeDeviceBrand.isNotEmpty
+            ? camState.runtimeDeviceBrand
+            : debugInfo['brand']?.toString() ?? '')
+        .trim();
+    final model = (camState.runtimeDeviceModel.isNotEmpty
+            ? camState.runtimeDeviceModel
+            : debugInfo['model']?.toString() ?? '')
+        .trim();
+    final sensorMp = debugInfo['sensorMp']?.toString() ??
+        camState.runtimeSensorMp.toString();
+
+    if (brand.isEmpty && model.isEmpty && runtimeCameraId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.copyCalibrationInfoEmpty)),
+      );
+      return;
+    }
+
+    final payload = <String, String>{
+      'presetCameraId': camState.activeCameraId,
+      'runtimeCameraId': runtimeCameraId,
+      'brand': brand,
+      'model': model,
+      'sensorMp': sensorMp,
+      if (debugInfo['facing'] != null) 'facing': debugInfo['facing'].toString(),
+      if (debugInfo['focalLengths'] != null)
+        'focalLengths': debugInfo['focalLengths'].toString(),
+      if (debugInfo['sensorSize'] != null)
+        'sensorSize': debugInfo['sensorSize'].toString(),
+      if (debugInfo['manufacturer'] != null)
+        'manufacturer': debugInfo['manufacturer'].toString(),
+      if (debugInfo['device'] != null) 'device': debugInfo['device'].toString(),
+    };
+    final text = payload.entries.map((e) => '${e.key}: ${e.value}').join('\n');
+
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(s.copyCalibrationInfoDone)),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final st       = ref.watch(_settingsProvider);
+    final st = ref.watch(_settingsProvider);
     final notifier = ref.read(_settingsProvider.notifier);
-    final camState    = ref.watch(cameraAppProvider);
+    final camState = ref.watch(cameraAppProvider);
     final camNotifier = ref.read(cameraAppProvider.notifier);
-    final lang     = ref.watch(languageProvider);
-    final s        = sOf(lang);
+    final lang = ref.watch(languageProvider);
+    final s = sOf(lang);
     ref.watch(subscriptionServiceProvider);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -140,7 +208,8 @@ class SettingsScreen extends ConsumerWidget {
               // ── 内容列表 ──
               Expanded(
                 child: ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                   children: [
                     // 分组1：Dazz Pro + 恢复购买
                     _SettingsGroup(
@@ -148,14 +217,17 @@ class SettingsScreen extends ConsumerWidget {
                         _SettingsRow(
                           title: s.dazzPro,
                           titleBold: true,
-                          trailing: const Icon(Icons.chevron_right, color: _kGray, size: 20),
+                          trailing: const Icon(Icons.chevron_right,
+                              color: _kGray, size: 20),
                           onTap: () {},
                         ),
                         _SettingsDivider(),
                         _SettingsRow(
                           title: s.restorePurchase,
                           onTap: () async {
-                            await ref.read(subscriptionServiceProvider.notifier).restorePurchases();
+                            await ref
+                                .read(subscriptionServiceProvider.notifier)
+                                .restorePurchases();
                           },
                         ),
                       ],
@@ -168,7 +240,8 @@ class SettingsScreen extends ConsumerWidget {
                         _SettingsRow(
                           title: s.language,
                           trailingLabel: lang.displayName,
-                          trailing: const Icon(Icons.chevron_right, color: _kGray, size: 20),
+                          trailing: const Icon(Icons.chevron_right,
+                              color: _kGray, size: 20),
                           onTap: () => _showLanguagePicker(context, ref, s),
                         ),
                       ],
@@ -179,12 +252,27 @@ class SettingsScreen extends ConsumerWidget {
                     _SettingsGroup(
                       children: [
                         _SettingsRow(
+                          title: s.renderMode,
+                          trailing: _RenderModeSegment(
+                            value: camState.renderStyleMode,
+                            replicaLabel: s.replicaModeShort,
+                            smartLabel: s.smartModeShort,
+                            onChanged: (mode) {
+                              if (mode != null) {
+                                camNotifier.setRenderStyleMode(mode);
+                              }
+                            },
+                          ),
+                        ),
+                        _SettingsDivider(),
+                        _SettingsRow(
                           title: s.mirrorFront,
                           trailing: _RedSwitch(
                             // 直接从 cameraAppProvider 读取，保证开关状态与相机层同步
                             value: camState.mirrorFrontCamera,
                             onChanged: (_) {
-                              camNotifier.setMirrorFrontCamera(!camState.mirrorFrontCamera);
+                              camNotifier.setMirrorFrontCamera(
+                                  !camState.mirrorFrontCamera);
                             },
                           ),
                         ),
@@ -194,7 +282,8 @@ class SettingsScreen extends ConsumerWidget {
                           trailing: _RedSwitch(
                             value: camState.locationEnabled,
                             onChanged: (_) {
-                              camNotifier.setLocationEnabled(!camState.locationEnabled);
+                              camNotifier.setLocationEnabled(
+                                  !camState.locationEnabled);
                             },
                           ),
                         ),
@@ -212,7 +301,8 @@ class SettingsScreen extends ConsumerWidget {
                           trailing: _RedSwitch(
                             value: camState.shutterVibrationEnabled,
                             onChanged: (_) {
-                              camNotifier.setShutterVibrationEnabled(!camState.shutterVibrationEnabled);
+                              camNotifier.setShutterVibrationEnabled(
+                                  !camState.shutterVibrationEnabled);
                             },
                           ),
                         ),
@@ -222,7 +312,8 @@ class SettingsScreen extends ConsumerWidget {
                           trailing: _RedSwitch(
                             value: camState.shutterSoundEnabled,
                             onChanged: (_) {
-                              camNotifier.setShutterSoundEnabled(!camState.shutterSoundEnabled);
+                              camNotifier.setShutterSoundEnabled(
+                                  !camState.shutterSoundEnabled);
                             },
                           ),
                         ),
@@ -230,12 +321,20 @@ class SettingsScreen extends ConsumerWidget {
                         // 保留设定 → 跳转子页面
                         _SettingsRow(
                           title: s.retainSettings,
-                          trailing: const Icon(Icons.chevron_right, color: _kGray, size: 20),
+                          trailing: const Icon(Icons.chevron_right,
+                              color: _kGray, size: 20),
                           onTap: () => Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => const RetainSettingsScreen(),
                             ),
                           ),
+                        ),
+                        _SettingsDivider(),
+                        _SettingsRow(
+                          title: s.copyCalibrationInfo,
+                          trailing: const Icon(Icons.copy_rounded,
+                              color: _kGray, size: 18),
+                          onTap: () => _copyCalibrationInfo(context, ref, s),
                         ),
                       ],
                     ),
@@ -312,10 +411,13 @@ class SettingsScreen extends ConsumerWidget {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            if (lang == AppLanguage.zhHans || lang == AppLanguage.zhHant)
+                            if (lang == AppLanguage.zhHans ||
+                                lang == AppLanguage.zhHant)
                               const TextSpan(text: ' 标签。'),
-                            if (lang == AppLanguage.en || lang == AppLanguage.ms)
-                              const TextSpan(text: ' when posting on social media.'),
+                            if (lang == AppLanguage.en ||
+                                lang == AppLanguage.ms)
+                              const TextSpan(
+                                  text: ' when posting on social media.'),
                             if (lang == AppLanguage.ja)
                               const TextSpan(text: ' タグを使ってください。'),
                             if (lang == AppLanguage.ko)
@@ -362,7 +464,8 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Text(
                   s.selectLanguage,
                   style: const TextStyle(
@@ -381,7 +484,8 @@ class SettingsScreen extends ConsumerWidget {
                     Navigator.of(ctx).pop();
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
                     child: Row(
                       children: [
                         Expanded(
@@ -390,7 +494,9 @@ class SettingsScreen extends ConsumerWidget {
                             style: TextStyle(
                               color: isSelected ? _kRed : _kWhite,
                               fontSize: 16,
-                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
                             ),
                           ),
                         ),
@@ -509,16 +615,56 @@ class _RedSwitch extends StatelessWidget {
   }
 }
 
+class _RenderModeSegment extends StatelessWidget {
+  final RenderStyleMode value;
+  final String replicaLabel;
+  final String smartLabel;
+  final ValueChanged<RenderStyleMode?> onChanged;
+
+  const _RenderModeSegment({
+    required this.value,
+    required this.replicaLabel,
+    required this.smartLabel,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoSlidingSegmentedControl<RenderStyleMode>(
+      backgroundColor: const Color(0xFF2C2C2E),
+      thumbColor: _kRed,
+      groupValue: value,
+      onValueChanged: onChanged,
+      children: {
+        RenderStyleMode.replica: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            replicaLabel,
+            style: const TextStyle(color: _kWhite, fontSize: 12),
+          ),
+        ),
+        RenderStyleMode.smart: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            smartLabel,
+            style: const TextStyle(color: _kWhite, fontSize: 12),
+          ),
+        ),
+      },
+    );
+  }
+}
+
 // ─── 保留设定子页面 ────────────────────────────────────────────────────────────
 class RetainSettingsScreen extends ConsumerWidget {
   const RetainSettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final retain   = ref.watch(retainSettingsProvider);
+    final retain = ref.watch(retainSettingsProvider);
     final notifier = ref.read(retainSettingsProvider.notifier);
-    final lang     = ref.watch(languageProvider);
-    final s        = sOf(lang);
+    final lang = ref.watch(languageProvider);
+    final s = sOf(lang);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
@@ -570,7 +716,8 @@ class RetainSettingsScreen extends ConsumerWidget {
               // ── 内容 ──
               Expanded(
                 child: ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                   children: [
                     _SettingsGroup(
                       children: [
@@ -578,7 +725,8 @@ class RetainSettingsScreen extends ConsumerWidget {
                           title: s.retainTemperature,
                           subtitle: s.retainTemperatureDesc,
                           value: retain.retainTemperature,
-                          onChanged: (_) => notifier.toggle('retainTemperature'),
+                          onChanged: (_) =>
+                              notifier.toggle('retainTemperature'),
                         ),
                         _SettingsDivider(),
                         _RetainItem(

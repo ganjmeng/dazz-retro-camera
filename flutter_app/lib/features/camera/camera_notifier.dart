@@ -20,6 +20,7 @@ import 'preview_renderer.dart';
 import 'capture_pipeline.dart';
 import '../../services/retain_settings_service.dart';
 import '../../services/app_prefs_service.dart';
+import 'render_style_mode.dart';
 
 // 默认关闭后台二次增强替换，优先保证预览与成片一致性（WYSIWYG）。
 const bool _kEnableBackgroundEnhanceReplace = false;
@@ -99,6 +100,7 @@ class CameraAppState {
   final double runtimeRtIso;
   final double runtimeRtExposureMs;
   final double runtimeRtLuma;
+  final RenderStyleMode renderStyleMode;
 
   const CameraAppState({
     this.activeCameraId = 'grd_r',
@@ -156,6 +158,7 @@ class CameraAppState {
     this.runtimeRtIso = -1.0,
     this.runtimeRtExposureMs = -1.0,
     this.runtimeRtLuma = -1.0,
+    this.renderStyleMode = RenderStyleMode.replica,
   });
   CameraAppState copyWith({
     String? activeCameraId,
@@ -215,6 +218,7 @@ class CameraAppState {
     double? runtimeRtIso,
     double? runtimeRtExposureMs,
     double? runtimeRtLuma,
+    RenderStyleMode? renderStyleMode,
     bool clearPanel = false,
     bool clearError = false,
     bool clearFrameId = false, // 用于将 activeFrameId 清空为 null
@@ -287,6 +291,7 @@ class CameraAppState {
       runtimeRtIso: runtimeRtIso ?? this.runtimeRtIso,
       runtimeRtExposureMs: runtimeRtExposureMs ?? this.runtimeRtExposureMs,
       runtimeRtLuma: runtimeRtLuma ?? this.runtimeRtLuma,
+      renderStyleMode: renderStyleMode ?? this.renderStyleMode,
     );
   }
 
@@ -320,6 +325,7 @@ class CameraAppState {
       rtIso: runtimeRtIso,
       rtExposureMs: runtimeRtExposureMs,
       rtLuma: runtimeRtLuma,
+      renderStyleMode: renderStyleMode,
     );
   }
 
@@ -414,6 +420,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       shutterVibrationEnabled: prefs.shutterVibrationEnabled,
       locationEnabled: prefs.locationEnabled,
       mirrorFrontCamera: prefs.mirrorFrontCamera,
+      renderStyleMode: prefs.renderStyleMode,
     );
     syncRuntimeColorContext();
     await _loadCamera(prefs.lastCameraId);
@@ -701,6 +708,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   void setLocationEnabled(bool enabled) {
     state = state.copyWith(locationEnabled: enabled);
     AppPrefsService.instance.setLocationEnabled(enabled);
+  }
+
+  void setRenderStyleMode(RenderStyleMode mode) {
+    if (state.renderStyleMode == mode) return;
+    state = state.copyWith(renderStyleMode: mode);
+    AppPrefsService.instance.setRenderStyleMode(mode);
+    _applyCurrentRenderParamsToNative();
   }
 
   void selectFrameBackground(String hexColor) {

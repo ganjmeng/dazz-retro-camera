@@ -7,6 +7,8 @@
 
 import 'package:flutter/material.dart';
 import '../../models/camera_definition.dart';
+import 'device_calibration_profiles.dart';
+import 'render_style_mode.dart';
 
 enum SceneClass {
   balanced,
@@ -15,6 +17,13 @@ enum SceneClass {
   lowLight,
   backlit,
   highDynamic,
+}
+
+enum CalibrationScene {
+  balanced,
+  daylight,
+  indoorWarm,
+  backlit,
 }
 
 class DeviceColorProfile {
@@ -56,10 +65,48 @@ class DeviceColorProfile {
   static DeviceColorProfile resolve({
     required String brand,
     required String model,
+    required String cameraId,
+    required String runtimeCameraId,
     required double sensorMp,
+    required CalibrationScene calibrationScene,
   }) {
     final b = brand.toLowerCase();
     final m = model.toLowerCase();
+    for (final exact in kExactDeviceCalibrationProfiles) {
+      if (exact.matches(
+        brand: b,
+        model: m,
+        cameraId: cameraId,
+        runtimeCameraId: runtimeCameraId,
+        sensorMp: sensorMp,
+      )) {
+        final sceneDelta = switch (calibrationScene) {
+          CalibrationScene.daylight => exact.daylight,
+          CalibrationScene.indoorWarm => exact.indoor,
+          CalibrationScene.backlit => exact.backlit,
+          CalibrationScene.balanced => const SceneCalibrationDelta(),
+        };
+        return DeviceColorProfile(
+          id: 'exact:${exact.brand}/${exact.model}/${exact.runtimeCameraId.isEmpty ? "default" : exact.runtimeCameraId}',
+          temperatureOffset:
+              exact.temperatureOffset + sceneDelta.temperatureOffset,
+          tintOffset: exact.tintOffset + sceneDelta.tintOffset,
+          contrastScale: exact.contrastScale * sceneDelta.contrastScale,
+          saturationScale: exact.saturationScale * sceneDelta.saturationScale,
+          colorBiasROffset:
+              exact.colorBiasROffset + sceneDelta.colorBiasROffset,
+          colorBiasGOffset:
+              exact.colorBiasGOffset + sceneDelta.colorBiasGOffset,
+          colorBiasBOffset:
+              exact.colorBiasBOffset + sceneDelta.colorBiasBOffset,
+          ccm: exact.ccm,
+          whiteScaleR: exact.whiteScaleR,
+          whiteScaleG: exact.whiteScaleG,
+          whiteScaleB: exact.whiteScaleB,
+          gamma: exact.gamma,
+        );
+      }
+    }
     if (b.contains('xiaomi') || b.contains('redmi') || b.contains('poco')) {
       return DeviceColorProfile(
         id: 'xiaomi_family',
@@ -242,6 +289,7 @@ class PreviewRenderParams {
   final double rtIso;
   final double rtExposureMs;
   final double rtLuma;
+  final RenderStyleMode renderStyleMode;
 
   const PreviewRenderParams({
     DefaultLook? defaultLook,
@@ -262,6 +310,7 @@ class PreviewRenderParams {
     this.rtIso = -1.0,
     this.rtExposureMs = -1.0,
     this.rtLuma = -1.0,
+    this.renderStyleMode = RenderStyleMode.replica,
   })  : defaultLook = defaultLook ??
             const DefaultLook(
               temperature: 0,
@@ -293,8 +342,20 @@ class PreviewRenderParams {
   DeviceColorProfile get _deviceProfile => DeviceColorProfile.resolve(
         brand: runtimeDeviceBrand,
         model: runtimeDeviceModel,
+        cameraId: cameraId,
+        runtimeCameraId: runtimeCameraId,
         sensorMp: runtimeSensorMp,
+        calibrationScene: calibrationScene,
       );
+
+  CalibrationScene get calibrationScene {
+    return switch (sceneClass) {
+      SceneClass.outdoor => CalibrationScene.daylight,
+      SceneClass.indoor => CalibrationScene.indoorWarm,
+      SceneClass.backlit || SceneClass.highDynamic => CalibrationScene.backlit,
+      _ => CalibrationScene.balanced,
+    };
+  }
 
   double get _normalizedRtLuma {
     if (rtLuma < 0) return rtLuma;
@@ -375,6 +436,9 @@ class PreviewRenderParams {
   }
 
   String? get effectiveBaseLut {
+    if (renderStyleMode == RenderStyleMode.replica) {
+      return defaultLook.baseLut;
+    }
     switch (sceneClass) {
       case SceneClass.lowLight:
         return defaultLook.baseLutNight ??
@@ -396,8 +460,9 @@ class PreviewRenderParams {
   // Effective vignette = defaultLook + lens override
   double get effectiveVignette {
     final base = defaultLook.vignette;
+    final filter = activeFilter?.vignette ?? 0;
     final lens = activeLens?.vignette ?? 0;
-    return (base + lens).clamp(0.0, 1.0);
+    return (base + filter + lens).clamp(0.0, 1.0);
   }
 
   double get effectiveChromaticAberration {
@@ -419,12 +484,15 @@ class PreviewRenderParams {
   }
 
   double get effectiveHalation {
+    final filterHalation = activeFilter?.halation ?? 0.0;
     final sceneScale = switch (sceneClass) {
       SceneClass.lowLight => 0.95,
       SceneClass.backlit || SceneClass.highDynamic => 0.85,
       _ => 1.0,
     };
-    return (defaultLook.halation * defaultLook.halationResponse * sceneScale)
+    return ((defaultLook.halation + filterHalation) *
+            defaultLook.halationResponse *
+            sceneScale)
         .clamp(0.0, 1.0);
   }
 
@@ -474,7 +542,7 @@ class PreviewRenderParams {
     return (defaultLook.temperature +
             temperatureOffset +
             _deviceProfile.temperatureOffset +
-            _sceneTemperatureOffset(sceneClass))
+            _sceneTemperatureOffset(sceneClass) * _sceneAdaptiveMix)
         .clamp(-100.0, 100.0);
   }
 
@@ -482,23 +550,68 @@ class PreviewRenderParams {
       (defaultLook.tint + _deviceProfile.tintOffset).clamp(-100.0, 100.0);
   double get effectiveHighlights => (defaultLook.highlights +
           _sceneHighlightOffset(sceneClass) *
-              defaultLook.sceneHighlightResponse)
+              defaultLook.sceneHighlightResponse *
+              _exposureProtectionMix)
       .clamp(-100.0, 100.0);
   double get effectiveShadows => (defaultLook.shadows +
-          _sceneShadowsOffset(sceneClass) * defaultLook.sceneShadowResponse)
+          _sceneShadowsOffset(sceneClass) *
+              defaultLook.sceneShadowResponse *
+              _exposureProtectionMix)
       .clamp(-100.0, 100.0);
   double get effectiveWhites => (defaultLook.whites +
-          _sceneWhitesOffset(sceneClass) * defaultLook.sceneWhitesResponse)
+          _sceneWhitesOffset(sceneClass) *
+              defaultLook.sceneWhitesResponse *
+              _exposureProtectionMix)
       .clamp(-100.0, 100.0);
   double get effectiveBlacks => defaultLook.blacks.clamp(-100.0, 100.0);
-  double get effectiveClarity =>
-      (defaultLook.clarity + _sceneClarityOffset(sceneClass))
-          .clamp(-100.0, 100.0);
-  double get effectiveVibrance =>
-      (defaultLook.vibrance + _sceneVibranceOffset(sceneClass))
-          .clamp(-100.0, 100.0);
+  double get effectiveClarity => (defaultLook.clarity +
+          _sceneClarityOffset(sceneClass) * _sceneAdaptiveMix)
+      .clamp(-100.0, 100.0);
+  double get effectiveVibrance => (defaultLook.vibrance +
+          _sceneVibranceOffset(sceneClass) * _sceneAdaptiveMix)
+      .clamp(-100.0, 100.0);
   double get effectiveGrain =>
-      (defaultLook.grain * _sceneGrainScale(sceneClass)).clamp(0.0, 1.0);
+      ((defaultLook.grain + _filterGrainAmount(activeFilter?.grain)) *
+              _sceneGrainScale(sceneClass))
+          .clamp(0.0, 1.0);
+  double get effectiveGrainSize {
+    final filterSize = activeFilter?.grainSize ?? defaultLook.grainSize;
+    return filterSize.clamp(0.5, 3.0);
+  }
+
+  double get effectiveSharpen {
+    final filterDelta = (activeFilter?.sharpness ?? 1.0) - 1.0;
+    return (defaultLook.sharpen + filterDelta * 0.18).clamp(0.0, 2.0);
+  }
+
+  double get effectiveSharpness =>
+      (defaultLook.sharpness * (activeFilter?.sharpness ?? 1.0))
+          .clamp(0.5, 2.0);
+  double get effectiveDehaze => (defaultLook.dehaze / 10.0).clamp(0.0, 1.0);
+  double get highlightWarmAmount =>
+      defaultLook.highlightWarmAmount.clamp(0.0, 1.0);
+  double get topBottomBias => defaultLook.topBottomBias.clamp(-1.0, 1.0);
+  double get leftRightBias => defaultLook.leftRightBias.clamp(-1.0, 1.0);
+  bool get hasCustomToneCurve => defaultLook.toneCurvePoints.isNotEmpty;
+  List<List<double>> get toneCurvePoints => defaultLook.toneCurvePoints;
+  bool get hasBwMixer =>
+      defaultLook.bwChannelR != 0 ||
+      defaultLook.bwChannelG != 0 ||
+      defaultLook.bwChannelB != 0;
+  List<double> get bwChannelMixer {
+    final sum = defaultLook.bwChannelR +
+        defaultLook.bwChannelG +
+        defaultLook.bwChannelB;
+    if (sum <= 0.0001) {
+      return const [0.299, 0.587, 0.114];
+    }
+    return [
+      defaultLook.bwChannelR / sum,
+      defaultLook.bwChannelG / sum,
+      defaultLook.bwChannelB / sum,
+    ];
+  }
+
   double get effectiveColorBiasR => (defaultLook.colorBiasR +
           _deviceProfile.colorBiasROffset +
           _ccmBiasR() +
@@ -532,7 +645,8 @@ class PreviewRenderParams {
 
   // ── 拍立得即时成像专属参数 getter ──────────────────────────────────────────────
   double get highlightRolloff => ((defaultLook.highlightRolloff +
-              _sceneHighlightRolloffBoost(sceneClass)) *
+              _sceneHighlightRolloffBoost(sceneClass) *
+                  _exposureProtectionMix) *
           defaultLook.highlightRolloffResponse)
       .clamp(0.0, 1.0);
 
@@ -655,6 +769,7 @@ class PreviewRenderParams {
   }
 
   double _sceneContrastScale(SceneClass scene) {
+    if (renderStyleMode == RenderStyleMode.replica) return 1.0;
     switch (scene) {
       case SceneClass.lowLight:
         return 0.98;
@@ -667,6 +782,7 @@ class PreviewRenderParams {
   }
 
   double _sceneSaturationScale(SceneClass scene) {
+    if (renderStyleMode == RenderStyleMode.replica) return 1.0;
     switch (scene) {
       case SceneClass.indoor:
         return 0.97;
@@ -680,6 +796,7 @@ class PreviewRenderParams {
   }
 
   double _sceneClarityOffset(SceneClass scene) {
+    if (renderStyleMode == RenderStyleMode.replica) return 0.0;
     switch (scene) {
       case SceneClass.lowLight:
         return -8.0;
@@ -691,6 +808,7 @@ class PreviewRenderParams {
   }
 
   double _sceneVibranceOffset(SceneClass scene) {
+    if (renderStyleMode == RenderStyleMode.replica) return 0.0;
     switch (scene) {
       case SceneClass.lowLight:
         return -10.0;
@@ -702,6 +820,7 @@ class PreviewRenderParams {
   }
 
   double _sceneGrainScale(SceneClass scene) {
+    if (renderStyleMode == RenderStyleMode.replica) return 1.0;
     switch (scene) {
       case SceneClass.lowLight:
         return 0.68;
@@ -713,6 +832,7 @@ class PreviewRenderParams {
   }
 
   double _sceneLutStrengthScale(SceneClass scene) {
+    if (renderStyleMode == RenderStyleMode.replica) return 1.0;
     switch (scene) {
       case SceneClass.lowLight:
         return 0.92;
@@ -736,6 +856,7 @@ class PreviewRenderParams {
   }
 
   double _sceneTemperatureOffset(SceneClass scene) {
+    if (renderStyleMode == RenderStyleMode.replica) return 0.0;
     switch (scene) {
       case SceneClass.lowLight:
         return -2.0;
@@ -747,6 +868,7 @@ class PreviewRenderParams {
   }
 
   double _dynamicSkinSatDelta() {
+    if (renderStyleMode == RenderStyleMode.replica) return 0.0;
     if (skinHueProtect < 0.5) return 0.0;
     final warmWeight = ((5200 - colorTempK) / 2600.0).clamp(0.0, 1.0);
     final lowLightWeight = (exposureOffset / 1.4).clamp(0.0, 1.0);
@@ -759,6 +881,7 @@ class PreviewRenderParams {
   }
 
   double _dynamicSkinLumaDelta() {
+    if (renderStyleMode == RenderStyleMode.replica) return 0.0;
     if (skinHueProtect < 0.5) return 0.0;
     final lowLightWeight = (exposureOffset / 1.5).clamp(0.0, 1.0);
     final sceneBoost = switch (sceneClass) {
@@ -770,6 +893,7 @@ class PreviewRenderParams {
   }
 
   double _dynamicSkinRedLimitDelta() {
+    if (renderStyleMode == RenderStyleMode.replica) return 0.0;
     if (skinHueProtect < 0.5) return 0.0;
     final warmWeight = ((5200 - colorTempK) / 2600.0).clamp(0.0, 1.0);
     final dynamicWeight =
@@ -783,6 +907,23 @@ class PreviewRenderParams {
   double get paperTexture => defaultLook.paperTexture.clamp(0.0, 1.0);
   double get developmentSoftness =>
       defaultLook.developmentSoftness.clamp(0.0, 1.0);
+  double get _sceneAdaptiveMix =>
+      renderStyleMode == RenderStyleMode.smart ? 1.0 : 0.0;
+  double get _exposureProtectionMix =>
+      renderStyleMode == RenderStyleMode.smart ? 1.0 : 0.22;
+
+  double _filterGrainAmount(String? grain) {
+    switch ((grain ?? '').toLowerCase()) {
+      case 'light':
+        return 0.06;
+      case 'medium':
+        return 0.12;
+      case 'heavy':
+        return 0.18;
+      default:
+        return 0.0;
+    }
+  }
 
   // 化学不规则感参数
   double get irregUvScale => defaultLook.irregUvScale;
@@ -844,14 +985,22 @@ class PreviewRenderParams {
         'highlightRolloff2': effectiveHighlightRolloff2,
         'toneCurveStrength': effectiveToneCurveStrength,
         'halationAmount': effectiveHalation,
+        'sharpen': effectiveSharpen,
+        'sharpness': effectiveSharpness,
+        'dehaze': effectiveDehaze,
+        'highlightWarmAmount': highlightWarmAmount,
         'lensVignette': effectiveVignette,
         'exposureOffset': exposureOffset + effectiveLensExposure,
         'softFocus': effectiveSoftFocus,
         'distortion': effectiveDistortion,
-        'grainSize': defaultLook.grainSize.clamp(0.5, 3.0),
+        'grainSize': effectiveGrainSize,
         'luminanceNoise': defaultLook.luminanceNoise.clamp(0.0, 0.5),
         'chromaNoise': defaultLook.chromaNoise.clamp(0.0, 0.5),
         'exposureVariation': defaultLook.exposureVariation.clamp(0.0, 0.1),
+        'topBottomBias': topBottomBias,
+        'leftRightBias': leftRightBias,
+        if (hasCustomToneCurve) 'toneCurvePoints': toneCurvePoints,
+        if (hasBwMixer) 'bwChannelMixer': bwChannelMixer,
         // ── 新增：Fade / Split Toning / Light Leak ──
         'fadeAmount': effectiveFadeAmount,
         'fade': effectiveFadeAmount,
@@ -867,6 +1016,7 @@ class PreviewRenderParams {
         // runtime calibration/debug context
         'sceneClass': sceneClass.name,
         'protectionMode': protectionMode,
+        'renderStyleMode': renderStyleMode.storageValue,
         'deviceProfileId': _deviceProfile.id,
         'runtimeCameraId': runtimeCameraId,
         'runtimeSensorMp': runtimeSensorMp,
