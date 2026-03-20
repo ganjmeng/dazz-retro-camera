@@ -120,7 +120,7 @@ static float2 cp_fisheyeUV(float2 uv, float aspect) {
     p.x *= aspect;
     float r = length(p);
     // 与预览保持一致：缩小有效圆半径，增强圆形边界可见度。
-    constexpr float rMax = 0.90;
+    constexpr float rMax = 0.98;
     if (r > rMax) return float2(-1.0);
     float rn = r / rMax;
     float theta = rn * 1.5707963; // π/2

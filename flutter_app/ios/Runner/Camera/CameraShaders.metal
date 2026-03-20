@@ -172,7 +172,7 @@ float2 fisheyeUV(float2 uv, float aspect) {
     p.x *= aspect; // 修正宽高比使圆形不变形
     float r = length(p);
     // 缩小有效圆半径，让鱼眼“圆边界”更明显。
-    constexpr float rMax = 0.90;
+    constexpr float rMax = 0.98;
     if (r > rMax) return float2(-1.0); // 圆外标记
     float rn = r / rMax;
     // 等距投影：theta = r * (π/2)

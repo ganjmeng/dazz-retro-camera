@@ -141,9 +141,13 @@ class CapturePipeline {
         try {
           debugPrint(
               "[CapturePipeline] Attempting to use native GPU pipeline...");
+          final gpuParams = <String, dynamic>{
+            ...?renderParams?.toJson(),
+            if (fisheyeMode) 'fisheyeMode': 1.0,
+          };
           final gpuResult = await _channel.invokeMethod<Map>("processWithGpu", {
             "filePath": imagePath,
-            "params": renderParams?.toJson() ?? {},
+            "params": gpuParams,
             "maxDimension": maxDimension,
             "jpegQuality": jpegQuality,
           });
@@ -730,7 +734,7 @@ class CapturePipeline {
           frameOffsetY + topPx + outH / 2,
         );
         // 与原生 shader 对齐：有效圆半径缩小到 90%，让圆边界更明显。
-        final fisheyeRadius = math.min(outW, outH) / 2 * 0.90;
+        final fisheyeRadius = math.min(outW, outH) / 2 * 0.98;
         final fisheyeClipPath = Path()
           ..addOval(
               Rect.fromCircle(center: fisheyeCenter, radius: fisheyeRadius));
@@ -1952,7 +1956,7 @@ class CapturePipeline {
   ) {
     final center = Offset(ox + w / 2, oy + h / 2);
     // 与 shader 保持一致
-    final radius = math.min(w, h) / 2 * 0.90;
+    final radius = math.min(w, h) / 2 * 0.98;
     // 用 Path evenOdd 填充规则：矩形 - 圆形 = 四角黑色区域
     final maskPath = Path()
       ..addRect(Rect.fromLTWH(ox, oy, w, h))

@@ -934,7 +934,6 @@ class PreviewRenderParams {
         'distortion': effectiveDistortion,
         'fisheyeMode': effectiveFisheyeMode ? 1.0 : 0.0,
         'softFocus': effectiveSoftFocus,
-        'distortion': effectiveDistortion,
         'grainSize': effectiveGrainSize,
         'luminanceNoise': defaultLook.luminanceNoise.clamp(0.0, 0.5),
         'chromaNoise': defaultLook.chromaNoise.clamp(0.0, 0.5),
@@ -1019,25 +1018,17 @@ class PreviewFilterWidget extends StatelessWidget {
         final containerW = constraints.maxWidth;
         final containerH = constraints.maxHeight;
         const sensorAspect = _kSensorAspect;
-        final keepFullFisheyeCircle = params.effectiveFisheyeMode;
         final containerAspect = containerW / containerH;
         double overflowW, overflowH;
-        if (keepFullFisheyeCircle) {
-          if (containerAspect >= sensorAspect) {
-            overflowH = containerH;
-            overflowW = containerH * sensorAspect;
-          } else {
-            overflowW = containerW;
-            overflowH = containerW / sensorAspect;
-          }
+        // 鱼眼预览也使用 cover。
+        // 之前为了保留完整圆域改成了 contain，结果圆面会明显缩小，
+        // 视觉上更像“小窗”而不是贴近取景框的鱼眼镜头。
+        if (containerAspect >= sensorAspect) {
+          overflowW = containerW;
+          overflowH = containerW / sensorAspect;
         } else {
-          if (containerAspect >= sensorAspect) {
-            overflowW = containerW;
-            overflowH = containerW / sensorAspect;
-          } else {
-            overflowH = containerH;
-            overflowW = containerH * sensorAspect;
-          }
+          overflowH = containerH;
+          overflowW = containerH * sensorAspect;
         }
         return ColoredBox(
           color: Colors.black,
