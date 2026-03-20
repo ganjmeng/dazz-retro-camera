@@ -36,6 +36,37 @@ bool _parseBoolField(dynamic val) {
   return false;
 }
 
+num? _parseNumField(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value;
+  if (value is String) {
+    final s = value.trim().toLowerCase();
+    if (s.isEmpty) return null;
+    switch (s) {
+      case 'none':
+      case 'off':
+        return 0.0;
+      case 'light':
+      case 'low':
+        return 0.25;
+      case 'medium':
+      case 'mid':
+        return 0.5;
+      case 'heavy':
+      case 'high':
+        return 0.8;
+    }
+    return num.tryParse(s);
+  }
+  return null;
+}
+
+double _asDouble(dynamic value, {double fallback = 0.0}) =>
+    (_parseNumField(value) ?? fallback).toDouble();
+
+int _asInt(dynamic value, {int fallback = 0}) =>
+    (_parseNumField(value) ?? fallback).toInt();
+
 // ─────────────────────────────────────────────
 // Top-level model
 // ──────────────────────────────────────────────
@@ -198,9 +229,9 @@ class SensorConfig {
 
   factory SensorConfig.fromJson(Map<String, dynamic> json) => SensorConfig(
         type: json['type'] as String,
-        dynamicRange: (json['dynamicRange'] as num).toInt(),
-        baseNoise: (json['baseNoise'] as num).toDouble(),
-        colorDepth: (json['colorDepth'] as num).toInt(),
+        dynamicRange: _asInt(json['dynamicRange']),
+        baseNoise: _asDouble(json['baseNoise']),
+        colorDepth: _asInt(json['colorDepth']),
       );
 }
 
@@ -365,70 +396,66 @@ class DefaultLook {
         baseLutDaylight: json['baseLutDaylight'] as String?,
         baseLutIndoor: json['baseLutIndoor'] as String?,
         baseLutNight: json['baseLutNight'] as String?,
-        lutStrength: (json['lutStrength'] as num? ?? 1.0).toDouble(),
-        temperature: (json['temperature'] as num? ?? 0).toDouble(),
-        tint: (json['tint'] as num? ?? 0).toDouble(),
-        contrast: (json['contrast'] as num? ?? 1.0).toDouble(),
-        highlights: (json['highlights'] as num? ?? 0).toDouble(),
-        shadows: (json['shadows'] as num? ?? 0).toDouble(),
-        whites: (json['whites'] as num? ?? 0).toDouble(),
-        blacks: (json['blacks'] as num? ?? 0).toDouble(),
-        clarity: (json['clarity'] as num? ?? 0).toDouble(),
-        vibrance: (json['vibrance'] as num? ?? 0).toDouble(),
-        saturation: (json['saturation'] as num? ?? 1.0).toDouble(),
-        vignette: (json['vignette'] as num? ?? 0).toDouble(),
-        distortion: (json['distortion'] as num? ?? 0).toDouble(),
-        chromaticAberration:
-            (json['chromaticAberration'] as num? ?? 0).toDouble(),
-        bloom: (json['bloom'] as num? ?? 0).toDouble(),
-        flare: (json['flare'] as num? ?? 0).toDouble(),
-        grain: (json['grain'] as num? ?? 0).toDouble(),
-        noiseAmount:
-            (json['noiseAmount'] as num? ?? 0).toDouble(), // FIX: 数字噪点强度
-        colorBiasR: (json['colorBiasR'] as num? ?? 0).toDouble(),
-        colorBiasG: (json['colorBiasG'] as num? ?? 0).toDouble(),
-        colorBiasB: (json['colorBiasB'] as num? ?? 0).toDouble(),
-        halation: (json['halation'] as num? ?? 0).toDouble(),
-        grainSize: (json['grainSize'] as num? ?? 1.0).toDouble(),
-        sharpness: (json['sharpness'] as num? ?? 1.0).toDouble(),
+        lutStrength: _asDouble(json['lutStrength'], fallback: 1.0),
+        temperature: _asDouble(json['temperature']),
+        tint: _asDouble(json['tint']),
+        contrast: _asDouble(json['contrast'], fallback: 1.0),
+        highlights: _asDouble(json['highlights']),
+        shadows: _asDouble(json['shadows']),
+        whites: _asDouble(json['whites']),
+        blacks: _asDouble(json['blacks']),
+        clarity: _asDouble(json['clarity']),
+        vibrance: _asDouble(json['vibrance']),
+        saturation: _asDouble(json['saturation'], fallback: 1.0),
+        vignette: _asDouble(json['vignette']),
+        distortion: _asDouble(json['distortion']),
+        chromaticAberration: _asDouble(json['chromaticAberration']),
+        bloom: _asDouble(json['bloom']),
+        flare: _asDouble(json['flare']),
+        grain: _asDouble(json['grain']),
+        noiseAmount: _asDouble(json['noiseAmount']), // FIX: 数字噪点强度
+        colorBiasR: _asDouble(json['colorBiasR']),
+        colorBiasG: _asDouble(json['colorBiasG']),
+        colorBiasB: _asDouble(json['colorBiasB']),
+        halation: _asDouble(json['halation']),
+        grainSize: _asDouble(json['grainSize'], fallback: 1.0),
+        sharpness: _asDouble(json['sharpness'], fallback: 1.0),
         // 拍立得即时成像专属字段
-        highlightRolloff: (json['highlightRolloff'] as num? ?? 0).toDouble(),
-        highlightRolloff2: (json['highlightRolloff2'] as num? ?? 0).toDouble(),
-        paperTexture: (json["paperTexture"] as num? ?? 0).toDouble(),
-        paperUvScale1: (json["paperUvScale1"] as num? ?? 8.0).toDouble(),
-        paperUvScale2: (json["paperUvScale2"] as num? ?? 32.0).toDouble(),
-        paperWeight1: (json["paperWeight1"] as num? ?? 0.7).toDouble(),
-        paperWeight2: (json["paperWeight2"] as num? ?? 0.3).toDouble(),
-        edgeFalloff: (json['edgeFalloff'] as num? ?? 0).toDouble(),
-        exposureVariation: (json['exposureVariation'] as num? ?? 0).toDouble(),
-        cornerWarmShift: (json['cornerWarmShift'] as num? ?? 0).toDouble(),
-        centerGain: (json['centerGain'] as num? ?? 0).toDouble(),
-        developmentSoftness:
-            (json['developmentSoftness'] as num? ?? 0).toDouble(),
-        chemicalIrregularity:
-            (json["chemicalIrregularity"] as num? ?? 0).toDouble(),
-        irregUvScale: (json["irregUvScale"] as num? ?? 2.5).toDouble(),
-        irregFreq1: (json["irregFreq1"] as num? ?? 1.0).toDouble(),
-        irregFreq2: (json["irregFreq2"] as num? ?? 1.7).toDouble(),
-        irregWeight1: (json["irregWeight1"] as num? ?? 0.6).toDouble(),
-        irregWeight2: (json["irregWeight2"] as num? ?? 0.4).toDouble(),
+        highlightRolloff: _asDouble(json['highlightRolloff']),
+        highlightRolloff2: _asDouble(json['highlightRolloff2']),
+        paperTexture: _asDouble(json["paperTexture"]),
+        paperUvScale1: _asDouble(json["paperUvScale1"], fallback: 8.0),
+        paperUvScale2: _asDouble(json["paperUvScale2"], fallback: 32.0),
+        paperWeight1: _asDouble(json["paperWeight1"], fallback: 0.7),
+        paperWeight2: _asDouble(json["paperWeight2"], fallback: 0.3),
+        edgeFalloff: _asDouble(json['edgeFalloff']),
+        exposureVariation: _asDouble(json['exposureVariation']),
+        cornerWarmShift: _asDouble(json['cornerWarmShift']),
+        centerGain: _asDouble(json['centerGain']),
+        developmentSoftness: _asDouble(json['developmentSoftness']),
+        chemicalIrregularity: _asDouble(json["chemicalIrregularity"]),
+        irregUvScale: _asDouble(json["irregUvScale"], fallback: 2.5),
+        irregFreq1: _asDouble(json["irregFreq1"], fallback: 1.0),
+        irregFreq2: _asDouble(json["irregFreq2"], fallback: 1.7),
+        irregWeight1: _asDouble(json["irregWeight1"], fallback: 0.6),
+        irregWeight2: _asDouble(json["irregWeight2"], fallback: 0.4),
         skinHueProtect: _parseBoolField(json['skinHueProtect']),
-        skinSatProtect: (json['skinSatProtect'] as num? ?? 1.0).toDouble(),
-        skinLumaSoften: (json['skinLumaSoften'] as num? ?? 0).toDouble(),
-        skinRedLimit: (json['skinRedLimit'] as num? ?? 1.0).toDouble(),
+        skinSatProtect: _asDouble(json['skinSatProtect'], fallback: 1.0),
+        skinLumaSoften: _asDouble(json['skinLumaSoften']),
+        skinRedLimit: _asDouble(json['skinRedLimit'], fallback: 1.0),
         // Fade / Split Toning / Light Leak
-        fadeAmount: (json['fadeAmount'] as num? ?? 0).toDouble(),
-        shadowTintR: (json['shadowTintR'] as num? ?? 0).toDouble(),
-        shadowTintG: (json['shadowTintG'] as num? ?? 0).toDouble(),
-        shadowTintB: (json['shadowTintB'] as num? ?? 0).toDouble(),
-        highlightTintR: (json['highlightTintR'] as num? ?? 0).toDouble(),
-        highlightTintG: (json['highlightTintG'] as num? ?? 0).toDouble(),
-        highlightTintB: (json['highlightTintB'] as num? ?? 0).toDouble(),
-        splitToneBalance: (json['splitToneBalance'] as num? ?? 0.5).toDouble(),
-        lightLeakAmount: (json['lightLeakAmount'] as num? ?? 0).toDouble(),
-        luminanceNoise: (json['luminanceNoise'] as num? ?? 0).toDouble(),
-        chromaNoise: (json['chromaNoise'] as num? ?? 0).toDouble(),
-        toneCurveStrength: (json['toneCurveStrength'] as num? ?? 0).toDouble(),
+        fadeAmount: _asDouble(json['fadeAmount']),
+        shadowTintR: _asDouble(json['shadowTintR']),
+        shadowTintG: _asDouble(json['shadowTintG']),
+        shadowTintB: _asDouble(json['shadowTintB']),
+        highlightTintR: _asDouble(json['highlightTintR']),
+        highlightTintG: _asDouble(json['highlightTintG']),
+        highlightTintB: _asDouble(json['highlightTintB']),
+        splitToneBalance: _asDouble(json['splitToneBalance'], fallback: 0.5),
+        lightLeakAmount: _asDouble(json['lightLeakAmount']),
+        luminanceNoise: _asDouble(json['luminanceNoise']),
+        chromaNoise: _asDouble(json['chromaNoise']),
+        toneCurveStrength: _asDouble(json['toneCurveStrength']),
       );
 
   Map<String, dynamic> toJson() => {

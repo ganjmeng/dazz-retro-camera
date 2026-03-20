@@ -34,6 +34,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     private var currentFlashMode: AVCaptureDevice.FlashMode = .off
     private let ciContext = CIContext(options: [.priorityRequestLow: false])
     private var cachedPresetJson: [String: Any] = [:]
+    private var cachedPresetShaderParams: [String: Any] = [:]
     private var cachedRenderParams: [String: Any] = [:]
     private var cachedLensParams: [String: Any] = [:]
     private var cachedZoom: Double = 1.0
@@ -133,6 +134,10 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
 
         cameraManager = CameraSessionManager()
         renderer = MetalRenderer(registry: textureRegistry!)
+        renderer?.assetLookup = { [weak self] raw in
+            guard let self else { return nil }
+            return self.flutterAssetKeyLookup?(raw)
+        }
 
         // 向 Flutter 注册 Texture
         let textureId = textureRegistry!.register(renderer!)
@@ -184,97 +189,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             return
         }
         cachedPresetJson = presetJson
-        var shaderParams: [String: Any] = [:]
-        if let baseModel = presetJson["baseModel"] as? [String: Any] {
-            if let color = baseModel["color"] as? [String: Any] {
-                if let contrast = color["contrast"] as? NSNumber { shaderParams["contrast"] = contrast.floatValue }
-                if let saturation = color["saturation"] as? NSNumber { shaderParams["saturation"] = saturation.floatValue }
-                if let temperature = color["temperature"] as? NSNumber { shaderParams["temperatureShift"] = temperature.floatValue }
-            }
-            if let sensor = baseModel["sensor"] as? [String: Any] {
-                if let noise = sensor["noise"] as? NSNumber { shaderParams["noise"] = noise.floatValue }
-                if let grain = sensor["grain"] as? NSNumber { shaderParams["grainAmount"] = grain.floatValue }
-                if let vignette = sensor["vignette"] as? NSNumber { shaderParams["vignette"] = vignette.floatValue }
-                if let ca = sensor["chromaticAberration"] as? NSNumber { shaderParams["chromaticAberration"] = ca.floatValue }
-                if let bloom = sensor["bloom"] as? NSNumber { shaderParams["bloom"] = bloom.floatValue }
-            }
-        }
-        // 解析 params 子对象（PresetParams.toJson() 输出）
-        if let params = presetJson["params"] as? [String: Any] {
-            if let contrast = params["contrast"] as? NSNumber { shaderParams["contrast"] = contrast.floatValue }
-            if let saturation = params["saturation"] as? NSNumber { shaderParams["saturation"] = saturation.floatValue }
-            if let temperatureShift = params["temperatureShift"] as? NSNumber { shaderParams["temperatureShift"] = temperatureShift.floatValue }
-            if let tintShift = params["tintShift"] as? NSNumber { shaderParams["tintShift"] = tintShift.floatValue }
-            if let sharpen = params["sharpen"] as? NSNumber { shaderParams["sharpen"] = sharpen.floatValue }
-            if let grainAmount = params["grainAmount"] as? NSNumber { shaderParams["grainAmount"] = grainAmount.floatValue }
-            if let noiseAmount = params["noiseAmount"] as? NSNumber { shaderParams["noise"] = noiseAmount.floatValue }
-            if let vignetteAmount = params["vignetteAmount"] as? NSNumber { shaderParams["vignette"] = vignetteAmount.floatValue }
-            if let ca = params["chromaticAberration"] as? NSNumber { shaderParams["chromaticAberration"] = ca.floatValue }
-            if let bloom = params["bloomAmount"] as? NSNumber { shaderParams["bloom"] = bloom.floatValue }
-            if let halation = params["halationAmount"] as? NSNumber { shaderParams["halation"] = halation.floatValue }
-            // ── FQS / CPM35 专用字段 ──────────────────────────────────────────────────
-            if let v = params["colorBiasR"]          as? NSNumber { shaderParams["colorBiasR"]          = v.floatValue }
-            if let v = params["colorBiasG"]          as? NSNumber { shaderParams["colorBiasG"]          = v.floatValue }
-            if let v = params["colorBiasB"]          as? NSNumber { shaderParams["colorBiasB"]          = v.floatValue }
-            if let v = params["grainSize"]           as? NSNumber { shaderParams["grainSize"]           = v.floatValue }
-            if let v = params["sharpness"]           as? NSNumber { shaderParams["sharpness"]           = v.floatValue }
-            if let v = params["highlightWarmAmount"] as? NSNumber { shaderParams["highlightWarmAmount"] = v.floatValue }
-            if let v = params["luminanceNoise"]      as? NSNumber { shaderParams["luminanceNoise"]      = v.floatValue }
-            if let v = params["chromaNoise"]         as? NSNumber { shaderParams["chromaNoise"]         = v.floatValue }
-        }
-        // ── 解析 defaultLook 子对象（直接从 CameraDefinition.defaultLook 传入） ──────────────────────
-        if let dl = presetJson["defaultLook"] as? [String: Any] {
-            if let v = dl["contrast"]            as? NSNumber { shaderParams["contrast"]            = v.floatValue }
-            if let v = dl["saturation"]          as? NSNumber { shaderParams["saturation"]          = v.floatValue }
-            if let v = dl["temperature"]         as? NSNumber { shaderParams["temperatureShift"]    = v.floatValue }
-            if let v = dl["tint"]                as? NSNumber { shaderParams["tintShift"]           = v.floatValue }
-            if let v = dl["grain"]               as? NSNumber { shaderParams["grainAmount"]         = v.floatValue }
-            if let v = dl["vignette"]            as? NSNumber { shaderParams["vignette"]            = v.floatValue }
-            if let v = dl["chromaticAberration"] as? NSNumber { shaderParams["chromaticAberration"] = v.floatValue }
-            if let v = dl["bloom"]               as? NSNumber { shaderParams["bloom"]               = v.floatValue }
-            if let v = dl["halation"]            as? NSNumber { shaderParams["halation"]            = v.floatValue }
-            // FIX: Lightroom 风格曲线参数（原来缺失，导致链路断裂）
-            if let v = dl["highlights"]          as? NSNumber { shaderParams["highlights"]          = v.floatValue }
-            if let v = dl["shadows"]             as? NSNumber { shaderParams["shadows"]             = v.floatValue }
-            if let v = dl["whites"]              as? NSNumber { shaderParams["whites"]              = v.floatValue }
-            if let v = dl["blacks"]              as? NSNumber { shaderParams["blacks"]              = v.floatValue }
-            if let v = dl["clarity"]             as? NSNumber { shaderParams["clarity"]             = v.floatValue }
-            if let v = dl["vibrance"]            as? NSNumber { shaderParams["vibrance"]            = v.floatValue }
-            // FIX: noiseAmount（兼容 noise 和 noiseAmount 两种键名）
-            if let v = dl["noise"]               as? NSNumber { shaderParams["noise"]               = v.floatValue }
-            if let v = dl["noiseAmount"]         as? NSNumber { shaderParams["noise"]               = v.floatValue }
-            // FQS / CPM35 专用
-            if let v = dl["colorBiasR"]          as? NSNumber { shaderParams["colorBiasR"]          = v.floatValue }
-            if let v = dl["colorBiasG"]          as? NSNumber { shaderParams["colorBiasG"]          = v.floatValue }
-            if let v = dl["colorBiasB"]          as? NSNumber { shaderParams["colorBiasB"]          = v.floatValue }
-            if let v = dl["grainSize"]           as? NSNumber { shaderParams["grainSize"]           = v.floatValue }
-            if let v = dl["sharpness"]           as? NSNumber { shaderParams["sharpness"]           = v.floatValue }
-            if let v = dl["highlightWarmAmount"] as? NSNumber { shaderParams["highlightWarmAmount"] = v.floatValue }
-            if let v = dl["luminanceNoise"]      as? NSNumber { shaderParams["luminanceNoise"]      = v.floatValue }
-            if let v = dl["chromaNoise"]         as? NSNumber { shaderParams["chromaNoise"]         = v.floatValue }
-            // Inst C 专用字段
-            if let v = dl["highlightRolloff"]   as? NSNumber { shaderParams["highlightRolloff"]   = v.floatValue }
-            if let v = dl["highlightRolloff2"]  as? NSNumber { shaderParams["highlightRolloff2"]  = v.floatValue }
-            if let v = dl["paperTexture"]        as? NSNumber { shaderParams["paperTexture"]        = v.floatValue }
-            if let v = dl["edgeFalloff"]         as? NSNumber { shaderParams["edgeFalloff"]         = v.floatValue }
-            if let v = dl["exposureVariation"]   as? NSNumber { shaderParams["exposureVariation"]   = v.floatValue }
-            if let v = dl["cornerWarmShift"]     as? NSNumber { shaderParams["cornerWarmShift"]     = v.floatValue }
-            if let v = dl["toneCurveStrength"]   as? NSNumber { shaderParams["toneCurveStrength"]   = v.floatValue }
-            if let v = dl["lutStrength"]         as? NSNumber { shaderParams["lutStrength"]         = v.floatValue }
-            // SQC 专用字段
-            if let v = dl["centerGain"]           as? NSNumber { shaderParams["centerGain"]           = v.floatValue }
-            if let v = dl["developmentSoftness"]  as? NSNumber { shaderParams["developmentSoftness"]  = v.floatValue }
-            if let v = dl["chemicalIrregularity"] as? NSNumber { shaderParams["chemicalIrregularity"] = v.floatValue }
-            if let v = dl["skinHueProtect"] as? Bool { shaderParams["skinHueProtect"] = v ? Float(1.0) : Float(0.0) }
-            else if let v = dl["skinHueProtect"] as? NSNumber { shaderParams["skinHueProtect"] = v.floatValue }
-            if let v = dl["skinSatProtect"]       as? NSNumber { shaderParams["skinSatProtect"]       = v.floatValue }
-            if let v = dl["skinLumaSoften"]       as? NSNumber { shaderParams["skinLumaSoften"]       = v.floatValue }
-            if let v = dl["skinRedLimit"]         as? NSNumber { shaderParams["skinRedLimit"]         = v.floatValue }
-            if let lutPath = dl["baseLut"] as? String, !lutPath.isEmpty { shaderParams["lut"] = lutPath }
-            if let lutPath = dl["baseLut"] as? String, !lutPath.isEmpty { shaderParams["baseLut"] = lutPath }
-        }
-        if let lut = presetJson["lut"] as? String { shaderParams["lut"] = lut }
-        if let grain = presetJson["grain"] as? String { shaderParams["grain"] = grain }
+        let shaderParams = buildShaderParams(from: presetJson)
+        cachedPresetShaderParams = shaderParams
         renderer?.updateParams(shaderParams)
         result(["success": true])
     }
@@ -1033,6 +949,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cachedRenderParams = [:]
         cachedLensParams = [:]
         cachedPresetJson = [:]
+        cachedPresetShaderParams = [:]
         cachedZoom = 1.0
         cachedRenderVersion = 0
         result(nil)
@@ -1040,12 +957,12 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
 
     private func reapplyRuntimeStateToRenderer() {
         guard let renderer else { return }
-        if !cachedPresetJson.isEmpty {
-            let cameraId = (cachedPresetJson["cameraId"] as? String) ??
-                (cachedPresetJson["id"] as? String) ?? ""
-            if !cameraId.isEmpty {
-                renderer.setCameraId(cameraId)
-            }
+        if !cachedPresetShaderParams.isEmpty {
+            renderer.updateParams(cachedPresetShaderParams)
+        } else if !cachedPresetJson.isEmpty {
+            // 兼容旧缓存路径，确保 renderer 重建后不会丢失预览风格参数。
+            cachedPresetShaderParams = buildShaderParams(from: cachedPresetJson)
+            renderer.updateParams(cachedPresetShaderParams)
         }
         if let fisheyeMode = cachedLensParams["fisheyeMode"] as? Bool {
             renderer.setFisheyeMode(fisheyeMode)
@@ -1062,6 +979,94 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             renderer.updateParams(cachedRenderParams)
         }
         cameraManager?.setZoom(factor: CGFloat(cachedZoom))
+    }
+
+    private func buildShaderParams(from presetJson: [String: Any]) -> [String: Any] {
+        var shaderParams: [String: Any] = [:]
+        if let baseModel = presetJson["baseModel"] as? [String: Any] {
+            if let color = baseModel["color"] as? [String: Any] {
+                if let contrast = color["contrast"] as? NSNumber { shaderParams["contrast"] = contrast.floatValue }
+                if let saturation = color["saturation"] as? NSNumber { shaderParams["saturation"] = saturation.floatValue }
+                if let temperature = color["temperature"] as? NSNumber { shaderParams["temperatureShift"] = temperature.floatValue }
+            }
+            if let sensor = baseModel["sensor"] as? [String: Any] {
+                if let noise = sensor["noise"] as? NSNumber { shaderParams["noise"] = noise.floatValue }
+                if let grain = sensor["grain"] as? NSNumber { shaderParams["grainAmount"] = grain.floatValue }
+                if let vignette = sensor["vignette"] as? NSNumber { shaderParams["vignette"] = vignette.floatValue }
+                if let ca = sensor["chromaticAberration"] as? NSNumber { shaderParams["chromaticAberration"] = ca.floatValue }
+                if let bloom = sensor["bloom"] as? NSNumber { shaderParams["bloom"] = bloom.floatValue }
+            }
+        }
+        if let params = presetJson["params"] as? [String: Any] {
+            if let contrast = params["contrast"] as? NSNumber { shaderParams["contrast"] = contrast.floatValue }
+            if let saturation = params["saturation"] as? NSNumber { shaderParams["saturation"] = saturation.floatValue }
+            if let temperatureShift = params["temperatureShift"] as? NSNumber { shaderParams["temperatureShift"] = temperatureShift.floatValue }
+            if let tintShift = params["tintShift"] as? NSNumber { shaderParams["tintShift"] = tintShift.floatValue }
+            if let sharpen = params["sharpen"] as? NSNumber { shaderParams["sharpen"] = sharpen.floatValue }
+            if let grainAmount = params["grainAmount"] as? NSNumber { shaderParams["grainAmount"] = grainAmount.floatValue }
+            if let noiseAmount = params["noiseAmount"] as? NSNumber { shaderParams["noise"] = noiseAmount.floatValue }
+            if let vignetteAmount = params["vignetteAmount"] as? NSNumber { shaderParams["vignette"] = vignetteAmount.floatValue }
+            if let ca = params["chromaticAberration"] as? NSNumber { shaderParams["chromaticAberration"] = ca.floatValue }
+            if let bloom = params["bloomAmount"] as? NSNumber { shaderParams["bloom"] = bloom.floatValue }
+            if let halation = params["halationAmount"] as? NSNumber { shaderParams["halation"] = halation.floatValue }
+            if let v = params["colorBiasR"] as? NSNumber { shaderParams["colorBiasR"] = v.floatValue }
+            if let v = params["colorBiasG"] as? NSNumber { shaderParams["colorBiasG"] = v.floatValue }
+            if let v = params["colorBiasB"] as? NSNumber { shaderParams["colorBiasB"] = v.floatValue }
+            if let v = params["grainSize"] as? NSNumber { shaderParams["grainSize"] = v.floatValue }
+            if let v = params["sharpness"] as? NSNumber { shaderParams["sharpness"] = v.floatValue }
+            if let v = params["highlightWarmAmount"] as? NSNumber { shaderParams["highlightWarmAmount"] = v.floatValue }
+            if let v = params["luminanceNoise"] as? NSNumber { shaderParams["luminanceNoise"] = v.floatValue }
+            if let v = params["chromaNoise"] as? NSNumber { shaderParams["chromaNoise"] = v.floatValue }
+        }
+        if let dl = presetJson["defaultLook"] as? [String: Any] {
+            if let v = dl["contrast"] as? NSNumber { shaderParams["contrast"] = v.floatValue }
+            if let v = dl["saturation"] as? NSNumber { shaderParams["saturation"] = v.floatValue }
+            if let v = dl["temperature"] as? NSNumber { shaderParams["temperatureShift"] = v.floatValue }
+            if let v = dl["tint"] as? NSNumber { shaderParams["tintShift"] = v.floatValue }
+            if let v = dl["grain"] as? NSNumber { shaderParams["grainAmount"] = v.floatValue }
+            if let v = dl["vignette"] as? NSNumber { shaderParams["vignette"] = v.floatValue }
+            if let v = dl["chromaticAberration"] as? NSNumber { shaderParams["chromaticAberration"] = v.floatValue }
+            if let v = dl["bloom"] as? NSNumber { shaderParams["bloom"] = v.floatValue }
+            if let v = dl["halation"] as? NSNumber { shaderParams["halation"] = v.floatValue }
+            if let v = dl["highlights"] as? NSNumber { shaderParams["highlights"] = v.floatValue }
+            if let v = dl["shadows"] as? NSNumber { shaderParams["shadows"] = v.floatValue }
+            if let v = dl["whites"] as? NSNumber { shaderParams["whites"] = v.floatValue }
+            if let v = dl["blacks"] as? NSNumber { shaderParams["blacks"] = v.floatValue }
+            if let v = dl["clarity"] as? NSNumber { shaderParams["clarity"] = v.floatValue }
+            if let v = dl["vibrance"] as? NSNumber { shaderParams["vibrance"] = v.floatValue }
+            if let v = dl["noise"] as? NSNumber { shaderParams["noise"] = v.floatValue }
+            if let v = dl["noiseAmount"] as? NSNumber { shaderParams["noise"] = v.floatValue }
+            if let v = dl["colorBiasR"] as? NSNumber { shaderParams["colorBiasR"] = v.floatValue }
+            if let v = dl["colorBiasG"] as? NSNumber { shaderParams["colorBiasG"] = v.floatValue }
+            if let v = dl["colorBiasB"] as? NSNumber { shaderParams["colorBiasB"] = v.floatValue }
+            if let v = dl["grainSize"] as? NSNumber { shaderParams["grainSize"] = v.floatValue }
+            if let v = dl["sharpness"] as? NSNumber { shaderParams["sharpness"] = v.floatValue }
+            if let v = dl["highlightWarmAmount"] as? NSNumber { shaderParams["highlightWarmAmount"] = v.floatValue }
+            if let v = dl["luminanceNoise"] as? NSNumber { shaderParams["luminanceNoise"] = v.floatValue }
+            if let v = dl["chromaNoise"] as? NSNumber { shaderParams["chromaNoise"] = v.floatValue }
+            if let v = dl["highlightRolloff"] as? NSNumber { shaderParams["highlightRolloff"] = v.floatValue }
+            if let v = dl["highlightRolloff2"] as? NSNumber { shaderParams["highlightRolloff2"] = v.floatValue }
+            if let v = dl["paperTexture"] as? NSNumber { shaderParams["paperTexture"] = v.floatValue }
+            if let v = dl["edgeFalloff"] as? NSNumber { shaderParams["edgeFalloff"] = v.floatValue }
+            if let v = dl["exposureVariation"] as? NSNumber { shaderParams["exposureVariation"] = v.floatValue }
+            if let v = dl["cornerWarmShift"] as? NSNumber { shaderParams["cornerWarmShift"] = v.floatValue }
+            if let v = dl["toneCurveStrength"] as? NSNumber { shaderParams["toneCurveStrength"] = v.floatValue }
+            if let v = dl["lutStrength"] as? NSNumber { shaderParams["lutStrength"] = v.floatValue }
+            if let v = dl["centerGain"] as? NSNumber { shaderParams["centerGain"] = v.floatValue }
+            if let v = dl["developmentSoftness"] as? NSNumber { shaderParams["developmentSoftness"] = v.floatValue }
+            if let v = dl["chemicalIrregularity"] as? NSNumber { shaderParams["chemicalIrregularity"] = v.floatValue }
+            if let v = dl["skinHueProtect"] as? Bool { shaderParams["skinHueProtect"] = v ? Float(1.0) : Float(0.0) }
+            else if let v = dl["skinHueProtect"] as? NSNumber { shaderParams["skinHueProtect"] = v.floatValue }
+            if let v = dl["skinSatProtect"] as? NSNumber { shaderParams["skinSatProtect"] = v.floatValue }
+            if let v = dl["skinLumaSoften"] as? NSNumber { shaderParams["skinLumaSoften"] = v.floatValue }
+            if let v = dl["skinRedLimit"] as? NSNumber { shaderParams["skinRedLimit"] = v.floatValue }
+            if let lutPath = dl["baseLut"] as? String, !lutPath.isEmpty { shaderParams["lut"] = lutPath }
+        }
+        if let lut = presetJson["lut"] as? String { shaderParams["lut"] = lut }
+        if let grain = presetJson["grain"] as? String { shaderParams["grain"] = grain }
+        let cameraId = (presetJson["cameraId"] as? String) ?? (presetJson["id"] as? String) ?? ""
+        if !cameraId.isEmpty { shaderParams["cameraId"] = cameraId }
+        return shaderParams
     }
 
     private func startRuntimeStatsTimer() {

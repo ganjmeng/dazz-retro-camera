@@ -500,6 +500,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     // ─────────────────────────────────────────────
 
     private fun handleStartPreview(result: MethodChannel.Result) {
+        glRenderer?.let { reapplyPresetToRenderer(it) }
         result.success(null)
     }
 
@@ -725,6 +726,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                         }
                         val mainExecutor = ContextCompat.getMainExecutor(context)
                         mainExecutor.execute {
+                            glRenderer?.let { renderer ->
+                                reapplyPresetToRenderer(renderer)
+                            }
                             // 缓存内存字节，供 processWithGpu 直接使用（跳过文件读取）
                             pendingJpegBytes = jpegBytes
                             pendingRotationDegrees = rotationDegrees
@@ -746,7 +750,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 override fun onError(exception: ImageCaptureException) {
                     Log.e(TAG, "takePhoto failed", exception)
                     val mainExecutor = ContextCompat.getMainExecutor(context)
-                    mainExecutor.execute { result.error("CAPTURE_FAILED", exception.message, null) }
+                    mainExecutor.execute {
+                        glRenderer?.let { renderer ->
+                            reapplyPresetToRenderer(renderer)
+                        }
+                        result.error("CAPTURE_FAILED", exception.message, null)
+                    }
                 }
             }
         )
@@ -1229,6 +1238,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                                 }
                             } catch (e: Exception) {
                                 Log.w(TAG, "setSharpen EDGE_MODE failed: ${e.message}")
+                            }
+                            glRenderer?.let { renderer ->
+                                reapplyPresetToRenderer(renderer)
                             }
                             // Return to Flutter ONLY after imageCapture is fully rebound
                             result.success(null)

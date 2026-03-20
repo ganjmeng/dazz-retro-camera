@@ -290,56 +290,56 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         defer { paramsLock.unlock() }
 
         // ── 通用参数 ─────────────────────────────────────────────────────────
-        if let v = params["contrast"]            as? Float { ccdParams.contrast            = v }
-        if let v = params["saturation"]          as? Float { ccdParams.saturation          = v }
-        if let v = params["temperatureShift"]    as? Float { ccdParams.temperatureShift    = v }
-        if let v = params["tintShift"]           as? Float { ccdParams.tintShift           = v }
-        if let v = params["grainAmount"]         as? Float { ccdParams.grainAmount         = v }
-        if let v = params["noise"]               as? Float { ccdParams.noiseAmount         = v }
-        if let v = params["vignette"]            as? Float { ccdParams.vignetteAmount      = v }
-        if let v = params["chromaticAberration"] as? Float { ccdParams.chromaticAberration = v }
-        if let v = params["bloom"]               as? Float { ccdParams.bloomAmount         = v }
-        if let v = params["halation"]            as? Float { ccdParams.halationAmount      = v }
-        if let v = params["sharpen"]             as? Float { ccdParams.sharpen             = v }
+        if let v = num("contrast") { ccdParams.contrast = v }
+        if let v = num("saturation") { ccdParams.saturation = v }
+        if let v = num("temperatureShift") { ccdParams.temperatureShift = v }
+        if let v = num("tintShift") { ccdParams.tintShift = v }
+        if let v = num("grainAmount") { ccdParams.grainAmount = v }
+        if let v = num("noise") { ccdParams.noiseAmount = v }
+        if let v = num("vignette") { ccdParams.vignetteAmount = v }
+        if let v = num("chromaticAberration") { ccdParams.chromaticAberration = v }
+        if let v = num("bloom") { ccdParams.bloomAmount = v }
+        if let v = num("halation") { ccdParams.halationAmount = v }
+        if let v = num("sharpen") { ccdParams.sharpen = v }
 
         // ── FQS / CPM35 专用参数 ─────────────────────────────────────────────
-        if let v = params["colorBiasR"]          as? Float { ccdParams.colorBiasR          = v }
-        if let v = params["colorBiasG"]          as? Float { ccdParams.colorBiasG          = v }
-        if let v = params["colorBiasB"]          as? Float { ccdParams.colorBiasB          = v }
-        if let v = params["grainSize"]           as? Float { ccdParams.grainSize           = v }
-        if let v = params["sharpness"]           as? Float { ccdParams.sharpness           = v }
-        if let v = params["highlightWarmAmount"] as? Float { ccdParams.highlightWarmAmount = v }
-        if let v = params["luminanceNoise"]      as? Float { ccdParams.luminanceNoise      = v }
-        if let v = params["chromaNoise"]         as? Float { ccdParams.chromaNoise         = v }
+        if let v = num("colorBiasR") { ccdParams.colorBiasR = v }
+        if let v = num("colorBiasG") { ccdParams.colorBiasG = v }
+        if let v = num("colorBiasB") { ccdParams.colorBiasB = v }
+        if let v = num("grainSize") { ccdParams.grainSize = v }
+        if let v = num("sharpness") { ccdParams.sharpness = v }
+        if let v = num("highlightWarmAmount") { ccdParams.highlightWarmAmount = v }
+        if let v = num("luminanceNoise") { ccdParams.luminanceNoise = v }
+        if let v = num("chromaNoise") { ccdParams.chromaNoise = v }
 
         // ── Inst C / SQC 拍立得专属参数（其他相机也可复用）──────────────────────────────────────────────────────
-        if let v = params["highlightRolloff"]   as? Float { ccdParams.highlightRolloff   = v }
+        if let v = num("highlightRolloff") { ccdParams.highlightRolloff = v }
         if let v = num("highlightRolloff2") { ccdParams.highlightRolloff2 = v }
-        if let v = params["paperTexture"]        as? Float { ccdParams.paperTexture        = v }
-        if let v = params["edgeFalloff"]         as? Float { ccdParams.edgeFalloff         = v }
-        if let v = params["exposureVariation"]   as? Float { ccdParams.exposureVariation   = v }
-        if let v = params["cornerWarmShift"]     as? Float { ccdParams.cornerWarmShift     = v }
+        if let v = num("paperTexture") { ccdParams.paperTexture = v }
+        if let v = num("edgeFalloff") { ccdParams.edgeFalloff = v }
+        if let v = num("exposureVariation") { ccdParams.exposureVariation = v }
+        if let v = num("cornerWarmShift") { ccdParams.cornerWarmShift = v }
 
         // ── 拍立得/数码通用参数（Inst C / SQC / FXN-R 共用）──────────────────────────────────────────────────────
-        if let v = params["centerGain"]          as? Float { ccdParams.centerGain          = v }
-        if let v = params["developmentSoftness"] as? Float { ccdParams.developmentSoftness = v }
-        if let v = params["chemicalIrregularity"] as? Float { ccdParams.chemicalIrregularity = v }
-        if let v = params["skinHueProtect"]      as? Float { ccdParams.skinHueProtect      = v }
-        if let v = params["skinSatProtect"]      as? Float { ccdParams.skinSatProtect      = v }
-        if let v = params["skinLumaSoften"]      as? Float { ccdParams.skinLumaSoften      = v }
-        if let v = params["skinRedLimit"]        as? Float { ccdParams.skinRedLimit        = v }
+        if let v = num("centerGain") { ccdParams.centerGain = v }
+        if let v = num("developmentSoftness") { ccdParams.developmentSoftness = v }
+        if let v = num("chemicalIrregularity") { ccdParams.chemicalIrregularity = v }
+        if let v = num("skinHueProtect") { ccdParams.skinHueProtect = v }
+        if let v = num("skinSatProtect") { ccdParams.skinSatProtect = v }
+        if let v = num("skinLumaSoften") { ccdParams.skinLumaSoften = v }
+        if let v = num("skinRedLimit") { ccdParams.skinRedLimit = v }
         if let v = num("toneCurveStrength") { ccdParams.toneCurveStrength = v }
 
         // ── FIX: Lightroom 风格曲线参数 ─────────────────────────────────────────────────────────────────
-        if let v = params["highlights"]  as? Float { ccdParams.highlights  = v }
-        if let v = params["shadows"]     as? Float { ccdParams.shadows     = v }
-        if let v = params["whites"]      as? Float { ccdParams.whites      = v }
-        if let v = params["blacks"]      as? Float { ccdParams.blacks      = v }
-        if let v = params["clarity"]     as? Float { ccdParams.clarity     = v }
-        if let v = params["vibrance"]    as? Float { ccdParams.vibrance    = v }
+        if let v = num("highlights") { ccdParams.highlights = v }
+        if let v = num("shadows") { ccdParams.shadows = v }
+        if let v = num("whites") { ccdParams.whites = v }
+        if let v = num("blacks") { ccdParams.blacks = v }
+        if let v = num("clarity") { ccdParams.clarity = v }
+        if let v = num("vibrance") { ccdParams.vibrance = v }
         // FIX: noiseAmount（兼容 noise 和 noiseAmount 两种键名）
-        if let v = params["noise"]       as? Float { ccdParams.noiseAmount = v }
-        if let v = params["noiseAmount"] as? Float { ccdParams.noiseAmount = v }
+        if let v = num("noise") { ccdParams.noiseAmount = v }
+        if let v = num("noiseAmount") { ccdParams.noiseAmount = v }
         // 曝光补偿
         if let v = num("exposureOffset") { ccdParams.exposureOffset = v }
         if let v = num("distortion") { ccdParams.lensDistortion = v }
