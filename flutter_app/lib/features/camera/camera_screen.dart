@@ -140,7 +140,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // 耗时操作过渡动画（换相机/切滤镜/切比例/切清晰度）
   bool _showTransition = false;
   Timer? _transitionTimer;
-  bool _isLifecycleSwitching = false;
+  Future<void>? _lifecycleDrainTask;
+  AppLifecycleState? _pendingLifecycleState;
   bool _isCameraTransitioning = false;
   AppLifecycleState _lastLifecycleState = AppLifecycleState.resumed;
 
@@ -325,43 +326,52 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     _lastLifecycleState = state;
-    if (state == AppLifecycleState.resumed) {
-      unawaited(_handleLifecycleResume());
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.hidden) {
-      unawaited(_handleLifecyclePause());
+    _pendingLifecycleState = state;
+    _pumpLifecycleQueue();
+  }
+
+  void _pumpLifecycleQueue() {
+    if (_lifecycleDrainTask != null) return;
+    _lifecycleDrainTask = _drainLifecycleQueue().whenComplete(() {
+      _lifecycleDrainTask = null;
+      if (_pendingLifecycleState != null && mounted) {
+        _pumpLifecycleQueue();
+      }
+    });
+  }
+
+  Future<void> _drainLifecycleQueue() async {
+    while (mounted && _pendingLifecycleState != null) {
+      final next = _pendingLifecycleState!;
+      _pendingLifecycleState = null;
+      if (next == AppLifecycleState.resumed) {
+        await _handleLifecycleResume();
+      } else if (next == AppLifecycleState.paused ||
+          next == AppLifecycleState.inactive ||
+          next == AppLifecycleState.hidden) {
+        await _handleLifecyclePause();
+      }
     }
   }
 
   Future<void> _handleLifecyclePause() async {
-    if (_isLifecycleSwitching || !mounted) return;
-    _isLifecycleSwitching = true;
-    try {
-      // App 进入后台：保存快照并停预览，避免后台持有相机资源
-      ref.read(cameraAppProvider.notifier).saveCurrentSnapshot();
-      await ref.read(cameraServiceProvider.notifier).stopPreview();
-    } finally {
-      _isLifecycleSwitching = false;
-    }
+    if (!mounted) return;
+    // App 进入后台：保存快照并停预览，避免后台持有相机资源
+    ref.read(cameraAppProvider.notifier).saveCurrentSnapshot();
+    await ref.read(cameraServiceProvider.notifier).stopPreview();
   }
 
   Future<void> _handleLifecycleResume() async {
-    if (_isLifecycleSwitching || !mounted) return;
-    _isLifecycleSwitching = true;
-    try {
-      _transitionTimer?.cancel();
-      setState(() => _showTransition = true);
-      await _reinitAndSyncCameraPipeline();
-      if (!mounted) return;
-      _transitionTimer = Timer(_kLifecycleResumeTail, () {
-        if (mounted && _lastLifecycleState == AppLifecycleState.resumed) {
-          setState(() => _showTransition = false);
-        }
-      });
-    } finally {
-      _isLifecycleSwitching = false;
-    }
+    if (!mounted) return;
+    _transitionTimer?.cancel();
+    setState(() => _showTransition = true);
+    await _reinitAndSyncCameraPipeline();
+    if (!mounted) return;
+    _transitionTimer = Timer(_kLifecycleResumeTail, () {
+      if (mounted && _lastLifecycleState == AppLifecycleState.resumed) {
+        setState(() => _showTransition = false);
+      }
+    });
   }
 
   Future<void> _syncPipelineAfterCameraInit() async {
@@ -424,6 +434,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final svc = ref.read(cameraServiceProvider.notifier);
     await svc.initCamera();
     if (!mounted) return;
+    await _syncPipelineAfterCameraInit();
+    // 某些机型在前后台频繁切换时，renderer 就绪与参数下发仍可能出现时间竞态。
+    // 这里延后做一次幂等重放，确保预览效果不会随机丢失。
+    await Future.delayed(const Duration(milliseconds: 140));
+    if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
     await _syncPipelineAfterCameraInit();
   }
 
