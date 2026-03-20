@@ -382,6 +382,9 @@ class PreviewRenderParams {
     return (base + lens).clamp(-1.0, 1.0);
   }
 
+  bool get effectiveFisheyeMode =>
+      activeLens?.fisheyeMode ?? cameraId.toLowerCase().contains('fisheye');
+
   double get effectiveContrast {
     final base = defaultLook.contrast;
     final filter = activeFilter?.contrast ?? 1.0;
@@ -928,6 +931,8 @@ class PreviewRenderParams {
         'highlightWarmAmount': highlightWarmAmount,
         'lensVignette': effectiveVignette,
         'exposureOffset': exposureOffset + effectiveLensExposure,
+        'distortion': effectiveDistortion,
+        'fisheyeMode': effectiveFisheyeMode ? 1.0 : 0.0,
         'softFocus': effectiveSoftFocus,
         'distortion': effectiveDistortion,
         'grainSize': effectiveGrainSize,
@@ -1007,35 +1012,49 @@ class PreviewFilterWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 预览始终充满容器（BoxFit.cover 效果）
-    // cover 计算基于传感器实际比例（_kSensorAspect = 3/4）
-    // 而不是目标比例（aspectRatio），避免 1:1 等比例切换时画面被拉伸
+    // 普通镜头使用 cover，保证取景填满容器。
+    // 鱼眼镜头需要保留完整圆域，使用 contain，避免圆形边界被裁出取景框。
     return LayoutBuilder(
       builder: (context, constraints) {
         final containerW = constraints.maxWidth;
         final containerH = constraints.maxHeight;
-        // 使用传感器实际比例计算 cover
         const sensorAspect = _kSensorAspect;
-        // BoxFit.cover：选择让内容充满容器的最小缩放
+        final keepFullFisheyeCircle = params.effectiveFisheyeMode;
         final containerAspect = containerW / containerH;
         double overflowW, overflowH;
-        if (containerAspect >= sensorAspect) {
-          // 容器更宽 → 宽度铺满，高度可能超出
-          overflowW = containerW;
-          overflowH = containerW / sensorAspect;
+        if (keepFullFisheyeCircle) {
+          if (containerAspect >= sensorAspect) {
+            overflowH = containerH;
+            overflowW = containerH * sensorAspect;
+          } else {
+            overflowW = containerW;
+            overflowH = containerW / sensorAspect;
+          }
         } else {
-          // 容器更高 → 高度铺满，宽度可能超出
-          overflowH = containerH;
-          overflowW = containerH * sensorAspect;
+          if (containerAspect >= sensorAspect) {
+            overflowW = containerW;
+            overflowH = containerW / sensorAspect;
+          } else {
+            overflowH = containerH;
+            overflowW = containerH * sensorAspect;
+          }
         }
-        return ClipRect(
-          child: OverflowBox(
-            maxWidth: overflowW,
-            maxHeight: overflowH,
-            // Phase 2 重构：所有渲染特效已下沉到 Native GPU Shader
-            // Flutter 层仅显示纯 Texture，不再做像素级渲染
-            // 色彩调整、色差、Bloom、Halation、相纸纹理、暗角等全部由 Native Shader 处理
-            child: Texture(textureId: textureId),
+        return ColoredBox(
+          color: Colors.black,
+          child: Center(
+            child: ClipRect(
+              child: OverflowBox(
+                maxWidth: overflowW,
+                maxHeight: overflowH,
+                child: SizedBox(
+                  width: overflowW,
+                  height: overflowH,
+                  // Phase 2 重构：所有渲染特效已下沉到 Native GPU Shader
+                  // Flutter 层仅显示纯 Texture，不再做像素级渲染
+                  child: Texture(textureId: textureId),
+                ),
+              ),
+            ),
           ),
         );
       },
