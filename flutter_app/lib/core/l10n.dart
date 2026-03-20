@@ -493,16 +493,18 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.ko: '미리보기 모드',
   },
   'previewModeHint': {
-    AppLanguage.zhHans: '轻量模式默认使用 720p 并关闭部分重效果，明显降低发热；性能模式预览更完整，但更耗电、更容易发热。',
-    AppLanguage.zhHant: '輕量模式預設使用 720p 並關閉部分重效果，可明顯降低發熱；效能模式預覽更完整，但更耗電、更容易發熱。',
+    AppLanguage.zhHans:
+        '轻量模式默认使用 720p 并关闭部分重效果，明显降低发热；完整预览会保留更多预览效果，但更耗电、更容易发热。',
+    AppLanguage.zhHant:
+        '輕量模式預設使用 720p 並關閉部分重效果，可明顯降低發熱；完整預覽會保留更多預覽效果，但更耗電、更容易發熱。',
     AppLanguage.en:
-        'Lightweight mode uses 720p preview and disables heavier effects to reduce heat. Performance mode shows fuller preview effects, but uses more power and runs hotter.',
+        'Lightweight mode uses 720p preview and disables heavier effects to reduce heat. Full Preview keeps more preview effects, but uses more power and runs hotter.',
     AppLanguage.ms:
-        'Mod ringan menggunakan pratonton 720p dan mematikan kesan berat untuk mengurangkan haba. Mod prestasi memberi pratonton lebih lengkap, tetapi lebih menggunakan kuasa dan lebih panas.',
+        'Mod ringan menggunakan pratonton 720p dan mematikan kesan berat untuk mengurangkan haba. Mod Pratonton Penuh mengekalkan lebih banyak kesan pratonton, tetapi lebih menggunakan kuasa dan lebih panas.',
     AppLanguage.ja:
-        '軽量モードは 720p プレビューと一部の重い効果の無効化で発熱を抑えます。性能モードはプレビュー効果がより完全ですが、消費電力と発熱が増えます。',
+        '軽量モードは 720p プレビューと一部の重い効果の無効化で発熱を抑えます。完全プレビューはより多くのプレビュー効果を維持しますが、消費電力と発熱が増えます。',
     AppLanguage.ko:
-        '경량 모드는 720p 미리보기와 일부 무거운 효과 비활성화로 발열을 줄입니다. 성능 모드는 미리보기 효과가 더 완전하지만 전력 소모와 발열이 더 큽니다.',
+        '경량 모드는 720p 미리보기와 일부 무거운 효과 비활성화로 발열을 줄입니다. 전체 미리보기는 더 많은 미리보기 효과를 유지하지만 전력 소모와 발열이 더 큽니다.',
   },
   'previewModeLightweightShort': {
     AppLanguage.zhHans: '轻量',
@@ -513,12 +515,12 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.ko: '경량',
   },
   'previewModePerformanceShort': {
-    AppLanguage.zhHans: '性能',
-    AppLanguage.zhHant: '效能',
-    AppLanguage.en: 'Performance',
-    AppLanguage.ms: 'Prestasi',
-    AppLanguage.ja: '性能',
-    AppLanguage.ko: '성능',
+    AppLanguage.zhHans: '完整预览',
+    AppLanguage.zhHant: '完整預覽',
+    AppLanguage.en: 'Full Preview',
+    AppLanguage.ms: 'Pratonton Penuh',
+    AppLanguage.ja: '完全プレビュー',
+    AppLanguage.ko: '전체 미리보기',
   },
   'silentCapture': {
     AppLanguage.zhHans: '静音拍摄',
