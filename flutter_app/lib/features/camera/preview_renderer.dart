@@ -1091,6 +1091,7 @@ class PreviewFilterWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 后置保持满幅 cover，前置优先保持原始几何比例，避免人物被横向/纵向拉伸。
+    // 圆形鱼眼镜头额外走圆形裁切，但不改变取景框尺寸。
     return LayoutBuilder(
       builder: (context, constraints) {
         final containerW = constraints.maxWidth;
@@ -1098,8 +1099,41 @@ class PreviewFilterWidget extends StatelessWidget {
         final sensorAspect =
             sourceAspectRatio > 0.01 ? sourceAspectRatio : 3 / 4;
         final containerAspect = containerW / containerH;
+        final circularFisheye = params.effectiveFisheyeMode;
         final keepSourceAspect = params.isFrontCamera;
         double contentW, contentH;
+
+        if (circularFisheye) {
+          final circleDiameter =
+              (containerW < containerH ? containerW : containerH) * 0.98;
+          if (1.0 >= sensorAspect) {
+            contentW = circleDiameter;
+            contentH = circleDiameter / sensorAspect;
+          } else {
+            contentH = circleDiameter;
+            contentW = circleDiameter * sensorAspect;
+          }
+          return ColoredBox(
+            color: Colors.black,
+            child: Center(
+              child: SizedBox(
+                width: circleDiameter,
+                height: circleDiameter,
+                child: ClipOval(
+                  child: OverflowBox(
+                    maxWidth: contentW,
+                    maxHeight: contentH,
+                    child: SizedBox(
+                      width: contentW,
+                      height: contentH,
+                      child: Texture(textureId: textureId),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
 
         if (keepSourceAspect) {
           if (containerAspect >= sensorAspect) {
