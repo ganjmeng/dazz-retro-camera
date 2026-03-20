@@ -1426,51 +1426,64 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
         onDismissed: () => Navigator.of(context).pop(),
         child: Stack(
           children: [
-            PhotoViewGallery.builder(
-              pageController: _pageController,
-              itemCount: galleryAssets.length,
-              backgroundDecoration: const BoxDecoration(color: Colors.black),
-              scrollPhysics: _isZoomed
-                  ? const NeverScrollableScrollPhysics()
-                  : const BouncingScrollPhysics(),
-              loadingBuilder: (_, __) => const Center(
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onLongPressStart:
+                  _currentAssetIsLivePhoto && !_isPreparingLiveVideo
+                      ? (_) => unawaited(_startLivePlaybackHold())
+                      : null,
+              onLongPressEnd: _currentAssetIsLivePhoto
+                  ? (_) => unawaited(_stopLivePlaybackHold())
+                  : null,
+              onLongPressCancel: _currentAssetIsLivePhoto
+                  ? () => unawaited(_stopLivePlaybackHold())
+                  : null,
+              child: PhotoViewGallery.builder(
+                pageController: _pageController,
+                itemCount: galleryAssets.length,
+                backgroundDecoration: const BoxDecoration(color: Colors.black),
+                scrollPhysics: _isZoomed
+                    ? const NeverScrollableScrollPhysics()
+                    : const BouncingScrollPhysics(),
+                loadingBuilder: (_, __) => const Center(
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
                 ),
+                scaleStateChangedCallback: (state) {
+                  final zoomed = state == PhotoViewScaleState.zoomedIn ||
+                      state == PhotoViewScaleState.covering ||
+                      state == PhotoViewScaleState.originalSize;
+                  if (zoomed != _isZoomed && mounted) {
+                    setState(() => _isZoomed = zoomed);
+                  }
+                },
+                onPageChanged: (i) {
+                  setState(() {
+                    _currentIndex = i;
+                    _isZoomed = false;
+                  });
+                  _disposeVideoController();
+                  _parseCameraName(galleryAssets[i]);
+                  _syncCurrentAssetLiveFlag();
+                  unawaited(_precacheAround(i));
+                },
+                builder: (ctx, i) {
+                  final pageAsset = galleryAssets[i];
+                  return PhotoViewGalleryPageOptions(
+                    imageProvider: _imageProviderFor(pageAsset),
+                    minScale: PhotoViewComputedScale.contained,
+                    initialScale: PhotoViewComputedScale.contained,
+                    maxScale: PhotoViewComputedScale.contained * 5.0,
+                    tightMode: true,
+                    basePosition: Alignment.center,
+                    filterQuality: FilterQuality.medium,
+                    gestureDetectorBehavior: HitTestBehavior.opaque,
+                    heroAttributes: PhotoViewHeroAttributes(tag: pageAsset.id),
+                  );
+                },
               ),
-              scaleStateChangedCallback: (state) {
-                final zoomed = state == PhotoViewScaleState.zoomedIn ||
-                    state == PhotoViewScaleState.covering ||
-                    state == PhotoViewScaleState.originalSize;
-                if (zoomed != _isZoomed && mounted) {
-                  setState(() => _isZoomed = zoomed);
-                }
-              },
-              onPageChanged: (i) {
-                setState(() {
-                  _currentIndex = i;
-                  _isZoomed = false;
-                });
-                _disposeVideoController();
-                _parseCameraName(galleryAssets[i]);
-                _syncCurrentAssetLiveFlag();
-                unawaited(_precacheAround(i));
-              },
-              builder: (ctx, i) {
-                final pageAsset = galleryAssets[i];
-                return PhotoViewGalleryPageOptions(
-                  imageProvider: _imageProviderFor(pageAsset),
-                  minScale: PhotoViewComputedScale.contained,
-                  initialScale: PhotoViewComputedScale.contained,
-                  maxScale: PhotoViewComputedScale.contained * 5.0,
-                  tightMode: true,
-                  basePosition: Alignment.center,
-                  filterQuality: FilterQuality.medium,
-                  gestureDetectorBehavior: HitTestBehavior.opaque,
-                  heroAttributes: PhotoViewHeroAttributes(tag: pageAsset.id),
-                );
-              },
             ),
             if (_videoCtrl?.value.isInitialized == true)
               Positioned.fill(
@@ -1507,55 +1520,48 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
               Positioned(
                 right: 20,
                 bottom: mq.padding.bottom + 110,
-                child: GestureDetector(
-                  onLongPressStart: _isPreparingLiveVideo
-                      ? null
-                      : (_) => unawaited(_startLivePlaybackHold()),
-                  onLongPressEnd: (_) => unawaited(_stopLivePlaybackHold()),
-                  onLongPressCancel: () => unawaited(_stopLivePlaybackHold()),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOut,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withAlpha(160),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: Colors.white.withAlpha(35),
                     ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withAlpha(160),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: Colors.white.withAlpha(35),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_isPreparingLiveVideo)
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        else
-                          const Icon(
-                            Icons.play_arrow_rounded,
-                            color: Color(0xFFFF9F0A),
-                            size: 18,
-                          ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _isPreparingLiveVideo ? '加载中' : '播放实况',
-                          style: const TextStyle(
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_isPreparingLiveVideo)
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
                             color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
                           ),
+                        )
+                      else
+                        const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Color(0xFFFF9F0A),
+                          size: 18,
                         ),
-                      ],
-                    ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _isPreparingLiveVideo ? '加载中' : '播放实况',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
