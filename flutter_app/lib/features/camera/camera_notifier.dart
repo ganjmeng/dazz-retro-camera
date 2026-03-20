@@ -95,6 +95,10 @@ class CameraAppState {
   final String runtimeDeviceModel;
   final String runtimeCameraId;
   final double runtimeSensorMp;
+  final double runtimeRtLightIndex;
+  final double runtimeRtIso;
+  final double runtimeRtExposureMs;
+  final double runtimeRtLuma;
 
   const CameraAppState({
     this.activeCameraId = 'grd_r',
@@ -148,6 +152,10 @@ class CameraAppState {
     this.runtimeDeviceModel = '',
     this.runtimeCameraId = '',
     this.runtimeSensorMp = 0,
+    this.runtimeRtLightIndex = -1.0,
+    this.runtimeRtIso = -1.0,
+    this.runtimeRtExposureMs = -1.0,
+    this.runtimeRtLuma = -1.0,
   });
   CameraAppState copyWith({
     String? activeCameraId,
@@ -203,6 +211,10 @@ class CameraAppState {
     String? runtimeDeviceModel,
     String? runtimeCameraId,
     double? runtimeSensorMp,
+    double? runtimeRtLightIndex,
+    double? runtimeRtIso,
+    double? runtimeRtExposureMs,
+    double? runtimeRtLuma,
     bool clearPanel = false,
     bool clearError = false,
     bool clearFrameId = false, // 用于将 activeFrameId 清空为 null
@@ -271,6 +283,10 @@ class CameraAppState {
       runtimeDeviceModel: runtimeDeviceModel ?? this.runtimeDeviceModel,
       runtimeCameraId: runtimeCameraId ?? this.runtimeCameraId,
       runtimeSensorMp: runtimeSensorMp ?? this.runtimeSensorMp,
+      runtimeRtLightIndex: runtimeRtLightIndex ?? this.runtimeRtLightIndex,
+      runtimeRtIso: runtimeRtIso ?? this.runtimeRtIso,
+      runtimeRtExposureMs: runtimeRtExposureMs ?? this.runtimeRtExposureMs,
+      runtimeRtLuma: runtimeRtLuma ?? this.runtimeRtLuma,
     );
   }
 
@@ -299,6 +315,10 @@ class CameraAppState {
       runtimeDeviceModel: runtimeDeviceModel,
       runtimeCameraId: runtimeCameraId,
       runtimeSensorMp: runtimeSensorMp,
+      rtLightIndex: runtimeRtLightIndex,
+      rtIso: runtimeRtIso,
+      rtExposureMs: runtimeRtExposureMs,
+      rtLuma: runtimeRtLuma,
     );
   }
 
@@ -332,14 +352,25 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   CameraAppNotifier(this._ref) : super(const CameraAppState());
 
+  double _toDouble(dynamic raw, [double fallback = -1.0]) {
+    if (raw is num) return raw.toDouble();
+    if (raw == null) return fallback;
+    return double.tryParse(raw.toString()) ?? fallback;
+  }
+
   void syncRuntimeColorContext([Map<String, dynamic>? debugInfoOverride]) {
     final info = debugInfoOverride ??
         _ref.read(cameraServiceProvider).activeCameraDebugInfo;
-    final rawSensor = info['sensorMp']?.toString() ?? '';
-    final sensorMp = double.tryParse(rawSensor) ?? state.runtimeSensorMp;
+    final sensorMp = _toDouble(info['sensorMp'], state.runtimeSensorMp);
     final brand = (info['brand']?.toString() ?? '').trim().toLowerCase();
     final model = (info['model']?.toString() ?? '').trim();
     final cameraId = (info['cameraId']?.toString() ?? '').trim();
+    final rtLightIndex =
+        _toDouble(info['rtLightIndex'], state.runtimeRtLightIndex);
+    final rtIso = _toDouble(info['rtIso'], state.runtimeRtIso);
+    final rtExposureMs =
+        _toDouble(info['rtExposureMs'], state.runtimeRtExposureMs);
+    final rtLuma = _toDouble(info['rtLuma'], state.runtimeRtLuma);
     final fallbackBrand = Platform.isIOS ? 'apple' : '';
     final fallbackModel = Platform.isIOS ? 'iphone' : '';
 
@@ -348,7 +379,11 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     if (nextBrand == state.runtimeDeviceBrand &&
         nextModel == state.runtimeDeviceModel &&
         cameraId == state.runtimeCameraId &&
-        (sensorMp - state.runtimeSensorMp).abs() < 0.001) {
+        (sensorMp - state.runtimeSensorMp).abs() < 0.001 &&
+        (rtLightIndex - state.runtimeRtLightIndex).abs() < 0.001 &&
+        (rtIso - state.runtimeRtIso).abs() < 0.001 &&
+        (rtExposureMs - state.runtimeRtExposureMs).abs() < 0.001 &&
+        (rtLuma - state.runtimeRtLuma).abs() < 0.001) {
       return;
     }
     state = state.copyWith(
@@ -356,7 +391,12 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       runtimeDeviceModel: nextModel,
       runtimeCameraId: cameraId,
       runtimeSensorMp: sensorMp,
+      runtimeRtLightIndex: rtLightIndex,
+      runtimeRtIso: rtIso,
+      runtimeRtExposureMs: rtExposureMs,
+      runtimeRtLuma: rtLuma,
     );
+    _applyCurrentRenderParamsToNative(throttled: true);
   }
 
   /// Initialize: 从持久化读取上次选择的相机和全局设置

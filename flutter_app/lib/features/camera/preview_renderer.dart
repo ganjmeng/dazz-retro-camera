@@ -237,6 +237,10 @@ class PreviewRenderParams {
   final String runtimeDeviceModel;
   final String runtimeCameraId;
   final double runtimeSensorMp;
+  final double rtLightIndex;
+  final double rtIso;
+  final double rtExposureMs;
+  final double rtLuma;
 
   const PreviewRenderParams({
     DefaultLook? defaultLook,
@@ -252,6 +256,10 @@ class PreviewRenderParams {
     this.runtimeDeviceModel = '',
     this.runtimeCameraId = '',
     this.runtimeSensorMp = 0,
+    this.rtLightIndex = -1.0,
+    this.rtIso = -1.0,
+    this.rtExposureMs = -1.0,
+    this.rtLuma = -1.0,
   })  : defaultLook = defaultLook ??
             const DefaultLook(
               temperature: 0,
@@ -288,6 +296,49 @@ class PreviewRenderParams {
 
   SceneClass get sceneClass {
     if (isFrontCamera) return SceneClass.indoor;
+    final hasRealtime = rtLightIndex >= 0 || rtIso > 0 || rtExposureMs > 0;
+
+    if (hasRealtime) {
+      final realtimeLowLight = rtLightIndex >= 4.2 ||
+          (rtIso >= 800 && rtExposureMs >= 20) ||
+          (rtIso >= 1200 && rtExposureMs >= 12);
+      if (realtimeLowLight || exposureOffset >= 1.0) return SceneClass.lowLight;
+
+      // 强逆光：亮场景 + 低 ISO/短曝光 + 预览 EV 明显往负方向补偿
+      final realtimeBacklit = rtLuma >= 0.66 &&
+          rtIso > 0 &&
+          rtIso <= 320 &&
+          rtExposureMs > 0 &&
+          rtExposureMs <= 10;
+      if (exposureOffset <= -0.75 || realtimeBacklit) return SceneClass.backlit;
+
+      final realtimeHighDynamic = rtLuma >= 0.78 &&
+          rtIso > 0 &&
+          rtIso <= 260 &&
+          rtExposureMs > 0 &&
+          rtExposureMs <= 8;
+      if (realtimeHighDynamic ||
+          (defaultLook.highlights <= -20 && defaultLook.shadows >= 20)) {
+        return SceneClass.highDynamic;
+      }
+
+      final likelyIndoorByRealtime =
+          rtLightIndex >= 3.1 || (rtLightIndex > 2.2 && colorTempK < 5200);
+      if (wbMode == 'incandescent' ||
+          colorTempK < 4300 ||
+          likelyIndoorByRealtime) {
+        return SceneClass.indoor;
+      }
+
+      final likelyOutdoorByRealtime =
+          rtLightIndex > 0 && rtLightIndex <= 2.1 && colorTempK >= 5600;
+      if (likelyOutdoorByRealtime ||
+          (wbMode == 'daylight' && colorTempK > 6200)) {
+        return SceneClass.outdoor;
+      }
+      return SceneClass.balanced;
+    }
+
     if (exposureOffset >= 1.0) return SceneClass.lowLight;
     if (exposureOffset <= -0.9) return SceneClass.backlit;
     if (defaultLook.highlights <= -20 && defaultLook.shadows >= 20) {

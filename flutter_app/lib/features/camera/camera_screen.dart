@@ -504,6 +504,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final rtExposureMs = rawRtExposureMs is num
         ? rawRtExposureMs.toDouble()
         : double.tryParse(rawRtExposureMs?.toString() ?? '') ?? -1.0;
+    final rawRtLuma = info['rtLuma'];
+    final rtLuma = rawRtLuma is num
+        ? rawRtLuma.toDouble()
+        : double.tryParse(rawRtLuma?.toString() ?? '') ?? -1.0;
     final signal = [
       st.activeCameraId,
       st.activeLensId ?? '',
@@ -518,6 +522,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       rtLightIndex.toStringAsFixed(1),
       rtIso > 0 ? rtIso.toStringAsFixed(0) : '-1',
       rtExposureMs > 0 ? rtExposureMs.toStringAsFixed(1) : '-1',
+      rtLuma >= 0 ? rtLuma.toStringAsFixed(2) : '-1',
     ].join('|');
     if (signal == _sceneHintSignal) return;
     _sceneHintSignal = signal;
@@ -530,6 +535,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         rtLightIndex: rtLightIndex,
         rtIso: rtIso,
         rtExposureMs: rtExposureMs,
+        rtLuma: rtLuma,
       );
       _enqueueSceneHint(next);
     });
@@ -544,6 +550,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       info['brand']?.toString() ?? '',
       info['model']?.toString() ?? '',
       info['facing']?.toString() ?? '',
+      info['rtLightIndex']?.toString() ?? '',
+      info['rtIso']?.toString() ?? '',
+      info['rtExposureMs']?.toString() ?? '',
+      info['rtLuma']?.toString() ?? '',
     ].join('|');
     if (signal == _runtimeColorSignal) return;
     _runtimeColorSignal = signal;
@@ -559,6 +569,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     double rtLightIndex = -1.0,
     double rtIso = -1.0,
     double rtExposureMs = -1.0,
+    double rtLuma = -1.0,
   }) {
     final lensId = (st.activeLensId ?? '').toLowerCase();
     if (st.fisheyeMode || lensId.contains('fish')) return 'sceneHintFisheye';
@@ -578,7 +589,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final isLowLight = hasRealtime ? realtimeLowLight : fallbackLowLight;
     if (isLowLight) return 'sceneHintLowLight';
 
-    if (st.exposureValue < -1.15) return 'sceneHintBacklit';
+    final realtimeBacklit = rtLuma >= 0.66 &&
+        rtIso > 0 &&
+        rtIso <= 320 &&
+        rtExposureMs > 0 &&
+        rtExposureMs <= 10;
+    if (st.exposureValue < -1.15 || (hasRealtime && realtimeBacklit)) {
+      return 'sceneHintBacklit';
+    }
 
     final likelyIndoorByRealtime = hasRealtime && rtLightIndex >= 3.1;
     if (st.wbMode == 'incandescent' ||
