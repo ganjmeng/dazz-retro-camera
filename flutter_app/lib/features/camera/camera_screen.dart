@@ -67,6 +67,9 @@ const _kLifecycleResumeTail = Duration(milliseconds: 90);
 const _kPagePauseTransitionLead = Duration(milliseconds: 24);
 const _kPageResumeTransitionTail = Duration(milliseconds: 100);
 const _kActionTransitionLead = Duration(milliseconds: 24);
+const _kLightRecoveryTimeout = Duration(milliseconds: 560);
+const _kLightRecoveryPoll = Duration(milliseconds: 40);
+const _kFreshRuntimeStatsWindow = Duration(milliseconds: 1200);
 // 宽屏适配：取景框最大宽度（平板/折叠屏展开态限制取景框不超过此宽度，避免画面过宽失调）
 // 普通手机最宽约 430dp，此值确保宽屏设备取景框宽度与手机体验一致
 const kMaxViewfinderW = 520.0;
@@ -368,18 +371,21 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _handleLifecyclePause() async {
     if (!mounted) return;
-    // App 进入后台：直接销毁原生相机与 renderer，避免旧 texture / 旧 shader 状态残留。
+    // 默认走轻暂停：保留已初始化的相机实例，恢复时先尝试轻恢复。
     _lastNativeReplaySignal = '';
     _nativeReadyReplayTimer?.cancel();
     ref.read(cameraAppProvider.notifier).saveCurrentSnapshot();
-    await ref.read(cameraServiceProvider.notifier).disposeCamera();
+    await ref.read(cameraServiceProvider.notifier).stopPreview();
   }
 
   Future<void> _handleLifecycleResume() async {
     if (!mounted) return;
     _transitionTimer?.cancel();
     setState(() => _showTransition = true);
-    await _reinitAndSyncCameraPipeline();
+    final recovered = await _attemptLightPreviewRecovery();
+    if (!recovered) {
+      await _reinitAndSyncCameraPipeline();
+    }
     if (!mounted) return;
     _transitionTimer = Timer(_kLifecycleResumeTail, () {
       if (mounted && _lastLifecycleState == AppLifecycleState.resumed) {
@@ -417,14 +423,81 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     await _syncPipelineAfterCameraInit();
   }
 
+  Future<bool> _attemptLightPreviewRecovery() async {
+    if (!mounted) return false;
+    _lastNativeReplaySignal = '';
+    _nativeReadyReplayTimer?.cancel();
+
+    final baselineRuntimeStats =
+        ref.read(cameraServiceProvider).runtimeStatsUpdatedAtMs;
+    final svc = ref.read(cameraServiceProvider.notifier);
+    final app = ref.read(cameraAppProvider.notifier);
+
+    await svc.startPreview();
+    if (!mounted) return false;
+    await app.replayCurrentPreviewStateToNative();
+    final minRenderVersion = app.latestRenderParamsVersion;
+    _scheduleNativeReadyReplay();
+    return _waitForPreviewRecoverySuccess(
+      baselineRuntimeStatsUpdatedAtMs: baselineRuntimeStats,
+      minimumRenderVersion: minRenderVersion,
+    );
+  }
+
+  Future<bool> _waitForPreviewRecoverySuccess({
+    required int baselineRuntimeStatsUpdatedAtMs,
+    required int minimumRenderVersion,
+  }) async {
+    final app = ref.read(cameraAppProvider.notifier);
+    final ackFuture = app.waitForNativeRenderAck(
+      timeout: _kLightRecoveryTimeout,
+      pollInterval: _kLightRecoveryPoll,
+      minimumVersion: minimumRenderVersion,
+    );
+    final deadline = DateTime.now().add(_kLightRecoveryTimeout);
+
+    while (DateTime.now().isBefore(deadline)) {
+      if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) {
+        return false;
+      }
+      final camSvc = ref.read(cameraServiceProvider);
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final isRunning = camSvc.isReady &&
+          camSvc.lifecyclePhase == 'running' &&
+          camSvc.textureId != null;
+      final hasFreshStats =
+          camSvc.runtimeStatsUpdatedAtMs > baselineRuntimeStatsUpdatedAtMs &&
+              nowMs - camSvc.runtimeStatsUpdatedAtMs <=
+                  _kFreshRuntimeStatsWindow.inMilliseconds;
+      final renderAcked =
+          app.lastAckedRenderParamsVersion >= minimumRenderVersion;
+      if (isRunning && hasFreshStats && renderAcked) {
+        return true;
+      }
+      await Future.delayed(_kLightRecoveryPoll);
+    }
+
+    final camSvc = ref.read(cameraServiceProvider);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final renderAcked = await ackFuture;
+    final hasFreshStats =
+        camSvc.runtimeStatsUpdatedAtMs > baselineRuntimeStatsUpdatedAtMs &&
+            nowMs - camSvc.runtimeStatsUpdatedAtMs <=
+                _kFreshRuntimeStatsWindow.inMilliseconds;
+    final isRunning = camSvc.isReady &&
+        camSvc.lifecyclePhase == 'running' &&
+        camSvc.textureId != null;
+    return isRunning && hasFreshStats && renderAcked;
+  }
+
   /// 进入二级页面时暂停相机预览，返回后自动恢复，并显示过渡动画。
   Future<void> _pushWithCameraPause(Widget page) async {
     // 1. 显示过渡动画（黑屏 + icon）
     _transitionTimer?.cancel();
     setState(() => _showTransition = true);
     await Future.delayed(_kPagePauseTransitionLead);
-    // 2. 直接销毁原生相机，返回时再完整重建，避免页面往返后预览特效丢失。
-    await ref.read(cameraServiceProvider.notifier).disposeCamera();
+    // 2. 先轻暂停预览，返回时优先尝试轻恢复，失败再升级到完整重建。
+    await ref.read(cameraServiceProvider.notifier).stopPreview();
     // 3. push 到二级页面，await 等待返回
     if (!mounted) return;
     await Navigator.of(context).push(
@@ -432,7 +505,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     );
     // 4. 返回后统一重建并同步完整相机链路
     if (!mounted) return;
-    await _reinitAndSyncCameraPipeline();
+    final recovered = await _attemptLightPreviewRecovery();
+    if (!recovered) {
+      await _reinitAndSyncCameraPipeline();
+    }
     // 5. 淡出过渡动画（setSharpen 完成后再淡出，确保分辨率已切换）
     _transitionTimer = Timer(_kPageResumeTransitionTail, () {
       if (mounted) setState(() => _showTransition = false);
@@ -638,9 +714,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _softResyncPreviewParams() async {
     if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
-    await ref
-        .read(cameraAppProvider.notifier)
-        .replayCurrentPreviewStateToNative();
+    final recovered = await _attemptLightPreviewRecovery();
+    if (!recovered) {
+      await _reinitAndSyncCameraPipeline();
+    }
   }
 
   void _handleCameraServiceStateChanged(

@@ -361,6 +361,27 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   CameraAppNotifier(this._ref) : super(const CameraAppState());
 
+  int get latestRenderParamsVersion => _renderParamsVersion;
+  int get lastAckedRenderParamsVersion => _lastAckedRenderParamsVersion;
+  bool get isNativeRenderStateSettled =>
+      _lastAckedRenderParamsVersion >= _renderParamsVersion;
+
+  Future<bool> waitForNativeRenderAck({
+    Duration timeout = const Duration(milliseconds: 520),
+    Duration pollInterval = const Duration(milliseconds: 40),
+    int? minimumVersion,
+  }) async {
+    final targetVersion = minimumVersion ?? _renderParamsVersion;
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      if (_lastAckedRenderParamsVersion >= targetVersion) {
+        return true;
+      }
+      await Future.delayed(pollInterval);
+    }
+    return _lastAckedRenderParamsVersion >= targetVersion;
+  }
+
   double _toDouble(dynamic raw, [double fallback = -1.0]) {
     if (raw is num) return raw.toDouble();
     if (raw == null) return fallback;
