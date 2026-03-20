@@ -520,10 +520,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             decoration: BoxDecoration(
               color: Colors.black.withAlpha(enabled ? 120 : 88),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: color.withAlpha(enabled ? 255 : 220),
-                width: 1.2,
-              ),
             ),
             child: Stack(
               alignment: Alignment.center,
@@ -1470,11 +1466,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               right: 8,
               child: _DebugOverlay(st: st),
             ),
-          Positioned(
-            top: 12,
-            left: 12,
-            child: _buildLivePhotoButton(st, camSvc),
-          ),
           // 拍摄中黑色半透明蒙层
           if (st.isTakingPhoto)
             Container(
@@ -1620,6 +1611,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 });
               },
             ),
+          ),
+          Positioned(
+            top: 12,
+            left: 12,
+            child: _buildLivePhotoButton(st, camSvc),
           ),
           // ── 对焦圈 + 曝光太阳 overlay ──
           if (_showFocusRing && _focusPoint != null)
