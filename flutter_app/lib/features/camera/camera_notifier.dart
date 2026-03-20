@@ -81,6 +81,7 @@ class CameraAppState {
   final bool mirrorBackCamera; // 后置摄像头镜像开关
   final bool shutterVibrationEnabled; // 快门振动开关
   final bool fisheyeMode; // 鱼眼圆圈模式
+  final bool livePhotoEnabled; // Live Photo 开关
   // ── 双重曝光 ──────────────────────────────────────────────────────────────
   final bool doubleExpEnabled; // 双重曝光开关
   final String? doubleExpFirstPath; // 第一张照片本地路径（待合成）
@@ -144,6 +145,7 @@ class CameraAppState {
     this.mirrorBackCamera = false,
     this.shutterVibrationEnabled = true,
     this.fisheyeMode = false,
+    this.livePhotoEnabled = false,
     this.doubleExpEnabled = false,
     this.doubleExpFirstPath,
     this.doubleExpBlend = 0.5,
@@ -204,6 +206,7 @@ class CameraAppState {
     bool? mirrorBackCamera,
     bool? shutterVibrationEnabled,
     bool? fisheyeMode,
+    bool? livePhotoEnabled,
     bool? doubleExpEnabled,
     String? doubleExpFirstPath,
     bool clearDoubleExpFirst = false,
@@ -277,6 +280,7 @@ class CameraAppState {
       shutterVibrationEnabled:
           shutterVibrationEnabled ?? this.shutterVibrationEnabled,
       fisheyeMode: fisheyeMode ?? this.fisheyeMode,
+      livePhotoEnabled: livePhotoEnabled ?? this.livePhotoEnabled,
       doubleExpEnabled: doubleExpEnabled ?? this.doubleExpEnabled,
       doubleExpFirstPath: clearDoubleExpFirst
           ? null
@@ -651,6 +655,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   void selectFrame(String id) {
+    if (state.livePhotoEnabled && id != 'frame_none' && id != 'none') {
+      return;
+    }
     // 'none' 和 'frame_none' 都表示无边框，用 clearFrameId=true 真正清空 activeFrameId
     if (id == 'frame_none' || id == 'none') {
       state = state.copyWith(clearFrameId: true);
@@ -660,6 +667,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   void selectWatermark(String id) {
+    if (state.livePhotoEnabled && id != 'none') {
+      return;
+    }
     // 切换预设时清空用户覆盖（使新预设的默认配置生效）
     state =
         state.copyWith(activeWatermarkId: id, clearWatermarkOverrides: true);
@@ -868,7 +878,20 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     final next = !state.doubleExpEnabled;
     state = state.copyWith(
       doubleExpEnabled: next,
+      livePhotoEnabled: next ? false : state.livePhotoEnabled,
       clearDoubleExpFirst: true, // 切换时清空第一张照片
+    );
+  }
+
+  void toggleLivePhoto() {
+    final next = !state.livePhotoEnabled;
+    state = state.copyWith(
+      livePhotoEnabled: next,
+      burstCount: next ? 0 : state.burstCount,
+      doubleExpEnabled: next ? false : state.doubleExpEnabled,
+      clearDoubleExpFirst: next,
+      clearFrameId: next,
+      activeWatermarkId: next ? 'none' : state.activeWatermarkId,
     );
   }
 
@@ -1035,6 +1058,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     int exifMs = 0;
     int galleryMs = 0;
     bool postApplied = false;
+    bool livePhotoRecordingStarted = false;
+    Future<String?>? liveVideoStopFuture;
     String? enhanceSourcePath;
     CameraDefinition? enhanceCamera;
     String enhanceRatioId = '';
@@ -1048,11 +1073,39 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     String? enhanceWatermarkStyleOverride;
     PreviewRenderParams? enhanceRenderParams;
     final captureRenderParams = state.renderParams;
+    final livePhotoActive = state.livePhotoEnabled &&
+        _ref.read(cameraServiceProvider).supportsLivePhoto &&
+        !state.doubleExpEnabled &&
+        state.burstCount == 0;
     bool enhanceFisheyeMode = false;
     int enhanceDeviceQuarter = 0;
     Rect? enhanceMinimapRect;
 
     try {
+      if (livePhotoActive && Platform.isAndroid) {
+        livePhotoRecordingStarted =
+            await _ref.read(cameraServiceProvider.notifier).startRecording();
+        if (livePhotoRecordingStarted) {
+          await Future.delayed(const Duration(milliseconds: 180));
+        }
+      }
+
+      if (livePhotoActive && Platform.isIOS) {
+        final liveResult = await _ref
+            .read(cameraServiceProvider.notifier)
+            .captureLivePhoto(deviceQuarter: deviceQuarter);
+        final filePath = liveResult?['filePath'] as String?;
+        final galleryAssetId = liveResult?['galleryAssetId'] as String?;
+        if (filePath != null && filePath.isNotEmpty) {
+          return TakePhotoResult(
+            path: filePath,
+            galleryAssetId: galleryAssetId,
+            isLivePhoto: true,
+          );
+        }
+        return null;
+      }
+
       final captureSw = Stopwatch()..start();
       final photoResult = await _ref
           .read(cameraServiceProvider.notifier)
@@ -1116,6 +1169,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           } catch (e) {
             debugPrint('[CameraNotifier] BG enhance source copy failed: $e');
           }
+        }
+
+        if (livePhotoRecordingStarted) {
+          liveVideoStopFuture = Future<String?>.delayed(
+            const Duration(milliseconds: 1170),
+            () => _ref.read(cameraServiceProvider.notifier).stopRecording(),
+          );
         }
 
         // Post-process: color effects + ratio crop + frame + watermark
@@ -1323,11 +1383,30 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         // iOS:    PHAsset.localIdentifier（直接使用，无需解析 URI）
         String? galleryAssetId;
         final gallerySw = Stopwatch()..start();
-        final saveFuture =
-            _ref.read(cameraServiceProvider.notifier).saveToGallery(
-                  path,
-                  cameraId: state.activeCameraId,
-                );
+        Future<String?> saveFuture;
+        if (livePhotoActive && liveVideoStopFuture != null) {
+          final videoPath = await liveVideoStopFuture;
+          if (videoPath != null && videoPath.isNotEmpty) {
+            saveFuture = Future<String?>.value(
+              await _ref.read(cameraServiceProvider.notifier).saveMotionPhoto(
+                    path,
+                    videoPath,
+                    cameraId: state.activeCameraId,
+                  ),
+            );
+          } else {
+            saveFuture =
+                _ref.read(cameraServiceProvider.notifier).saveToGallery(
+                      path,
+                      cameraId: state.activeCameraId,
+                    );
+          }
+        } else {
+          saveFuture = _ref.read(cameraServiceProvider.notifier).saveToGallery(
+                path,
+                cameraId: state.activeCameraId,
+              );
+        }
         if (enhanceSourcePath != null && enhanceCamera != null) {
           unawaited(_runBackgroundEnhanceAndReplace(
             sourcePath: enhanceSourcePath,
@@ -1384,7 +1463,11 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           '(capture=$captureMs, post=$postMs, exif=$exifMs, gallery=$galleryMs)',
         );
 
-        return TakePhotoResult(path: path, galleryAssetId: galleryAssetId);
+        return TakePhotoResult(
+          path: path,
+          galleryAssetId: galleryAssetId,
+          isLivePhoto: livePhotoActive,
+        );
       }
       totalSw.stop();
       debugPrint(
@@ -1397,6 +1480,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             '[Perf][takePhoto] total=${totalSw.elapsedMilliseconds} ms (finally)');
       }
       state = state.copyWith(isTakingPhoto: false);
+      if (livePhotoRecordingStarted && liveVideoStopFuture == null) {
+        unawaited(_ref.read(cameraServiceProvider.notifier).stopRecording());
+      }
       unawaited(_syncCurrentPreviewStateToNative());
     }
   }
@@ -1681,7 +1767,12 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 class TakePhotoResult {
   final String path;
   final String? galleryAssetId;
-  const TakePhotoResult({required this.path, this.galleryAssetId});
+  final bool isLivePhoto;
+  const TakePhotoResult({
+    required this.path,
+    this.galleryAssetId,
+    this.isLivePhoto = false,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1793,6 +1884,10 @@ final smallFrameModeProvider = Provider<bool>(
 /// 鱼眼模式（切换鱼眼时 rebuild）
 final fisheyeModeProvider = Provider<bool>(
   (ref) => ref.watch(cameraAppProvider.select((s) => s.fisheyeMode)),
+);
+
+final livePhotoEnabledProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.livePhotoEnabled)),
 );
 
 /// 双重曝光开关（切换双曝时 rebuild）

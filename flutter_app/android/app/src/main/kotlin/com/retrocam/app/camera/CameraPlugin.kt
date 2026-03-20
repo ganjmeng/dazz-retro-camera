@@ -18,6 +18,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
+import android.media.ExifInterface
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CameraCharacteristics
 import androidx.camera.camera2.interop.Camera2CameraControl
@@ -44,6 +45,9 @@ import io.flutter.plugin.common.MethodChannel
 import com.retrocam.app.camera.CaptureGLProcessor
 import io.flutter.view.TextureRegistry
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.CountDownLatch
@@ -84,6 +88,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private var activeCameraDebugInfo: Map<String, Any> = emptyMap()
     private var videoCapture: VideoCapture<Recorder>? = null
     private var recording: Recording? = null
+    private var supportsLivePhoto: Boolean = false
     private var lensFacing: Int = CameraSelector.LENS_FACING_BACK
 
     // Flutter texture
@@ -204,6 +209,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "startRecording"     -> handleStartRecording(result)
             "stopRecording"      -> handleStopRecording(result)
             "saveToGallery"      -> handleSaveToGallery(call, result)
+            "saveMotionPhoto"    -> handleSaveMotionPhoto(call, result)
             "replaceGalleryImage"-> handleReplaceGalleryImage(call, result)
             "composeOverlay"     -> handleComposeOverlay(call, result)
             "blendDoubleExposure"-> handleBlendDoubleExposure(call, result)
@@ -401,17 +407,32 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val recorder = Recorder.Builder()
             .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
             .build()
-        videoCapture = VideoCapture.withOutput(recorder)
-
+        val candidateVideoCapture = VideoCapture.withOutput(recorder)
         provider.unbindAll()
-        camera = provider.bindToLifecycle(
-            owner,
-            cameraSelector,
-            preview,
-            imageCapture,
-            videoCapture,
-            imageAnalysis
-        )
+        try {
+            camera = provider.bindToLifecycle(
+                owner,
+                cameraSelector,
+                preview,
+                imageCapture,
+                candidateVideoCapture,
+                imageAnalysis
+            )
+            videoCapture = candidateVideoCapture
+            supportsLivePhoto = true
+        } catch (e: Exception) {
+            Log.w(TAG, "bindCameraUseCases: live photo bind rejected, fallback to photo-only: ${e.message}")
+            provider.unbindAll()
+            camera = provider.bindToLifecycle(
+                owner,
+                cameraSelector,
+                preview,
+                imageCapture,
+                imageAnalysis
+            )
+            videoCapture = null
+            supportsLivePhoto = false
+        }
         // 绑定成功后读取当前摄像头的传感器信息，供 Debug 面板显示
         @Suppress("UnsafeOptInUsageError")
         readActiveCameraInfo()
@@ -445,7 +466,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 "brand" to Build.BRAND,
                 "model" to Build.MODEL,
                 "manufacturer" to Build.MANUFACTURER,
-                "device" to Build.DEVICE
+                "device" to Build.DEVICE,
+                "supportsLivePhoto" to supportsLivePhoto
             )
             Log.d(TAG, "Active camera: id=$camId sensor=${sensorW}×${sensorH} focal=$focalStr facing=$facingStr")
         } catch (e: Exception) {
@@ -872,6 +894,141 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
     }
 
+    private fun handleSaveMotionPhoto(call: MethodCall, result: MethodChannel.Result) {
+        val imagePath = call.argument<String>("imagePath")
+        val videoPath = call.argument<String>("videoPath")
+        if (imagePath.isNullOrEmpty() || videoPath.isNullOrEmpty()) {
+            result.error("INVALID_ARG", "imagePath and videoPath are required", null)
+            return
+        }
+        val imageFile = File(imagePath)
+        val videoFile = File(videoPath)
+        if (!imageFile.exists() || !videoFile.exists()) {
+            result.error("FILE_NOT_FOUND", "image or video file not found", null)
+            return
+        }
+        val cameraId = call.argument<String>("cameraId") ?: ""
+        val context = flutterPluginBinding.applicationContext
+
+        bgExecutor.execute {
+            var xmpImageFile: File? = null
+            var motionPhotoFile: File? = null
+            try {
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                val displayName = if (cameraId.isNotEmpty()) {
+                    "DAZZ_${cameraId}_${timestamp}.jpg"
+                } else {
+                    "DAZZ_MOTION_${timestamp}.jpg"
+                }
+
+                xmpImageFile = File(context.cacheDir, "motion_xmp_${timestamp}.jpg")
+                imageFile.copyTo(xmpImageFile, overwrite = true)
+                val exif = ExifInterface(xmpImageFile.absolutePath)
+                exif.setAttribute(
+                    ExifInterface.TAG_XMP,
+                    buildMotionPhotoXmp(videoLength = videoFile.length())
+                )
+                exif.saveAttributes()
+
+                motionPhotoFile = File(context.cacheDir, "motion_out_${timestamp}.jpg")
+                FileInputStream(xmpImageFile).use { input ->
+                    FileOutputStream(motionPhotoFile).use { output ->
+                        input.copyTo(output)
+                        FileInputStream(videoFile).use { videoInput ->
+                            videoInput.copyTo(output)
+                        }
+                    }
+                }
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+                        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                        put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_DCIM}/$DAZZ_ALBUM")
+                        put(MediaStore.Images.Media.IS_PENDING, 1)
+                    }
+                    val uri = context.contentResolver.insert(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        contentValues
+                    )
+                    if (uri != null) {
+                        context.contentResolver.openOutputStream(uri)?.use { os ->
+                            FileInputStream(motionPhotoFile).use { it.copyTo(os) }
+                        }
+                        val updateValues = ContentValues().apply {
+                            put(MediaStore.Images.Media.IS_PENDING, 0)
+                        }
+                        context.contentResolver.update(uri, updateValues, null, null)
+                        context.contentResolver.notifyChange(
+                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                            null
+                        )
+                        ContextCompat.getMainExecutor(context).execute {
+                            result.success(mapOf("success" to true, "uri" to uri.toString()))
+                        }
+                    } else {
+                        ContextCompat.getMainExecutor(context).execute {
+                            result.error("GALLERY_SAVE_FAILED", "ContentResolver insert returned null", null)
+                        }
+                    }
+                } else {
+                    val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
+                    val dazzDir = File(dcimDir, DAZZ_ALBUM).apply { mkdirs() }
+                    val destFile = File(dazzDir, displayName)
+                    motionPhotoFile.copyTo(destFile, overwrite = true)
+                    android.media.MediaScannerConnection.scanFile(
+                        context,
+                        arrayOf(destFile.absolutePath),
+                        arrayOf("image/jpeg")
+                    ) { _, _ -> }
+                    ContextCompat.getMainExecutor(context).execute {
+                        result.success(mapOf("success" to true, "uri" to destFile.absolutePath))
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "saveMotionPhoto failed", e)
+                ContextCompat.getMainExecutor(context).execute {
+                    result.error("GALLERY_SAVE_FAILED", e.message, null)
+                }
+            } finally {
+                runCatching { imageFile.delete() }
+                runCatching { videoFile.delete() }
+                runCatching { xmpImageFile?.delete() }
+                runCatching { motionPhotoFile?.delete() }
+            }
+        }
+    }
+
+    private fun buildMotionPhotoXmp(videoLength: Long): String {
+        return """
+            <x:xmpmeta xmlns:x="adobe:ns:meta/">
+              <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+                <rdf:Description
+                  xmlns:Camera="http://ns.google.com/photos/1.0/camera/"
+                  xmlns:Container="http://ns.google.com/photos/1.0/container/"
+                  xmlns:Item="http://ns.google.com/photos/1.0/container/item/"
+                  Camera:MotionPhoto="1"
+                  Camera:MotionPhotoVersion="1"
+                  Camera:MotionPhotoPresentationTimestampUs="0">
+                  <Container:Directory>
+                    <rdf:Seq>
+                      <rdf:li rdf:parseType="Resource"
+                        Item:Mime="image/jpeg"
+                        Item:Semantic="Primary"
+                        Item:Length="0"
+                        Item:Padding="0"/>
+                      <rdf:li rdf:parseType="Resource"
+                        Item:Mime="video/mp4"
+                        Item:Semantic="MotionPhoto"
+                        Item:Length="$videoLength"/>
+                    </rdf:Seq>
+                  </Container:Directory>
+                </rdf:Description>
+              </rdf:RDF>
+            </x:xmpmeta>
+        """.trimIndent()
+    }
+
     /// 使用处理后的文件覆盖已存在的 MediaStore 资产内容（同一 URI）。
     private fun handleReplaceGalleryImage(call: MethodCall, result: MethodChannel.Result) {
         val uriStr = call.argument<String>("uri")
@@ -1223,13 +1380,41 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                             provider.unbindAll()
                             imageCapture = newImageCapture
                             imageCapture?.flashMode = currentFlashMode
-                            camera = provider.bindToLifecycle(
-                                owner,
-                                cameraSelector,
-                                preview,
-                                imageCapture,
-                                videoCapture
-                            )
+                            val currentVideoCapture = videoCapture
+                            if (currentVideoCapture != null) {
+                                try {
+                                    camera = provider.bindToLifecycle(
+                                        owner,
+                                        cameraSelector,
+                                        preview,
+                                        imageCapture,
+                                        currentVideoCapture,
+                                        imageAnalysis
+                                    )
+                                    supportsLivePhoto = true
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "setSharpen rebind with live photo failed, fallback to photo-only: ${e.message}")
+                                    provider.unbindAll()
+                                    videoCapture = null
+                                    supportsLivePhoto = false
+                                    camera = provider.bindToLifecycle(
+                                        owner,
+                                        cameraSelector,
+                                        preview,
+                                        imageCapture,
+                                        imageAnalysis
+                                    )
+                                }
+                            } else {
+                                supportsLivePhoto = false
+                                camera = provider.bindToLifecycle(
+                                    owner,
+                                    cameraSelector,
+                                    preview,
+                                    imageCapture,
+                                    imageAnalysis
+                                )
+                            }
                             Log.d(TAG, "setSharpen: level=$level, imageCapture rebuilt")
                             // 3. 使用 Camera2Interop 设置 EDGE_MODE（锐化算法）
                             // Must run after bindToLifecycle so cam.cameraControl is valid

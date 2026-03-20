@@ -122,6 +122,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // 取景框中央文字提示（闪光灯/倒计时切换时显示）
   String? _viewfinderHint;
   Timer? _hintTimer;
+  String? _viewfinderTopHint;
+  Timer? _topHintTimer;
   // 场景提示：稳定防抖后展示，避免频繁跳动
   String _sceneHintKey = 'sceneHintBalanced';
   String? _pendingSceneHintKey;
@@ -258,6 +260,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _countdownTimer?.cancel();
     _focusFadeTimer?.cancel();
     _hintTimer?.cancel();
+    _topHintTimer?.cancel();
     _sceneHintCommitTimer?.cancel();
     _sceneHintHideTimer?.cancel();
     _previewHealthTimer?.cancel();
@@ -478,6 +481,76 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _hintTimer = Timer(const Duration(milliseconds: 1500), () {
       if (mounted) setState(() => _viewfinderHint = null);
     });
+  }
+
+  void _showViewfinderTopHint(String text,
+      {Duration duration = const Duration(seconds: 3)}) {
+    _topHintTimer?.cancel();
+    setState(() => _viewfinderTopHint = text);
+    _topHintTimer = Timer(duration, () {
+      if (mounted) setState(() => _viewfinderTopHint = null);
+    });
+  }
+
+  void _toggleLivePhoto(CameraAppState st, CameraState camSvc) {
+    if (!camSvc.supportsLivePhoto) return;
+    ref.read(cameraAppProvider.notifier).toggleLivePhoto();
+    if (!st.livePhotoEnabled) {
+      _showViewfinderTopHint(_s().livePhotoEffect);
+    }
+  }
+
+  Widget _buildLivePhotoButton(CameraAppState st, CameraState camSvc) {
+    if (!camSvc.supportsLivePhoto) return const SizedBox.shrink();
+    final enabled = st.livePhotoEnabled;
+    final color = enabled ? const Color(0xFFFF8A3D) : Colors.white;
+    return AnimatedScale(
+      scale: enabled ? 1.0 : 0.96,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _toggleLivePhoto(st, camSvc),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.black.withAlpha(enabled ? 120 : 88),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: color.withAlpha(enabled ? 255 : 220),
+                width: 1.2,
+              ),
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(
+                  Icons.motion_photos_on_outlined,
+                  color: color,
+                  size: 22,
+                ),
+                if (!enabled)
+                  Transform.rotate(
+                    angle: -math.pi / 4,
+                    child: Container(
+                      width: 20,
+                      height: 1.8,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withAlpha(235),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _scheduleSceneHintRefresh(CameraAppState st, CameraState camSvc) {
@@ -1072,6 +1145,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         // fallback: 相册查询（仅当 saveToGallery 未返回 URI 时）
         _loadLatestThumbWithRetry();
       }
+      if (result.isLivePhoto) {
+        _showViewfinderTopHint(_s().livePhotoEffect);
+      }
     }
   }
 
@@ -1394,6 +1470,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               right: 8,
               child: _DebugOverlay(st: st),
             ),
+          Positioned(
+            top: 12,
+            left: 12,
+            child: _buildLivePhotoButton(st, camSvc),
+          ),
           // 拍摄中黑色半透明蒙层
           if (st.isTakingPhoto)
             Container(
@@ -1434,6 +1515,41 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           color: Colors.white,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (_viewfinderTopHint != null)
+            Positioned(
+              top: _showSceneHint ? 48 : 10,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Center(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    child: Container(
+                      key: ValueKey(_viewfinderTopHint),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF8A3D).withAlpha(230),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(
+                        _viewfinderTopHint!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
                           letterSpacing: 0.2,
                         ),
                       ),
@@ -3267,14 +3383,36 @@ class _OptionsSheet extends ConsumerWidget {
             frames: camera.modules.frames,
             activeId: st.activeFrameId,
             activeRatioId: st.activeRatioId,
-            onSelect: (id) =>
-                ref.read(cameraAppProvider.notifier).selectFrame(id),
+            onSelect: (id) {
+              if (st.livePhotoEnabled && id != 'none' && id != 'frame_none') {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      sOf(ref.read(languageProvider)).livePhotoNoOverlay,
+                    ),
+                  ),
+                );
+                return;
+              }
+              ref.read(cameraAppProvider.notifier).selectFrame(id);
+            },
           ),
         'watermark' => _WatermarkRow(
             presets: camera.modules.watermarks.presets,
             activeId: st.activeWatermarkId,
-            onSelect: (id) =>
-                ref.read(cameraAppProvider.notifier).selectWatermark(id),
+            onSelect: (id) {
+              if (st.livePhotoEnabled && id != 'none') {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      sOf(ref.read(languageProvider)).livePhotoNoOverlay,
+                    ),
+                  ),
+                );
+                return;
+              }
+              ref.read(cameraAppProvider.notifier).selectWatermark(id);
+            },
           ),
         _ => const SizedBox.shrink(),
       },

@@ -87,6 +87,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleUpdateRenderParams(call: call, result: result)
         case "takePhoto":
             handleTakePhoto(call: call, result: result)
+        case "captureLivePhoto":
+            handleCaptureLivePhoto(call: call, result: result)
         case "startRecording":
             result(["success": false, "reason": "not_implemented"])
         case "stopRecording":
@@ -171,7 +173,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             "facing": lensStr,
             "brand": "apple",
             "model": d.model,
-            "device": d.name
+            "device": d.name,
+            "supportsLivePhoto": cameraManager?.supportsLivePhotoCapture ?? false
         ])
 
         result(["textureId": textureId])
@@ -455,6 +458,92 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
                 DispatchQueue.main.async {
                     self?.reapplyRuntimeStateToRenderer()
                     result(FlutterError(code: "WRITE_FAILED", message: error.localizedDescription, details: nil))
+                }
+            }
+        }
+    }
+
+    private func handleCaptureLivePhoto(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let cameraManager = cameraManager else {
+            result(FlutterError(code: "NOT_READY", message: "Camera not initialized", details: nil))
+            return
+        }
+        guard cameraManager.supportsLivePhotoCapture else {
+            result(FlutterError(code: "NOT_SUPPORTED", message: "Live Photo not supported", details: nil))
+            return
+        }
+        let args = call.arguments as? [String: Any]
+        let deviceQuarter = (args?["deviceQuarter"] as? Int) ?? 0
+
+        let timestamp = Int(Date().timeIntervalSince1970 * 1000)
+        let fileName = "DAZZ_\(timestamp).jpg"
+        let cacheDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dazz_captures", isDirectory: true)
+        let movieDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dazz_live_photo", isDirectory: true)
+        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: movieDir, withIntermediateDirectories: true)
+        let fileURL = cacheDir.appendingPathComponent(fileName)
+        let movieURL = movieDir.appendingPathComponent("DAZZ_LIVE_\(timestamp).mov")
+
+        cameraManager.captureLivePhoto(
+            flashMode: currentFlashMode,
+            deviceQuarter: deviceQuarter,
+            movieURL: movieURL
+        ) { [weak self] imageData, pairedMovieURL in
+            guard let self else { return }
+            guard let data = imageData, let liveMovieURL = pairedMovieURL else {
+                DispatchQueue.main.async {
+                    self.reapplyRuntimeStateToRenderer()
+                    result(FlutterError(code: "CAPTURE_FAILED", message: "Failed to capture live photo", details: nil))
+                }
+                return
+            }
+            do {
+                try data.write(to: fileURL)
+            } catch {
+                DispatchQueue.main.async {
+                    self.reapplyRuntimeStateToRenderer()
+                    result(FlutterError(code: "WRITE_FAILED", message: error.localizedDescription, details: nil))
+                }
+                return
+            }
+
+            PHPhotoLibrary.requestAuthorization { status in
+                let isGranted: Bool
+                if #available(iOS 14, *) {
+                    isGranted = (status == .authorized || status == .limited)
+                } else {
+                    isGranted = (status == .authorized)
+                }
+                guard isGranted else {
+                    DispatchQueue.main.async {
+                        self.reapplyRuntimeStateToRenderer()
+                        result(FlutterError(code: "PERMISSION_DENIED", message: "Photo library access denied", details: nil))
+                    }
+                    return
+                }
+
+                var assetPlaceholder: PHObjectPlaceholder?
+                PHPhotoLibrary.shared().performChanges({
+                    let request = PHAssetCreationRequest.forAsset()
+                    let options = PHAssetResourceCreationOptions()
+                    request.addResource(with: .photo, fileURL: fileURL, options: options)
+                    request.addResource(with: .pairedVideo, fileURL: liveMovieURL, options: options)
+                    assetPlaceholder = request.placeholderForCreatedAsset
+                }) { success, error in
+                    try? FileManager.default.removeItem(at: liveMovieURL)
+                    DispatchQueue.main.async {
+                        self.reapplyRuntimeStateToRenderer()
+                        if success {
+                            result([
+                                "filePath": fileURL.path,
+                                "galleryAssetId": assetPlaceholder?.localIdentifier ?? ""
+                            ])
+                        } else {
+                            result(FlutterError(code: "SAVE_FAILED", message: error?.localizedDescription, details: nil))
+                        }
+                    }
                 }
             }
         }

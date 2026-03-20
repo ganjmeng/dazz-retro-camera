@@ -19,6 +19,9 @@ class CameraSessionManager: NSObject {
 
     // 拍照回调
     private var photoCaptureCallback: ((Data?) -> Void)?
+    private var livePhotoCaptureCallback: ((Data?, URL?) -> Void)?
+    private var pendingLivePhotoPhotoData: Data?
+    private var pendingLivePhotoMovieURL: URL?
 
     // MARK: - Setup
 
@@ -26,7 +29,7 @@ class CameraSessionManager: NSObject {
     /// 默认使用 .photo preset，保证 photoOutput 能输出设备全像素分辨率。
     /// initCamera 完成后 Flutter 端会立即调用 setSharpen 切换到用户选择的档位。
     func configure(lens: AVCaptureDevice.Position = .back, resolution: AVCaptureSession.Preset = .photo) {
-        sessionQueue.async { [weak self] in
+        sessionQueue.sync { [weak self] in
             guard let self = self else { return }
 
             self.session.beginConfiguration()
@@ -67,6 +70,9 @@ class CameraSessionManager: NSObject {
             if self.session.canAddOutput(photoOutput) {
                 self.session.addOutput(photoOutput)
                 self.photoOutput = photoOutput
+                if photoOutput.isLivePhotoCaptureSupported {
+                    photoOutput.isLivePhotoCaptureEnabled = true
+                }
             }
 
             self.applyMirroringLocked(for: lens)
@@ -123,6 +129,14 @@ class CameraSessionManager: NSObject {
             let currentPosition = self.currentVideoInput?.device.position ?? .back
             self.applyMirroringLocked(for: currentPosition)
         }
+    }
+
+    var supportsLivePhotoCapture: Bool {
+        var supported = false
+        sessionQueue.sync {
+            supported = self.photoOutput?.isLivePhotoCaptureSupported ?? false
+        }
+        return supported
     }
 
     // MARK: - Zoom
@@ -353,6 +367,40 @@ class CameraSessionManager: NSObject {
         }
     }
 
+    func captureLivePhoto(
+        flashMode: AVCaptureDevice.FlashMode,
+        deviceQuarter: Int = 0,
+        movieURL: URL,
+        completion: @escaping (Data?, URL?) -> Void
+    ) {
+        guard let photoOutput = photoOutput, photoOutput.isLivePhotoCaptureSupported else {
+            completion(nil, nil)
+            return
+        }
+        livePhotoCaptureCallback = completion
+        pendingLivePhotoPhotoData = nil
+        pendingLivePhotoMovieURL = nil
+
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
+            if #available(iOS 16.0, *) {
+                settings.maxPhotoDimensions = photoOutput.maxPhotoDimensions
+            } else {
+                settings.isHighResolutionPhotoEnabled = true
+            }
+            if photoOutput.supportedFlashModes.contains(flashMode) {
+                settings.flashMode = flashMode
+            }
+            settings.livePhotoMovieFileURL = movieURL
+            if let connection = photoOutput.connection(with: .video),
+               connection.isVideoOrientationSupported {
+                connection.videoOrientation = Self.videoOrientation(from: deviceQuarter)
+            }
+            photoOutput.capturePhoto(with: settings, delegate: self)
+        }
+    }
+
     // MARK: - Private Helpers
 
     private func captureDevice(for position: AVCaptureDevice.Position) -> AVCaptureDevice? {
@@ -420,13 +468,54 @@ extension CameraSessionManager: AVCapturePhotoCaptureDelegate {
     func photoOutput(_ output: AVCapturePhotoOutput,
                      didFinishProcessingPhoto photo: AVCapturePhoto,
                      error: Error?) {
-        if let error = error {
-            print("[CameraSessionManager] capturePhoto error: \(error)")
-            photoCaptureCallback?(nil)
+        if livePhotoCaptureCallback != nil {
+            if let error = error {
+                print("[CameraSessionManager] captureLivePhoto photo error: \(error)")
+                pendingLivePhotoPhotoData = nil
+            } else {
+                pendingLivePhotoPhotoData = photo.fileDataRepresentation()
+            }
         } else {
-            let data = photo.fileDataRepresentation()
-            photoCaptureCallback?(data)
+            if let error = error {
+                print("[CameraSessionManager] capturePhoto error: \(error)")
+                photoCaptureCallback?(nil)
+            } else {
+                let data = photo.fileDataRepresentation()
+                photoCaptureCallback?(data)
+            }
+            photoCaptureCallback = nil
         }
-        photoCaptureCallback = nil
+    }
+
+    func photoOutput(_ output: AVCapturePhotoOutput,
+                     didFinishProcessingLivePhotoToMovieFileAt outputFileURL: URL,
+                     duration: CMTime,
+                     photoDisplayTime: CMTime,
+                     resolvedSettings: AVCaptureResolvedPhotoSettings,
+                     error: Error?) {
+        if let error = error {
+            print("[CameraSessionManager] captureLivePhoto movie error: \(error)")
+            pendingLivePhotoMovieURL = nil
+        } else {
+            pendingLivePhotoMovieURL = outputFileURL
+        }
+    }
+
+    func photoOutput(_ output: AVCapturePhotoOutput,
+                     didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings,
+                     error: Error?) {
+        if let callback = livePhotoCaptureCallback {
+            let photoData = pendingLivePhotoPhotoData
+            let movieURL = pendingLivePhotoMovieURL
+            livePhotoCaptureCallback = nil
+            pendingLivePhotoPhotoData = nil
+            pendingLivePhotoMovieURL = nil
+            if let error = error {
+                print("[CameraSessionManager] captureLivePhoto finish error: \(error)")
+                callback(nil, nil)
+            } else {
+                callback(photoData, movieURL)
+            }
+        }
     }
 }

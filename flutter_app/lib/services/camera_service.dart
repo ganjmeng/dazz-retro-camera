@@ -24,6 +24,7 @@ class CameraState {
 
   /// Android Camera2 传感器调试信息（onCameraReady 事件携带）
   final Map<String, dynamic> activeCameraDebugInfo;
+  final bool supportsLivePhoto;
 
   const CameraState({
     this.isReady = false,
@@ -36,6 +37,7 @@ class CameraState {
     this.lifecyclePhase = 'idle',
     this.runtimeStatsUpdatedAtMs = 0,
     this.activeCameraDebugInfo = const {},
+    this.supportsLivePhoto = false,
   });
 
   CameraState copyWith({
@@ -49,6 +51,7 @@ class CameraState {
     String? lifecyclePhase,
     int? runtimeStatsUpdatedAtMs,
     Map<String, dynamic>? activeCameraDebugInfo,
+    bool? supportsLivePhoto,
   }) {
     return CameraState(
       isReady: isReady ?? this.isReady,
@@ -63,6 +66,7 @@ class CameraState {
           runtimeStatsUpdatedAtMs ?? this.runtimeStatsUpdatedAtMs,
       activeCameraDebugInfo:
           activeCameraDebugInfo ?? this.activeCameraDebugInfo,
+      supportsLivePhoto: supportsLivePhoto ?? this.supportsLivePhoto,
     );
   }
 }
@@ -82,6 +86,7 @@ class CameraService extends StateNotifier<CameraState> {
   Future<void> _lifecycleChain = Future.value();
   bool _isDisposed = false;
   int _initGeneration = 0;
+  Completer<String?>? _pendingVideoRecordedCompleter;
 
   Future<T> _serializeLifecycle<T>(Future<T> Function() action) async {
     final completer = Completer<T>();
@@ -110,6 +115,7 @@ class CameraService extends StateNotifier<CameraState> {
         lifecyclePhase: 'initializing',
         runtimeStatsUpdatedAtMs: 0,
         activeCameraDebugInfo: const {},
+        supportsLivePhoto: false,
       );
 
       // 相机权限已在 CameraScreen._requestPermissions() 中一次性请求
@@ -151,6 +157,7 @@ class CameraService extends StateNotifier<CameraState> {
           textureId: textureId,
           lifecyclePhase: 'running',
           runtimeStatsUpdatedAtMs: 0,
+          supportsLivePhoto: false,
         );
         await _channel.invokeMethod('startPreview');
       } catch (e) {
@@ -161,6 +168,7 @@ class CameraService extends StateNotifier<CameraState> {
           textureId: null,
           lifecyclePhase: 'idle',
           runtimeStatsUpdatedAtMs: 0,
+          supportsLivePhoto: false,
         );
       }
     });
@@ -189,6 +197,7 @@ class CameraService extends StateNotifier<CameraState> {
           textureId: null,
           lifecyclePhase: 'paused',
           runtimeStatsUpdatedAtMs: 0,
+          supportsLivePhoto: false,
         );
       } catch (e) {
         print('Error stopping preview: $e');
@@ -418,6 +427,7 @@ class CameraService extends StateNotifier<CameraState> {
     if (!state.isReady) return false;
 
     try {
+      _pendingVideoRecordedCompleter = null;
       final result =
           await _channel.invokeMethod<Map<dynamic, dynamic>>('startRecording');
       if (result?['success'] == true) {
@@ -436,13 +446,25 @@ class CameraService extends StateNotifier<CameraState> {
     if (!state.isReady || !state.isRecording) return null;
 
     try {
+      final completer = Completer<String?>();
+      _pendingVideoRecordedCompleter = completer;
       final result =
           await _channel.invokeMethod<Map<dynamic, dynamic>>('stopRecording');
       state = state.copyWith(isRecording: false);
-      return result?['filePath'] as String?;
+      final directPath = result?['filePath'] as String?;
+      if (directPath != null &&
+          directPath.isNotEmpty &&
+          !completer.isCompleted) {
+        completer.complete(directPath);
+      }
+      return completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => directPath,
+      );
     } catch (e) {
       print('Failed to stop recording: $e');
       state = state.copyWith(isRecording: false);
+      _pendingVideoRecordedCompleter = null;
       return null;
     }
   }
@@ -460,6 +482,43 @@ class CameraService extends StateNotifier<CameraState> {
       return result?['uri'] as String?;
     } catch (e) {
       print('Error saving to gallery: $e');
+      return null;
+    }
+  }
+
+  Future<String?> saveMotionPhoto(
+    String imagePath,
+    String videoPath, {
+    String cameraId = '',
+  }) async {
+    try {
+      final result = await _channel
+          .invokeMethod<Map<dynamic, dynamic>>('saveMotionPhoto', {
+        'imagePath': imagePath,
+        'videoPath': videoPath,
+        if (cameraId.isNotEmpty) 'cameraId': cameraId,
+      });
+      return result?['uri'] as String?;
+    } catch (e) {
+      print('Error saving motion photo: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> captureLivePhoto(
+      {int deviceQuarter = 0}) async {
+    try {
+      final result = await _channel
+          .invokeMethod<Map<dynamic, dynamic>>('captureLivePhoto', {
+        'deviceQuarter': deviceQuarter,
+      });
+      if (result == null) return null;
+      return {
+        'filePath': result['filePath'] as String?,
+        'galleryAssetId': result['galleryAssetId'] as String?,
+      };
+    } catch (e) {
+      print('Error capturing live photo: $e');
       return null;
     }
   }
@@ -491,12 +550,14 @@ class CameraService extends StateNotifier<CameraState> {
         _eventSubscription = null;
         await _channel.invokeMethod('dispose');
         state = state.copyWith(
-            isReady: false,
-            textureId: null,
-            isRecording: false,
-            lifecyclePhase: 'idle',
-            runtimeStatsUpdatedAtMs: 0,
-            activeCameraDebugInfo: const {});
+          isReady: false,
+          textureId: null,
+          isRecording: false,
+          lifecyclePhase: 'idle',
+          runtimeStatsUpdatedAtMs: 0,
+          activeCameraDebugInfo: const {},
+          supportsLivePhoto: false,
+        );
       } catch (e) {
         print('Error disposing camera: $e');
       }
@@ -520,6 +581,7 @@ class CameraService extends StateNotifier<CameraState> {
           isReady: true,
           activeCameraDebugInfo:
               debugInfo.isNotEmpty ? debugInfo : state.activeCameraDebugInfo,
+          supportsLivePhoto: payload?['supportsLivePhoto'] as bool? ?? false,
         );
         break;
       case AppConstants.eventError:
@@ -529,6 +591,14 @@ class CameraService extends StateNotifier<CameraState> {
       case AppConstants.eventRecordingStateChanged:
         final isRecording = payload?['isRecording'] as bool? ?? false;
         state = state.copyWith(isRecording: isRecording);
+        break;
+      case 'onVideoRecorded':
+        final filePath = payload?['filePath'] as String?;
+        final completer = _pendingVideoRecordedCompleter;
+        _pendingVideoRecordedCompleter = null;
+        if (completer != null && !completer.isCompleted) {
+          completer.complete(filePath);
+        }
         break;
       case 'onCameraRuntimeStats':
         final runtime = <String, dynamic>{};

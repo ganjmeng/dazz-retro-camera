@@ -120,6 +120,9 @@ class S {
   String get restorePurchase => get('restorePurchase');
   String get mirrorFront => get('mirrorFront');
   String get mirrorBack => get('mirrorBack');
+  String get livePhoto => get('livePhoto');
+  String get livePhotoEffect => get('livePhotoEffect');
+  String get livePhotoNoOverlay => get('livePhotoNoOverlay');
   String get saveLocation => get('saveLocation');
   String get renderMode => get('renderMode');
   String get replicaModeShort => get('replicaModeShort');
@@ -382,6 +385,30 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.ms: 'Cermin Kamera Belakang',
     AppLanguage.ja: 'リアカメラ反転',
     AppLanguage.ko: '후면 카메라 미러',
+  },
+  'livePhoto': {
+    AppLanguage.zhHans: '实况照片',
+    AppLanguage.zhHant: '實況照片',
+    AppLanguage.en: 'Live Photo',
+    AppLanguage.ms: 'Live Photo',
+    AppLanguage.ja: 'Live Photo',
+    AppLanguage.ko: '라이브 포토',
+  },
+  'livePhotoEffect': {
+    AppLanguage.zhHans: '实况效果',
+    AppLanguage.zhHant: '實況效果',
+    AppLanguage.en: 'Live Effect',
+    AppLanguage.ms: 'Kesan Live',
+    AppLanguage.ja: 'ライブ効果',
+    AppLanguage.ko: '라이브 효과',
+  },
+  'livePhotoNoOverlay': {
+    AppLanguage.zhHans: 'Live Photo 不支持边框 水印',
+    AppLanguage.zhHant: 'Live Photo 不支援邊框 浮水印',
+    AppLanguage.en: 'Live Photo does not support frames or watermarks',
+    AppLanguage.ms: 'Live Photo tidak menyokong bingkai atau tera air',
+    AppLanguage.ja: 'Live Photo はフレームと透かしに非対応です',
+    AppLanguage.ko: '라이브 포토는 프레임과 워터마크를 지원하지 않습니다',
   },
   'saveLocation': {
     AppLanguage.zhHans: '保存地理位置',

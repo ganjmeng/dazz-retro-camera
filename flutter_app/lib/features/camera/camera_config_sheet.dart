@@ -90,7 +90,8 @@ class CameraConfigInlinePanel extends ConsumerWidget {
           const Divider(height: 1, color: _kDivider),
           _buildCameraRow(context, ref, st),
           const Divider(height: 1, color: _kDivider),
-          if (cam != null) _buildFunctionRow(context, ref, st, cam, showLens: showLens),
+          if (cam != null)
+            _buildFunctionRow(context, ref, st, cam, showLens: showLens),
           SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
         ],
       ),
@@ -98,7 +99,8 @@ class CameraConfigInlinePanel extends ConsumerWidget {
   }
 
   // ── 相机列表行 ─────────────────────────────────────────────────────────────
-  Widget _buildCameraRow(BuildContext context, WidgetRef ref, CameraAppState st) {
+  Widget _buildCameraRow(
+      BuildContext context, WidgetRef ref, CameraAppState st) {
     final managerAsync = ref.watch(cameraManagerProvider);
     final List<CameraEntry> orderedCameras;
     if (managerAsync.hasValue) {
@@ -143,7 +145,9 @@ class CameraConfigInlinePanel extends ConsumerWidget {
   }
 
   // ── 功能图标行 ─────────────────────────────────────────────────────────────
-  Widget _buildFunctionRow(BuildContext context, WidgetRef ref, CameraAppState st, CameraDefinition cam, {bool showLens = true}) {
+  Widget _buildFunctionRow(BuildContext context, WidgetRef ref,
+      CameraAppState st, CameraDefinition cam,
+      {bool showLens = true}) {
     final uiCap = cam.uiCapabilities;
     final s = sOf(ref.read(languageProvider));
     final List<Widget> items = [];
@@ -222,15 +226,18 @@ class CameraConfigInlinePanel extends ConsumerWidget {
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        children: items.map((w) => Padding(
-          padding: const EdgeInsets.only(right: 16),
-          child: w,
-        )).toList(),
+        children: items
+            .map((w) => Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: w,
+                ))
+            .toList(),
       ),
     );
   }
 
-  void _openSubPanel(BuildContext context, WidgetRef ref, _SubPanelType type, CameraDefinition cam) {
+  void _openSubPanel(BuildContext context, WidgetRef ref, _SubPanelType type,
+      CameraDefinition cam) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -273,7 +280,8 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
   void initState() {
     super.initState();
     // 菜单打开后，在下一帧自动滚动到当前选中相机（仅当相机在可视区域外时才滚动）
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToActiveCamera());
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _scrollToActiveCamera());
   }
 
   /// 计算当前选中相机的索引，并在其不可见时自动滚动到该位置
@@ -302,13 +310,13 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
     if (index < 0) return;
 
     // 计算该 cell 的左边缘和右边缘在 ScrollView 内容坐标中的位置
-    final cellLeft  = _kListPadding + index * _kCellStride;
+    final cellLeft = _kListPadding + index * _kCellStride;
     final cellRight = cellLeft + 72.0; // cell 宽度 72px
 
     final viewportWidth = _cameraScrollCtrl.position.viewportDimension;
-    final scrollOffset  = _cameraScrollCtrl.position.pixels;
-    final visibleLeft   = scrollOffset;
-    final visibleRight  = scrollOffset + viewportWidth;
+    final scrollOffset = _cameraScrollCtrl.position.pixels;
+    final visibleLeft = scrollOffset;
+    final visibleRight = scrollOffset + viewportWidth;
 
     // 仅当 cell 不完全可见时才滚动
     if (cellLeft >= visibleLeft && cellRight <= visibleRight) return;
@@ -452,7 +460,9 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
               final onSwitch = widget.onCameraSwitch;
               if (onSwitch != null) {
                 // 有 loading callback 时：先触发动画，再执行切换
-                onSwitch(() => ref.read(cameraAppProvider.notifier).switchCamera(entry.id));
+                onSwitch(() => ref
+                    .read(cameraAppProvider.notifier)
+                    .switchCamera(entry.id));
               } else {
                 ref.read(cameraAppProvider.notifier).switchCamera(entry.id);
               }
@@ -461,7 +471,8 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
         },
       ),
     );
-  }// ── 功能图标行 ──────────────────────────────────────────────────────────────
+  } // ── 功能图标行 ──────────────────────────────────────────────────────────────
+
   Widget _buildFunctionRow(CameraAppState st, CameraDefinition cam) {
     final uiCap = cam.uiCapabilities;
     final s = sOf(ref.read(languageProvider));
@@ -550,10 +561,12 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        children: items.map((w) => Padding(
-          padding: const EdgeInsets.only(right: 16),
-          child: w,
-        )).toList(),
+        children: items
+            .map((w) => Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: w,
+                ))
+            .toList(),
       ),
     );
   }
@@ -571,7 +584,7 @@ class _CameraConfigSheetState extends ConsumerState<_CameraConfigSheet>
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black26,
       isDismissible: true, // 点击遗罩关闭
-      enableDrag: true,    // 下拉手势关闭
+      enableDrag: true, // 下拉手势关闭
       // 使用 useRootNavigator=false 确保 modal 在 ProviderScope 内部
       useRootNavigator: false,
       builder: (modalCtx) => ProviderScope(
@@ -608,9 +621,9 @@ class _SubPanelState extends ConsumerState<_SubPanel>
   late TabController _tabCtrl;
   int _tabIndex = 0;
   bool _showColorPicker = false; // 彩虹圆圈点击后展开 HSV 色盘
-  double _pickerHue = 30.0;        // HSV 色相 0~360
-  double _pickerSaturation = 1.0;  // HSV 饱和度 0~1
-  double _pickerValue = 1.0;       // HSV 亮度 0~1
+  double _pickerHue = 30.0; // HSV 色相 0~360
+  double _pickerSaturation = 1.0; // HSV 饱和度 0~1
+  double _pickerValue = 1.0; // HSV 亮度 0~1
 
   int _lastTabCount = 0;
 
@@ -632,7 +645,8 @@ class _SubPanelState extends ConsumerState<_SubPanel>
       _lastTabCount = newCount;
       _tabCtrl = TabController(length: newCount, vsync: this);
       _tabCtrl.addListener(() {
-        if (!_tabCtrl.indexIsChanging) setState(() => _tabIndex = _tabCtrl.index);
+        if (!_tabCtrl.indexIsChanging)
+          setState(() => _tabIndex = _tabCtrl.index);
       });
       // 如果当前 tab 超出范围，重置到第一个
       if (_tabIndex >= newCount) {
@@ -650,9 +664,12 @@ class _SubPanelState extends ConsumerState<_SubPanel>
 
   int get _tabCount {
     switch (widget.type) {
-      case _SubPanelType.watermark: return 5;
-      case _SubPanelType.frame: return _frameSupportsBackground ? 2 : 1;
-      default: return 1;
+      case _SubPanelType.watermark:
+        return 5;
+      case _SubPanelType.frame:
+        return _frameSupportsBackground ? 2 : 1;
+      default:
+        return 1;
     }
   }
 
@@ -665,11 +682,16 @@ class _SubPanelState extends ConsumerState<_SubPanel>
 
   String _title(S s) {
     switch (widget.type) {
-      case _SubPanelType.watermark: return s.watermark;
-      case _SubPanelType.frame: return s.frame;
-      case _SubPanelType.ratio: return s.ratio;
-      case _SubPanelType.filter: return s.filter;
-      case _SubPanelType.lens: return s.lens;
+      case _SubPanelType.watermark:
+        return s.watermark;
+      case _SubPanelType.frame:
+        return s.frame;
+      case _SubPanelType.ratio:
+        return s.ratio;
+      case _SubPanelType.filter:
+        return s.filter;
+      case _SubPanelType.lens:
+        return s.lens;
     }
   }
 
@@ -717,62 +739,90 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                   ),
                   // 比例面板：在标题旁显示相框限制提示
                   if (widget.type == _SubPanelType.ratio &&
-                      widget.camera.modules.ratios.any((r) => !r.supportsFrame)) ...
-                    [
-                      const SizedBox(width: 8),
-                      Text(
-                        s.frameRatioHint,
-                        style: const TextStyle(
-                          color: Color(0xFF8E8E93),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                        ),
+                      widget.camera.modules.ratios
+                          .any((r) => !r.supportsFrame)) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      s.frameRatioHint,
+                      style: const TextStyle(
+                        color: Color(0xFF8E8E93),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
                       ),
-                    ],
+                    ),
+                  ],
                   const Spacer(),
                   // 右上角操作按鈕（无水印开关 / 无边框）
-                  if (widget.type == _SubPanelType.watermark) (() {
-                    final isNone = st.activeWatermark?.isNone ?? st.activeWatermarkId == null;
-                    return GestureDetector(
-                      onTap: () {
-                        if (isNone) {
-                          // 当前无水印 → 切回第一个非-none 预设
-                          final presets = widget.camera.modules.watermarks.presets;
-                          final first = presets.firstWhere((p) => !p.isNone, orElse: () => presets.first);
-                          ref.read(cameraAppProvider.notifier).selectWatermark(first.id);
-                        } else {
-                          // 当前有水印 → 切换到 none
-                          ref.read(cameraAppProvider.notifier).selectWatermark('none');
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isNone ? const Color(0xFFFF9500) : const Color(0xFFE5E5EA),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          s.noWatermark,
-                          style: TextStyle(
-                            color: isNone ? Colors.white : Colors.black,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
+                  if (widget.type == _SubPanelType.watermark)
+                    (() {
+                      final isNone = st.activeWatermark?.isNone ??
+                          st.activeWatermarkId == null;
+                      return GestureDetector(
+                        onTap: () {
+                          if (st.livePhotoEnabled && isNone) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(s.livePhotoNoOverlay)),
+                            );
+                            return;
+                          }
+                          if (isNone) {
+                            // 当前无水印 → 切回第一个非-none 预设
+                            final presets =
+                                widget.camera.modules.watermarks.presets;
+                            final first = presets.firstWhere((p) => !p.isNone,
+                                orElse: () => presets.first);
+                            ref
+                                .read(cameraAppProvider.notifier)
+                                .selectWatermark(first.id);
+                          } else {
+                            // 当前有水印 → 切换到 none
+                            ref
+                                .read(cameraAppProvider.notifier)
+                                .selectWatermark('none');
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isNone
+                                ? const Color(0xFFFF9500)
+                                : const Color(0xFFE5E5EA),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            s.noWatermark,
+                            style: TextStyle(
+                              color: isNone ? Colors.white : Colors.black,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  })(),
+                      );
+                    })(),
                   if (widget.type == _SubPanelType.frame)
                     _FrameToggleSwitch(
-                      enabled: ref.watch(cameraAppProvider).activeFrameId != null,
+                      enabled:
+                          ref.watch(cameraAppProvider).activeFrameId != null,
                       onChanged: (v) {
+                        if (st.livePhotoEnabled && v) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(s.livePhotoNoOverlay)),
+                          );
+                          return;
+                        }
                         // v=true 表示开启边框，v=false 表示关闭边框
                         if (!v) {
-                          ref.read(cameraAppProvider.notifier).selectFrame('none');
+                          ref
+                              .read(cameraAppProvider.notifier)
+                              .selectFrame('none');
                         } else {
                           final frames = widget.camera.modules.frames;
                           if (frames.isNotEmpty) {
-                            ref.read(cameraAppProvider.notifier).selectFrame(frames.first.id);
+                            ref
+                                .read(cameraAppProvider.notifier)
+                                .selectFrame(frames.first.id);
                           }
                         }
                       },
@@ -781,22 +831,25 @@ class _SubPanelState extends ConsumerState<_SubPanel>
               ),
             ),
             // 子 Tab 行（水印/边框有多 Tab）
-            if (widget.type == _SubPanelType.watermark) (() {
-              final isNone = st.activeWatermark?.isNone ?? st.activeWatermarkId == null;
-              return Opacity(
-                opacity: isNone ? 0.35 : 1.0,
-                child: AbsorbPointer(
-                  absorbing: isNone,
-                  child: _buildWatermarkTabs(),
-                ),
-              );
-            })(),
+            if (widget.type == _SubPanelType.watermark)
+              (() {
+                final isNone =
+                    st.activeWatermark?.isNone ?? st.activeWatermarkId == null;
+                return Opacity(
+                  opacity: isNone ? 0.35 : 1.0,
+                  child: AbsorbPointer(
+                    absorbing: isNone,
+                    child: _buildWatermarkTabs(),
+                  ),
+                );
+              })(),
             if (widget.type == _SubPanelType.frame) _buildFrameTabs(),
             // 内容区（可滚动）
             Flexible(
               child: (() {
                 final isNone = widget.type == _SubPanelType.watermark &&
-                    (st.activeWatermark?.isNone ?? st.activeWatermarkId == null);
+                    (st.activeWatermark?.isNone ??
+                        st.activeWatermarkId == null);
                 return Opacity(
                   opacity: isNone ? 0.35 : 1.0,
                   child: AbsorbPointer(
@@ -859,7 +912,8 @@ class _SubPanelState extends ConsumerState<_SubPanel>
   Widget _buildFrameTabs() {
     // 仅当当前相框支持背景色时才显示“背景”Tab
     final s = sOf(ref.read(languageProvider));
-    final tabs = _frameSupportsBackground ? [s.wmStyle, s.frameBackground] : [s.wmStyle];
+    final tabs =
+        _frameSupportsBackground ? [s.wmStyle, s.frameBackground] : [s.wmStyle];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -926,7 +980,8 @@ class _SubPanelState extends ConsumerState<_SubPanel>
   Widget _buildWatermarkContent(CameraAppState st) {
     if (_tabIndex == 0) {
       // 解析当前颜色，用于预览
-      final currentColor = _parseColor(st.watermarkColor ?? st.activeWatermark?.color ?? '#FF8A3D');
+      final currentColor = _parseColor(
+          st.watermarkColor ?? st.activeWatermark?.color ?? '#FF8A3D');
 
       // 颜色 Tab：预览 + 彩虹圆圈（点击展开 HSV 色盘）
       return Column(
@@ -963,24 +1018,31 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                 _ColorDot(
                   isRainbow: true,
                   selected: _showColorPicker,
-                  onTap: () => setState(() => _showColorPicker = !_showColorPicker),
+                  onTap: () =>
+                      setState(() => _showColorPicker = !_showColorPicker),
                 ),
                 ..._kWatermarkColors.map((c) {
                   // Flutter 3.x 中 Color.r/g/b 是 double (0.0~1.0)，需乘以 255 再取整
-                  final r = (c.r * 255).round().toRadixString(16).padLeft(2, '0');
-                  final g = (c.g * 255).round().toRadixString(16).padLeft(2, '0');
-                  final b = (c.b * 255).round().toRadixString(16).padLeft(2, '0');
+                  final r =
+                      (c.r * 255).round().toRadixString(16).padLeft(2, '0');
+                  final g =
+                      (c.g * 255).round().toRadixString(16).padLeft(2, '0');
+                  final b =
+                      (c.b * 255).round().toRadixString(16).padLeft(2, '0');
                   final hex = '#$r$g$b'.toUpperCase();
                   // 预设颜色选中时关闭 HSV 色盘
                   final isSelected = !_showColorPicker &&
                       (st.watermarkColor?.toUpperCase() == hex ||
-                       (st.watermarkColor == null && st.activeWatermark?.color?.toUpperCase() == hex));
+                          (st.watermarkColor == null &&
+                              st.activeWatermark?.color?.toUpperCase() == hex));
                   return _ColorDot(
                     color: c,
                     selected: isSelected,
                     onTap: () {
                       setState(() => _showColorPicker = false);
-                      ref.read(cameraAppProvider.notifier).selectWatermarkColor(hex);
+                      ref
+                          .read(cameraAppProvider.notifier)
+                          .selectWatermarkColor(hex);
                     },
                   );
                 }),
@@ -997,7 +1059,8 @@ class _SubPanelState extends ConsumerState<_SubPanel>
     if (_tabIndex == 1) {
       final now = DateTime.now();
       // 当前水印颜色（用于卡片预览）
-      final previewColor = _parseColor(st.watermarkColor ?? st.activeWatermark?.color ?? '#FF8A3D');
+      final previewColor = _parseColor(
+          st.watermarkColor ?? st.activeWatermark?.color ?? '#FF8A3D');
       final currentStyleId = st.watermarkStyle ?? 's1';
       return SizedBox(
         height: 120,
@@ -1013,7 +1076,9 @@ class _SubPanelState extends ConsumerState<_SubPanel>
             return GestureDetector(
               onTap: () {
                 HapticFeedback.selectionClick();
-                ref.read(cameraAppProvider.notifier).setWatermarkStyle(style.id);
+                ref
+                    .read(cameraAppProvider.notifier)
+                    .setWatermarkStyle(style.id);
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
@@ -1035,7 +1100,9 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                         previewText,
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: isActive ? previewColor : previewColor.withOpacity(0.7),
+                          color: isActive
+                              ? previewColor
+                              : previewColor.withOpacity(0.7),
                           fontSize: style.fontSize.clamp(11.0, 15.0),
                           fontFamily: style.fontFamily,
                           fontWeight: style.fontWeight,
@@ -1049,7 +1116,9 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                     Text(
                       style.label,
                       style: TextStyle(
-                        color: isActive ? const Color(0xFFFF9500) : const Color(0xFF8E8E93),
+                        color: isActive
+                            ? const Color(0xFFFF9500)
+                            : const Color(0xFF8E8E93),
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
@@ -1067,14 +1136,16 @@ class _SubPanelState extends ConsumerState<_SubPanel>
     if (_tabIndex == 2) {
       final sl = sOf(ref.read(languageProvider));
       final positions = [
-        ('top_left',     sl.posTopLeft),
-        ('top_center',   sl.posTopCenter),
-        ('top_right',    sl.posTopRight),
-        ('bottom_left',  sl.posBottomLeft),
-        ('bottom_center',sl.posBottomCenter),
+        ('top_left', sl.posTopLeft),
+        ('top_center', sl.posTopCenter),
+        ('top_right', sl.posTopRight),
+        ('bottom_left', sl.posBottomLeft),
+        ('bottom_center', sl.posBottomCenter),
         ('bottom_right', sl.posBottomRight),
       ];
-      final currentPos = st.watermarkPosition ?? st.activeWatermark?.position ?? 'bottom_right';
+      final currentPos = st.watermarkPosition ??
+          st.activeWatermark?.position ??
+          'bottom_right';
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: Column(
@@ -1098,10 +1169,14 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                   children: positions.map((pos) {
                     final isSelected = currentPos == pos.$1;
                     return GestureDetector(
-                      onTap: () => ref.read(cameraAppProvider.notifier).setWatermarkPosition(pos.$1),
+                      onTap: () => ref
+                          .read(cameraAppProvider.notifier)
+                          .setWatermarkPosition(pos.$1),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFFFF9500) : const Color(0xFF2C2C2E),
+                          color: isSelected
+                              ? const Color(0xFFFF9500)
+                              : const Color(0xFF2C2C2E),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Center(
@@ -1110,7 +1185,9 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                             style: TextStyle(
                               color: isSelected ? Colors.black : Colors.white54,
                               fontSize: 13,
-                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w400,
                             ),
                           ),
                         ),
@@ -1134,14 +1211,20 @@ class _SubPanelState extends ConsumerState<_SubPanel>
           children: [
             Expanded(
               child: GestureDetector(
-                onTap: () => ref.read(cameraAppProvider.notifier).setWatermarkDirection('horizontal'),
+                onTap: () => ref
+                    .read(cameraAppProvider.notifier)
+                    .setWatermarkDirection('horizontal'),
                 child: Container(
                   height: 80,
                   decoration: BoxDecoration(
-                    color: currentDir == 'horizontal' ? const Color(0xFFFF9500) : Colors.black,
+                    color: currentDir == 'horizontal'
+                        ? const Color(0xFFFF9500)
+                        : Colors.black,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: currentDir == 'horizontal' ? const Color(0xFFFF9500) : const Color(0xFF3A3A3C),
+                      color: currentDir == 'horizontal'
+                          ? const Color(0xFFFF9500)
+                          : const Color(0xFF3A3A3C),
                       width: 2,
                     ),
                   ),
@@ -1149,13 +1232,20 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.text_fields, color: currentDir == 'horizontal' ? Colors.black : Colors.white54, size: 24),
+                        Icon(Icons.text_fields,
+                            color: currentDir == 'horizontal'
+                                ? Colors.black
+                                : Colors.white54,
+                            size: 24),
                         const SizedBox(height: 4),
-                        Text(sOf(ref.read(languageProvider)).wmHorizontal, style: TextStyle(
-                          color: currentDir == 'horizontal' ? Colors.black : Colors.white54,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        )),
+                        Text(sOf(ref.read(languageProvider)).wmHorizontal,
+                            style: TextStyle(
+                              color: currentDir == 'horizontal'
+                                  ? Colors.black
+                                  : Colors.white54,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            )),
                       ],
                     ),
                   ),
@@ -1165,14 +1255,20 @@ class _SubPanelState extends ConsumerState<_SubPanel>
             const SizedBox(width: 12),
             Expanded(
               child: GestureDetector(
-                onTap: () => ref.read(cameraAppProvider.notifier).setWatermarkDirection('vertical'),
+                onTap: () => ref
+                    .read(cameraAppProvider.notifier)
+                    .setWatermarkDirection('vertical'),
                 child: Container(
                   height: 80,
                   decoration: BoxDecoration(
-                    color: currentDir == 'vertical' ? const Color(0xFFFF9500) : Colors.black,
+                    color: currentDir == 'vertical'
+                        ? const Color(0xFFFF9500)
+                        : Colors.black,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: currentDir == 'vertical' ? const Color(0xFFFF9500) : const Color(0xFF3A3A3C),
+                      color: currentDir == 'vertical'
+                          ? const Color(0xFFFF9500)
+                          : const Color(0xFF3A3A3C),
                       width: 2,
                     ),
                   ),
@@ -1180,13 +1276,20 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.text_rotate_vertical, color: currentDir == 'vertical' ? Colors.black : Colors.white54, size: 24),
+                        Icon(Icons.text_rotate_vertical,
+                            color: currentDir == 'vertical'
+                                ? Colors.black
+                                : Colors.white54,
+                            size: 24),
                         const SizedBox(height: 4),
-                        Text(sOf(ref.read(languageProvider)).wmVertical, style: TextStyle(
-                          color: currentDir == 'vertical' ? Colors.black : Colors.white54,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        )),
+                        Text(sOf(ref.read(languageProvider)).wmVertical,
+                            style: TextStyle(
+                              color: currentDir == 'vertical'
+                                  ? Colors.black
+                                  : Colors.white54,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            )),
                       ],
                     ),
                   ),
@@ -1202,9 +1305,9 @@ class _SubPanelState extends ConsumerState<_SubPanel>
     if (_tabIndex == 4) {
       final sl = sOf(ref.read(languageProvider));
       final sizes = [
-        ('small',  sl.small),
+        ('small', sl.small),
         ('medium', sl.medium),
-        ('large',  sl.large),
+        ('large', sl.large),
       ];
       final currentSize = st.watermarkSize ?? 'medium';
       return Padding(
@@ -1213,10 +1316,15 @@ class _SubPanelState extends ConsumerState<_SubPanel>
           children: sizes.map((s) {
             final isSelected = currentSize == s.$1;
             // 不同大小对应不同的字体大小预览
-            final previewFontSize = s.$1 == 'small' ? 14.0 : s.$1 == 'medium' ? 20.0 : 28.0;
+            final previewFontSize = s.$1 == 'small'
+                ? 14.0
+                : s.$1 == 'medium'
+                    ? 20.0
+                    : 28.0;
             return Expanded(
               child: GestureDetector(
-                onTap: () => ref.read(cameraAppProvider.notifier).setWatermarkSize(s.$1),
+                onTap: () =>
+                    ref.read(cameraAppProvider.notifier).setWatermarkSize(s.$1),
                 child: Container(
                   margin: EdgeInsets.only(right: s.$1 != 'large' ? 12 : 0),
                   height: 80,
@@ -1224,7 +1332,9 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                     color: Colors.black,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: isSelected ? const Color(0xFFFF9500) : const Color(0xFF3A3A3C),
+                      color: isSelected
+                          ? const Color(0xFFFF9500)
+                          : const Color(0xFF3A3A3C),
                       width: isSelected ? 2 : 1,
                     ),
                   ),
@@ -1242,11 +1352,16 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(s.$2, style: TextStyle(
-                          color: isSelected ? const Color(0xFFFF9500) : Colors.white54,
-                          fontSize: 12,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-                        )),
+                        Text(s.$2,
+                            style: TextStyle(
+                              color: isSelected
+                                  ? const Color(0xFFFF9500)
+                                  : Colors.white54,
+                              fontSize: 12,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w400,
+                            )),
                       ],
                     ),
                   ),
@@ -1283,7 +1398,8 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                   _pickerSaturation = newS;
                   _pickerValue = newV;
                 });
-                ref.read(cameraAppProvider.notifier)
+                ref
+                    .read(cameraAppProvider.notifier)
                     .selectWatermarkColor(_hsvToHex(newH, newS, newV));
               },
               onTapDown: (d) {
@@ -1295,7 +1411,8 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                   _pickerSaturation = newS;
                   _pickerValue = newV;
                 });
-                ref.read(cameraAppProvider.notifier)
+                ref
+                    .read(cameraAppProvider.notifier)
                     .selectWatermarkColor(_hsvToHex(_pickerHue, newS, newV));
               },
               child: CustomPaint(
@@ -1323,15 +1440,15 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                 final dx = d.localPosition.dx.clamp(0.0, sliderW);
                 final newH = dx / sliderW * 360;
                 setState(() => _pickerHue = newH);
-                ref.read(cameraAppProvider.notifier)
-                    .selectWatermarkColor(_hsvToHex(newH, _pickerSaturation, _pickerValue));
+                ref.read(cameraAppProvider.notifier).selectWatermarkColor(
+                    _hsvToHex(newH, _pickerSaturation, _pickerValue));
               },
               onTapDown: (d) {
                 final dx = d.localPosition.dx.clamp(0.0, sliderW);
                 final newH = dx / sliderW * 360;
                 setState(() => _pickerHue = newH);
-                ref.read(cameraAppProvider.notifier)
-                    .selectWatermarkColor(_hsvToHex(newH, _pickerSaturation, _pickerValue));
+                ref.read(cameraAppProvider.notifier).selectWatermarkColor(
+                    _hsvToHex(newH, _pickerSaturation, _pickerValue));
               },
               child: CustomPaint(
                 size: Size(sliderW, sliderH),
@@ -1363,22 +1480,33 @@ class _SubPanelState extends ConsumerState<_SubPanel>
           },
         ),
         ...frames.map((f) => _FrameStyleCell(
-          frame: f,
-          selected: st.activeFrameId == f.id,
-          onTap: () {
-            ref.read(cameraAppProvider.notifier).selectFrame(f.id);
-            setState(() => _rebuildTabControllerIfNeeded());
-          },
-        )),
+              frame: f,
+              selected: st.activeFrameId == f.id,
+              onTap: () {
+                if (st.livePhotoEnabled) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                        content: Text(sOf(ref.read(languageProvider))
+                            .livePhotoNoOverlay)),
+                  );
+                  return;
+                }
+                ref.read(cameraAppProvider.notifier).selectFrame(f.id);
+                setState(() => _rebuildTabControllerIfNeeded());
+              },
+            )),
       ];
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            const itemSize = 64.0;  // 固定 item 大小 64dp
+            const itemSize = 64.0; // 固定 item 大小 64dp
             const spacing = 12.0;
-            final cols = ((constraints.maxWidth + spacing) / (itemSize + spacing)).floor().clamp(2, 8);
-            final ratio = itemSize / itemSize;  // 1:1 正方形
+            final cols =
+                ((constraints.maxWidth + spacing) / (itemSize + spacing))
+                    .floor()
+                    .clamp(2, 8);
+            final ratio = itemSize / itemSize; // 1:1 正方形
             return GridView.count(
               crossAxisCount: cols,
               crossAxisSpacing: spacing,
@@ -1398,9 +1526,12 @@ class _SubPanelState extends ConsumerState<_SubPanel>
       _BgColorCell(
         color: Colors.transparent,
         isTransparent: true,
-        selected: (st.frameBackgroundColor ?? '').toLowerCase() == 'transparent' ||
-                  (st.frameBackgroundColor ?? '').toLowerCase() == '#00000000',
-        onTap: () => ref.read(cameraAppProvider.notifier).selectFrameBackground('transparent'),
+        selected:
+            (st.frameBackgroundColor ?? '').toLowerCase() == 'transparent' ||
+                (st.frameBackgroundColor ?? '').toLowerCase() == '#00000000',
+        onTap: () => ref
+            .read(cameraAppProvider.notifier)
+            .selectFrameBackground('transparent'),
       ),
       ..._kFrameBgColors.map((c) {
         // Flutter 3.x 中 Color.r/g/b 是 double (0.0~1.0)，需乘以 255 再取整
@@ -1415,7 +1546,8 @@ class _SubPanelState extends ConsumerState<_SubPanel>
         return _BgColorCell(
           color: c,
           selected: isSelected,
-          onTap: () => ref.read(cameraAppProvider.notifier).selectFrameBackground(hex),
+          onTap: () =>
+              ref.read(cameraAppProvider.notifier).selectFrameBackground(hex),
         );
       }),
     ];
@@ -1427,14 +1559,17 @@ class _SubPanelState extends ConsumerState<_SubPanel>
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              const itemSize = 64.0;  // 固定 item 大小 64dp
+              const itemSize = 64.0; // 固定 item 大小 64dp
               const spacing = 12.0;
-              final cols = ((constraints.maxWidth + spacing) / (itemSize + spacing)).floor().clamp(2, 8);
+              final cols =
+                  ((constraints.maxWidth + spacing) / (itemSize + spacing))
+                      .floor()
+                      .clamp(2, 8);
               return GridView.count(
                 crossAxisCount: cols,
                 crossAxisSpacing: spacing,
                 mainAxisSpacing: spacing,
-                childAspectRatio: 1.0,  // 1:1 正方形
+                childAspectRatio: 1.0, // 1:1 正方形
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 children: bgCells,
@@ -1471,7 +1606,8 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                   Navigator.of(context).pop();
                 },
                 child: Container(
-                  margin: EdgeInsets.only(right: entry.key < ratios.length - 1 ? 28 : 0),
+                  margin: EdgeInsets.only(
+                      right: entry.key < ratios.length - 1 ? 28 : 0),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1486,9 +1622,11 @@ class _SubPanelState extends ConsumerState<_SubPanel>
                       Text(
                         r.label,
                         style: TextStyle(
-                          color: isActive ? Colors.black : const Color(0xFF8E8E93),
+                          color:
+                              isActive ? Colors.black : const Color(0xFF8E8E93),
                           fontSize: 13,
-                          fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                          fontWeight:
+                              isActive ? FontWeight.w700 : FontWeight.w400,
                         ),
                       ),
                     ],
@@ -1572,7 +1710,11 @@ class _TabBtn extends StatelessWidget {
   final VoidCallback onTap;
   final bool dark;
 
-  const _TabBtn({required this.label, required this.selected, required this.onTap, this.dark = true});
+  const _TabBtn(
+      {required this.label,
+      required this.selected,
+      required this.onTap,
+      this.dark = true});
 
   @override
   Widget build(BuildContext context) {
@@ -1599,7 +1741,11 @@ class _PillBtn extends StatelessWidget {
   final VoidCallback onTap;
   final bool dark;
 
-  const _PillBtn({required this.label, required this.icon, required this.onTap, this.dark = true});
+  const _PillBtn(
+      {required this.label,
+      required this.icon,
+      required this.onTap,
+      this.dark = true});
 
   @override
   Widget build(BuildContext context) {
@@ -1739,7 +1885,11 @@ class _FuncBtn extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
 
-  const _FuncBtn({required this.label, required this.child, required this.isActive, required this.onTap});
+  const _FuncBtn(
+      {required this.label,
+      required this.child,
+      required this.isActive,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1772,7 +1922,8 @@ class _LensBtn extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
 
-  const _LensBtn({required this.lens, required this.isActive, required this.onTap});
+  const _LensBtn(
+      {required this.lens, required this.isActive, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1790,7 +1941,8 @@ class _LensBtn extends StatelessWidget {
               decoration: isActive
                   ? BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: _kOrange.withAlpha(200), width: 1.5),
+                      border: Border.all(
+                          color: _kOrange.withAlpha(200), width: 1.5),
                       boxShadow: [
                         BoxShadow(
                           color: _kOrange.withAlpha(80),
@@ -1952,7 +2104,8 @@ class _RatioIcon extends StatelessWidget {
         shape: BoxShape.circle,
         color: _kSurface,
         border: isDefault
-            ? Border.all(color: _kTextSecondary.withValues(alpha: 0.3), width: 1.5)
+            ? Border.all(
+                color: _kTextSecondary.withValues(alpha: 0.3), width: 1.5)
             : Border.all(color: _kOrange, width: 2),
       ),
       child: Center(
@@ -2107,7 +2260,11 @@ class _ColorDot extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _ColorDot({this.color, this.isRainbow = false, required this.selected, required this.onTap});
+  const _ColorDot(
+      {this.color,
+      this.isRainbow = false,
+      required this.selected,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -2124,8 +2281,13 @@ class _ColorDot extends StatelessWidget {
               : Border.all(color: Colors.transparent, width: 2.5),
           gradient: isRainbow
               ? const SweepGradient(colors: [
-                  Colors.red, Colors.orange, Colors.yellow,
-                  Colors.green, Colors.blue, Colors.purple, Colors.red,
+                  Colors.red,
+                  Colors.orange,
+                  Colors.yellow,
+                  Colors.green,
+                  Colors.blue,
+                  Colors.purple,
+                  Colors.red,
                 ])
               : null,
           color: isRainbow ? null : color,
@@ -2143,7 +2305,11 @@ class _FrameStyleCell extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _FrameStyleCell({this.frame, this.isRandom = false, required this.selected, required this.onTap});
+  const _FrameStyleCell(
+      {this.frame,
+      this.isRandom = false,
+      required this.selected,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -2157,12 +2323,12 @@ class _FrameStyleCell extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(0xFFE5E5EA),
               borderRadius: BorderRadius.circular(10),
-              border: selected
-                  ? Border.all(color: Colors.black, width: 2.5)
-                  : null,
+              border:
+                  selected ? Border.all(color: Colors.black, width: 2.5) : null,
             ),
             child: isRandom
-                ? const Center(child: Icon(Icons.shuffle, color: Colors.black54, size: 28))
+                ? const Center(
+                    child: Icon(Icons.shuffle, color: Colors.black54, size: 28))
                 : Center(
                     child: Container(
                       width: 44,
@@ -2327,7 +2493,8 @@ class _FrameToggleSwitch extends ConsumerWidget {
           scale: 0.8,
           child: Switch.adaptive(
             value: !enabled, // 开关 ON = 无边框（enabled=false）
-            onChanged: (switchOn) => onChanged(!switchOn), // switchOn=true→无边框→enabled=false
+            onChanged: (switchOn) =>
+                onChanged(!switchOn), // switchOn=true→无边框→enabled=false
             activeColor: Colors.black,
             inactiveThumbColor: const Color(0xFF8E8E93),
             inactiveTrackColor: const Color(0xFFD1D1D6),
@@ -2337,7 +2504,6 @@ class _FrameToggleSwitch extends ConsumerWidget {
     );
   }
 }
-
 
 // ─── 胶卷图标单元格（滤镜列表）────────────────────────────────────────────────
 
@@ -2378,7 +2544,8 @@ class _FilmRollCell extends StatelessWidget {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: const Center(
-                        child: Icon(Icons.filter_vintage, color: Colors.white, size: 20),
+                        child: Icon(Icons.filter_vintage,
+                            color: Colors.white, size: 20),
                       ),
                     ),
                   ],
@@ -2395,7 +2562,8 @@ class _FilmRollCell extends StatelessWidget {
                       color: Colors.black,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.check, color: Colors.white, size: 10),
+                    child:
+                        const Icon(Icons.check, color: Colors.white, size: 10),
                   ),
                 ),
             ],
@@ -2418,8 +2586,10 @@ class _FilmRollCell extends StatelessWidget {
   }
 
   Color _filmColor(String id) {
-    if (id.contains('standard') || id.contains('classic')) return const Color(0xFF1C1C1E);
-    if (id.contains('warm') || id.contains('orange')) return const Color(0xFF2E7D32);
+    if (id.contains('standard') || id.contains('classic'))
+      return const Color(0xFF1C1C1E);
+    if (id.contains('warm') || id.contains('orange'))
+      return const Color(0xFF2E7D32);
     if (id.contains('high_contrast')) return const Color(0xFF1B5E20);
     return const Color(0xFF37474F);
   }
@@ -2445,7 +2615,8 @@ class _LensCell extends StatelessWidget {
           decoration: isActive
               ? BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: _kOrange.withAlpha(200), width: 1.5),
+                  border:
+                      Border.all(color: _kOrange.withAlpha(200), width: 1.5),
                   boxShadow: [
                     BoxShadow(
                       color: _kOrange.withAlpha(80),
@@ -2541,7 +2712,8 @@ class _HsvSVPainter extends CustomPainter {
   final double saturation;
   final double value;
 
-  const _HsvSVPainter({required this.hue, required this.saturation, required this.value});
+  const _HsvSVPainter(
+      {required this.hue, required this.saturation, required this.value});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -2610,7 +2782,8 @@ class _HueSliderPainter extends CustomPainter {
       rrect,
       Paint()
         ..shader = LinearGradient(
-          colors: List.generate(37, (i) => HSVColor.fromAHSV(1.0, i * 10.0, 1.0, 1.0).toColor()),
+          colors: List.generate(
+              37, (i) => HSVColor.fromAHSV(1.0, i * 10.0, 1.0, 1.0).toColor()),
         ).createShader(rect),
     );
 
