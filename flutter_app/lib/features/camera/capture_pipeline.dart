@@ -171,7 +171,6 @@ class CapturePipeline {
                 gpuW.toDouble(),
                 gpuH.toDouble(),
                 selectedRatioId,
-                preferLandscapeOutput: deviceQuarter == 1 || deviceQuarter == 3,
               );
               final needsRatioCrop =
                   (ratioCropRect.width - fullRect.width).abs() > 1.0 ||
@@ -324,7 +323,6 @@ class CapturePipeline {
         srcW,
         srcH,
         selectedRatioId,
-        preferLandscapeOutput: deviceQuarter == 1 || deviceQuarter == 3,
       );
       // ── 2b. 小窗模式：将裁剪区域进一步缩小到小窗内容 ──────────────────────────────
       if (minimapNormalizedRect != null) {
@@ -932,9 +930,8 @@ class CapturePipeline {
   Rect _calcCropRect(
     double w,
     double h,
-    String ratioId, {
-    bool preferLandscapeOutput = false,
-  }) {
+    String ratioId,
+  ) {
     RatioDefinition? ratioOpt;
     if (ratioId.isNotEmpty) {
       try {
@@ -946,10 +943,11 @@ class CapturePipeline {
 
     if (ratioOpt == null) return Rect.fromLTWH(0, 0, w, h);
 
-    var targetRatio = ratioOpt.width.toDouble() / ratioOpt.height.toDouble();
-    if (preferLandscapeOutput && targetRatio != 1.0) {
-      targetRatio = 1.0 / targetRatio;
-    }
+    // 取景框始终以相机预设比例布局，横屏只是把整套 UI 旋转显示。
+    // 成片要和预览一致，裁切必须始终按“当前相机比例”进行，
+    // 不能再根据 deviceQuarter 额外翻转比例，否则横屏时会出现
+    // 预览与成片视野不一致，以及输出尺寸异常偏小的问题。
+    final targetRatio = ratioOpt.width.toDouble() / ratioOpt.height.toDouble();
     final srcRatio = w / h;
 
     double cropW, cropH, cropX, cropY;
@@ -970,6 +968,10 @@ class CapturePipeline {
         '[CapturePipeline] ratio=${ratioOpt.label} targetRatio=$targetRatio srcRatio=$srcRatio crop=${cropW}x${cropH}@($cropX,$cropY)');
     return Rect.fromLTWH(cropX, cropY, cropW, cropH);
   }
+
+  @visibleForTesting
+  Rect debugCalcCropRect(double w, double h, String ratioId) =>
+      _calcCropRect(w, h, ratioId);
 
   // ── 颜色矩阵（与预览一致）────────────────────────────────────────────────────
 
