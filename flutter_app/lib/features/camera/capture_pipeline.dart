@@ -176,6 +176,7 @@ class CapturePipeline {
                 gpuW.toDouble(),
                 gpuH.toDouble(),
                 selectedRatioId,
+                preferLandscapeOutput: isLandscapeCapture,
               );
               final needsRatioCrop =
                   (ratioCropRect.width - fullRect.width).abs() > 1.0 ||
@@ -323,11 +324,31 @@ class CapturePipeline {
       debugPrint(
           '[CapturePipeline] decoded: ${srcW.toInt()}x${srcH.toInt()}, ratio=$selectedRatioId, frame=$selectedFrameId, wm=$selectedWatermarkId');
 
+      FrameDefinition? frameOpt;
+      if (selectedFrameId.isNotEmpty &&
+          selectedFrameId != 'frame_none' &&
+          selectedFrameId != 'none') {
+        try {
+          frameOpt =
+              camera.modules.frames.firstWhere((f) => f.id == selectedFrameId);
+          // FIX: 检查相框是否支持当前 ratio（如 2:3 比例下拍立得相框不可用）
+          if (frameOpt.supportedRatios.isNotEmpty &&
+              !frameOpt.supportedRatios.contains(selectedRatioId)) {
+            debugPrint(
+                '[CapturePipeline] frame ${selectedFrameId} does not support ratio $selectedRatioId, skipping');
+            frameOpt = null;
+          }
+        } catch (_) {
+          frameOpt = null;
+        }
+      }
+
       // ── 2. 计算裁剪区域（保持中心裁剪）────────────────────────────────────────────
       Rect cropRect = _calcCropRect(
         srcW,
         srcH,
         selectedRatioId,
+        preferLandscapeOutput: isLandscapeCapture && frameOpt == null,
       );
       // ── 2b. 小窗模式：将裁剪区域进一步缩小到小窗内容 ──────────────────────────────
       if (minimapNormalizedRect != null) {
@@ -352,34 +373,16 @@ class CapturePipeline {
 
       // ── 3. 边框 inset 计算（在裁剪后尺寸上扩展画布）──────────────────────────
       double topPx = 0, rightPx = 0, bottomPx = 0, leftPx = 0;
-      FrameDefinition? frameOpt;
-      if (selectedFrameId.isNotEmpty &&
-          selectedFrameId != 'frame_none' &&
-          selectedFrameId != 'none') {
-        try {
-          frameOpt =
-              camera.modules.frames.firstWhere((f) => f.id == selectedFrameId);
-          // FIX: 检查相框是否支持当前 ratio（如 2:3 比例下拍立得相框不可用）
-          if (frameOpt.supportedRatios.isNotEmpty &&
-              !frameOpt.supportedRatios.contains(selectedRatioId)) {
-            debugPrint(
-                '[CapturePipeline] frame ${selectedFrameId} does not support ratio $selectedRatioId, skipping');
-            frameOpt = null;
-          }
-          if (frameOpt == null)
-            throw StateError('frame not supported for ratio');
-          final refSize = math.min(outW, outH);
-          final scale = refSize / 1080.0;
-          final activeInset = frameOpt.insetForRatio(selectedRatioId);
-          topPx = activeInset.top * scale;
-          rightPx = activeInset.right * scale;
-          bottomPx = activeInset.bottom * scale;
-          leftPx = activeInset.left * scale;
-          debugPrint(
-              '[CapturePipeline] frame inset (ratio=$selectedRatioId): t=$topPx r=$rightPx b=$bottomPx l=$leftPx');
-        } catch (_) {
-          frameOpt = null;
-        }
+      if (frameOpt != null) {
+        final refSize = math.min(outW, outH);
+        final scale = refSize / 1080.0;
+        final activeInset = frameOpt.insetForRatio(selectedRatioId);
+        topPx = activeInset.top * scale;
+        rightPx = activeInset.right * scale;
+        bottomPx = activeInset.bottom * scale;
+        leftPx = activeInset.left * scale;
+        debugPrint(
+            '[CapturePipeline] frame inset (ratio=$selectedRatioId): t=$topPx r=$rightPx b=$bottomPx l=$leftPx');
       }
       final landscapeFrameOpt = isLandscapeCapture ? frameOpt : null;
       final synthesizeLandscapeFrame = landscapeFrameOpt != null;
@@ -987,8 +990,9 @@ class CapturePipeline {
   Rect _calcCropRect(
     double w,
     double h,
-    String ratioId,
-  ) {
+    String ratioId, {
+    bool preferLandscapeOutput = false,
+  }) {
     RatioDefinition? ratioOpt;
     if (ratioId.isNotEmpty) {
       try {
@@ -1000,10 +1004,10 @@ class CapturePipeline {
 
     if (ratioOpt == null) return Rect.fromLTWH(0, 0, w, h);
 
-    // 取景框始终按相机当前比例裁切，横屏只是最终输出再旋转。
-    // 这里不能因为 deviceQuarter 再翻转一次比例，否则横屏时会把
-    // 9:16 错裁成 4:3 / 16:9，导致成片视野与取景框不一致。
-    final targetRatio = ratioOpt.width.toDouble() / ratioOpt.height.toDouble();
+    final portraitRatio = ratioOpt.width.toDouble() / ratioOpt.height.toDouble();
+    final targetRatio = preferLandscapeOutput && portraitRatio != 1.0
+        ? 1.0 / portraitRatio
+        : portraitRatio;
     final srcRatio = w / h;
 
     double cropW, cropH, cropX, cropY;
@@ -1026,8 +1030,18 @@ class CapturePipeline {
   }
 
   @visibleForTesting
-  Rect debugCalcCropRect(double w, double h, String ratioId) =>
-      _calcCropRect(w, h, ratioId);
+  Rect debugCalcCropRect(
+    double w,
+    double h,
+    String ratioId, {
+    bool preferLandscapeOutput = false,
+  }) =>
+      _calcCropRect(
+        w,
+        h,
+        ratioId,
+        preferLandscapeOutput: preferLandscapeOutput,
+      );
 
   int _resolveEffectiveQuarter({
     required double canvasW,
@@ -1036,6 +1050,9 @@ class CapturePipeline {
     required bool gpuProcessed,
   }) {
     if (!gpuProcessed) return deviceQuarter;
+    if ((canvasW - canvasH).abs() < 1.0) {
+      return deviceQuarter;
+    }
     final expectedLandscape = deviceQuarter == 1 || deviceQuarter == 3;
     final currentLandscape = canvasW >= canvasH;
     return (expectedLandscape == currentLandscape) ? 0 : deviceQuarter;

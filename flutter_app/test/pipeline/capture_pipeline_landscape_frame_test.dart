@@ -105,6 +105,18 @@ Map<String, dynamic> _makeCameraJson() {
 
 void main() {
   group('CapturePipeline landscape frame layout', () {
+    test('framed landscape keeps portrait 3:4 crop geometry', () {
+      final pipeline =
+          CapturePipeline(camera: CameraDefinition.fromJson(_makeCameraJson()));
+
+      final crop = pipeline.debugCalcCropRect(4000, 3000, 'ratio_3_4');
+
+      expect(crop.width, 2250);
+      expect(crop.height, 3000);
+      expect(crop.left, 875);
+      expect(crop.top, 0);
+    });
+
     test('left landscape rotates portrait frame insets counterclockwise', () {
       final pipeline =
           CapturePipeline(camera: CameraDefinition.fromJson(_makeCameraJson()));

@@ -22,6 +22,13 @@ Map<String, dynamic> _makeCameraJson() {
       'lenses': [],
       'ratios': [
         {
+          'id': 'ratio_1_1',
+          'label': '1:1',
+          'width': 1,
+          'height': 1,
+          'supportsFrame': false,
+        },
+        {
           'id': 'ratio_2_3',
           'label': '2:3',
           'width': 2,
@@ -112,31 +119,74 @@ Map<String, dynamic> _makeCameraJson() {
 
 void main() {
   group('CapturePipeline landscape crop parity', () {
-    test('2:3 ratio keeps portrait crop geometry on landscape source', () {
+    test('1:1 ratio keeps square crop geometry on landscape source', () {
       final pipeline =
           CapturePipeline(camera: CameraDefinition.fromJson(_makeCameraJson()));
 
-      final crop = pipeline.debugCalcCropRect(4000, 3000, 'ratio_2_3');
+      final crop = pipeline.debugCalcCropRect(
+        4000,
+        3000,
+        'ratio_1_1',
+        preferLandscapeOutput: true,
+      );
 
-      expect(crop.width, 2000);
+      expect(crop.width, 3000);
       expect(crop.height, 3000);
-      expect(crop.left, 1000);
+      expect(crop.left, 500);
       expect(crop.top, 0);
     });
 
-    test('9:16 ratio keeps 1920x1080 content geometry after landscape rotate',
+    test('1:1 square output still keeps device quarter for landscape capture',
         () {
       final pipeline =
           CapturePipeline(camera: CameraDefinition.fromJson(_makeCameraJson()));
 
-      final crop = pipeline.debugCalcCropRect(4000, 3000, 'ratio_9_16');
-      final scale = CapturePipeline.kMaxDimMid / crop.height;
-      final rotatedWidth = (crop.height * scale).round();
-      final rotatedHeight = (crop.width * scale).round();
+      final effectiveQuarter = pipeline.debugResolveEffectiveQuarter(
+        canvasW: 1920,
+        canvasH: 1920,
+        deviceQuarter: 1,
+        gpuProcessed: true,
+      );
 
-      expect(crop.height, 3000);
-      expect(rotatedWidth, 1920);
-      expect(rotatedHeight, 1080);
+      expect(effectiveQuarter, 1);
+    });
+
+    test('2:3 ratio flips to 3:2 geometry on landscape source', () {
+      final pipeline =
+          CapturePipeline(camera: CameraDefinition.fromJson(_makeCameraJson()));
+
+      final crop = pipeline.debugCalcCropRect(
+        4000,
+        3000,
+        'ratio_2_3',
+        preferLandscapeOutput: true,
+      );
+
+      expect(crop.width, 4000);
+      expect(crop.height, closeTo(2666.67, 0.01));
+      expect(crop.left, 0);
+      expect(crop.top, closeTo(166.67, 0.01));
+    });
+
+    test('9:16 ratio flips to 16:9 and keeps 1920x1080 after landscape rotate',
+        () {
+      final pipeline =
+          CapturePipeline(camera: CameraDefinition.fromJson(_makeCameraJson()));
+
+      final crop = pipeline.debugCalcCropRect(
+        4000,
+        3000,
+        'ratio_9_16',
+        preferLandscapeOutput: true,
+      );
+      final scale = CapturePipeline.kMaxDimMid / crop.width;
+      final outputWidth = (crop.width * scale).round();
+      final outputHeight = (crop.height * scale).round();
+
+      expect(crop.width, 4000);
+      expect(crop.height, 2250);
+      expect(outputWidth, 1920);
+      expect(outputHeight, 1080);
     });
 
     test('low quality landscape export stays near 1920 long edge after rotate',
@@ -144,10 +194,15 @@ void main() {
       final pipeline =
           CapturePipeline(camera: CameraDefinition.fromJson(_makeCameraJson()));
 
-      final crop = pipeline.debugCalcCropRect(4000, 3000, 'ratio_2_3');
-      final scale = CapturePipeline.kMaxDimLow / crop.height;
-      final rotatedWidth = (crop.height * scale).round();
-      final rotatedHeight = (crop.width * scale).round();
+      final crop = pipeline.debugCalcCropRect(
+        4000,
+        3000,
+        'ratio_2_3',
+        preferLandscapeOutput: true,
+      );
+      final scale = CapturePipeline.kMaxDimLow / crop.width;
+      final rotatedWidth = (crop.width * scale).round();
+      final rotatedHeight = (crop.height * scale).round();
 
       expect(rotatedWidth, 1920);
       expect(rotatedHeight, 1280);
@@ -159,10 +214,15 @@ void main() {
       final pipeline =
           CapturePipeline(camera: CameraDefinition.fromJson(_makeCameraJson()));
 
-      final crop = pipeline.debugCalcCropRect(4000, 3000, 'ratio_2_3');
-      final scale = CapturePipeline.kMaxDimMid / crop.height;
-      final rotatedWidth = (crop.height * scale).round();
-      final rotatedHeight = (crop.width * scale).round();
+      final crop = pipeline.debugCalcCropRect(
+        4000,
+        3000,
+        'ratio_2_3',
+        preferLandscapeOutput: true,
+      );
+      final scale = CapturePipeline.kMaxDimMid / crop.width;
+      final rotatedWidth = (crop.width * scale).round();
+      final rotatedHeight = (crop.height * scale).round();
 
       expect(rotatedWidth, 1920);
       expect(rotatedHeight, 1280);
@@ -173,10 +233,15 @@ void main() {
       final pipeline =
           CapturePipeline(camera: CameraDefinition.fromJson(_makeCameraJson()));
 
-      final crop = pipeline.debugCalcCropRect(4000, 3000, 'ratio_2_3');
-      final scale = CapturePipeline.kMaxDimHigh / crop.height;
-      final rotatedWidth = (crop.height * scale).round();
-      final rotatedHeight = (crop.width * scale).round();
+      final crop = pipeline.debugCalcCropRect(
+        4000,
+        3000,
+        'ratio_2_3',
+        preferLandscapeOutput: true,
+      );
+      final scale = CapturePipeline.kMaxDimHigh / crop.width;
+      final rotatedWidth = (crop.width * scale).round();
+      final rotatedHeight = (crop.height * scale).round();
 
       expect(rotatedWidth, 4096);
       expect(rotatedHeight, 2731);
