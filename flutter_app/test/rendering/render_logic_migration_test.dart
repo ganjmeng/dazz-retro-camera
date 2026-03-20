@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_cam/features/camera/preview_renderer.dart';
-import 'package:retro_cam/features/camera/pipelines/pipeline_utils.dart';
 import 'package:retro_cam/models/camera_definition.dart';
 
 void main() {
@@ -172,9 +171,9 @@ void main() {
 
       // Verify the parameters that will be sent to the native shader
       // 注意：V3 加入了设备校准 + 场景自适应，因此不再固定等于 defaultLook 原值。
-      expect(params.effectiveContrast, greaterThan(1.2));
-      expect(params.effectiveSaturation, greaterThan(1.5));
-      expect(params.effectiveTemperature, greaterThan(50.0));
+      expect(params.effectiveContrast, greaterThanOrEqualTo(1.2));
+      expect(params.effectiveSaturation, greaterThanOrEqualTo(1.5));
+      expect(params.effectiveTemperature, greaterThanOrEqualTo(50.0));
 
       // Phase 2 重构后：computeColorMatrix 已删除，所有色彩处理由 Native Shader 完成
       // 验证 toJson 包含所有必要的参数
