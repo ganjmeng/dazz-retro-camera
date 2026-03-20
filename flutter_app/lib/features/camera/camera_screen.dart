@@ -141,6 +141,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   int _previewSoftResyncCooldownUntilMs = 0;
   // 曝光水平滑动条是否展开（点击胶囊触发）
   bool _showExposureSlider = false;
+  // 美颜水平滑动条是否展开（点击胶囊触发）
+  bool _showBeautySlider = false;
   // 色温面板是否展开（点击色温胶囊触发）
   bool _showWbPanel = false;
   // ── 捩合缩放 ────────────────────────────────────────────────────────────────────────
@@ -920,9 +922,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void _onViewfinderTap(TapDownDetails d, double viewfinderH) {
     // 双指捩合期间不触发对焦
     if (_isPinching || _activePointers >= 2) return;
-    // 关闭曝光水平滑动条
-    if (_showExposureSlider) {
-      setState(() => _showExposureSlider = false);
+    // 关闭控制滑条
+    if (_showExposureSlider || _showBeautySlider) {
+      setState(() {
+        _showExposureSlider = false;
+        _showBeautySlider = false;
+      });
       return;
     }
     // 如果已有对焦点且点击的不是太阳区域（距太阳中心 > 40px），则太阳视觉复位到中间
@@ -1395,7 +1400,26 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
-          if (st.showZoomSlider && !_showExposureSlider && !_showWbPanel)
+          if (_showBeautySlider && !_showExposureSlider)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: kBottomPanelH + bottomSafeH,
+              height: kSliderAreaH,
+              child: Center(
+                child: _BeautyHorizontalSlider(
+                  value: st.beautyStrength,
+                  onChanged: (v) =>
+                      ref.read(cameraAppProvider.notifier).setBeautyStrength(v),
+                  onReset: () =>
+                      ref.read(cameraAppProvider.notifier).setBeautyStrength(0),
+                ),
+              ),
+            ),
+          if (st.showZoomSlider &&
+              !_showExposureSlider &&
+              !_showBeautySlider &&
+              !_showWbPanel)
             Positioned(
               left: 0,
               right: 0,
@@ -1411,7 +1435,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
-          if (_showWbPanel && !_showExposureSlider)
+          if (_showWbPanel && !_showExposureSlider && !_showBeautySlider)
             Positioned(
               left: 0,
               right: 0,
@@ -1826,13 +1850,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // 工具图标行（4个图标+文字标签）
           // 点击曝光胶囊或色温胶囊时隐藏工具栏
           AnimatedOpacity(
-            opacity: (_showExposureSlider || _showWbPanel || st.showZoomSlider)
+            opacity: (_showExposureSlider ||
+                    _showBeautySlider ||
+                    _showWbPanel ||
+                    st.showZoomSlider)
                 ? 0.0
                 : 1.0,
             duration: const Duration(milliseconds: 200),
             child: IgnorePointer(
-              ignoring:
-                  _showExposureSlider || _showWbPanel || st.showZoomSlider,
+              ignoring: _showExposureSlider ||
+                  _showBeautySlider ||
+                  _showWbPanel ||
+                  st.showZoomSlider,
               child: _buildToolbar(st),
             ),
           ),
@@ -2111,6 +2140,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final zoomLabel = zoom == zoom.roundToDouble()
         ? 'x${zoom.toInt()}'
         : 'x${zoom.toStringAsFixed(1)}';
+    final beautyAutoHighlighted =
+        st.isFrontCamera && !st.beautyCustomized && st.beautyStrength > 0.0;
+    final beautyHighlighted = _showBeautySlider || st.beautyStrength > 0;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -2124,7 +2156,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           onTap: () {
             setState(() {
               _showWbPanel = !_showWbPanel;
-              if (_showWbPanel) _showExposureSlider = false; // 互斥
+              if (_showWbPanel) {
+                _showExposureSlider = false;
+                _showBeautySlider = false;
+              }
             });
           },
           child: AnimatedContainer(
@@ -2164,6 +2199,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             // 与曝光、色温互斥
             setState(() {
               _showExposureSlider = false;
+              _showBeautySlider = false;
               _showWbPanel = false;
             });
           },
@@ -2202,7 +2238,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           onTap: () {
             setState(() {
               _showExposureSlider = !_showExposureSlider;
-              if (_showExposureSlider) _showWbPanel = false; // 与色温面板互斥
+              if (_showExposureSlider) {
+                _showBeautySlider = false;
+                _showWbPanel = false;
+              }
             });
           },
           child: AnimatedContainer(
@@ -2241,6 +2280,77 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                         color: (_showExposureSlider || st.exposureValue != 0)
                             ? Colors.black
                             : _kWhite,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _showBeautySlider = !_showBeautySlider;
+              if (_showBeautySlider) {
+                _showExposureSlider = false;
+                _showWbPanel = false;
+              }
+            });
+            if (_showBeautySlider) {
+              ref.read(cameraAppProvider.notifier).hideZoomSlider();
+            }
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              color: beautyAutoHighlighted
+                  ? const Color(0xFFFFF4D6)
+                  : (beautyHighlighted
+                      ? Colors.white.withAlpha(230)
+                      : Colors.black.withAlpha(160)),
+              border: beautyAutoHighlighted
+                  ? Border.all(
+                      color: const Color(0xFFFFD36A).withAlpha(220),
+                      width: 1.1,
+                    )
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _showBeautySlider
+                      ? Icons.keyboard_arrow_down
+                      : Icons.face_retouching_natural,
+                  size: 14,
+                  color: beautyAutoHighlighted
+                      ? const Color(0xFF6A4B00)
+                      : beautyHighlighted
+                          ? Colors.black
+                          : _kWhite,
+                ),
+                const SizedBox(width: 5),
+                AnimatedBuilder(
+                  animation: _rotateAngle,
+                  builder: (_, __) => Transform.rotate(
+                    angle: _rotateAngle.value,
+                    child: Text(
+                      st.beautyStrength == 0
+                          ? '0'
+                          : (st.beautyStrength * 100).round().toString(),
+                      style: TextStyle(
+                        color: beautyAutoHighlighted
+                            ? const Color(0xFF6A4B00)
+                            : beautyHighlighted
+                                ? Colors.black
+                                : _kWhite,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
@@ -4846,6 +4956,73 @@ class _ExposureHorizontalSlider extends StatelessWidget {
                 value: value.clamp(-2.0, 2.0),
                 min: -2.0,
                 max: 2.0,
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BeautyHorizontalSlider extends StatelessWidget {
+  final double value; // 0.0 .. 1.0
+  final ValueChanged<double> onChanged;
+  final VoidCallback onReset;
+
+  const _BeautyHorizontalSlider({
+    required this.value,
+    required this.onChanged,
+    required this.onReset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: onReset,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black.withAlpha(180),
+                border: Border.all(
+                  color: Colors.white.withAlpha(60),
+                  width: 1,
+                ),
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.refresh,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: SliderTheme(
+              data: SliderThemeData(
+                trackHeight: 3,
+                activeTrackColor: Colors.white,
+                inactiveTrackColor: Colors.white.withAlpha(80),
+                thumbColor: Colors.white,
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: 10,
+                  elevation: 0,
+                ),
+                overlayShape: SliderComponentShape.noOverlay,
+              ),
+              child: Slider(
+                value: value.clamp(0.0, 1.0),
+                min: 0.0,
+                max: 1.0,
                 onChanged: onChanged,
               ),
             ),

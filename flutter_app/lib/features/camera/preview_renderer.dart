@@ -151,6 +151,7 @@ class PreviewRenderParams {
   final LensDefinition? activeLens;
   final double temperatureOffset; // user-adjusted, -100..100
   final double exposureOffset; // user-adjusted, -2.0..2.0
+  final double beautyStrength; // user-adjusted, 0.0..1.0
   final PreviewPolicy policy;
   final String wbMode;
   final int colorTempK;
@@ -172,6 +173,7 @@ class PreviewRenderParams {
     this.activeLens,
     this.temperatureOffset = 0,
     this.exposureOffset = 0,
+    this.beautyStrength = 0,
     PreviewPolicy? policy,
     this.wbMode = 'auto',
     this.colorTempK = 6300,
@@ -373,8 +375,14 @@ class PreviewRenderParams {
         .clamp(0.0, 1.0);
   }
 
+  double get effectiveBeautyStrength {
+    final cameraWeight = isFrontCamera ? 1.35 : 0.72;
+    return (beautyStrength * cameraWeight).clamp(0.0, 1.0);
+  }
+
   double get effectiveSoftFocus {
-    return (activeLens?.softFocus ?? 0).clamp(0.0, 1.0);
+    return ((activeLens?.softFocus ?? 0) + effectiveBeautyStrength * 0.24)
+        .clamp(0.0, 1.0);
   }
 
   /// 真实镜头畸变：负值=桶形(barrel/fisheye)，正值=枕形(pincushion/tele)
@@ -445,7 +453,8 @@ class PreviewRenderParams {
       .clamp(-100.0, 100.0);
   double get effectiveBlacks => defaultLook.blacks.clamp(-100.0, 100.0);
   double get effectiveClarity => (defaultLook.clarity +
-          _auditedSceneClarityOffset(sceneClass) * _sceneAdaptiveMix)
+          _auditedSceneClarityOffset(sceneClass) * _sceneAdaptiveMix -
+          effectiveBeautyStrength * 22.0)
       .clamp(-100.0, 100.0);
   double get effectiveVibrance => (defaultLook.vibrance +
           _auditedSceneVibranceOffset(sceneClass) * _sceneAdaptiveMix)
@@ -461,12 +470,16 @@ class PreviewRenderParams {
 
   double get effectiveSharpen {
     final filterDelta = (activeFilter?.sharpness ?? 1.0) - 1.0;
-    return (defaultLook.sharpen + filterDelta * 0.18).clamp(0.0, 2.0);
+    return (defaultLook.sharpen +
+            filterDelta * 0.18 -
+            effectiveBeautyStrength * 0.36)
+        .clamp(0.0, 2.0);
   }
 
-  double get effectiveSharpness =>
-      (defaultLook.sharpness * (activeFilter?.sharpness ?? 1.0))
-          .clamp(0.5, 2.0);
+  double get effectiveSharpness => (defaultLook.sharpness *
+          (activeFilter?.sharpness ?? 1.0) *
+          (1.0 - effectiveBeautyStrength * 0.26))
+      .clamp(0.5, 2.0);
   double get effectiveDehaze => (defaultLook.dehaze / 10.0).clamp(0.0, 1.0);
   double get highlightWarmAmount =>
       defaultLook.highlightWarmAmount.clamp(0.0, 1.0);
@@ -568,16 +581,23 @@ class PreviewRenderParams {
   double get centerGain => defaultLook.centerGain.clamp(0.0, 0.2);
   double get edgeFalloff => defaultLook.edgeFalloff.clamp(0.0, 1.0);
   double get cornerWarmShift => defaultLook.cornerWarmShift.clamp(0.0, 5.0);
-  double get skinHueProtect => defaultLook.skinHueProtect ? 1.0 : 0.0;
+  double get skinHueProtect =>
+      (defaultLook.skinHueProtect || effectiveBeautyStrength > 0.02)
+          ? 1.0
+          : 0.0;
   double get chemicalIrregularity =>
       defaultLook.chemicalIrregularity.clamp(0.0, 0.1);
 
   /// FIX: noiseAmount 现已添加到 DefaultLook
   double get noiseAmount => defaultLook.noiseAmount.clamp(0.0, 1.0);
-  double get skinSatProtect =>
-      (defaultLook.skinSatProtect - _dynamicSkinSatDelta()).clamp(0.0, 1.0);
-  double get skinLumaSoften =>
-      (defaultLook.skinLumaSoften + _dynamicSkinLumaDelta()).clamp(0.0, 0.2);
+  double get skinSatProtect => (defaultLook.skinSatProtect -
+          _dynamicSkinSatDelta() -
+          effectiveBeautyStrength * 0.08)
+      .clamp(0.0, 1.0);
+  double get skinLumaSoften => (defaultLook.skinLumaSoften +
+          _dynamicSkinLumaDelta() +
+          effectiveBeautyStrength * 0.10)
+      .clamp(0.0, 0.30);
   double get skinRedLimit =>
       (defaultLook.skinRedLimit - _dynamicSkinRedLimitDelta()).clamp(0.9, 1.2);
 
@@ -810,7 +830,9 @@ class PreviewRenderParams {
       SceneClass.indoor => 0.86,
       _ => 1.0,
     };
-    return (defaultLook.developmentSoftness * sceneScale).clamp(0.0, 1.0);
+    return (defaultLook.developmentSoftness * sceneScale +
+            effectiveBeautyStrength * 0.28)
+        .clamp(0.0, 1.0);
   }
 
   double get _sceneAdaptiveMix =>
@@ -960,6 +982,7 @@ class PreviewRenderParams {
         'exposureVariation': defaultLook.exposureVariation.clamp(0.0, 0.1),
         'topBottomBias': topBottomBias,
         'leftRightBias': leftRightBias,
+        'beautyStrength': effectiveBeautyStrength,
         if (hasCustomToneCurve) 'toneCurvePoints': toneCurvePoints,
         if (hasBwMixer) 'bwChannelMixer': bwChannelMixer,
         // ── 新增：Fade / Split Toning / Light Leak ──
@@ -1013,20 +1036,27 @@ class PreviewRenderParams {
     final json = Map<String, dynamic>.from(toJson());
     if (!mode.isLightweight) return json;
 
-    json['clarity'] = 0.0;
+    final previewBeauty = (effectiveBeautyStrength * 0.82).clamp(0.0, 1.0);
+
+    json['clarity'] = previewBeauty > 0.0 ? (-previewBeauty * 16.0) : 0.0;
     json['grainAmount'] = 0.0;
     json['noiseAmount'] = 0.0;
     json['chromaticAberration'] = 0.0;
     json['bloomAmount'] = 0.0;
     json['paperTexture'] = 0.0;
-    json['developmentSoftness'] = 0.0;
+    json['developmentSoftness'] =
+        previewBeauty > 0.0 ? (previewBeauty * 0.24) : 0.0;
     json['chemicalIrregularity'] = 0.0;
     json['halationAmount'] = 0.0;
-    json['sharpen'] = 0.0;
-    json['sharpness'] = 1.0;
+    json['sharpen'] = previewBeauty > 0.0 ? (0.16 - previewBeauty * 0.16) : 0.0;
+    json['sharpness'] =
+        previewBeauty > 0.0 ? (1.0 - previewBeauty * 0.24) : 1.0;
     json['dehaze'] = 0.0;
     json['highlightWarmAmount'] = 0.0;
-    json['softFocus'] = 0.0;
+    json['softFocus'] = previewBeauty > 0.0 ? (previewBeauty * 0.18) : 0.0;
+    json['skinHueProtect'] = previewBeauty > 0.0 ? 1.0 : json['skinHueProtect'];
+    json['skinLumaSoften'] =
+        previewBeauty > 0.0 ? (previewBeauty * 0.08) : json['skinLumaSoften'];
     json['grainSize'] = 1.0;
     json['luminanceNoise'] = 0.0;
     json['chromaNoise'] = 0.0;

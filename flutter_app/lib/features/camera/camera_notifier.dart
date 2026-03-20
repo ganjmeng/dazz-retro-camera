@@ -46,6 +46,8 @@ class CameraAppState {
   // User adjustments
   final double temperatureOffset; // -100..100
   final double exposureValue; // -2.0..2.0
+  final double beautyStrength; // 0.0..1.0
+  final bool beautyCustomized;
   // White balance
   final String wbMode; // 'auto' | 'daylight' | 'incandescent'
   final int colorTempK; // 1800..8000
@@ -118,6 +120,8 @@ class CameraAppState {
     this.activeWatermarkId,
     this.temperatureOffset = 0,
     this.exposureValue = 0,
+    this.beautyStrength = 0,
+    this.beautyCustomized = false,
     this.wbMode = 'auto',
     this.colorTempK = 6300,
     this.watermarkColor,
@@ -179,6 +183,8 @@ class CameraAppState {
     String? activeWatermarkId,
     double? temperatureOffset,
     double? exposureValue,
+    double? beautyStrength,
+    bool? beautyCustomized,
     String? wbMode,
     int? colorTempK,
     String? watermarkColor,
@@ -246,6 +252,8 @@ class CameraAppState {
       activeWatermarkId: activeWatermarkId ?? this.activeWatermarkId,
       temperatureOffset: temperatureOffset ?? this.temperatureOffset,
       exposureValue: exposureValue ?? this.exposureValue,
+      beautyStrength: beautyStrength ?? this.beautyStrength,
+      beautyCustomized: beautyCustomized ?? this.beautyCustomized,
       wbMode: wbMode ?? this.wbMode,
       colorTempK: colorTempK ?? this.colorTempK,
       watermarkColor: watermarkColor ?? this.watermarkColor,
@@ -326,6 +334,7 @@ class CameraAppState {
       activeLens: activeLens,
       temperatureOffset: temperatureOffset,
       exposureOffset: exposureValue,
+      beautyStrength: beautyStrength,
       policy: camera!.previewPolicy,
       cameraId: camera!.id,
       wbMode: wbMode,
@@ -441,6 +450,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       mirrorBackCamera: prefs.mirrorBackCamera,
       renderStyleMode: prefs.renderStyleMode,
       previewPerformanceMode: prefs.previewPerformanceMode,
+      beautyStrength: prefs.beautyStrength,
+      beautyCustomized: prefs.beautyCustomized,
     );
     await _ref
         .read(cameraServiceProvider.notifier)
@@ -807,6 +818,21 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     _applyCurrentRenderParamsToNative(throttled: true);
   }
 
+  void setBeautyStrength(double value) {
+    final clamped = value.clamp(0.0, 1.0);
+    state = state.copyWith(beautyStrength: clamped, beautyCustomized: true);
+    AppPrefsService.instance.setBeautyStrength(clamped);
+    AppPrefsService.instance.setBeautyCustomized(true);
+    _applyCurrentRenderParamsToNative(throttled: true);
+  }
+
+  void _applyAutoBeautyForLens(bool isFrontCamera) {
+    if (state.beautyCustomized) return;
+    final autoBeauty = isFrontCamera ? 0.2 : 0.0;
+    state = state.copyWith(beautyStrength: autoBeauty);
+    AppPrefsService.instance.setBeautyStrength(autoBeauty);
+  }
+
   // 设置白平衡预设模式
   // mode: 'auto' | 'daylight' | 'incandescent'
   void setWhiteBalance(String mode) {
@@ -1021,9 +1047,11 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   /// 彻底避免 switchLens 路径下 SurfaceProvider 回调不触发导致 renderer 丢失的问题。
   Future<void> flipCamera() async {
     final svc = _ref.read(cameraServiceProvider.notifier);
+    final nextIsFrontCamera = !state.isFrontCamera;
 
     // 1. 切换前后置标记
-    state = state.copyWith(isFrontCamera: !state.isFrontCamera);
+    state = state.copyWith(isFrontCamera: nextIsFrontCamera);
+    _applyAutoBeautyForLens(nextIsFrontCamera);
 
     // 2. 停止当前预览（释放旧 renderer + Surface）
     await svc.stopPreview();

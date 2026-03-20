@@ -18,6 +18,8 @@ const _kMirrorFrontCamera = 'pref_mirror_front_camera';
 const _kMirrorBackCamera = 'pref_mirror_back_camera';
 const _kRenderStyleMode = 'pref_render_style_mode';
 const _kPreviewPerformanceMode = 'pref_preview_performance_mode';
+const _kBeautyStrength = 'pref_beauty_strength';
+const _kBeautyCustomized = 'pref_beauty_customized';
 
 class AppPrefs {
   final int sharpenLevel; // 0=低 1=中 2=高，默认1
@@ -31,6 +33,8 @@ class AppPrefs {
   final bool mirrorBackCamera; // 默认 false
   final RenderStyleMode renderStyleMode; // 默认复刻模式
   final PreviewPerformanceMode previewPerformanceMode; // 默认轻量预览
+  final double beautyStrength; // 0.0=关闭, 1.0=强
+  final bool beautyCustomized; // 用户是否手动调整过美颜
 
   const AppPrefs({
     this.sharpenLevel = 1,
@@ -45,6 +49,8 @@ class AppPrefs {
     this.mirrorBackCamera = false,
     this.renderStyleMode = RenderStyleMode.replica,
     this.previewPerformanceMode = PreviewPerformanceMode.lightweight,
+    this.beautyStrength = 0.0,
+    this.beautyCustomized = false,
   });
 }
 
@@ -70,6 +76,8 @@ class AppPrefsService {
       previewPerformanceMode: PreviewPerformanceModeX.fromStorage(
         p.getString(_kPreviewPerformanceMode),
       ),
+      beautyStrength: p.getDouble(_kBeautyStrength) ?? 0.0,
+      beautyCustomized: p.getBool(_kBeautyCustomized) ?? false,
     );
   }
 
@@ -107,4 +115,12 @@ class AppPrefsService {
   Future<void> setPreviewPerformanceMode(PreviewPerformanceMode mode) async =>
       (await SharedPreferences.getInstance())
           .setString(_kPreviewPerformanceMode, mode.storageValue);
+
+  Future<void> setBeautyStrength(double value) async =>
+      (await SharedPreferences.getInstance())
+          .setDouble(_kBeautyStrength, value.clamp(0.0, 1.0));
+
+  Future<void> setBeautyCustomized(bool value) async =>
+      (await SharedPreferences.getInstance())
+          .setBool(_kBeautyCustomized, value);
 }
