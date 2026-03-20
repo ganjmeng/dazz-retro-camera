@@ -114,6 +114,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     @Volatile private var pendingJpegBytes: ByteArray? = null
     @Volatile private var pendingRotationDegrees: Int = 0
     @Volatile private var pendingIsFrontCamera: Boolean = false
+    @Volatile private var mirrorFrontCameraEnabled: Boolean = true
+    @Volatile private var mirrorBackCameraEnabled: Boolean = false
     // 当前镜头朝向（LENS_FACING_BACK / LENS_FACING_FRONT）
     private var currentLensPosition: Int = CameraSelector.LENS_FACING_BACK
     // 持久化闪光灯状态，避免重建 ImageCapture 后丢失
@@ -192,6 +194,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "setZoom"         -> handleSetZoom(call, result)
             "setExposure"     -> handleSetExposure(call, result)
             "setFocus"        -> handleSetFocus(call, result)
+            "setMirrorFrontCamera" -> handleSetMirrorFrontCamera(call, result)
+            "setMirrorBackCamera"  -> handleSetMirrorBackCamera(call, result)
             "setFlash"        -> handleSetFlash(call, result)
             "setWhiteBalance" -> handleSetWhiteBalance(call, result)
             "setSharpen"         -> handleSetSharpen(call, result)
@@ -349,6 +353,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 val renderer = CameraGLRenderer(st, flutterPluginBinding.applicationContext)
                 renderer.initialize(w, h)
                 glRenderer = renderer
+                applyPreviewMirrorToRenderer(renderer)
 
                 // ── FIX: 切换摄像头后重新应用缓存的 preset 参数 ──────────
                 // switchLens 会重建 renderer，但不会重新调用 setPreset，
@@ -1333,6 +1338,18 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         result.success(null)
     }
 
+    private fun handleSetMirrorFrontCamera(call: MethodCall, result: MethodChannel.Result) {
+        mirrorFrontCameraEnabled = call.argument<Boolean>("enabled") ?: true
+        applyPreviewMirrorToRenderer()
+        result.success(null)
+    }
+
+    private fun handleSetMirrorBackCamera(call: MethodCall, result: MethodChannel.Result) {
+        mirrorBackCameraEnabled = call.argument<Boolean>("enabled") ?: false
+        applyPreviewMirrorToRenderer()
+        result.success(null)
+    }
+
     // ─────────────────────────────────────────────
     // syncRuntimeState — 一次性同步镜头参数 + 渲染参数 + 缩放
     // ─────────────────────────────────────────────
@@ -1472,6 +1489,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             val paramsForGpu = params.toMutableMap().apply {
                 this["maxDimension"] = maxDimension
                 this["jpegQuality"] = jpegQuality
+                this["mirrorOutput"] = shouldMirrorCurrentLens()
             }
 
             val newPath = if (memBytes != null) {
@@ -1832,6 +1850,17 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private fun handleDispose(result: MethodChannel.Result) {
         releaseCamera()
         result.success(null)
+    }
+
+    private fun shouldMirrorCurrentLens(): Boolean =
+        if (currentLensPosition == CameraSelector.LENS_FACING_FRONT) {
+            mirrorFrontCameraEnabled
+        } else {
+            mirrorBackCameraEnabled
+        }
+
+    private fun applyPreviewMirrorToRenderer(renderer: CameraGLRenderer? = glRenderer) {
+        renderer?.setPreviewMirror(shouldMirrorCurrentLens())
     }
 
     // ─────────────────────────────────────────────

@@ -278,6 +278,17 @@ class SettingsScreen extends ConsumerWidget {
                         ),
                         _SettingsDivider(),
                         _SettingsRow(
+                          title: s.mirrorBack,
+                          trailing: _RedSwitch(
+                            value: camState.mirrorBackCamera,
+                            onChanged: (_) {
+                              camNotifier.setMirrorBackCamera(
+                                  !camState.mirrorBackCamera);
+                            },
+                          ),
+                        ),
+                        _SettingsDivider(),
+                        _SettingsRow(
                           title: s.saveLocation,
                           trailing: _RedSwitch(
                             value: camState.locationEnabled,

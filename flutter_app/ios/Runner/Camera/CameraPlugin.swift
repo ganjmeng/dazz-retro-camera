@@ -41,6 +41,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     private var cachedRenderVersion: Int = 0
     private var currentCameraId: String = ""
     private var currentSharpenLevel: Float = 0.5
+    private var mirrorFrontCameraEnabled = true
+    private var mirrorBackCameraEnabled = false
 
     // takePhoto 的回调（等待 AVCapturePhotoCaptureDelegate）
     private var pendingPhotoResult: FlutterResult?
@@ -99,6 +101,10 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleSetExposure(call: call, result: result)
         case "setFocus":
             handleSetFocus(call: call, result: result)
+        case "setMirrorFrontCamera":
+            handleSetMirrorFrontCamera(call: call, result: result)
+        case "setMirrorBackCamera":
+            handleSetMirrorBackCamera(call: call, result: result)
         case "setWhiteBalance":
             handleSetWhiteBalance(call: call, result: result)
         case "setSharpen":
@@ -137,6 +143,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         }
 
         cameraManager = CameraSessionManager()
+        cameraManager?.setMirrorEnabled(mirrorFrontCameraEnabled, for: .front)
+        cameraManager?.setMirrorEnabled(mirrorBackCameraEnabled, for: .back)
         renderer = MetalRenderer(registry: textureRegistry!)
         renderer?.assetLookup = { [weak self] raw in
             guard let self else { return nil }
@@ -280,6 +288,20 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             return
         }
         cameraManager?.setFocusAndExposure(x: CGFloat(x), y: CGFloat(y))
+        result(nil)
+    }
+
+    private func handleSetMirrorFrontCamera(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any]
+        mirrorFrontCameraEnabled = args?["enabled"] as? Bool ?? true
+        cameraManager?.setMirrorEnabled(mirrorFrontCameraEnabled, for: .front)
+        result(nil)
+    }
+
+    private func handleSetMirrorBackCamera(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any]
+        mirrorBackCameraEnabled = args?["enabled"] as? Bool ?? false
+        cameraManager?.setMirrorEnabled(mirrorBackCameraEnabled, for: .back)
         result(nil)
     }
 

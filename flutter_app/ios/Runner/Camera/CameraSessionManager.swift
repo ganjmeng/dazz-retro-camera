@@ -10,6 +10,8 @@ class CameraSessionManager: NSObject {
     private var currentVideoInput: AVCaptureDeviceInput?
     private var videoDataOutput: AVCaptureVideoDataOutput?
     private var photoOutput: AVCapturePhotoOutput?
+    private var mirrorFrontCameraEnabled = true
+    private var mirrorBackCameraEnabled = false
 
     private let sessionQueue = DispatchQueue(label: "com.retrocam.session_queue")
 
@@ -67,6 +69,8 @@ class CameraSessionManager: NSObject {
                 self.photoOutput = photoOutput
             }
 
+            self.applyMirroringLocked(for: lens)
+
             self.session.commitConfiguration()
         }
     }
@@ -100,7 +104,24 @@ class CameraSessionManager: NSObject {
                 self.session.addInput(newInput)
                 self.currentVideoInput = newInput
             }
+            self.applyMirroringLocked(for: position)
             self.session.commitConfiguration()
+        }
+    }
+
+    func setMirrorEnabled(_ enabled: Bool, for position: AVCaptureDevice.Position) {
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            switch position {
+            case .front:
+                self.mirrorFrontCameraEnabled = enabled
+            case .back:
+                self.mirrorBackCameraEnabled = enabled
+            default:
+                break
+            }
+            let currentPosition = self.currentVideoInput?.device.position ?? .back
+            self.applyMirroringLocked(for: currentPosition)
         }
     }
 
@@ -354,6 +375,22 @@ class CameraSessionManager: NSObject {
             return .landscapeLeft
         default:
             return .portrait
+        }
+    }
+
+    private func applyMirroringLocked(for position: AVCaptureDevice.Position) {
+        let enabled = (position == .front) ? mirrorFrontCameraEnabled : mirrorBackCameraEnabled
+        if let videoConnection = videoDataOutput?.connection(with: .video) {
+            if videoConnection.isVideoMirroringSupported {
+                videoConnection.automaticallyAdjustsVideoMirroring = false
+                videoConnection.isVideoMirrored = enabled
+            }
+        }
+        if let photoConnection = photoOutput?.connection(with: .video) {
+            if photoConnection.isVideoMirroringSupported {
+                photoConnection.automaticallyAdjustsVideoMirroring = false
+                photoConnection.isVideoMirrored = enabled
+            }
         }
     }
 

@@ -119,6 +119,7 @@ class S {
   String get dazzPro => get('dazzPro');
   String get restorePurchase => get('restorePurchase');
   String get mirrorFront => get('mirrorFront');
+  String get mirrorBack => get('mirrorBack');
   String get saveLocation => get('saveLocation');
   String get renderMode => get('renderMode');
   String get replicaModeShort => get('replicaModeShort');
@@ -373,6 +374,14 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.ms: 'Cermin Kamera Depan',
     AppLanguage.ja: 'フロントカメラ反転',
     AppLanguage.ko: '전면 카메라 미러',
+  },
+  'mirrorBack': {
+    AppLanguage.zhHans: '镜像后置摄像头',
+    AppLanguage.zhHant: '鏡像後置鏡頭',
+    AppLanguage.en: 'Mirror Rear Camera',
+    AppLanguage.ms: 'Cermin Kamera Belakang',
+    AppLanguage.ja: 'リアカメラ反転',
+    AppLanguage.ko: '후면 카메라 미러',
   },
   'saveLocation': {
     AppLanguage.zhHans: '保存地理位置',

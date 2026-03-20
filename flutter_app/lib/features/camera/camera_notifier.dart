@@ -78,6 +78,7 @@ class CameraAppState {
   final bool showDebugOverlay; // 调试信息浮层：显示实时渲染参数
   final bool shutterSoundEnabled; // 快门声音开关
   final bool mirrorFrontCamera; // 前置摄像头镜像开关
+  final bool mirrorBackCamera; // 后置摄像头镜像开关
   final bool shutterVibrationEnabled; // 快门振动开关
   final bool fisheyeMode; // 鱼眼圆圈模式
   // ── 双重曝光 ──────────────────────────────────────────────────────────────
@@ -140,6 +141,7 @@ class CameraAppState {
     this.showDebugOverlay = false,
     this.shutterSoundEnabled = true,
     this.mirrorFrontCamera = true,
+    this.mirrorBackCamera = false,
     this.shutterVibrationEnabled = true,
     this.fisheyeMode = false,
     this.doubleExpEnabled = false,
@@ -199,6 +201,7 @@ class CameraAppState {
     bool? showDebugOverlay,
     bool? shutterSoundEnabled,
     bool? mirrorFrontCamera,
+    bool? mirrorBackCamera,
     bool? shutterVibrationEnabled,
     bool? fisheyeMode,
     bool? doubleExpEnabled,
@@ -270,6 +273,7 @@ class CameraAppState {
       showDebugOverlay: showDebugOverlay ?? this.showDebugOverlay,
       shutterSoundEnabled: shutterSoundEnabled ?? this.shutterSoundEnabled,
       mirrorFrontCamera: mirrorFrontCamera ?? this.mirrorFrontCamera,
+      mirrorBackCamera: mirrorBackCamera ?? this.mirrorBackCamera,
       shutterVibrationEnabled:
           shutterVibrationEnabled ?? this.shutterVibrationEnabled,
       fisheyeMode: fisheyeMode ?? this.fisheyeMode,
@@ -420,8 +424,15 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       shutterVibrationEnabled: prefs.shutterVibrationEnabled,
       locationEnabled: prefs.locationEnabled,
       mirrorFrontCamera: prefs.mirrorFrontCamera,
+      mirrorBackCamera: prefs.mirrorBackCamera,
       renderStyleMode: prefs.renderStyleMode,
     );
+    await _ref
+        .read(cameraServiceProvider.notifier)
+        .setMirrorFrontCamera(prefs.mirrorFrontCamera);
+    await _ref
+        .read(cameraServiceProvider.notifier)
+        .setMirrorBackCamera(prefs.mirrorBackCamera);
     syncRuntimeColorContext();
     await _loadCamera(prefs.lastCameraId);
   }
@@ -682,8 +693,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   void setMirrorFrontCamera(bool enabled) {
     state = state.copyWith(mirrorFrontCamera: enabled);
     AppPrefsService.instance.setMirrorFrontCamera(enabled);
-    // 通知原生层镜像设置
     _ref.read(cameraServiceProvider.notifier).setMirrorFrontCamera(enabled);
+  }
+
+  void setMirrorBackCamera(bool enabled) {
+    state = state.copyWith(mirrorBackCamera: enabled);
+    AppPrefsService.instance.setMirrorBackCamera(enabled);
+    _ref.read(cameraServiceProvider.notifier).setMirrorBackCamera(enabled);
   }
 
   void setShutterVibrationEnabled(bool enabled) {
@@ -1858,6 +1874,10 @@ final shutterVibrationEnabledProvider = Provider<bool>(
 /// 前置镜像开关（切换镜像时 rebuild）
 final mirrorFrontCameraProvider = Provider<bool>(
   (ref) => ref.watch(cameraAppProvider.select((s) => s.mirrorFrontCamera)),
+);
+
+final mirrorBackCameraProvider = Provider<bool>(
+  (ref) => ref.watch(cameraAppProvider.select((s) => s.mirrorBackCamera)),
 );
 
 /// 相框背景色（切换相框背景时 rebuild）

@@ -758,6 +758,7 @@ void main() {
      */
     fun processImage(filePath: String, params: Map<String, Any>): String? {
         return try {
+            val mirrorOutput = (params["mirrorOutput"] as? Boolean) ?: false
             // 1. 解码原始 JPEG
             val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
             val rawBitmap = BitmapFactory.decodeFile(filePath, options)
@@ -871,13 +872,18 @@ void main() {
             }
             GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0)
 
+            val finalBitmap = maybeMirrorBitmap(outBitmap, mirrorOutput)
+            if (finalBitmap !== outBitmap) {
+                outBitmap.recycle()
+            }
+
             // 8. 编码为 JPEG
             val outputFile = File(context.cacheDir, "gpu_${File(filePath).name}")
             val jpegQuality = ((params["jpegQuality"] as? Number)?.toInt() ?: 88).coerceIn(60, 95)
             FileOutputStream(outputFile).use { fos ->
-                outBitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, fos)
+                finalBitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, fos)
             }
-            outBitmap.recycle()
+            finalBitmap.recycle()
 
             Log.d(TAG, "GL GPU processing complete (PBO): ${outputFile.absolutePath}")
             outputFile.absolutePath
@@ -903,6 +909,7 @@ void main() {
         params: Map<String, Any>
     ): String? {
         return try {
+            val mirrorOutput = (params["mirrorOutput"] as? Boolean) ?: isFrontCamera
             // 1. 解码内存 JPEG（跳过磁盘读取）
             val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
             val rawBitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size, options)
@@ -923,7 +930,7 @@ void main() {
                 exifTag != ExifInterface.ORIENTATION_NORMAL) {
                 applyExifOrientation(rawBitmap, exifTag)
             } else {
-                applyRotation(rawBitmap, exifOrientation, isFrontCamera)
+                applyRotation(rawBitmap, exifOrientation, mirrorOutput)
             }
             if (exifBitmap !== rawBitmap) rawBitmap.recycle()
 
@@ -1012,14 +1019,19 @@ void main() {
             }
             GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0)
 
+            val finalBitmap = maybeMirrorBitmap(outBitmap, mirrorOutput)
+            if (finalBitmap !== outBitmap) {
+                outBitmap.recycle()
+            }
+
             // 8. 编码为 JPEG
             val ts = System.currentTimeMillis()
             val outputFile = File(context.cacheDir, "gpu_mem_${ts}.jpg")
             val jpegQuality = ((params["jpegQuality"] as? Number)?.toInt() ?: 88).coerceIn(60, 95)
             FileOutputStream(outputFile).use { fos ->
-                outBitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, fos)
+                finalBitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, fos)
             }
-            outBitmap.recycle()
+            finalBitmap.recycle()
             Log.d(TAG, "processImageBytes complete (PBO): ${outputFile.absolutePath}")
             outputFile.absolutePath
         } catch (e: Exception) {
@@ -1036,6 +1048,12 @@ void main() {
         if (rotationDegrees != 0) matrix.postRotate(rotationDegrees.toFloat())
         if (mirror) matrix.preScale(-1f, 1f)
         if (rotationDegrees == 0 && !mirror) return bitmap
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
+    private fun maybeMirrorBitmap(bitmap: Bitmap, mirror: Boolean): Bitmap {
+        if (!mirror) return bitmap
+        val matrix = Matrix().apply { preScale(-1f, 1f) }
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 

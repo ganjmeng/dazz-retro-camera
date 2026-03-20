@@ -14,6 +14,7 @@ const _kShutterSound = 'pref_shutter_sound';
 const _kShutterVibration = 'pref_shutter_vibration';
 const _kLastCameraId = 'pref_last_camera_id';
 const _kMirrorFrontCamera = 'pref_mirror_front_camera';
+const _kMirrorBackCamera = 'pref_mirror_back_camera';
 const _kRenderStyleMode = 'pref_render_style_mode';
 
 class AppPrefs {
@@ -25,6 +26,7 @@ class AppPrefs {
   final bool shutterVibrationEnabled; // 默认 true
   final String lastCameraId; // 默认为 kDefaultCameraOrder 第一个相机
   final bool mirrorFrontCamera; // 默认 true
+  final bool mirrorBackCamera; // 默认 false
   final RenderStyleMode renderStyleMode; // 默认复刻模式
 
   const AppPrefs({
@@ -37,6 +39,7 @@ class AppPrefs {
     this.lastCameraId =
         'fxn_r', // FIX: const default (kDefaultCameraOrder[0] is not const-evaluable)
     this.mirrorFrontCamera = true,
+    this.mirrorBackCamera = false,
     this.renderStyleMode = RenderStyleMode.replica,
   });
 }
@@ -56,6 +59,7 @@ class AppPrefsService {
       shutterVibrationEnabled: p.getBool(_kShutterVibration) ?? true,
       lastCameraId: p.getString(_kLastCameraId) ?? kDefaultCameraOrder[0],
       mirrorFrontCamera: p.getBool(_kMirrorFrontCamera) ?? true,
+      mirrorBackCamera: p.getBool(_kMirrorBackCamera) ?? false,
       renderStyleMode: RenderStyleModeX.fromStorage(
         p.getString(_kRenderStyleMode),
       ),
@@ -85,6 +89,9 @@ class AppPrefsService {
 
   Future<void> setMirrorFrontCamera(bool v) async =>
       (await SharedPreferences.getInstance()).setBool(_kMirrorFrontCamera, v);
+
+  Future<void> setMirrorBackCamera(bool v) async =>
+      (await SharedPreferences.getInstance()).setBool(_kMirrorBackCamera, v);
 
   Future<void> setRenderStyleMode(RenderStyleMode mode) async =>
       (await SharedPreferences.getInstance())

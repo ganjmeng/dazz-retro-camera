@@ -100,6 +100,7 @@ uniform vec2  uTexelSize;   // 1/width, 1/height
 uniform float uFisheyeMode; // 1.0=圆形鱼眼模式, 0.0=普通模式
 uniform float uAspectRatio; // 宽/高 比例（用于保持圆形）
 uniform float uLensDistortion; // 轻量桶形畸变（非圆形鱼眼）
+uniform float uMirrorX; // 1.0=水平镜像, 0.0=不镜像
 // ── 传感器非均匀性（数码相机通用，FXN-R 专项调校）──
 uniform float uCenterGain;          // 中心增亮（FXN-R=0.010）
 uniform float uEdgeFalloff;         // 边缘衰减（FXN-R=0.035）
@@ -492,6 +493,9 @@ vec3 applyLightLeak(vec3 c, vec2 uv, float amount, float seed) {
 // ── 主函数（统一渲染管线，所有相机差异由 uniform 参数驱动）────────────
 void main() {
     vec2 uv = vTexCoord;
+    if (uMirrorX > 0.5) {
+        uv.x = 1.0 - uv.x;
+    }
 
     // 鱼眼模式：重映射 UV 坐标
     if (uFisheyeMode > 0.5) {
@@ -699,6 +703,7 @@ void main() {
     private var uFisheyeMode: Int = -1
     private var uAspectRatio: Int = -1
     private var uLensDistortion: Int = -1
+    private var uMirrorX: Int = -1
     private var uHighlights: Int = -1
     private var uShadows: Int = -1
     private var uWhites: Int = -1
@@ -774,6 +779,7 @@ void main() {
     @Volatile private var sharpen: Float = 0.0f
     @Volatile private var time: Float = 0.0f
     @Volatile private var fisheyeMode: Float = 0.0f
+    @Volatile private var previewMirrorX: Float = 0.0f
     @Volatile private var lensDistortion: Float = 0.0f
     @Volatile private var highlights: Float = 0.0f
     @Volatile private var shadows: Float = 0.0f
@@ -1022,6 +1028,7 @@ void main() {
         uFisheyeMode          = GLES30.glGetUniformLocation(programId, "uFisheyeMode")
         uAspectRatio          = GLES30.glGetUniformLocation(programId, "uAspectRatio")
         uLensDistortion       = GLES30.glGetUniformLocation(programId, "uLensDistortion")
+        uMirrorX              = GLES30.glGetUniformLocation(programId, "uMirrorX")
         aPositionLoc          = GLES30.glGetAttribLocation(programId, "aPosition")
         aTexCoordLoc          = GLES30.glGetAttribLocation(programId, "aTexCoord")
         uHighlights           = GLES30.glGetUniformLocation(programId, "uHighlights")
@@ -1167,6 +1174,7 @@ void main() {
         val ph = previewHeight.toFloat()
         GLES30.glUniform1f(uAspectRatio, minOf(pw, ph) / maxOf(pw, ph))
         GLES30.glUniform1f(uLensDistortion,      lensDistortion)
+        GLES30.glUniform1f(uMirrorX,             previewMirrorX)
         GLES30.glUniform1f(uHighlights,          highlights)
         GLES30.glUniform1f(uShadows,             shadows)
         GLES30.glUniform1f(uWhites,              whites)
@@ -1363,6 +1371,10 @@ void main() {
 
     fun setFisheyeMode(enabled: Boolean) {
         fisheyeMode = if (enabled) 1.0f else 0.0f
+    }
+
+    fun setPreviewMirror(enabled: Boolean) {
+        previewMirrorX = if (enabled) 1.0f else 0.0f
     }
 
     // ── 获取相机输入 Surface ──────────────────────────────────────────────────
