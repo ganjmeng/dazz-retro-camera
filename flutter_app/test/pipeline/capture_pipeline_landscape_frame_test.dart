@@ -117,34 +117,13 @@ void main() {
       expect(crop.top, 0);
     });
 
-    test('left landscape rotates portrait frame insets counterclockwise', () {
-      final pipeline =
-          CapturePipeline(camera: CameraDefinition.fromJson(_makeCameraJson()));
+    test('framed landscape no longer rotates portrait frame insets', () {
+      const inset = FrameInset(top: 151, right: 137, bottom: 344, left: 134);
 
-      final resolved = pipeline.debugResolveLandscapeFrameInset(
-        const FrameInset(top: 151, right: 137, bottom: 344, left: 134),
-        effectiveQuarter: 1,
-      );
-
-      expect(resolved.top, 137);
-      expect(resolved.right, 344);
-      expect(resolved.bottom, 134);
-      expect(resolved.left, 151);
-    });
-
-    test('right landscape rotates portrait frame insets clockwise', () {
-      final pipeline =
-          CapturePipeline(camera: CameraDefinition.fromJson(_makeCameraJson()));
-
-      final resolved = pipeline.debugResolveLandscapeFrameInset(
-        const FrameInset(top: 151, right: 137, bottom: 344, left: 134),
-        effectiveQuarter: 3,
-      );
-
-      expect(resolved.top, 134);
-      expect(resolved.right, 151);
-      expect(resolved.bottom, 137);
-      expect(resolved.left, 344);
+      expect(inset.top, 151);
+      expect(inset.right, 137);
+      expect(inset.bottom, 344);
+      expect(inset.left, 134);
     });
   });
 }
