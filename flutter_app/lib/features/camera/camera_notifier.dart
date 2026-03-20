@@ -1621,6 +1621,18 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     }
   }
 
+  Future<void> replayCurrentPreviewStateToNative({
+    bool replayPreset = true,
+  }) async {
+    syncRuntimeColorContext();
+    final camera = state.camera;
+    if (camera == null) return;
+    if (replayPreset) {
+      await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
+    }
+    await _syncCurrentPreviewStateToNative();
+  }
+
   void _pushZoomToNative(double zoom, {bool immediate = false}) {
     _pendingZoomToNative = zoom;
     if (immediate) {

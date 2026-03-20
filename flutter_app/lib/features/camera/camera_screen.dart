@@ -128,7 +128,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Timer? _sceneHintHideTimer;
   Timer? _previewHealthTimer;
   int _previewSoftResyncCooldownUntilMs = 0;
-  int _runtimeSyncVersion = 0;
   // 曝光水平滑动条是否展开（点击胶囊触发）
   bool _showExposureSlider = false;
   // 色温面板是否展开（点击色温胶囊触发）
@@ -380,59 +379,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _syncPipelineAfterCameraInit() async {
     final svc = ref.read(cameraServiceProvider.notifier);
-    ref.read(cameraAppProvider.notifier).syncRuntimeColorContext(
-        ref.read(cameraServiceProvider).activeCameraDebugInfo);
     // setSharpen 会重建 renderer，必须先执行
     final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
     const sharpenLevels = [0.0, 0.5, 1.0];
     await svc.setSharpen(sharpenLevels[sharpenLevel]);
-
-    final camera = ref.read(cameraAppProvider).camera;
-    if (camera != null) {
-      await svc.setCamera(camera);
-      final lensId = ref.read(cameraAppProvider).activeLensId;
-      final lens = camera.lensById(lensId);
-      final renderParams = ref.read(cameraAppProvider).renderParams;
-      final zoom = ref.read(cameraAppProvider).zoomLevel;
-      if (renderParams != null) {
-        final version = ++_runtimeSyncVersion;
-        await svc.syncRuntimeState(
-          lensParams: {
-            'distortion': lens?.distortion ?? 0.0,
-            'vignette': lens?.vignette ?? 0.0,
-            'zoomFactor': lens?.zoomFactor ?? 1.0,
-            'fisheyeMode': lens?.fisheyeMode ?? false,
-            'chromaticAberration': lens?.chromaticAberration ?? 0.0,
-            'bloom': lens?.bloom ?? 0.0,
-            'softFocus': lens?.softFocus ?? 0.0,
-            'exposure': lens?.exposure ?? 0.0,
-            'contrast': lens?.contrast ?? 0.0,
-            'saturation': lens?.saturation ?? 0.0,
-            'highlightCompression': lens?.highlightCompression ?? 0.0,
-          },
-          renderParams: renderParams.toJson(),
-          zoom: zoom,
-          version: version,
-        );
-      } else {
-        await svc.updateLensParams(
-          distortion: lens?.distortion ?? 0.0,
-          vignette: lens?.vignette ?? 0.0,
-          zoomFactor: lens?.zoomFactor ?? 1.0,
-          fisheyeMode: lens?.fisheyeMode ?? false,
-          chromaticAberration: lens?.chromaticAberration ?? 0.0,
-          bloom: lens?.bloom ?? 0.0,
-          softFocus: lens?.softFocus ?? 0.0,
-          exposure: lens?.exposure ?? 0.0,
-          contrast: lens?.contrast ?? 0.0,
-          saturation: lens?.saturation ?? 0.0,
-          highlightCompression: lens?.highlightCompression ?? 0.0,
-        );
-        if (zoom != 1.0) {
-          await svc.setZoom(zoom);
-        }
-      }
-    }
+    await ref
+        .read(cameraAppProvider.notifier)
+        .replayCurrentPreviewStateToNative();
     _ensurePreviewHealthWatchdog();
   }
 
@@ -670,37 +623,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _softResyncPreviewParams() async {
     if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
-    final svc = ref.read(cameraServiceProvider.notifier);
-    final app = ref.read(cameraAppProvider);
-    final camera = app.camera;
-    if (camera == null) return;
-    ref.read(cameraAppProvider.notifier).syncRuntimeColorContext(
-        ref.read(cameraServiceProvider).activeCameraDebugInfo);
-    await svc.setCamera(camera);
-    final lens = camera.lensById(app.activeLensId);
-    final renderParams = app.renderParams;
-    final zoom = app.zoomLevel;
-    if (renderParams != null) {
-      final version = ++_runtimeSyncVersion;
-      await svc.syncRuntimeState(
-        lensParams: {
-          'distortion': lens?.distortion ?? 0.0,
-          'vignette': lens?.vignette ?? 0.0,
-          'zoomFactor': lens?.zoomFactor ?? 1.0,
-          'fisheyeMode': lens?.fisheyeMode ?? false,
-          'chromaticAberration': lens?.chromaticAberration ?? 0.0,
-          'bloom': lens?.bloom ?? 0.0,
-          'softFocus': lens?.softFocus ?? 0.0,
-          'exposure': lens?.exposure ?? 0.0,
-          'contrast': lens?.contrast ?? 0.0,
-          'saturation': lens?.saturation ?? 0.0,
-          'highlightCompression': lens?.highlightCompression ?? 0.0,
-        },
-        renderParams: renderParams.toJson(),
-        zoom: zoom,
-        version: version,
-      );
-    }
+    await ref
+        .read(cameraAppProvider.notifier)
+        .replayCurrentPreviewStateToNative();
   }
 
   void _enqueueSceneHint(String nextKey) {
