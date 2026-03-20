@@ -264,17 +264,11 @@ class CameraService extends StateNotifier<CameraState> {
   }
 
   /// 将完整渲染参数（滤镜+镜头+defaultLook 组合后的值）发送到原生预览 Shader
-  /// 复用 setPreset 通道中 glRenderer.updateParams 的能力
+  /// 使用独立通道，避免污染原生 preset 缓存（会导致切机后参数串台）
   Future<void> updateRenderParams(Map<String, dynamic> params) async {
     try {
-      // 通过 setPreset 通道发送，原生端会读取 defaultLook 子对象并 updateParams
-      // 但更直接的方式是新增一个专用 method channel
-      // 这里直接复用 setPreset：将 params 作为 defaultLook 传入
-      await _channel.invokeMethod('setPreset', {
-        'preset': {
-          'cameraId': '', // 空字符串不会触发 setCameraId
-          'defaultLook': params,
-        },
+      await _channel.invokeMethod('updateRenderParams', {
+        'params': params,
       });
     } catch (e) {
       print('Error updating render params: $e');

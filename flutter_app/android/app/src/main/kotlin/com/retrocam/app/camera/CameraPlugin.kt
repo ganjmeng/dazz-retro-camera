@@ -96,6 +96,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
     // Filter state
     private var currentPresetJson: Map<*, *>? = null
+    private var cachedRenderParams: Map<String, Any> = emptyMap()
     private var currentSharpenLevel: Float = 0.5f
     private var currentCameraId: String = ""
     @Volatile private var pendingShotStartNs: Long = 0L
@@ -184,6 +185,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "startPreview"    -> handleStartPreview(result)
             "stopPreview"     -> handleStopPreview(result)
             "setPreset"       -> handleSetPreset(call, result)
+            "updateRenderParams" -> handleUpdateRenderParams(call, result)
             "switchLens"      -> handleSwitchLens(call, result)
             "takePhoto"       -> handleTakePhoto(call, result)
             "setZoom"         -> handleSetZoom(call, result)
@@ -514,9 +516,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     @Suppress("UNCHECKED_CAST")
     private fun handleSetPreset(call: MethodCall, result: MethodChannel.Result) {
         val preset = call.argument<Map<*, *>>("preset")
-        currentPresetJson = preset
         val cameraId = (preset?.get("cameraId") as? String) ?: (preset?.get("id") as? String) ?: ""
-        currentCameraId = cameraId
+        if (cameraId.isNotEmpty()) {
+            currentPresetJson = preset
+            currentCameraId = cameraId
+        }
         Log.d(TAG, "setPreset: cameraId=$cameraId")
 
         if (preset != null) {
@@ -599,6 +603,18 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             if (cameraId.isNotEmpty()) {
                 glRenderer?.setCameraId(cameraId)
             }
+        }
+        result.success(null)
+    }
+
+    // ─────────────────────────────────────────────
+    // updateRenderParams — update shader params only (do not mutate preset cache)
+    // ─────────────────────────────────────────────
+    private fun handleUpdateRenderParams(call: MethodCall, result: MethodChannel.Result) {
+        val params = call.argument<Map<String, Any>>("params") ?: emptyMap()
+        if (params.isNotEmpty()) {
+            cachedRenderParams = params
+            glRenderer?.updateParams(params)
         }
         result.success(null)
     }
@@ -1303,6 +1319,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         merged["bloomAmount"] = bloom
         merged["softFocus"] = softFocus
         merged["distortion"] = distortion
+        cachedRenderParams = renderParams
         glRenderer?.updateParams(merged)
 
         result.success(null)
@@ -1758,6 +1775,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
         if (cameraId.isNotEmpty()) {
             renderer.setCameraId(cameraId)
+        }
+        if (cachedRenderParams.isNotEmpty()) {
+            renderer.updateParams(cachedRenderParams)
         }
 
         // ── FIX: 恢复缓存的 lens 参数（fisheyeMode / vignette）──────────────

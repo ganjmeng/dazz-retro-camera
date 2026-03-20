@@ -69,6 +69,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             result(nil)
         case "setPreset":
             handleSetPreset(call: call, result: result)
+        case "updateRenderParams":
+            handleUpdateRenderParams(call: call, result: result)
         case "takePhoto":
             handleTakePhoto(call: call, result: result)
         case "startRecording":
@@ -260,6 +262,16 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         if let lut = presetJson["lut"] as? String { shaderParams["lut"] = lut }
         if let grain = presetJson["grain"] as? String { shaderParams["grain"] = grain }
         renderer?.updateParams(shaderParams)
+        result(["success": true])
+    }
+
+    // ─────────────────────────────────────────────
+    // updateRenderParams — update shader params only
+    // ─────────────────────────────────────────────
+    private func handleUpdateRenderParams(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any]
+        let params = args?["params"] as? [String: Any] ?? [:]
+        renderer?.updateParams(params)
         result(["success": true])
     }
 
