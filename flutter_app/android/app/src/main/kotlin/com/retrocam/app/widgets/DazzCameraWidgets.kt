@@ -11,7 +11,7 @@ import android.widget.RemoteViews
 import com.retrocam.app.MainActivity
 import com.retrocam.app.R
 
-private data class WidgetCamera(val id: String, val label: String)
+data class WidgetCamera(val id: String, val label: String)
 
 private val kWidgetCameraOrder = listOf(
     WidgetCamera("fxn_r", "FXN R"),
@@ -53,7 +53,7 @@ private fun bindCameraButtons(
     }
 }
 
-private abstract class BaseCameraWidgetProvider(
+abstract class BaseCameraWidgetProvider(
     private val layoutId: Int,
     private val buttonIds: List<Int>,
     private val cameras: List<WidgetCamera>,
