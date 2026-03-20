@@ -509,6 +509,12 @@ class CapturePipeline {
       final nativeComposeSourcePath = gpuProcessed
           ? gpuOutputPath
           : ((!decodedWithScale && renderParams == null) ? imagePath : null);
+      final nativeEffectiveQuarter = _resolveEffectiveQuarter(
+        canvasW: canvasW,
+        canvasH: canvasH,
+        deviceQuarter: deviceQuarter,
+        gpuProcessed: gpuProcessed,
+      );
       if ((gpuProcessed || hasNativeOverlayNeed) &&
           nativeComposeSourcePath != null &&
           (Platform.isAndroid || Platform.isIOS)) {
@@ -557,22 +563,34 @@ class CapturePipeline {
                 File(gpuOutputPath).deleteSync();
               }
             } catch (_) {}
-            return CaptureResult(
+            final rotated = await _rotateEncodedOutputIfNeeded(
               bytes: outBytes,
-              outputWidth: canvasW.toInt(),
-              outputHeight: canvasH.toInt(),
+              width: canvasW.toInt(),
+              height: canvasH.toInt(),
+              effectiveQuarter: nativeEffectiveQuarter,
+              jpegQuality: jpegQuality,
+            );
+            return CaptureResult(
+              bytes: rotated.bytes,
+              outputWidth: rotated.width,
+              outputHeight: rotated.height,
             );
           }
           if (gpuProcessed) {
             final fallbackBytes = gpuOutputBytes ??
                 await File(nativeComposeSourcePath).readAsBytes();
             final fallbackSize = _readJpegDimensions(fallbackBytes);
-            final fw = fallbackSize?[0] ?? 0;
-            final fh = fallbackSize?[1] ?? 0;
-            return CaptureResult(
+            final fallbackRotated = await _rotateEncodedOutputIfNeeded(
               bytes: fallbackBytes,
-              outputWidth: fw,
-              outputHeight: fh,
+              width: fallbackSize?[0] ?? 0,
+              height: fallbackSize?[1] ?? 0,
+              effectiveQuarter: nativeEffectiveQuarter,
+              jpegQuality: jpegQuality,
+            );
+            return CaptureResult(
+              bytes: fallbackRotated.bytes,
+              outputWidth: fallbackRotated.width,
+              outputHeight: fallbackRotated.height,
             );
           }
         } catch (e) {
@@ -581,12 +599,17 @@ class CapturePipeline {
             final fallbackBytes = gpuOutputBytes ??
                 await File(nativeComposeSourcePath).readAsBytes();
             final fallbackSize = _readJpegDimensions(fallbackBytes);
-            final fw = fallbackSize?[0] ?? 0;
-            final fh = fallbackSize?[1] ?? 0;
-            return CaptureResult(
+            final fallbackRotated = await _rotateEncodedOutputIfNeeded(
               bytes: fallbackBytes,
-              outputWidth: fw,
-              outputHeight: fh,
+              width: fallbackSize?[0] ?? 0,
+              height: fallbackSize?[1] ?? 0,
+              effectiveQuarter: nativeEffectiveQuarter,
+              jpegQuality: jpegQuality,
+            );
+            return CaptureResult(
+              bytes: fallbackRotated.bytes,
+              outputWidth: fallbackRotated.width,
+              outputHeight: fallbackRotated.height,
             );
           }
         }
@@ -859,13 +882,12 @@ class CapturePipeline {
       //      // ── 5b. 根据设备方向旋转图片 ────────────────────────────────────
       // GPU 路径默认已处理方向，但部分机型仍会出现横竖错向。
       // 采用自适应策略：仅当当前输出朝向与设备朝向不一致时补旋转，避免双重旋转。
-      int effectiveQuarter = deviceQuarter;
-      if (gpuProcessed) {
-        final expectedLandscape = deviceQuarter == 1 || deviceQuarter == 3;
-        final currentLandscape = canvasW >= canvasH;
-        effectiveQuarter =
-            (expectedLandscape == currentLandscape) ? 0 : deviceQuarter;
-      }
+      final effectiveQuarter = _resolveEffectiveQuarter(
+        canvasW: canvasW,
+        canvasH: canvasH,
+        deviceQuarter: deviceQuarter,
+        gpuProcessed: gpuProcessed,
+      );
       ui.Image finalImage = outputImage;
       if (effectiveQuarter != 0) {
         // quarter 定义：1=左横屏(逆时针), 3=右横屏(顺时针)。
@@ -972,6 +994,80 @@ class CapturePipeline {
   @visibleForTesting
   Rect debugCalcCropRect(double w, double h, String ratioId) =>
       _calcCropRect(w, h, ratioId);
+
+  int _resolveEffectiveQuarter({
+    required double canvasW,
+    required double canvasH,
+    required int deviceQuarter,
+    required bool gpuProcessed,
+  }) {
+    if (!gpuProcessed) return deviceQuarter;
+    final expectedLandscape = deviceQuarter == 1 || deviceQuarter == 3;
+    final currentLandscape = canvasW >= canvasH;
+    return (expectedLandscape == currentLandscape) ? 0 : deviceQuarter;
+  }
+
+  @visibleForTesting
+  int debugResolveEffectiveQuarter({
+    required double canvasW,
+    required double canvasH,
+    required int deviceQuarter,
+    required bool gpuProcessed,
+  }) =>
+      _resolveEffectiveQuarter(
+        canvasW: canvasW,
+        canvasH: canvasH,
+        deviceQuarter: deviceQuarter,
+        gpuProcessed: gpuProcessed,
+      );
+
+  Future<({Uint8List bytes, int width, int height})>
+      _rotateEncodedOutputIfNeeded({
+    required Uint8List bytes,
+    required int width,
+    required int height,
+    required int effectiveQuarter,
+    required int jpegQuality,
+  }) async {
+    if (effectiveQuarter == 0 || width <= 0 || height <= 0) {
+      return (bytes: bytes, width: width, height: height);
+    }
+
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final srcImage = frame.image;
+    final srcW = srcImage.width.toDouble();
+    final srcH = srcImage.height.toDouble();
+    final rotAngle = switch (effectiveQuarter) {
+      1 => -math.pi / 2,
+      2 => math.pi,
+      3 => math.pi / 2,
+      _ => 0.0,
+    };
+    final isLandscape = effectiveQuarter == 1 || effectiveQuarter == 3;
+    final rotW = isLandscape ? srcH : srcW;
+    final rotH = isLandscape ? srcW : srcH;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, rotW, rotH));
+    canvas.translate(rotW / 2, rotH / 2);
+    canvas.rotate(rotAngle);
+    canvas.translate(-srcW / 2, -srcH / 2);
+    canvas.drawImage(srcImage, Offset.zero, Paint());
+    final picture = recorder.endRecording();
+    final rotated = await picture.toImage(rotW.toInt(), rotH.toInt());
+    final byteData =
+        await rotated.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (byteData == null) {
+      return (bytes: bytes, width: width, height: height);
+    }
+    final jpegBytes = await _encodeJpeg(
+      byteData.buffer.asUint8List(),
+      rotW.toInt(),
+      rotH.toInt(),
+      quality: jpegQuality,
+    );
+    return (bytes: jpegBytes, width: rotW.toInt(), height: rotH.toInt());
+  }
 
   // ── 颜色矩阵（与预览一致）────────────────────────────────────────────────────
 

@@ -159,5 +159,21 @@ void main() {
       expect(rotatedWidth, 4096);
       expect(rotatedHeight, 2731);
     });
+
+    test(
+        'native overlay path still keeps landscape quarter when composed canvas is portrait',
+        () {
+      final pipeline =
+          CapturePipeline(camera: CameraDefinition.fromJson(_makeCameraJson()));
+
+      final effectiveQuarter = pipeline.debugResolveEffectiveQuarter(
+        canvasW: 1575,
+        canvasH: 1711,
+        deviceQuarter: 1,
+        gpuProcessed: true,
+      );
+
+      expect(effectiveQuarter, 1);
+    });
   });
 }
