@@ -19,6 +19,9 @@ class CameraState {
   bool get isProcessing => isLoading;
   String? get errorMessage => error;
   final String currentLens; // "front" | "back"
+  final String lifecyclePhase; // idle|initializing|running|paused|disposing
+  final int runtimeStatsUpdatedAtMs;
+
   /// Android Camera2 传感器调试信息（onCameraReady 事件携带）
   final Map<String, dynamic> activeCameraDebugInfo;
 
@@ -30,6 +33,8 @@ class CameraState {
     this.currentPreset,
     this.isRecording = false,
     this.currentLens = 'back',
+    this.lifecyclePhase = 'idle',
+    this.runtimeStatsUpdatedAtMs = 0,
     this.activeCameraDebugInfo = const {},
   });
 
@@ -41,6 +46,8 @@ class CameraState {
     Preset? currentPreset,
     bool? isRecording,
     String? currentLens,
+    String? lifecyclePhase,
+    int? runtimeStatsUpdatedAtMs,
     Map<String, dynamic>? activeCameraDebugInfo,
   }) {
     return CameraState(
@@ -51,6 +58,9 @@ class CameraState {
       currentPreset: currentPreset ?? this.currentPreset,
       isRecording: isRecording ?? this.isRecording,
       currentLens: currentLens ?? this.currentLens,
+      lifecyclePhase: lifecyclePhase ?? this.lifecyclePhase,
+      runtimeStatsUpdatedAtMs:
+          runtimeStatsUpdatedAtMs ?? this.runtimeStatsUpdatedAtMs,
       activeCameraDebugInfo:
           activeCameraDebugInfo ?? this.activeCameraDebugInfo,
     );
@@ -92,7 +102,11 @@ class CameraService extends StateNotifier<CameraState> {
   /// 初始化相机，获取 Texture ID 并开始预览
   Future<void> initCamera() async {
     await _serializeLifecycle(() async {
-      state = state.copyWith(isLoading: true, error: null);
+      state = state.copyWith(
+        isLoading: true,
+        error: null,
+        lifecyclePhase: 'initializing',
+      );
 
       // 相机权限已在 CameraScreen._requestPermissions() 中一次性请求
       // 这里只检查相机权限是否已授予，不再重复弹出权限对话框
@@ -128,11 +142,18 @@ class CameraService extends StateNotifier<CameraState> {
 
         final textureId = result['textureId'] as int;
         state = state.copyWith(
-            isLoading: false, isReady: true, textureId: textureId);
+          isLoading: false,
+          isReady: true,
+          textureId: textureId,
+          lifecyclePhase: 'running',
+        );
         await _channel.invokeMethod('startPreview');
       } catch (e) {
         state = state.copyWith(
-            isLoading: false, error: 'Failed to init camera: $e');
+          isLoading: false,
+          error: 'Failed to init camera: $e',
+          lifecyclePhase: 'idle',
+        );
       }
     });
   }
@@ -141,6 +162,7 @@ class CameraService extends StateNotifier<CameraState> {
     await _serializeLifecycle(() async {
       try {
         await _channel.invokeMethod('startPreview');
+        state = state.copyWith(lifecyclePhase: 'running');
       } catch (e) {
         print('Error starting preview: $e');
       }
@@ -151,6 +173,7 @@ class CameraService extends StateNotifier<CameraState> {
     await _serializeLifecycle(() async {
       try {
         await _channel.invokeMethod('stopPreview');
+        state = state.copyWith(lifecyclePhase: 'paused');
       } catch (e) {
         print('Error stopping preview: $e');
       }
@@ -265,30 +288,46 @@ class CameraService extends StateNotifier<CameraState> {
 
   /// 将完整渲染参数（滤镜+镜头+defaultLook 组合后的值）发送到原生预览 Shader
   /// 使用独立通道，避免污染原生 preset 缓存（会导致切机后参数串台）
-  Future<void> updateRenderParams(Map<String, dynamic> params) async {
+  Future<int?> updateRenderParams(
+    Map<String, dynamic> params, {
+    int? version,
+  }) async {
     try {
-      await _channel.invokeMethod('updateRenderParams', {
+      final result = await _channel
+          .invokeMethod<Map<dynamic, dynamic>>('updateRenderParams', {
         'params': params,
+        if (version != null) 'version': version,
       });
+      final raw = result?['appliedVersion'];
+      if (raw is num) return raw.toInt();
+      return int.tryParse(raw?.toString() ?? '');
     } catch (e) {
       print('Error updating render params: $e');
+      return null;
     }
   }
 
   /// 一次性同步预览运行态参数（镜头 + 渲染 + 缩放），减少多次 MethodChannel 往返和中间态闪动。
-  Future<void> syncRuntimeState({
+  Future<int?> syncRuntimeState({
     required Map<String, dynamic> lensParams,
     required Map<String, dynamic> renderParams,
     required double zoom,
+    int? version,
   }) async {
     try {
-      await _channel.invokeMethod('syncRuntimeState', {
+      final result = await _channel
+          .invokeMethod<Map<dynamic, dynamic>>('syncRuntimeState', {
         'lensParams': lensParams,
         'renderParams': renderParams,
         'zoom': zoom,
+        if (version != null) 'version': version,
       });
+      final raw = result?['appliedVersion'];
+      if (raw is num) return raw.toInt();
+      return int.tryParse(raw?.toString() ?? '');
     } catch (e) {
       print('Error syncing runtime state: $e');
+      return null;
     }
   }
 
@@ -416,11 +455,15 @@ class CameraService extends StateNotifier<CameraState> {
     await _serializeLifecycle(() async {
       try {
         _initGeneration++;
+        state = state.copyWith(lifecyclePhase: 'disposing');
         await _eventSubscription?.cancel();
         _eventSubscription = null;
         await _channel.invokeMethod('dispose');
-        state =
-            state.copyWith(isReady: false, textureId: null, isRecording: false);
+        state = state.copyWith(
+            isReady: false,
+            textureId: null,
+            isRecording: false,
+            lifecyclePhase: 'idle');
       } catch (e) {
         print('Error disposing camera: $e');
       }
@@ -459,12 +502,21 @@ class CameraService extends StateNotifier<CameraState> {
         if (payload != null && payload.isNotEmpty) {
           payload.forEach((k, v) => runtime[k.toString()] = v);
         }
+        final rtLumaRaw = runtime['rtLuma'];
+        final rtLuma = rtLumaRaw is num
+            ? rtLumaRaw.toDouble()
+            : double.tryParse(rtLumaRaw?.toString() ?? '');
+        // Android 侧历史值是 0~255，这里统一归一化到 0~1，跨端口径一致。
+        if (rtLuma != null && rtLuma > 1.5) {
+          runtime['rtLuma'] = (rtLuma / 255.0).clamp(0.0, 1.0);
+        }
         if (runtime.isNotEmpty) {
           state = state.copyWith(
             activeCameraDebugInfo: {
               ...state.activeCameraDebugInfo,
               ...runtime,
             },
+            runtimeStatsUpdatedAtMs: DateTime.now().millisecondsSinceEpoch,
           );
         }
         break;

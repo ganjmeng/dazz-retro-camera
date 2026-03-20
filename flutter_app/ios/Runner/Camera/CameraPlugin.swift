@@ -33,6 +33,11 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     // 当前闪光灯模式
     private var currentFlashMode: AVCaptureDevice.FlashMode = .off
     private let ciContext = CIContext(options: [.priorityRequestLow: false])
+    private var cachedPresetJson: [String: Any] = [:]
+    private var cachedRenderParams: [String: Any] = [:]
+    private var cachedLensParams: [String: Any] = [:]
+    private var cachedZoom: Double = 1.0
+    private var cachedRenderVersion: Int = 0
 
     // takePhoto 的回调（等待 AVCapturePhotoCaptureDelegate）
     private var pendingPhotoResult: FlutterResult?
@@ -138,6 +143,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cameraManager?.sampleBufferDelegate = renderer!
         cameraManager?.configure(lens: lens)
         cameraManager?.startSession()
+        reapplyRuntimeStateToRenderer()
         startRuntimeStatsTimer()
         let d = UIDevice.current
         emitEvent(type: "onCameraReady", payload: [
@@ -162,6 +168,9 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let lensStr = args?["lens"] as? String ?? "back"
         let position: AVCaptureDevice.Position = (lensStr == "front") ? .front : .back
         cameraManager?.switchCamera(to: position)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            self?.reapplyRuntimeStateToRenderer()
+        }
         result(nil)
     }
 
@@ -174,6 +183,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             result(FlutterError(code: "INVALID_ARG", message: "Invalid preset parameters", details: nil))
             return
         }
+        cachedPresetJson = presetJson
         var shaderParams: [String: Any] = [:]
         if let baseModel = presetJson["baseModel"] as? [String: Any] {
             if let color = baseModel["color"] as? [String: Any] {
@@ -275,8 +285,17 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     private func handleUpdateRenderParams(call: FlutterMethodCall, result: @escaping FlutterResult) {
         let args = call.arguments as? [String: Any]
         let params = args?["params"] as? [String: Any] ?? [:]
+        let version = (args?["version"] as? Int) ?? cachedRenderVersion
+        if !params.isEmpty {
+            cachedRenderParams = params
+        }
+        cachedRenderVersion = max(0, version)
         renderer?.updateParams(params)
-        result(["success": true])
+        result([
+            "success": true,
+            "appliedVersion": cachedRenderVersion,
+            "rendererReady": renderer != nil,
+        ])
     }
 
     // ─────────────────────────────────────────────
@@ -380,6 +399,14 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let bloom                 = args?["bloom"] as? Double ?? 0.0
         let softFocus             = args?["softFocus"] as? Double ?? 0.0
         let distortion            = args?["distortion"] as? Double ?? 0.0
+        cachedLensParams = [
+            "fisheyeMode": fisheyeMode,
+            "vignette": vignette,
+            "chromaticAberration": chromaticAberration,
+            "bloom": bloom,
+            "softFocus": softFocus,
+            "distortion": distortion,
+        ]
 
         // 将鱼眼模式传递到 Metal 渲染器
         renderer?.setFisheyeMode(fisheyeMode)
@@ -405,6 +432,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let lens = args?["lensParams"] as? [String: Any] ?? [:]
         let render = args?["renderParams"] as? [String: Any] ?? [:]
         let zoom = (args?["zoom"] as? Double) ?? 1.0
+        let version = (args?["version"] as? Int) ?? cachedRenderVersion
 
         let fisheyeMode = lens["fisheyeMode"] as? Bool ?? false
         let vignette = lens["vignette"] as? Double ?? 0.0
@@ -412,6 +440,10 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let bloom = lens["bloom"] as? Double ?? 0.0
         let softFocus = lens["softFocus"] as? Double ?? 0.0
         let distortion = lens["distortion"] as? Double ?? 0.0
+        cachedLensParams = lens
+        cachedRenderParams = render
+        cachedZoom = zoom
+        cachedRenderVersion = max(0, version)
 
         cameraManager?.setZoom(factor: CGFloat(zoom))
         renderer?.setFisheyeMode(fisheyeMode)
@@ -423,7 +455,10 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         merged["softFocus"] = Float(softFocus)
         merged["distortion"] = Float(distortion)
         renderer?.updateParams(merged)
-        result(nil)
+        result([
+            "appliedVersion": cachedRenderVersion,
+            "rendererReady": renderer != nil,
+        ])
     }
 
     // ─────────────────────────────────────────────
@@ -995,7 +1030,38 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             registeredTextureId = -1
         }
         renderer = nil
+        cachedRenderParams = [:]
+        cachedLensParams = [:]
+        cachedPresetJson = [:]
+        cachedZoom = 1.0
+        cachedRenderVersion = 0
         result(nil)
+    }
+
+    private func reapplyRuntimeStateToRenderer() {
+        guard let renderer else { return }
+        if !cachedPresetJson.isEmpty {
+            let cameraId = (cachedPresetJson["cameraId"] as? String) ??
+                (cachedPresetJson["id"] as? String) ?? ""
+            if !cameraId.isEmpty {
+                renderer.setCameraId(cameraId)
+            }
+        }
+        if let fisheyeMode = cachedLensParams["fisheyeMode"] as? Bool {
+            renderer.setFisheyeMode(fisheyeMode)
+        }
+        if !cachedLensParams.isEmpty {
+            var p = renderer.getCCDParams()
+            if let v = cachedLensParams["vignette"] as? Double { p.vignetteAmount = Float(v) }
+            if let v = cachedLensParams["chromaticAberration"] as? Double { p.chromaticAberration = Float(v) }
+            if let v = cachedLensParams["bloom"] as? Double { p.bloomAmount = Float(v) }
+            if let v = cachedLensParams["distortion"] as? Double { p.lensDistortion = Float(v) }
+            renderer.setCCDParams(p)
+        }
+        if !cachedRenderParams.isEmpty {
+            renderer.updateParams(cachedRenderParams)
+        }
+        cameraManager?.setZoom(factor: CGFloat(cachedZoom))
     }
 
     private func startRuntimeStatsTimer() {

@@ -294,9 +294,16 @@ class PreviewRenderParams {
         sensorMp: runtimeSensorMp,
       );
 
+  double get _normalizedRtLuma {
+    if (rtLuma < 0) return rtLuma;
+    if (rtLuma > 1.5) return (rtLuma / 255.0).clamp(0.0, 1.0);
+    return rtLuma.clamp(0.0, 1.0);
+  }
+
   SceneClass get sceneClass {
     if (isFrontCamera) return SceneClass.indoor;
     final hasRealtime = rtLightIndex >= 0 || rtIso > 0 || rtExposureMs > 0;
+    final rtLumaNorm = _normalizedRtLuma;
 
     if (hasRealtime) {
       final realtimeLowLight = rtLightIndex >= 4.2 ||
@@ -305,14 +312,14 @@ class PreviewRenderParams {
       if (realtimeLowLight || exposureOffset >= 1.0) return SceneClass.lowLight;
 
       // 强逆光：亮场景 + 低 ISO/短曝光 + 预览 EV 明显往负方向补偿
-      final realtimeBacklit = rtLuma >= 0.66 &&
+      final realtimeBacklit = rtLumaNorm >= 0.66 &&
           rtIso > 0 &&
           rtIso <= 320 &&
           rtExposureMs > 0 &&
           rtExposureMs <= 10;
       if (exposureOffset <= -0.75 || realtimeBacklit) return SceneClass.backlit;
 
-      final realtimeHighDynamic = rtLuma >= 0.78 &&
+      final realtimeHighDynamic = rtLumaNorm >= 0.78 &&
           rtIso > 0 &&
           rtIso <= 260 &&
           rtExposureMs > 0 &&

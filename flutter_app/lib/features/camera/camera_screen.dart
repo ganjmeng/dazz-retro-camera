@@ -126,6 +126,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   DateTime _sceneHintLastSwitchAt = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _sceneHintCommitTimer;
   Timer? _sceneHintHideTimer;
+  Timer? _previewHealthTimer;
+  int _previewSoftResyncCooldownUntilMs = 0;
+  int _runtimeSyncVersion = 0;
   // 曝光水平滑动条是否展开（点击胶囊触发）
   bool _showExposureSlider = false;
   // 色温面板是否展开（点击色温胶囊触发）
@@ -243,6 +246,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _hintTimer?.cancel();
     _sceneHintCommitTimer?.cancel();
     _sceneHintHideTimer?.cancel();
+    _previewHealthTimer?.cancel();
     _transitionTimer?.cancel();
     _optionsAnim.dispose();
     _rotateAnim.dispose();
@@ -391,6 +395,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       final renderParams = ref.read(cameraAppProvider).renderParams;
       final zoom = ref.read(cameraAppProvider).zoomLevel;
       if (renderParams != null) {
+        final version = ++_runtimeSyncVersion;
         await svc.syncRuntimeState(
           lensParams: {
             'distortion': lens?.distortion ?? 0.0,
@@ -407,6 +412,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           },
           renderParams: renderParams.toJson(),
           zoom: zoom,
+          version: version,
         );
       } else {
         await svc.updateLensParams(
@@ -427,6 +433,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         }
       }
     }
+    _ensurePreviewHealthWatchdog();
   }
 
   Future<void> _reinitAndSyncCameraPipeline() async {
@@ -520,9 +527,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         ? rawRtExposureMs.toDouble()
         : double.tryParse(rawRtExposureMs?.toString() ?? '') ?? -1.0;
     final rawRtLuma = info['rtLuma'];
-    final rtLuma = rawRtLuma is num
+    var rtLuma = rawRtLuma is num
         ? rawRtLuma.toDouble()
         : double.tryParse(rawRtLuma?.toString() ?? '') ?? -1.0;
+    if (rtLuma > 1.5) {
+      // 兼容旧 Android runtime 数据（0~255），统一归一化到 0~1。
+      rtLuma = (rtLuma / 255.0).clamp(0.0, 1.0);
+    }
     final signal = [
       st.activeCameraId,
       st.activeLensId ?? '',
@@ -613,23 +624,83 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       return 'sceneHintBacklit';
     }
 
-    final likelyIndoorByRealtime = hasRealtime && rtLightIndex >= 3.1;
-    if (st.wbMode == 'incandescent' ||
-        (st.wbMode == 'auto' && st.colorTempK < 3900) ||
-        likelyIndoorByRealtime) {
-      return 'sceneHintIndoor';
-    }
-
-    final likelyOutdoorByRealtime =
-        hasRealtime && rtLightIndex > 0 && rtLightIndex <= 2.1;
-    if (st.wbMode == 'daylight' ||
-        (st.wbMode == 'auto' &&
-            st.colorTempK >= 7000 &&
-            (likelyOutdoorByRealtime || !hasRealtime))) {
-      return 'sceneHintOutdoor';
+    if (hasRealtime) {
+      if (rtLightIndex >= 3.1 || (rtLightIndex > 2.2 && st.colorTempK < 5200)) {
+        return 'sceneHintIndoor';
+      }
+      if (rtLightIndex > 0 && rtLightIndex <= 2.1 && st.colorTempK >= 5600) {
+        return 'sceneHintOutdoor';
+      }
+      if (st.wbMode == 'incandescent' && st.colorTempK < 4400) {
+        return 'sceneHintIndoor';
+      }
+      if (st.wbMode == 'daylight' &&
+          st.colorTempK > 6400 &&
+          rtLightIndex <= 2.5) {
+        return 'sceneHintOutdoor';
+      }
+    } else {
+      if (st.wbMode == 'incandescent' ||
+          (st.wbMode == 'auto' && st.colorTempK < 3900)) {
+        return 'sceneHintIndoor';
+      }
+      if (st.wbMode == 'daylight' ||
+          (st.wbMode == 'auto' && st.colorTempK >= 7000)) {
+        return 'sceneHintOutdoor';
+      }
     }
     if (sensorMp >= 90) return 'sceneHintHighRes';
     return 'sceneHintBalanced';
+  }
+
+  void _ensurePreviewHealthWatchdog() {
+    _previewHealthTimer ??=
+        Timer.periodic(const Duration(milliseconds: 900), (_) async {
+      if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
+      final camSvc = ref.read(cameraServiceProvider);
+      if (!camSvc.isReady || camSvc.lifecyclePhase != 'running') return;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final staleFor = now - camSvc.runtimeStatsUpdatedAtMs;
+      if (camSvc.runtimeStatsUpdatedAtMs <= 0 || staleFor < 2800) return;
+      if (now < _previewSoftResyncCooldownUntilMs) return;
+      _previewSoftResyncCooldownUntilMs = now + 4500;
+      await _softResyncPreviewParams();
+    });
+  }
+
+  Future<void> _softResyncPreviewParams() async {
+    if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
+    final svc = ref.read(cameraServiceProvider.notifier);
+    final app = ref.read(cameraAppProvider);
+    final camera = app.camera;
+    if (camera == null) return;
+    ref.read(cameraAppProvider.notifier).syncRuntimeColorContext(
+        ref.read(cameraServiceProvider).activeCameraDebugInfo);
+    await svc.setCamera(camera);
+    final lens = camera.lensById(app.activeLensId);
+    final renderParams = app.renderParams;
+    final zoom = app.zoomLevel;
+    if (renderParams != null) {
+      final version = ++_runtimeSyncVersion;
+      await svc.syncRuntimeState(
+        lensParams: {
+          'distortion': lens?.distortion ?? 0.0,
+          'vignette': lens?.vignette ?? 0.0,
+          'zoomFactor': lens?.zoomFactor ?? 1.0,
+          'fisheyeMode': lens?.fisheyeMode ?? false,
+          'chromaticAberration': lens?.chromaticAberration ?? 0.0,
+          'bloom': lens?.bloom ?? 0.0,
+          'softFocus': lens?.softFocus ?? 0.0,
+          'exposure': lens?.exposure ?? 0.0,
+          'contrast': lens?.contrast ?? 0.0,
+          'saturation': lens?.saturation ?? 0.0,
+          'highlightCompression': lens?.highlightCompression ?? 0.0,
+        },
+        renderParams: renderParams.toJson(),
+        zoom: zoom,
+        version: version,
+      );
+    }
   }
 
   void _enqueueSceneHint(String nextKey) {

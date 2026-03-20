@@ -349,6 +349,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   Timer? _renderParamsPushTimer;
   Timer? _zoomPushTimer;
   double? _pendingZoomToNative;
+  int _renderParamsVersion = 0;
+  int _lastAckedRenderParamsVersion = 0;
 
   CameraAppNotifier(this._ref) : super(const CameraAppState());
 
@@ -1028,6 +1030,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     String? enhanceWatermarkDirectionOverride;
     String? enhanceWatermarkStyleOverride;
     PreviewRenderParams? enhanceRenderParams;
+    final captureRenderParams = state.renderParams;
     bool enhanceFisheyeMode = false;
     int enhanceDeviceQuarter = 0;
     Rect? enhanceMinimapRect;
@@ -1087,7 +1090,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             enhanceWatermarkSizeOverride = state.watermarkSize;
             enhanceWatermarkDirectionOverride = state.watermarkDirection;
             enhanceWatermarkStyleOverride = state.watermarkStyle;
-            enhanceRenderParams = state.renderParams;
+            enhanceRenderParams = captureRenderParams;
             enhanceFisheyeMode = state.fisheyeMode;
             enhanceDeviceQuarter = deviceQuarter;
             enhanceMinimapRect = minimapNormalizedRect;
@@ -1142,7 +1145,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                   selectedRatioId: state.activeRatioId ?? '',
                   selectedFrameId: 'frame_none', // 第一张不加相框
                   selectedWatermarkId: 'none', // 第一张不加水印
-                  renderParams: state.renderParams,
+                  renderParams: captureRenderParams,
                   minimapNormalizedRect: minimapNormalizedRect,
                   deviceQuarter: deviceQuarter,
                   maxDimension: maxDim,
@@ -1170,7 +1173,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                     selectedRatioId: state.activeRatioId ?? '',
                     selectedFrameId: 'frame_none',
                     selectedWatermarkId: 'none',
-                    renderParams: state.renderParams,
+                    renderParams: captureRenderParams,
                     minimapNormalizedRect: minimapNormalizedRect,
                     deviceQuarter: deviceQuarter,
                     maxDimension: maxDim,
@@ -1249,7 +1252,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                 watermarkSizeOverride: state.watermarkSize,
                 watermarkDirectionOverride: state.watermarkDirection,
                 watermarkStyleOverride: state.watermarkStyle,
-                renderParams: state.renderParams,
+                renderParams: captureRenderParams,
                 minimapNormalizedRect: minimapNormalizedRect,
                 deviceQuarter: deviceQuarter,
                 maxDimension: maxDim,
@@ -1546,9 +1549,19 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     final params = state.renderParams;
     if (params == null) return;
     final json = params.toJson();
+    final version = ++_renderParamsVersion;
     debugPrint(
-        '[CameraNotifier] _applyCurrentRenderParamsToNative: sending ${json.length} params to native');
-    _ref.read(cameraServiceProvider.notifier).updateRenderParams(json);
+        '[CameraNotifier] _applyCurrentRenderParamsToNative: sending ${json.length} params to native (v=$version)');
+    _ref
+        .read(cameraServiceProvider.notifier)
+        .updateRenderParams(json, version: version)
+        .then((ackVersion) {
+      if (ackVersion != null &&
+          ackVersion >= version &&
+          ackVersion > _lastAckedRenderParamsVersion) {
+        _lastAckedRenderParamsVersion = ackVersion;
+      }
+    });
   }
 
   void _pushZoomToNative(double zoom, {bool immediate = false}) {

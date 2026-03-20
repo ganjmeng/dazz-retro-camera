@@ -97,6 +97,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     // Filter state
     private var currentPresetJson: Map<*, *>? = null
     private var cachedRenderParams: Map<String, Any> = emptyMap()
+    private var cachedRenderVersion: Int = 0
     private var currentSharpenLevel: Float = 0.5f
     private var currentCameraId: String = ""
     @Volatile private var pendingShotStartNs: Long = 0L
@@ -481,8 +482,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             if (count <= 0) return
             val luma = sum.toDouble() / count.toDouble() // 0~255
             val lightIndex = ((170.0 - luma) / 28.0).coerceIn(0.0, 6.0) // 越暗越大
+            val normalizedLuma = (luma / 255.0).coerceIn(0.0, 1.0)
             val runtime = mapOf(
-                "rtLuma" to String.format(Locale.US, "%.1f", luma),
+                "rtLuma" to String.format(Locale.US, "%.4f", normalizedLuma),
                 "rtLightIndex" to String.format(Locale.US, "%.2f", lightIndex),
             )
             activeCameraDebugInfo = activeCameraDebugInfo + runtime
@@ -613,11 +615,18 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     // ─────────────────────────────────────────────
     private fun handleUpdateRenderParams(call: MethodCall, result: MethodChannel.Result) {
         val params = call.argument<Map<String, Any>>("params") ?: emptyMap()
+        val version = (call.argument<Int>("version") ?: cachedRenderVersion).coerceAtLeast(0)
         if (params.isNotEmpty()) {
             cachedRenderParams = params
             glRenderer?.updateParams(params)
         }
-        result.success(null)
+        cachedRenderVersion = version
+        result.success(
+            mapOf(
+                "appliedVersion" to cachedRenderVersion,
+                "rendererReady" to (glRenderer != null)
+            )
+        )
     }
 
     // ─────────────────────────────────────────────
@@ -1291,6 +1300,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val lensParams = call.argument<Map<String, Any>>("lensParams") ?: emptyMap()
         val renderParams = call.argument<Map<String, Any>>("renderParams") ?: emptyMap()
         val zoom = (call.argument<Double>("zoom") ?: 1.0).coerceIn(0.6, 20.0)
+        val version = (call.argument<Int>("version") ?: cachedRenderVersion).coerceAtLeast(0)
 
         val fisheyeMode = (lensParams["fisheyeMode"] as? Boolean) ?: false
         val vignette = (lensParams["vignette"] as? Number)?.toDouble() ?: 0.0
@@ -1321,9 +1331,15 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         merged["softFocus"] = softFocus
         merged["distortion"] = distortion
         cachedRenderParams = renderParams
+        cachedRenderVersion = version
         glRenderer?.updateParams(merged)
 
-        result.success(null)
+        result.success(
+            mapOf(
+                "appliedVersion" to cachedRenderVersion,
+                "rendererReady" to (glRenderer != null)
+            )
+        )
     }
 
     // ─────────────────────────────────────────────
