@@ -513,9 +513,12 @@ class CameraService extends StateNotifier<CameraState> {
         'deviceQuarter': deviceQuarter,
       });
       if (result == null) return null;
+      final galleryAssetId = (result['galleryAssetId'] as String?)?.trim();
       return {
         'filePath': result['filePath'] as String?,
-        'galleryAssetId': result['galleryAssetId'] as String?,
+        'galleryAssetId': (galleryAssetId == null || galleryAssetId.isEmpty)
+            ? null
+            : galleryAssetId,
       };
     } catch (e) {
       print('Error capturing live photo: $e');

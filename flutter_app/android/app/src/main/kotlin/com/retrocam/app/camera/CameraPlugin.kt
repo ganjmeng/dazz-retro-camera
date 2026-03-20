@@ -16,6 +16,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.media.MediaMetadataRetriever
 import android.util.Log
 import android.view.Surface
 import android.media.ExifInterface
@@ -916,17 +917,22 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             try {
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
                 val displayName = if (cameraId.isNotEmpty()) {
-                    "DAZZ_${cameraId}_${timestamp}.jpg"
+                    "DAZZ_${cameraId}_${timestamp}_MP.jpg"
                 } else {
-                    "DAZZ_MOTION_${timestamp}.jpg"
+                    "DAZZ_MOTION_${timestamp}_MP.jpg"
                 }
+                val presentationTimestampUs =
+                    resolveMotionPhotoPresentationTimestampUs(videoFile)
 
                 xmpImageFile = File(context.cacheDir, "motion_xmp_${timestamp}.jpg")
                 imageFile.copyTo(xmpImageFile, overwrite = true)
                 val exif = ExifInterface(xmpImageFile.absolutePath)
                 exif.setAttribute(
                     ExifInterface.TAG_XMP,
-                    buildMotionPhotoXmp(videoLength = videoFile.length())
+                    buildMotionPhotoXmp(
+                        videoLength = videoFile.length(),
+                        presentationTimestampUs = presentationTimestampUs,
+                    )
                 )
                 exif.saveAttributes()
 
@@ -999,7 +1005,10 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
     }
 
-    private fun buildMotionPhotoXmp(videoLength: Long): String {
+    private fun buildMotionPhotoXmp(
+        videoLength: Long,
+        presentationTimestampUs: Long,
+    ): String {
         return """
             <x:xmpmeta xmlns:x="adobe:ns:meta/">
               <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -1007,9 +1016,13 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                   xmlns:Camera="http://ns.google.com/photos/1.0/camera/"
                   xmlns:Container="http://ns.google.com/photos/1.0/container/"
                   xmlns:Item="http://ns.google.com/photos/1.0/container/item/"
+                  Camera:MicroVideo="1"
+                  Camera:MicroVideoVersion="1"
+                  Camera:MicroVideoOffset="$videoLength"
+                  Camera:MicroVideoPresentationTimestampUs="$presentationTimestampUs"
                   Camera:MotionPhoto="1"
                   Camera:MotionPhotoVersion="1"
-                  Camera:MotionPhotoPresentationTimestampUs="0">
+                  Camera:MotionPhotoPresentationTimestampUs="$presentationTimestampUs">
                   <Container:Directory>
                     <rdf:Seq>
                       <rdf:li rdf:parseType="Resource"
@@ -1027,6 +1040,25 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
               </rdf:RDF>
             </x:xmpmeta>
         """.trimIndent()
+    }
+
+    private fun resolveMotionPhotoPresentationTimestampUs(videoFile: File): Long {
+        return try {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(videoFile.absolutePath)
+                val durationMs = retriever
+                    .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    ?.toLongOrNull()
+                    ?: return -1L
+                if (durationMs <= 0L) -1L else (durationMs * 1000L) / 2L
+            } finally {
+                retriever.release()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "resolveMotionPhotoPresentationTimestampUs failed: ${e.message}")
+            -1L
+        }
     }
 
     /// 使用处理后的文件覆盖已存在的 MediaStore 资产内容（同一 URI）。

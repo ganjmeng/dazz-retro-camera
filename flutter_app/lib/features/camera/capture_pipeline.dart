@@ -936,6 +936,7 @@ class CapturePipeline {
           image: finalImage,
           frame: landscapeFrameOpt,
           ratioId: selectedRatioId,
+          effectiveQuarter: effectiveQuarter,
           frameBackgroundColor: frameBackgroundColor,
           selectedWatermarkId: selectedWatermarkId,
           watermarkColorOverride: watermarkColorOverride,
@@ -999,10 +1000,9 @@ class CapturePipeline {
 
     if (ratioOpt == null) return Rect.fromLTWH(0, 0, w, h);
 
-    // 取景框始终以相机预设比例布局，横屏只是把整套 UI 旋转显示。
-    // 成片要和预览一致，裁切必须始终按“当前相机比例”进行，
-    // 不能再根据 deviceQuarter 额外翻转比例，否则横屏时会出现
-    // 预览与成片视野不一致，以及输出尺寸异常偏小的问题。
+    // 取景框始终按相机当前比例裁切，横屏只是最终输出再旋转。
+    // 这里不能因为 deviceQuarter 再翻转一次比例，否则横屏时会把
+    // 9:16 错裁成 4:3 / 16:9，导致成片视野与取景框不一致。
     final targetRatio = ratioOpt.width.toDouble() / ratioOpt.height.toDouble();
     final srcRatio = w / h;
 
@@ -1107,6 +1107,7 @@ class CapturePipeline {
     required ui.Image image,
     required FrameDefinition frame,
     required String ratioId,
+    required int effectiveQuarter,
     String? frameBackgroundColor,
     required String selectedWatermarkId,
     String? watermarkColorOverride,
@@ -1119,15 +1120,10 @@ class CapturePipeline {
     final imageH = image.height.toDouble();
     final inset = frame.insetForRatio(ratioId);
     final scale = math.min(imageW, imageH) / 1080.0;
-
-    // 横屏相框不再复用竖版 PNG 模板，而是把竖版模板的“上下厚度”
-    // 均分到横版左右两侧，得到更自然的横版拍立得边框。
-    final horizontalPad =
-        ((inset.top + inset.bottom) / 2.0 * scale).clamp(0.0, imageW);
-    final verticalPad =
-        ((inset.left + inset.right) / 2.0 * scale).clamp(0.0, imageH);
-    final canvasW = imageW + horizontalPad * 2;
-    final canvasH = imageH + verticalPad * 2;
+    final rotatedInset =
+        _resolveLandscapeFrameInset(inset, effectiveQuarter, scale);
+    final canvasW = imageW + rotatedInset.left + rotatedInset.right;
+    final canvasH = imageH + rotatedInset.top + rotatedInset.bottom;
     final frameBgHex =
         (frameBackgroundColor != null && frameBackgroundColor.isNotEmpty)
             ? frameBackgroundColor
@@ -1175,8 +1171,13 @@ class CapturePipeline {
       }
     }
 
-    final imageRect = Rect.fromLTWH(horizontalPad, verticalPad, imageW, imageH);
-    canvas.drawImage(image, Offset(horizontalPad, verticalPad), Paint());
+    final imageRect = Rect.fromLTWH(
+      rotatedInset.left,
+      rotatedInset.top,
+      imageW,
+      imageH,
+    );
+    canvas.drawImage(image, Offset(imageRect.left, imageRect.top), Paint());
 
     if (frame.innerShadow) {
       _drawInnerShadow(
@@ -1218,6 +1219,53 @@ class CapturePipeline {
 
     final picture = recorder.endRecording();
     return picture.toImage(canvasW.toInt(), canvasH.toInt());
+  }
+
+  ({double top, double right, double bottom, double left})
+      _resolveLandscapeFrameInset(
+    FrameInset inset,
+    int effectiveQuarter,
+    double scale,
+  ) {
+    final scaled = (
+      top: inset.top * scale,
+      right: inset.right * scale,
+      bottom: inset.bottom * scale,
+      left: inset.left * scale,
+    );
+
+    return switch (effectiveQuarter) {
+      1 => (
+          top: scaled.right,
+          right: scaled.bottom,
+          bottom: scaled.left,
+          left: scaled.top,
+        ),
+      3 => (
+          top: scaled.left,
+          right: scaled.top,
+          bottom: scaled.right,
+          left: scaled.bottom,
+        ),
+      _ => scaled,
+    };
+  }
+
+  @visibleForTesting
+  ({double top, double right, double bottom, double left})
+      debugResolveLandscapeFrameInset(
+    FrameInset inset, {
+    required int effectiveQuarter,
+    double scale = 1.0,
+  }) {
+    final resolved =
+        _resolveLandscapeFrameInset(inset, effectiveQuarter, scale);
+    return (
+      top: resolved.top,
+      right: resolved.right,
+      bottom: resolved.bottom,
+      left: resolved.left,
+    );
   }
 
   // ── 颜色矩阵（与预览一致）────────────────────────────────────────────────────

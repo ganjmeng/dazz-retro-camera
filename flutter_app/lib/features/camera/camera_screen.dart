@@ -494,8 +494,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _toggleLivePhoto(CameraAppState st, CameraState camSvc) {
     if (!camSvc.supportsLivePhoto) return;
+    final next = !st.livePhotoEnabled;
     ref.read(cameraAppProvider.notifier).toggleLivePhoto();
-    if (!st.livePhotoEnabled) {
+    _showViewfinderHint(next ? _s().livePhotoOn : _s().livePhotoOff);
+    if (next) {
       _showViewfinderTopHint(_s().livePhotoEffect);
     }
   }
@@ -1035,25 +1037,41 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   /// 拍照后直接用 MediaStore ID 查询资产，完全绕开相册查询
   Future<void> _loadThumbFromGalleryId(String assetId) async {
-    final asset = await AssetEntity.fromId(assetId);
-    if (asset != null && mounted) {
-      await _applyThumbFromAsset(asset);
-      debugPrint('[CameraScreen] _loadThumbFromGalleryId OK, id=$assetId');
-    } else {
+    final normalizedId = assetId.trim();
+    if (normalizedId.isEmpty) {
       debugPrint(
-          '[CameraScreen] _loadThumbFromGalleryId: asset not found for id=$assetId');
+          '[CameraScreen] _loadThumbFromGalleryId skipped: empty asset id');
+      return;
+    }
+    try {
+      final asset = await AssetEntity.fromId(normalizedId);
+      if (asset != null && mounted) {
+        await _applyThumbFromAsset(asset);
+        debugPrint(
+            '[CameraScreen] _loadThumbFromGalleryId OK, id=$normalizedId');
+      } else {
+        debugPrint(
+            '[CameraScreen] _loadThumbFromGalleryId: asset not found for id=$normalizedId');
+      }
+    } catch (e) {
+      debugPrint(
+          '[CameraScreen] _loadThumbFromGalleryId failed: id=$normalizedId, $e');
     }
   }
 
   /// 生成缩略图并更新状态
   Future<void> _applyThumbFromAsset(AssetEntity asset) async {
-    final thumb =
-        await asset.thumbnailDataWithSize(const ThumbnailSize(120, 120));
-    if (mounted) {
-      setState(() {
-        _latestThumb = thumb;
-        _latestAsset = asset;
-      });
+    try {
+      final thumb =
+          await asset.thumbnailDataWithSize(const ThumbnailSize(120, 120));
+      if (mounted) {
+        setState(() {
+          _latestThumb = thumb;
+          _latestAsset = asset;
+        });
+      }
+    } catch (e) {
+      debugPrint('[CameraScreen] _applyThumbFromAsset failed: ${asset.id}, $e');
     }
   }
 
@@ -1098,8 +1116,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       if (mounted && results.isNotEmpty) {
         // 显示最后一张的缩略图
         final last = results.last;
-        if (last.galleryAssetId != null) {
-          _loadThumbFromGalleryId(last.galleryAssetId!);
+        final galleryAssetId = last.galleryAssetId?.trim();
+        if (galleryAssetId != null && galleryAssetId.isNotEmpty) {
+          _loadThumbFromGalleryId(galleryAssetId);
         } else {
           _loadLatestThumbWithRetry();
         }
@@ -1131,8 +1150,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         );
     if (result != null && mounted) {
       // 优先用 galleryAssetId 直接查资产（绕开相册查询，100% 可靠）
-      if (result.galleryAssetId != null) {
-        _loadThumbFromGalleryId(result.galleryAssetId!);
+      final galleryAssetId = result.galleryAssetId?.trim();
+      if (galleryAssetId != null && galleryAssetId.isNotEmpty) {
+        _loadThumbFromGalleryId(galleryAssetId);
         // 双重曝光合成完成提示：仅当本次是第二张拍摄（合成完成后 notifier 会清空 firstPath 并关闭）
         if (wasDoubleExpSecondShot) {
           _showViewfinderHint(s3.doubleExpDone);
@@ -1301,7 +1321,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 kSliderAreaH +
                 kCapsuleInsetBottom,
             height: kCapsuleH,
-            child: Center(child: _buildControlCapsule(st)),
+            child: Center(child: _buildControlCapsule(st, camSvc)),
           ),
 
           // ── 三个拉条：固定在取景框底部和底部面板之间的 kSliderAreaH 区域内 ──
@@ -1611,11 +1631,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 });
               },
             ),
-          ),
-          Positioned(
-            top: 12,
-            left: 12,
-            child: _buildLivePhotoButton(st, camSvc),
           ),
           // ── 对焦圈 + 曝光太阳 overlay ──
           if (_showFocusRing && _focusPoint != null)
@@ -2039,7 +2054,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   // ── 控制胶囊 ──────────────────────────────────────────────────────────────
   // 截图精确复刻：深色半透明背景，白色文字，[🌡] [x1] [☀ 0.0]
-  Widget _buildControlCapsule(CameraAppState st) {
+  Widget _buildControlCapsule(CameraAppState st, CameraState camSvc) {
     // 截图精确复刻：3个独立圆形/胶囊按鈕 [🌡] [x1] [☀ 0.0]
     // 倒率按鈕显示实时 zoomLevel
     final zoom = st.zoomLevel;
@@ -2049,6 +2064,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (camSvc.supportsLivePhoto) ...[
+          _buildLivePhotoButton(st, camSvc),
+          const SizedBox(width: 10),
+        ],
         // 色温按鈕（圆形，点击弹出色温面板）
         // 高亮条件：面板展开 OR 色温不为自动
         GestureDetector(

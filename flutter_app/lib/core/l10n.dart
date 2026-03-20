@@ -122,6 +122,8 @@ class S {
   String get mirrorBack => get('mirrorBack');
   String get livePhoto => get('livePhoto');
   String get livePhotoEffect => get('livePhotoEffect');
+  String get livePhotoOn => get('livePhotoOn');
+  String get livePhotoOff => get('livePhotoOff');
   String get livePhotoNoOverlay => get('livePhotoNoOverlay');
   String get saveLocation => get('saveLocation');
   String get renderMode => get('renderMode');
@@ -401,6 +403,22 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.ms: 'Kesan Live',
     AppLanguage.ja: 'ライブ効果',
     AppLanguage.ko: '라이브 효과',
+  },
+  'livePhotoOn': {
+    AppLanguage.zhHans: '实况已开启',
+    AppLanguage.zhHant: '實況已開啟',
+    AppLanguage.en: 'Live Photo On',
+    AppLanguage.ms: 'Live Photo aktif',
+    AppLanguage.ja: 'Live Photo オン',
+    AppLanguage.ko: '라이브 포토 켜짐',
+  },
+  'livePhotoOff': {
+    AppLanguage.zhHans: '实况已关闭',
+    AppLanguage.zhHant: '實況已關閉',
+    AppLanguage.en: 'Live Photo Off',
+    AppLanguage.ms: 'Live Photo dimatikan',
+    AppLanguage.ja: 'Live Photo オフ',
+    AppLanguage.ko: '라이브 포토 꺼짐',
   },
   'livePhotoNoOverlay': {
     AppLanguage.zhHans: 'Live Photo 不支持边框 水印',

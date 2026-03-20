@@ -28,6 +28,13 @@ Map<String, dynamic> _makeCameraJson() {
           'height': 3,
           'supportsFrame': false,
         },
+        {
+          'id': 'ratio_9_16',
+          'label': '9:16',
+          'width': 9,
+          'height': 16,
+          'supportsFrame': false,
+        },
       ],
       'frames': [],
       'watermarks': {
@@ -115,6 +122,21 @@ void main() {
       expect(crop.height, 3000);
       expect(crop.left, 1000);
       expect(crop.top, 0);
+    });
+
+    test('9:16 ratio keeps 1920x1080 content geometry after landscape rotate',
+        () {
+      final pipeline =
+          CapturePipeline(camera: CameraDefinition.fromJson(_makeCameraJson()));
+
+      final crop = pipeline.debugCalcCropRect(4000, 3000, 'ratio_9_16');
+      final scale = CapturePipeline.kMaxDimMid / crop.height;
+      final rotatedWidth = (crop.height * scale).round();
+      final rotatedHeight = (crop.width * scale).round();
+
+      expect(crop.height, 3000);
+      expect(rotatedWidth, 1920);
+      expect(rotatedHeight, 1080);
     });
 
     test('low quality landscape export stays near 1920 long edge after rotate',
