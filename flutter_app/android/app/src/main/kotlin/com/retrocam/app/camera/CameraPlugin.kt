@@ -501,6 +501,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
     private fun handleStartPreview(result: MethodChannel.Result) {
         glRenderer?.let { reapplyPresetToRenderer(it) }
+        scheduleRendererStateReplay("startPreview")
         result.success(null)
     }
 
@@ -1250,6 +1251,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                             glRenderer?.let { renderer ->
                                 reapplyPresetToRenderer(renderer)
                             }
+                            scheduleRendererStateReplay("setSharpen")
                             // Return to Flutter ONLY after imageCapture is fully rebound
                             result.success(null)
                         } catch (e: Exception) {
@@ -1266,6 +1268,24 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             // No camera provider yet — just update the level and return immediately.
             // bindCameraUseCases will use currentSharpenLevel when it runs.
             result.success(null)
+        }
+    }
+
+    private fun scheduleRendererStateReplay(reason: String) {
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val replayDelays = longArrayOf(90L, 220L)
+        replayDelays.forEach { delayMs ->
+            handler.postDelayed({
+                try {
+                    glRenderer?.let { renderer ->
+                        reapplyPresetToRenderer(renderer)
+                        renderer.setSharpen(currentSharpenLevel)
+                        Log.d(TAG, "renderer state replayed after $reason (+${delayMs}ms)")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "renderer replay after $reason failed: ${e.message}")
+                }
+            }, delayMs)
         }
     }
 

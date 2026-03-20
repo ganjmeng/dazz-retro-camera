@@ -146,6 +146,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   AppLifecycleState? _pendingLifecycleState;
   bool _isCameraTransitioning = false;
   AppLifecycleState _lastLifecycleState = AppLifecycleState.resumed;
+  ProviderSubscription<CameraState>? _cameraServiceSubscription;
+  Timer? _nativeReadyReplayTimer;
+  String _lastNativeReplaySignal = '';
 
   // Options 弹框控制器
   late AnimationController _optionsAnim;
@@ -167,6 +170,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _cameraServiceSubscription =
+        ref.listenManual<CameraState>(cameraServiceProvider, (previous, next) {
+      _handleCameraServiceStateChanged(previous, next);
+    });
     _optionsAnim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 320),
@@ -240,6 +247,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _cameraServiceSubscription?.close();
+    _nativeReadyReplayTimer?.cancel();
     _countdownTimer?.cancel();
     _focusFadeTimer?.cancel();
     _hintTimer?.cancel();
@@ -360,6 +369,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<void> _handleLifecyclePause() async {
     if (!mounted) return;
     // App 进入后台：保存快照并停预览，避免后台持有相机资源
+    _lastNativeReplaySignal = '';
     ref.read(cameraAppProvider.notifier).saveCurrentSnapshot();
     await ref.read(cameraServiceProvider.notifier).stopPreview();
   }
@@ -391,6 +401,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _reinitAndSyncCameraPipeline() async {
     if (!mounted) return;
+    _lastNativeReplaySignal = '';
     final svc = ref.read(cameraServiceProvider.notifier);
     await svc.initCamera();
     if (!mounted) return;
@@ -626,6 +637,62 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     await ref
         .read(cameraAppProvider.notifier)
         .replayCurrentPreviewStateToNative();
+  }
+
+  void _handleCameraServiceStateChanged(
+    CameraState? previous,
+    CameraState next,
+  ) {
+    if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
+    if (!next.isReady || next.lifecyclePhase != 'running') return;
+
+    final prevSignal = previous == null ? '' : _nativeReplaySignalFor(previous);
+    final nextSignal = _nativeReplaySignalFor(next);
+    final becameReady = previous?.isReady != true;
+    final resumedRunning = previous?.lifecyclePhase != 'running';
+    final textureChanged = previous?.textureId != next.textureId;
+    final signalChanged = nextSignal != prevSignal;
+
+    if (!(becameReady || resumedRunning || textureChanged || signalChanged)) {
+      return;
+    }
+    if (nextSignal == _lastNativeReplaySignal) return;
+    _lastNativeReplaySignal = nextSignal;
+    _scheduleNativeReadyReplay();
+  }
+
+  String _nativeReplaySignalFor(CameraState state) {
+    final info = state.activeCameraDebugInfo;
+    return [
+      state.textureId?.toString() ?? '',
+      state.currentLens,
+      state.lifecyclePhase,
+      info['cameraId']?.toString() ?? '',
+      info['facing']?.toString() ?? '',
+      info['sensorMp']?.toString() ?? '',
+    ].join('|');
+  }
+
+  void _scheduleNativeReadyReplay() {
+    _nativeReadyReplayTimer?.cancel();
+    _nativeReadyReplayTimer =
+        Timer(const Duration(milliseconds: 110), () async {
+      if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
+      final camSvc = ref.read(cameraServiceProvider);
+      if (!camSvc.isReady || camSvc.lifecyclePhase != 'running') return;
+      await ref
+          .read(cameraAppProvider.notifier)
+          .replayCurrentPreviewStateToNative();
+      await Future.delayed(const Duration(milliseconds: 180));
+      if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
+      final stillRunning = ref.read(cameraServiceProvider);
+      if (!stillRunning.isReady || stillRunning.lifecyclePhase != 'running') {
+        return;
+      }
+      await ref
+          .read(cameraAppProvider.notifier)
+          .replayCurrentPreviewStateToNative(replayPreset: false);
+    });
   }
 
   void _enqueueSceneHint(String nextKey) {

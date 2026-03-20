@@ -40,6 +40,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     private var cachedZoom: Double = 1.0
     private var cachedRenderVersion: Int = 0
     private var currentCameraId: String = ""
+    private var currentSharpenLevel: Float = 0.5
 
     // takePhoto 的回调（等待 AVCapturePhotoCaptureDelegate）
     private var pendingPhotoResult: FlutterResult?
@@ -73,6 +74,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         case "startPreview":
             cameraManager?.startSession()
             reapplyRuntimeStateToRenderer()
+            scheduleRendererStateReplay(reason: "startPreview")
             result(nil)
         case "stopPreview":
             cameraManager?.stopSession()
@@ -301,6 +303,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let args = call.arguments as? [String: Any]
         let level = args?["level"] as? Double ?? 0.5
         let floatLevel = Float(level)
+        currentSharpenLevel = floatLevel
         // 1. 更新 Metal shader 中的 Unsharp Mask 强度
         renderer?.setSharpen(floatLevel)
         // 2. 动态切换 AVCaptureSession.sessionPreset（影响实际拍摄分辨率）
@@ -309,6 +312,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         // to run before the new sessionPreset was applied — resulting in 2MP output.
         if let mgr = cameraManager {
             mgr.setResolution(level: floatLevel) {
+                self.scheduleRendererStateReplay(reason: "setSharpen")
                 result(nil)
             }
         } else {
@@ -995,6 +999,20 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             renderer.updateParams(cachedRenderParams)
         }
         cameraManager?.setZoom(factor: CGFloat(cachedZoom))
+    }
+
+    private func scheduleRendererStateReplay(reason: String) {
+        let replayDelays: [DispatchTimeInterval] = [.milliseconds(90), .milliseconds(220)]
+        for delay in replayDelays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self else { return }
+                self.reapplyRuntimeStateToRenderer()
+                self.renderer?.setSharpen(self.currentSharpenLevel)
+                #if DEBUG
+                print("CameraPlugin: renderer state replayed after \(reason)")
+                #endif
+            }
+        }
     }
 
     private func buildShaderParams(from presetJson: [String: Any]) -> [String: Any] {
