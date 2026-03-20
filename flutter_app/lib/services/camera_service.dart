@@ -474,12 +474,19 @@ class CameraService extends StateNotifier<CameraState> {
   /// 将处理后的图片文件保存到相册（DCIM/DAZZ）
   /// [filePath] 必须是 dart:io File 可读的绝对路径（cache dir）
   /// [cameraId] 相机 ID，用于文件命名，使相册可按相机分类
-  Future<String?> saveToGallery(String filePath, {String cameraId = ''}) async {
+  Future<String?> saveToGallery(
+    String filePath, {
+    String cameraId = '',
+    double? latitude,
+    double? longitude,
+  }) async {
     try {
       final result =
           await _channel.invokeMethod<Map<dynamic, dynamic>>('saveToGallery', {
         'filePath': filePath,
         if (cameraId.isNotEmpty) 'cameraId': cameraId,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
       });
       return result?['uri'] as String?;
     } catch (e) {
@@ -492,6 +499,8 @@ class CameraService extends StateNotifier<CameraState> {
     String imagePath,
     String videoPath, {
     String cameraId = '',
+    double? latitude,
+    double? longitude,
   }) async {
     try {
       final result = await _channel
@@ -499,6 +508,8 @@ class CameraService extends StateNotifier<CameraState> {
         'imagePath': imagePath,
         'videoPath': videoPath,
         if (cameraId.isNotEmpty) 'cameraId': cameraId,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
       });
       return result?['uri'] as String?;
     } catch (e) {
@@ -507,12 +518,17 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
-  Future<Map<String, dynamic>?> captureLivePhoto(
-      {int deviceQuarter = 0}) async {
+  Future<Map<String, dynamic>?> captureLivePhoto({
+    int deviceQuarter = 0,
+    double? latitude,
+    double? longitude,
+  }) async {
     try {
       final result = await _channel
           .invokeMethod<Map<dynamic, dynamic>>('captureLivePhoto', {
         'deviceQuarter': deviceQuarter,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
       });
       if (result == null) return null;
       final galleryAssetId = (result['galleryAssetId'] as String?)?.trim();

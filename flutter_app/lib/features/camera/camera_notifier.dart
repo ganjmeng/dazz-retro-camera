@@ -1133,6 +1133,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     bool enhanceFisheyeMode = false;
     int enhanceDeviceQuarter = 0;
     Rect? enhanceMinimapRect;
+    Position? capturedLocation;
 
     try {
       if (livePhotoActive && Platform.isAndroid) {
@@ -1144,9 +1145,16 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       }
 
       if (livePhotoActive && Platform.isIOS) {
-        final liveResult = await _ref
-            .read(cameraServiceProvider.notifier)
-            .captureLivePhoto(deviceQuarter: deviceQuarter);
+        if (state.locationEnabled) {
+          capturedLocation =
+              await LocationService.instance.getCurrentPosition();
+        }
+        final liveResult =
+            await _ref.read(cameraServiceProvider.notifier).captureLivePhoto(
+                  deviceQuarter: deviceQuarter,
+                  latitude: capturedLocation?.latitude,
+                  longitude: capturedLocation?.longitude,
+                );
         final filePath = liveResult?['filePath'] as String?;
         final galleryAssetId = liveResult?['galleryAssetId'] as String?;
         if (filePath != null && filePath.isNotEmpty) {
@@ -1417,9 +1425,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         if (locationFuture != null) {
           final exifSw = Stopwatch()..start();
           try {
-            final position = await locationFuture;
-            if (position != null) {
-              await _writeGpsExif(path, position);
+            capturedLocation = await locationFuture;
+            if (capturedLocation != null) {
+              await _writeGpsExif(path, capturedLocation);
             }
           } catch (e) {
             debugPrint('[CameraNotifier] GPS EXIF write error: $e');
@@ -1445,6 +1453,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                     path,
                     videoPath,
                     cameraId: state.activeCameraId,
+                    latitude: capturedLocation?.latitude,
+                    longitude: capturedLocation?.longitude,
                   ),
             );
           } else {
@@ -1452,12 +1462,16 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                 _ref.read(cameraServiceProvider.notifier).saveToGallery(
                       path,
                       cameraId: state.activeCameraId,
+                      latitude: capturedLocation?.latitude,
+                      longitude: capturedLocation?.longitude,
                     );
           }
         } else {
           saveFuture = _ref.read(cameraServiceProvider.notifier).saveToGallery(
                 path,
                 cameraId: state.activeCameraId,
+                latitude: capturedLocation?.latitude,
+                longitude: capturedLocation?.longitude,
               );
         }
         if (enhanceSourcePath != null && enhanceCamera != null) {
@@ -1478,6 +1492,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             minimapNormalizedRect: enhanceMinimapRect,
             deviceQuarter: enhanceDeviceQuarter,
             fisheyeMode: enhanceFisheyeMode,
+            capturedLocation: capturedLocation,
           ));
         }
         try {
@@ -1557,6 +1572,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     required Rect? minimapNormalizedRect,
     required int deviceQuarter,
     required bool fisheyeMode,
+    required Position? capturedLocation,
   }) async {
     String? enhancedPath;
     try {
@@ -1597,6 +1613,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       enhancedPath =
           '${Directory.systemTemp.path}/dazz_bg_enh_${DateTime.now().millisecondsSinceEpoch}.jpg';
       await File(enhancedPath).writeAsBytes(processed.bytes);
+      if (capturedLocation != null) {
+        await _writeGpsExif(enhancedPath, capturedLocation);
+      }
       final replaced = await _ref
           .read(cameraServiceProvider.notifier)
           .replaceGalleryImage(galleryUri, enhancedPath);

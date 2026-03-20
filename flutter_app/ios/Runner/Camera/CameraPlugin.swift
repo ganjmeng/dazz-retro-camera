@@ -4,6 +4,7 @@ import AVFoundation
 import Photos
 import MetalKit
 import CoreImage
+import CoreLocation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RetroCamPlugin — iOS 相机 MethodChannel 插件
@@ -432,6 +433,12 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         }
         let args = call.arguments as? [String: Any]
         let deviceQuarter = (args?["deviceQuarter"] as? Int) ?? 0
+        let latitude = args?["latitude"] as? Double
+        let longitude = args?["longitude"] as? Double
+        let assetLocation =
+            (latitude != nil && longitude != nil)
+                ? CLLocation(latitude: latitude!, longitude: longitude!)
+                : nil
 
         let timestamp = Int(Date().timeIntervalSince1970 * 1000)
         let fileName = "DAZZ_\(timestamp).jpg"
@@ -531,6 +538,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
                 PHPhotoLibrary.shared().performChanges({
                     let request = PHAssetCreationRequest.forAsset()
                     let options = PHAssetResourceCreationOptions()
+                    request.location = assetLocation
                     request.addResource(with: .photo, fileURL: fileURL, options: options)
                     request.addResource(with: .pairedVideo, fileURL: liveMovieURL, options: options)
                     assetPlaceholder = request.placeholderForCreatedAsset
@@ -563,6 +571,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             return
         }
         let cameraId = args["cameraId"] as? String ?? ""
+        let latitude = args["latitude"] as? Double
+        let longitude = args["longitude"] as? Double
         var fileURL = URL(fileURLWithPath: filePath)
 
         guard FileManager.default.fileExists(atPath: filePath) else {
@@ -601,6 +611,9 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             PHPhotoLibrary.shared().performChanges({
                 // 1. 创建图片资产
                 let createRequest = PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: fileURL)
+                if let latitude, let longitude {
+                    createRequest?.location = CLLocation(latitude: latitude, longitude: longitude)
+                }
                 assetPlaceholder = createRequest?.placeholderForCreatedAsset
 
                 // 2. 保存到 DAZZ 专属相册
