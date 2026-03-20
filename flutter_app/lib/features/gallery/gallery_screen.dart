@@ -331,6 +331,28 @@ class _GalleryScreenState extends State<GalleryScreen> {
   Map<String, int> _albumCounts = {};
   List<_AlbumEntry> _cameraAlbumEntries = [];
 
+  String _normalizeCameraMatchText(String raw) {
+    return raw.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+  }
+
+  String? _cameraIdForAsset(AssetEntity asset) {
+    final rawTitle = (asset.title ?? '').trim();
+    if (rawTitle.isEmpty) return null;
+    final normalizedTitle = _normalizeCameraMatchText(rawTitle);
+    for (final cam in kAllCameras) {
+      final normalizedId = _normalizeCameraMatchText(cam.id);
+      final normalizedName = _normalizeCameraMatchText(cam.name);
+      if (normalizedId.isNotEmpty && normalizedTitle.contains(normalizedId)) {
+        return cam.id;
+      }
+      if (normalizedName.isNotEmpty &&
+          normalizedTitle.contains(normalizedName)) {
+        return cam.id;
+      }
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -498,13 +520,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final counts = <String, int>{'all': assets.length};
     final cameraIdsFound = <String>{};
     for (final asset in assets) {
-      final title = (asset.title ?? '').toLowerCase();
-      for (final cam in kAllCameras) {
-        if (title.contains(cam.id.toLowerCase())) {
-          cameraIdsFound.add(cam.id);
-          counts[cam.id] = (counts[cam.id] ?? 0) + 1;
-          break;
-        }
+      final cameraId = _cameraIdForAsset(asset);
+      if (cameraId != null) {
+        cameraIdsFound.add(cameraId);
+        counts[cameraId] = (counts[cameraId] ?? 0) + 1;
       }
     }
     final s = sOf(ProviderScope.containerOf(context).read(languageProvider));
@@ -552,10 +571,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
       _showAlbumDropdown = false;
       _assets = cameraId == 'all'
           ? _allDazzAssets
-          : _allDazzAssets.where((asset) {
-              final title = (asset.title ?? '').toLowerCase();
-              return title.contains(cameraId.toLowerCase());
-            }).toList();
+          : _allDazzAssets
+              .where((asset) => _cameraIdForAsset(asset) == cameraId)
+              .toList();
     });
   }
 
