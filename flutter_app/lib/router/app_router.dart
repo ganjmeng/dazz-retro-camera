@@ -8,6 +8,7 @@ import '../features/subscription/subscription_screen.dart';
 // 路由路径常量
 abstract class AppRoutes {
   static const camera = '/';
+  static const cameraLaunch = '/camera';
   static const gallery = '/gallery';
   static const settings = '/settings';
   static const subscription = '/subscription';
@@ -19,7 +20,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: AppRoutes.camera,
-        builder: (context, state) => const CameraScreen(),
+        builder: (context, state) => CameraScreen(
+          initialCameraId: state.uri.queryParameters['cameraId'],
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.cameraLaunch,
+        builder: (context, state) => CameraScreen(
+          initialCameraId: state.uri.queryParameters['cameraId'],
+        ),
       ),
       GoRoute(
         path: AppRoutes.gallery,

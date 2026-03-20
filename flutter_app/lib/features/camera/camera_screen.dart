@@ -81,7 +81,9 @@ const kMaxViewfinderW = 520.0;
 const kMaxBottomContentW = 500.0;
 
 class CameraScreen extends ConsumerStatefulWidget {
-  const CameraScreen({super.key});
+  final String? initialCameraId;
+
+  const CameraScreen({super.key, this.initialCameraId});
 
   @override
   ConsumerState<CameraScreen> createState() => _CameraScreenState();
@@ -175,6 +177,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   /// 多语言辅助方法：在任何 helper 方法中调用 _s() 获取翻译对象
   S _s() => sOf(ref.read(languageProvider));
 
+  String get _normalizedInitialCameraId =>
+      (widget.initialCameraId ?? '').trim().toLowerCase();
+
   @override
   void initState() {
     super.initState();
@@ -219,7 +224,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
       // 加载相机 JSON 配置（必须 await，确保 _loadCamera → setCamera 在 initCamera 之前完成，
       // 这样 currentPresetJson 已赋值，reapplyPresetToRenderer 能正确恢复参数）
-      await ref.read(cameraAppProvider.notifier).initialize();
+      await ref
+          .read(cameraAppProvider.notifier)
+          .initialize(initialCameraId: widget.initialCameraId);
       if (!mounted) return;
 
       if (!cameraGranted) {
@@ -256,6 +263,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       // ── 启动画面收尾：保持短时覆盖层，避免闪烁 ──
       await Future.delayed(_kStartupTransitionTail);
       if (mounted) setState(() => _showTransition = false);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant CameraScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final previous = (oldWidget.initialCameraId ?? '').trim().toLowerCase();
+    final current = _normalizedInitialCameraId;
+    if (current.isEmpty || current == previous) return;
+    if (!kAllCameras.any((camera) => camera.id == current)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(cameraAppProvider.notifier).switchToCamera(current);
     });
   }
 

@@ -2,4 +2,5 @@
 <resources>
     <!-- Adaptive icon background: 黑色，与启动画面背景一致，消除白边 -->
     <color name="ic_launcher_background">#FF000000</color>
+    <color name="widget_background">#F0121214</color>
 </resources>

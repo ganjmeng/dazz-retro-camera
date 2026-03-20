@@ -14,12 +14,16 @@ class CameraEntry {
   final String? focalLengthLabel;
   final bool premium;
   final int sortOrder;
+
   /// 相机图标 asset 路径（用于相机选择器和快门行）
   final String? iconPath;
+
   /// 样片图片 asset 路径列表（用于样片页面展示）
   final List<String> samplePhotos;
+
   /// 相机简短描述
   final String description;
+
   /// 风格标签
   final List<String> tags;
 
@@ -54,6 +58,17 @@ const List<String> kDefaultCameraOrder = [
   'fisheye',
 ];
 
+/// Widget / 快捷启动默认相机顺序。
+/// 对应展示名称：FXN R / CPM35 / INST SQC / GRD R / CCD R / BW
+const List<String> kWidgetLaunchCameraOrder = [
+  'fxn_r',
+  'cpm35',
+  'inst_sqc',
+  'grd_r',
+  'ccd_r',
+  'bw_classic',
+];
+
 /// All registered cameras. Add new cameras here.
 const List<CameraEntry> kAllCameras = [
   CameraEntry(
@@ -82,7 +97,8 @@ const List<CameraEntry> kAllCameras = [
     premium: false,
     sortOrder: 20,
     iconPath: 'assets/thumbnails/cameras/cpm35_icon.jpg',
-    description: 'Kodak Gold 200 / ColorPlus 200 风格，暖色复古，轻颗粒，干净出片。90s 傻瓜机日常胶片质感，旅行、街拍、人像通吃。',
+    description:
+        'Kodak Gold 200 / ColorPlus 200 风格，暖色复古，轻颗粒，干净出片。90s 傻瓜机日常胶片质感，旅行、街拍、人像通吃。',
     tags: ['胶片', '暖色', '复古', 'Kodak', '35mm', '傻瓜机', '日常'],
     samplePhotos: [
       'assets/samples/fxn_r_sample_1.jpg',
@@ -184,7 +200,8 @@ const List<CameraEntry> kAllCameras = [
     premium: false,
     sortOrder: 80,
     iconPath: 'assets/thumbnails/cameras/fqs_icon.jpg',
-    description: 'Fuji Superia 400 + Kodak Portra 400 双胶卷融合，柔和绿调，肤色自然，颗粒感明显。2000年代 35mm SLR 经典质感。',
+    description:
+        'Fuji Superia 400 + Kodak Portra 400 双胶卷融合，柔和绿调，肤色自然，颗粒感明显。2000年代 35mm SLR 经典质感。',
     tags: ['胶片', '绿调', '柔和', 'Fuji', 'Kodak', '35mm', 'SLR'],
     samplePhotos: [
       'assets/samples/fxn_r_sample_1.jpg',

@@ -423,8 +423,12 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   /// Initialize: 从持久化读取上次选择的相机和全局设置
-  Future<void> initialize() async {
+  Future<void> initialize({String? initialCameraId}) async {
     final prefs = await AppPrefsService.instance.load();
+    final requestedCameraId = (initialCameraId ?? '').trim();
+    final launchCameraId = kAllCameras.any((e) => e.id == requestedCameraId)
+        ? requestedCameraId
+        : prefs.lastCameraId;
     // 先将持久化的全局设置写入 state（在 _loadCamera 之前，避免被覆盖）
     state = state.copyWith(
       sharpenLevel: prefs.sharpenLevel,
@@ -445,7 +449,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         .read(cameraServiceProvider.notifier)
         .setMirrorBackCamera(prefs.mirrorBackCamera);
     syncRuntimeColorContext();
-    await _loadCamera(prefs.lastCameraId);
+    if (launchCameraId != prefs.lastCameraId) {
+      await AppPrefsService.instance.setLastCameraId(launchCameraId);
+    }
+    await _loadCamera(launchCameraId);
   }
 
   /// Switch to a different camera by id
