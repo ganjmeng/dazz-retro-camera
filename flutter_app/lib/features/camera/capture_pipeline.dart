@@ -514,33 +514,10 @@ class CapturePipeline {
               outputHeight: canvasH.toInt(),
             );
           }
-          // GPU 路径下 compose 未返回文件时，不再回退 Dart Canvas，直接回退到原生 GPU 输出。
-          if (gpuProcessed) {
-            final fallbackBytes = gpuOutputBytes ??
-                await File(nativeComposeSourcePath).readAsBytes();
-            final fallbackSize = _readJpegDimensions(fallbackBytes);
-            final fw = fallbackSize?[0] ?? 0;
-            final fh = fallbackSize?[1] ?? 0;
-            return CaptureResult(
-              bytes: fallbackBytes,
-              outputWidth: fw,
-              outputHeight: fh,
-            );
-          }
+          // compose 未返回文件：继续走 Dart Canvas 路径，保证比例/边框/水印仍然生效。
         } catch (e) {
           debugPrint('[CapturePipeline] native compose failed: $e');
-          if (gpuProcessed) {
-            final fallbackBytes = gpuOutputBytes ??
-                await File(nativeComposeSourcePath).readAsBytes();
-            final fallbackSize = _readJpegDimensions(fallbackBytes);
-            final fw = fallbackSize?[0] ?? 0;
-            final fh = fallbackSize?[1] ?? 0;
-            return CaptureResult(
-              bytes: fallbackBytes,
-              outputWidth: fw,
-              outputHeight: fh,
-            );
-          }
+          // 原生合成失败时继续走 Dart Canvas 路径，避免“选了边框但成片没有”。
         }
       }
 
@@ -808,12 +785,15 @@ class CapturePipeline {
           await picture.toImage(canvasW.toInt(), canvasH.toInt());
 
       //      // ── 5b. 根据设备方向旋转图片 ────────────────────────────────────
-      // FIX: 当 GPU 管线已成功处理时，跳过 deviceQuarter 旋转。
-      // GPU 管线中的 applyExifRotation 已通过 EXIF Orientation 完整修正了
-      // 图像方向（包括旋转和镜像翻转），如果再用 deviceQuarter 旋转
-      // 会导致双重旋转。仅在 Dart 降级管线（未经 GPU 处理）时才用
-      // deviceQuarter 旋转。
-      final effectiveQuarter = gpuProcessed ? 0 : deviceQuarter;
+      // GPU 路径默认已处理方向，但部分机型仍会出现横竖错向。
+      // 采用自适应策略：仅当当前输出朝向与设备朝向不一致时补旋转，避免双重旋转。
+      int effectiveQuarter = deviceQuarter;
+      if (gpuProcessed) {
+        final expectedLandscape = deviceQuarter == 1 || deviceQuarter == 3;
+        final currentLandscape = canvasW >= canvasH;
+        effectiveQuarter =
+            (expectedLandscape == currentLandscape) ? 0 : deviceQuarter;
+      }
       ui.Image finalImage = outputImage;
       if (effectiveQuarter != 0) {
         // quarter 定义：1=左横屏(逆时针), 3=右横屏(顺时针)。
