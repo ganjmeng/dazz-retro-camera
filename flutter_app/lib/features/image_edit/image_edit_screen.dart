@@ -7,12 +7,14 @@ import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../../models/camera_definition.dart';
+import '../../models/camera_registry.dart';
 import '../camera/camera_notifier.dart';
 import '../camera/camera_config_sheet.dart';
 import '../camera/capture_pipeline.dart';
@@ -53,8 +55,8 @@ Future<void> openImageImportFlow(BuildContext context) async {
   if (!context.mounted) return;
   await Navigator.of(context).push(
     MaterialPageRoute(
-      builder: (ctx) => ProviderScope(
-        parent: ProviderScope.containerOf(context),
+      builder: (ctx) => UncontrolledProviderScope(
+        container: ProviderScope.containerOf(context),
         child: ImageEditScreen(imagePath: file.path),
       ),
       fullscreenDialog: true,
@@ -98,7 +100,12 @@ class _ImportLoadingOverlay extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 class ImageEditScreen extends ConsumerStatefulWidget {
   final String imagePath;
-  const ImageEditScreen({super.key, required this.imagePath});
+  final String? initialCameraId;
+  const ImageEditScreen({
+    super.key,
+    required this.imagePath,
+    this.initialCameraId,
+  });
   @override
   ConsumerState<ImageEditScreen> createState() => _ImageEditScreenState();
 }
@@ -148,7 +155,18 @@ class _ImageEditScreenState extends ConsumerState<ImageEditScreen> {
   @override
   void initState() {
     super.initState();
+    unawaited(_applyInitialCamera());
     _initPreview();
+  }
+
+  Future<void> _applyInitialCamera() async {
+    final requestedCameraId = (widget.initialCameraId ?? '').trim();
+    if (requestedCameraId.isEmpty) return;
+    if (!kAllCameras.any((camera) => camera.id == requestedCameraId)) return;
+    final notifier = ref.read(cameraAppProvider.notifier);
+    final currentCameraId = ref.read(cameraAppProvider).activeCameraId;
+    if (currentCameraId == requestedCameraId) return;
+    await notifier.switchToCamera(requestedCameraId);
   }
 
   /// 初始化预览：先缩小高清图片到安全尺寸（在 isolate 中执行，避免卡 UI）

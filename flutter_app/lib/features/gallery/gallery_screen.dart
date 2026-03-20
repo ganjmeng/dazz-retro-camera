@@ -1245,6 +1245,16 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     if (mounted) setState(() => _cameraName = 'DAZZ');
   }
 
+  String? _cameraIdForAsset(AssetEntity asset) {
+    final title = (asset.title ?? '').toLowerCase();
+    for (final cam in kAllCameras) {
+      if (title.contains(cam.id.toLowerCase())) {
+        return cam.id;
+      }
+    }
+    return null;
+  }
+
   Future<void> _syncCurrentAssetLiveFlag() async {
     final asset = _safeCurrentAsset;
     final isLive = await _LivePhotoSupport.isLiveAsset(asset);
@@ -1376,7 +1386,10 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
       MaterialPageRoute(
         builder: (ctx) => UncontrolledProviderScope(
           container: ProviderScope.containerOf(context),
-          child: ImageEditScreen(imagePath: originalPath),
+          child: ImageEditScreen(
+            imagePath: originalPath,
+            initialCameraId: _cameraIdForAsset(asset),
+          ),
         ),
       ),
     );
