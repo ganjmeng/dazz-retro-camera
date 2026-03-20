@@ -20,6 +20,7 @@ import 'preview_renderer.dart';
 import 'capture_pipeline.dart';
 import '../../services/retain_settings_service.dart';
 import '../../services/app_prefs_service.dart';
+import '../../services/original_asset_service.dart';
 import 'render_style_mode.dart';
 import 'preview_performance_mode.dart';
 
@@ -85,6 +86,7 @@ class CameraAppState {
   final bool shutterVibrationEnabled; // 快门振动开关
   final bool fisheyeMode; // 鱼眼圆圈模式
   final bool livePhotoEnabled; // Live Photo 开关
+  final bool saveOriginalEnabled; // 保存底片
   // ── 双重曝光 ──────────────────────────────────────────────────────────────
   final bool doubleExpEnabled; // 双重曝光开关
   final String? doubleExpFirstPath; // 第一张照片本地路径（待合成）
@@ -152,6 +154,7 @@ class CameraAppState {
     this.shutterVibrationEnabled = true,
     this.fisheyeMode = false,
     this.livePhotoEnabled = false,
+    this.saveOriginalEnabled = false,
     this.doubleExpEnabled = false,
     this.doubleExpFirstPath,
     this.doubleExpBlend = 0.5,
@@ -216,6 +219,7 @@ class CameraAppState {
     bool? shutterVibrationEnabled,
     bool? fisheyeMode,
     bool? livePhotoEnabled,
+    bool? saveOriginalEnabled,
     bool? doubleExpEnabled,
     String? doubleExpFirstPath,
     bool clearDoubleExpFirst = false,
@@ -293,6 +297,7 @@ class CameraAppState {
           shutterVibrationEnabled ?? this.shutterVibrationEnabled,
       fisheyeMode: fisheyeMode ?? this.fisheyeMode,
       livePhotoEnabled: livePhotoEnabled ?? this.livePhotoEnabled,
+      saveOriginalEnabled: saveOriginalEnabled ?? this.saveOriginalEnabled,
       doubleExpEnabled: doubleExpEnabled ?? this.doubleExpEnabled,
       doubleExpFirstPath: clearDoubleExpFirst
           ? null
@@ -452,6 +457,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       previewPerformanceMode: prefs.previewPerformanceMode,
       beautyStrength: prefs.beautyStrength,
       beautyCustomized: prefs.beautyCustomized,
+      saveOriginalEnabled: prefs.saveOriginalEnabled,
     );
     await _ref
         .read(cameraServiceProvider.notifier)
@@ -745,6 +751,25 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   void setLocationEnabled(bool enabled) {
     state = state.copyWith(locationEnabled: enabled);
     AppPrefsService.instance.setLocationEnabled(enabled);
+  }
+
+  void setSaveOriginalEnabled(bool enabled) {
+    state = state.copyWith(saveOriginalEnabled: enabled);
+    AppPrefsService.instance.setSaveOriginalEnabled(enabled);
+  }
+
+  int beautyLevelForStrength(double value) {
+    if (value <= 0.0) return 0;
+    if (value < 0.5) return 1;
+    if (value < 0.85) return 2;
+    return 3;
+  }
+
+  void cycleBeautyLevel() {
+    const levels = [0.0, 0.35, 0.65, 1.0];
+    final current = beautyLevelForStrength(state.beautyStrength);
+    final next = (current + 1) % levels.length;
+    setBeautyStrength(levels[next]);
   }
 
   void setRenderStyleMode(RenderStyleMode mode) {
@@ -1134,6 +1159,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     int enhanceDeviceQuarter = 0;
     Rect? enhanceMinimapRect;
     Position? capturedLocation;
+    String? originalCopyPath;
 
     try {
       if (livePhotoActive && Platform.isAndroid) {
@@ -1183,6 +1209,17 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       }
 
       if (path != null) {
+        if (state.saveOriginalEnabled && !livePhotoActive) {
+          try {
+            originalCopyPath =
+                await OriginalAssetService.instance.saveOriginalCopy(
+              path,
+              cameraId: state.activeCameraId,
+            );
+          } catch (e) {
+            debugPrint('[CameraNotifier] save original copy failed: $e');
+          }
+        }
         state = state.copyWith(showCaptureFlash: true);
         // 视觉闪光异步关闭，避免固定 150ms 阻塞拍照主链路。
         unawaited(Future<void>.delayed(const Duration(milliseconds: 150), () {
@@ -1507,6 +1544,15 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
               galleryAssetId = galleryUri;
             }
             debugPrint('[CameraNotifier] galleryAssetId=$galleryAssetId');
+            if (originalCopyPath != null &&
+                galleryAssetId != null &&
+                galleryAssetId.isNotEmpty) {
+              await OriginalAssetService.instance.linkOriginal(
+                assetId: galleryAssetId,
+                originalPath: originalCopyPath,
+              );
+              originalCopyPath = null;
+            }
           }
         } on TimeoutException {
           debugPrint(
@@ -1514,6 +1560,20 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           unawaited(saveFuture.then((galleryUri) {
             debugPrint(
                 '[CameraNotifier] saveToGallery completed in background: $galleryUri');
+            if (originalCopyPath == null ||
+                galleryUri == null ||
+                galleryUri.isEmpty) {
+              return;
+            }
+            final assetId = galleryUri.startsWith('content://')
+                ? Uri.tryParse(galleryUri)?.pathSegments.lastOrNull
+                : galleryUri;
+            if (assetId == null || assetId.isEmpty) return;
+            unawaited(OriginalAssetService.instance.linkOriginal(
+              assetId: assetId,
+              originalPath: originalCopyPath!,
+            ));
+            originalCopyPath = null;
           }).catchError((Object e) {
             debugPrint('[CameraNotifier] saveToGallery background error: $e');
           }));
@@ -1546,6 +1606,11 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         totalSw.stop();
         debugPrint(
             '[Perf][takePhoto] total=${totalSw.elapsedMilliseconds} ms (finally)');
+      }
+      if (originalCopyPath != null) {
+        unawaited(
+          OriginalAssetService.instance.deleteUnlinkedPath(originalCopyPath),
+        );
       }
       state = state.copyWith(isTakingPhoto: false);
       if (livePhotoRecordingStarted && liveVideoStopFuture == null) {

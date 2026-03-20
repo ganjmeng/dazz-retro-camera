@@ -38,6 +38,7 @@ import '../../services/shutter_sound_service.dart';
 import 'camera_sample_screen.dart';
 import '../image_edit/image_edit_screen.dart';
 import '../../services/camera_manager_service.dart';
+import '../../services/original_asset_service.dart';
 import '../../models/watermark_styles.dart';
 import '../../core/l10n.dart';
 
@@ -141,8 +142,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   int _previewSoftResyncCooldownUntilMs = 0;
   // 曝光水平滑动条是否展开（点击胶囊触发）
   bool _showExposureSlider = false;
-  // 美颜水平滑动条是否展开（点击胶囊触发）
-  bool _showBeautySlider = false;
   // 色温面板是否展开（点击色温胶囊触发）
   bool _showWbPanel = false;
   // ── 捩合缩放 ────────────────────────────────────────────────────────────────────────
@@ -937,10 +936,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 双指捩合期间不触发对焦
     if (_isPinching || _activePointers >= 2) return;
     // 关闭控制滑条
-    if (_showExposureSlider || _showBeautySlider) {
+    if (_showExposureSlider) {
       setState(() {
         _showExposureSlider = false;
-        _showBeautySlider = false;
       });
       return;
     }
@@ -1391,7 +1389,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 kSliderAreaH +
                 kCapsuleInsetBottom,
             height: kCapsuleH,
-            child: Center(child: _buildControlCapsule(st, camSvc)),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Center(child: _buildControlCapsule(st, camSvc)),
+                Positioned(
+                  left: 18,
+                  child: _buildSaveOriginalButton(st),
+                ),
+              ],
+            ),
           ),
 
           // ── 三个拉条：固定在取景框底部和底部面板之间的 kSliderAreaH 区域内 ──
@@ -1415,26 +1422,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
-          if (_showBeautySlider && !_showExposureSlider)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: kBottomPanelH + bottomSafeH,
-              height: kSliderAreaH,
-              child: Center(
-                child: _BeautyHorizontalSlider(
-                  value: st.beautyStrength,
-                  onChanged: (v) =>
-                      ref.read(cameraAppProvider.notifier).setBeautyStrength(v),
-                  onReset: () =>
-                      ref.read(cameraAppProvider.notifier).setBeautyStrength(0),
-                ),
-              ),
-            ),
-          if (st.showZoomSlider &&
-              !_showExposureSlider &&
-              !_showBeautySlider &&
-              !_showWbPanel)
+          if (st.showZoomSlider && !_showExposureSlider && !_showWbPanel)
             Positioned(
               left: 0,
               right: 0,
@@ -1450,7 +1438,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ),
               ),
             ),
-          if (_showWbPanel && !_showExposureSlider && !_showBeautySlider)
+          if (_showWbPanel && !_showExposureSlider)
             Positioned(
               left: 0,
               right: 0,
@@ -1865,18 +1853,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // 工具图标行（4个图标+文字标签）
           // 点击曝光胶囊或色温胶囊时隐藏工具栏
           AnimatedOpacity(
-            opacity: (_showExposureSlider ||
-                    _showBeautySlider ||
-                    _showWbPanel ||
-                    st.showZoomSlider)
+            opacity: (_showExposureSlider || _showWbPanel || st.showZoomSlider)
                 ? 0.0
                 : 1.0,
             duration: const Duration(milliseconds: 200),
             child: IgnorePointer(
-              ignoring: _showExposureSlider ||
-                  _showBeautySlider ||
-                  _showWbPanel ||
-                  st.showZoomSlider,
+              ignoring:
+                  _showExposureSlider || _showWbPanel || st.showZoomSlider,
               child: _buildToolbar(st),
             ),
           ),
@@ -2155,9 +2138,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final zoomLabel = zoom == zoom.roundToDouble()
         ? 'x${zoom.toInt()}'
         : 'x${zoom.toStringAsFixed(1)}';
-    final beautyAutoHighlighted =
-        st.isFrontCamera && !st.beautyCustomized && st.beautyStrength > 0.0;
-    final beautyHighlighted = _showBeautySlider || st.beautyStrength > 0;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -2173,7 +2153,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               _showWbPanel = !_showWbPanel;
               if (_showWbPanel) {
                 _showExposureSlider = false;
-                _showBeautySlider = false;
               }
             });
           },
@@ -2214,7 +2193,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             // 与曝光、色温互斥
             setState(() {
               _showExposureSlider = false;
-              _showBeautySlider = false;
               _showWbPanel = false;
             });
           },
@@ -2254,7 +2232,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             setState(() {
               _showExposureSlider = !_showExposureSlider;
               if (_showExposureSlider) {
-                _showBeautySlider = false;
                 _showWbPanel = false;
               }
             });
@@ -2305,77 +2282,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ),
           ),
         ),
-        const SizedBox(width: 10),
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _showBeautySlider = !_showBeautySlider;
-              if (_showBeautySlider) {
-                _showExposureSlider = false;
-                _showWbPanel = false;
-              }
-            });
-            if (_showBeautySlider) {
-              ref.read(cameraAppProvider.notifier).hideZoomSlider();
-            }
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            height: 34,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              color: beautyAutoHighlighted
-                  ? const Color(0xFFFFF4D6)
-                  : (beautyHighlighted
-                      ? Colors.white.withAlpha(230)
-                      : Colors.black.withAlpha(160)),
-              border: beautyAutoHighlighted
-                  ? Border.all(
-                      color: const Color(0xFFFFD36A).withAlpha(220),
-                      width: 1.1,
-                    )
-                  : null,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _showBeautySlider
-                      ? Icons.keyboard_arrow_down
-                      : Icons.face_retouching_natural,
-                  size: 14,
-                  color: beautyAutoHighlighted
-                      ? const Color(0xFF6A4B00)
-                      : beautyHighlighted
-                          ? Colors.black
-                          : _kWhite,
-                ),
-                const SizedBox(width: 5),
-                AnimatedBuilder(
-                  animation: _rotateAngle,
-                  builder: (_, __) => Transform.rotate(
-                    angle: _rotateAngle.value,
-                    child: Text(
-                      st.beautyStrength == 0
-                          ? '0'
-                          : (st.beautyStrength * 100).round().toString(),
-                      style: TextStyle(
-                        color: beautyAutoHighlighted
-                            ? const Color(0xFF6A4B00)
-                            : beautyHighlighted
-                                ? Colors.black
-                                : _kWhite,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -2383,6 +2289,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ── 工具栏（5个图标）────────────────────────────────────────────────────────
   Widget _buildToolbar(CameraAppState st) {
     const double btnW = 64.0;
+    final beautyLevel =
+        ref.read(cameraAppProvider.notifier).beautyLevelForStrength(
+              st.beautyStrength,
+            );
     return SizedBox(
       height: 52,
       child: Center(
@@ -2424,6 +2334,35 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                       _showViewfinderHint(sl.timerOff);
                     } else {
                       _showViewfinderHint(sl.timerSeconds(next));
+                    }
+                  },
+                ),
+              ),
+            ),
+            SizedBox(
+              width: btnW,
+              child: _RotatingToolbarBtn(
+                rotateAnimation: _rotateAngle,
+                rotateController: _rotateAnim,
+                child: _ToolbarBtn(
+                  icon: Icons.face_retouching_natural_outlined,
+                  label: _s().beauty,
+                  badge: beautyLevel > 0 ? '$beautyLevel' : null,
+                  onTap: () {
+                    final notifier = ref.read(cameraAppProvider.notifier);
+                    notifier.cycleBeautyLevel();
+                    notifier.hideZoomSlider();
+                    setState(() {
+                      _showExposureSlider = false;
+                      _showWbPanel = false;
+                    });
+                    final nextLevel = notifier.beautyLevelForStrength(
+                      ref.read(cameraAppProvider).beautyStrength,
+                    );
+                    if (nextLevel == 0) {
+                      _showViewfinderHint(_s().beautyOff);
+                    } else {
+                      _showViewfinderHint(_s().beautyLevel(nextLevel));
                     }
                   },
                 ),
@@ -2707,6 +2646,52 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           return SizedBox(height: bottomInset > 0 ? bottomInset : 38);
         }),
       ],
+    );
+  }
+
+  Widget _buildSaveOriginalButton(CameraAppState st) {
+    return GestureDetector(
+      onTap: () {
+        final next = !st.saveOriginalEnabled;
+        ref.read(cameraAppProvider.notifier).setSaveOriginalEnabled(next);
+        _showViewfinderHint(next ? _s().saveOriginalOn : _s().saveOriginalOff);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: st.saveOriginalEnabled
+              ? Colors.white.withAlpha(230)
+              : Colors.black.withAlpha(160),
+          border: Border.all(
+            color: Colors.white.withAlpha(st.saveOriginalEnabled ? 90 : 35),
+          ),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Icon(
+              Icons.photo_outlined,
+              size: 18,
+              color: st.saveOriginalEnabled ? Colors.black : Colors.white,
+            ),
+            if (!st.saveOriginalEnabled)
+              Transform.rotate(
+                angle: -math.pi / 4,
+                child: Container(
+                  width: 18,
+                  height: 1.8,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(235),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -3929,6 +3914,8 @@ class _PhotoDetailPageState extends State<_PhotoDetailPage> {
                   IconButton(
                     icon: const Icon(Icons.delete_outline, color: _kWhite),
                     onPressed: () async {
+                      await OriginalAssetService.instance
+                          .removeOriginal(widget.asset.id);
                       await PhotoManager.editor
                           .deleteWithIds([widget.asset.id]);
                       if (context.mounted) Navigator.of(context).pop();
@@ -4971,73 +4958,6 @@ class _ExposureHorizontalSlider extends StatelessWidget {
                 value: value.clamp(-2.0, 2.0),
                 min: -2.0,
                 max: 2.0,
-                onChanged: onChanged,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BeautyHorizontalSlider extends StatelessWidget {
-  final double value; // 0.0 .. 1.0
-  final ValueChanged<double> onChanged;
-  final VoidCallback onReset;
-
-  const _BeautyHorizontalSlider({
-    required this.value,
-    required this.onChanged,
-    required this.onReset,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: onReset,
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.black.withAlpha(180),
-                border: Border.all(
-                  color: Colors.white.withAlpha(60),
-                  width: 1,
-                ),
-              ),
-              child: const Center(
-                child: Icon(
-                  Icons.refresh,
-                  color: Colors.white,
-                  size: 22,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: SliderTheme(
-              data: SliderThemeData(
-                trackHeight: 3,
-                activeTrackColor: Colors.white,
-                inactiveTrackColor: Colors.white.withAlpha(80),
-                thumbColor: Colors.white,
-                thumbShape: const RoundSliderThumbShape(
-                  enabledThumbRadius: 10,
-                  elevation: 0,
-                ),
-                overlayShape: SliderComponentShape.noOverlay,
-              ),
-              child: Slider(
-                value: value.clamp(0.0, 1.0),
-                min: 0.0,
-                max: 1.0,
                 onChanged: onChanged,
               ),
             ),

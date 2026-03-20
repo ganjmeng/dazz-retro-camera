@@ -20,6 +20,7 @@ const _kRenderStyleMode = 'pref_render_style_mode';
 const _kPreviewPerformanceMode = 'pref_preview_performance_mode';
 const _kBeautyStrength = 'pref_beauty_strength';
 const _kBeautyCustomized = 'pref_beauty_customized';
+const _kSaveOriginalEnabled = 'pref_save_original_enabled';
 
 class AppPrefs {
   final int sharpenLevel; // 0=低 1=中 2=高，默认1
@@ -35,6 +36,7 @@ class AppPrefs {
   final PreviewPerformanceMode previewPerformanceMode; // 默认轻量预览
   final double beautyStrength; // 0.0=关闭, 1.0=强
   final bool beautyCustomized; // 用户是否手动调整过美颜
+  final bool saveOriginalEnabled; // 默认 false
 
   const AppPrefs({
     this.sharpenLevel = 1,
@@ -51,6 +53,7 @@ class AppPrefs {
     this.previewPerformanceMode = PreviewPerformanceMode.lightweight,
     this.beautyStrength = 0.0,
     this.beautyCustomized = false,
+    this.saveOriginalEnabled = false,
   });
 }
 
@@ -78,6 +81,7 @@ class AppPrefsService {
       ),
       beautyStrength: p.getDouble(_kBeautyStrength) ?? 0.0,
       beautyCustomized: p.getBool(_kBeautyCustomized) ?? false,
+      saveOriginalEnabled: p.getBool(_kSaveOriginalEnabled) ?? false,
     );
   }
 
@@ -123,4 +127,8 @@ class AppPrefsService {
   Future<void> setBeautyCustomized(bool value) async =>
       (await SharedPreferences.getInstance())
           .setBool(_kBeautyCustomized, value);
+
+  Future<void> setSaveOriginalEnabled(bool value) async =>
+      (await SharedPreferences.getInstance())
+          .setBool(_kSaveOriginalEnabled, value);
 }

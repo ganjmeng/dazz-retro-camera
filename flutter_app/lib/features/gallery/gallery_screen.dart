@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/camera_registry.dart';
 import '../../core/l10n.dart';
 import '../image_edit/image_edit_screen.dart';
+import '../../services/original_asset_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 全局缩略图字节缓存（内存级，App 存活期间有效，避免重复解码）
@@ -612,6 +613,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
             (i + batchSize < toDelete.length) ? i + batchSize : toDelete.length;
         await PhotoManager.editor.deleteWithIds(toDelete.sublist(i, end));
       }
+      await OriginalAssetService.instance.removeOriginals(toDelete);
       for (final id in toDelete) {
         _ThumbCache.remove(id);
       }
@@ -1191,6 +1193,8 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
   bool _isPreparingLiveVideo = false;
   bool _isPlayingLiveVideo = false;
   bool _isHoldingLivePlayback = false;
+  bool _hasEditableOriginal = false;
+  String? _editableOriginalPath;
   Timer? _livePressTimer;
   Offset? _livePressDownPosition;
   VideoPlayerController? _videoCtrl;
@@ -1209,6 +1213,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     _pageController = PageController(initialPage: _currentIndex);
     _parseCameraName(widget.asset);
     _syncCurrentAssetLiveFlag();
+    unawaited(_syncEditableOriginalFlag());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_precacheAround(_currentIndex));
     });
@@ -1247,6 +1252,16 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
     if (isLive != _currentAssetIsLivePhoto) {
       setState(() => _currentAssetIsLivePhoto = isLive);
     }
+  }
+
+  Future<void> _syncEditableOriginalFlag() async {
+    final asset = _safeCurrentAsset;
+    final path = await OriginalAssetService.instance.getOriginalPath(asset.id);
+    if (!mounted || asset.id != _currentDisplayedAsset.id) return;
+    setState(() {
+      _editableOriginalPath = path;
+      _hasEditableOriginal = path != null;
+    });
   }
 
   AssetEntity get _currentDisplayedAsset => _safeCurrentAsset;
@@ -1335,11 +1350,36 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
       ),
     );
     if (confirmed == true) {
+      await OriginalAssetService.instance.removeOriginal(asset.id);
       await PhotoManager.editor.deleteWithIds([asset.id]);
       _ThumbCache.remove(asset.id);
       _GalleryCache.invalidate();
       if (mounted) Navigator.of(context).pop();
     }
+  }
+
+  Future<void> _openEditScreen() async {
+    final asset = _safeCurrentAsset;
+    final originalPath = _editableOriginalPath ??
+        await OriginalAssetService.instance.getOriginalPath(asset.id);
+    if (!mounted) return;
+    if (originalPath == null || originalPath.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_s().saveOriginalOff),
+          backgroundColor: const Color(0xFF2C2C2E),
+        ),
+      );
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (ctx) => UncontrolledProviderScope(
+          container: ProviderScope.containerOf(context),
+          child: ImageEditScreen(imagePath: originalPath),
+        ),
+      ),
+    );
   }
 
   Future<bool> _ensureLiveVideoReady(AssetEntity asset) async {
@@ -1530,6 +1570,7 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
                   _disposeVideoController();
                   _parseCameraName(galleryAssets[i]);
                   _syncCurrentAssetLiveFlag();
+                  _syncEditableOriginalFlag();
                   unawaited(_precacheAround(i));
                 },
                 builder: (ctx, i) {
@@ -1691,6 +1732,13 @@ class _PhotoDetailPageState extends State<PhotoDetailPage> {
                       const SizedBox(),
                     Row(
                       children: [
+                        if (_hasEditableOriginal) ...[
+                          _ActionBtn(
+                            icon: Icons.edit_outlined,
+                            onTap: _openEditScreen,
+                          ),
+                          const SizedBox(width: 12),
+                        ],
                         _ActionBtn(
                           icon: Icons.ios_share_outlined,
                           onTap: _shareAsset,
@@ -1742,7 +1790,7 @@ class _LiveBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            Icons.motion_photos_on_rounded,
+            Icons.motion_photos_on_outlined,
             color: const Color(0xFFFF9F0A),
             size: compact ? 12 : 15,
           ),

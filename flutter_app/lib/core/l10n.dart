@@ -170,6 +170,9 @@ class S {
   String get timer => get('timer');
   String get timerOff => get('timerOff');
   String timerSeconds(int n) => get('timerSeconds').replaceAll('{n}', '$n');
+  String get beauty => get('beauty');
+  String get beautyOff => get('beautyOff');
+  String beautyLevel(int n) => get('beautyLevel').replaceAll('{n}', '$n');
   String get flash => get('flash');
   String get flashOff => get('flashOff');
   String get flashOn => get('flashOn');
@@ -225,6 +228,8 @@ class S {
   String get allPhotos => get('allPhotos');
   String get favorites => get('favorites');
   String get film => get('film');
+  String get saveOriginalOn => get('saveOriginalOn');
+  String get saveOriginalOff => get('saveOriginalOff');
   String get noPhotos => get('noPhotos');
   String get noPhotoHint => get('noPhotoHint');
   String get galleryPermDesc => get('galleryPermDesc');
@@ -790,6 +795,30 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.ja: 'タイマー {n}s',
     AppLanguage.ko: '타이머 {n}s',
   },
+  'beauty': {
+    AppLanguage.zhHans: '美颜',
+    AppLanguage.zhHant: '美顏',
+    AppLanguage.en: 'Beauty',
+    AppLanguage.ms: 'Beauty',
+    AppLanguage.ja: '美肌',
+    AppLanguage.ko: '뷰티',
+  },
+  'beautyOff': {
+    AppLanguage.zhHans: '美颜关闭',
+    AppLanguage.zhHant: '美顏關閉',
+    AppLanguage.en: 'Beauty Off',
+    AppLanguage.ms: 'Beauty Mati',
+    AppLanguage.ja: '美肌オフ',
+    AppLanguage.ko: '뷰티 끔',
+  },
+  'beautyLevel': {
+    AppLanguage.zhHans: '美颜{n}级',
+    AppLanguage.zhHant: '美顏{n}級',
+    AppLanguage.en: 'Beauty {n}',
+    AppLanguage.ms: 'Beauty {n}',
+    AppLanguage.ja: '美肌 {n}',
+    AppLanguage.ko: '뷰티 {n}단계',
+  },
   'flash': {
     AppLanguage.zhHans: '闪光灯',
     AppLanguage.zhHant: '閃光燈',
@@ -1231,6 +1260,22 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.ms: 'Filem',
     AppLanguage.ja: 'フィルム',
     AppLanguage.ko: '필름',
+  },
+  'saveOriginalOn': {
+    AppLanguage.zhHans: '底片已开启',
+    AppLanguage.zhHant: '底片已開啟',
+    AppLanguage.en: 'Original Saved On',
+    AppLanguage.ms: 'Simpan Asal Hidup',
+    AppLanguage.ja: '原板保存オン',
+    AppLanguage.ko: '원본 저장 켬',
+  },
+  'saveOriginalOff': {
+    AppLanguage.zhHans: '底片已关闭',
+    AppLanguage.zhHant: '底片已關閉',
+    AppLanguage.en: 'Original Saved Off',
+    AppLanguage.ms: 'Simpan Asal Mati',
+    AppLanguage.ja: '原板保存オフ',
+    AppLanguage.ko: '원본 저장 끔',
   },
   'noPhotos': {
     AppLanguage.zhHans: '还没有照片',
