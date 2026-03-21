@@ -1033,35 +1033,45 @@ class PreviewRenderParams {
   Map<String, dynamic> toPreviewJson({
     required PreviewPerformanceMode mode,
   }) {
-    final json = Map<String, dynamic>.from(toJson());
-    if (!mode.isLightweight) return json;
+    final previewBeauty = switch (mode) {
+      PreviewPerformanceMode.lightweight =>
+        (effectiveBeautyStrength * 0.82).clamp(0.0, 1.0),
+      PreviewPerformanceMode.performance =>
+        effectiveBeautyStrength.clamp(0.0, 1.0),
+    };
 
-    final previewBeauty = (effectiveBeautyStrength * 0.82).clamp(0.0, 1.0);
+    final json = <String, dynamic>{
+      if (cameraId.isNotEmpty) 'cameraId': cameraId,
+      if (effectiveBaseLut?.isNotEmpty == true) 'baseLut': effectiveBaseLut,
+      'lutStrength': effectiveLutStrength,
+      'temperatureShift': effectiveTemperature,
+      'tintShift': effectiveTint,
+      'exposureOffset': exposureOffset + effectiveLensExposure,
+      'beautyStrength': previewBeauty,
+    };
 
-    // Lightweight preview should stay fast/stable: keep LUT + exposure, and
-    // disable expensive or visually noisy enhancement passes.
-    json['clarity'] = previewBeauty > 0.0 ? (-previewBeauty * 6.0) : 0.0;
-    json['grainAmount'] = 0.0;
-    json['noiseAmount'] = 0.0;
-    json['chromaticAberration'] = 0.0;
-    json['bloomAmount'] = 0.0;
-    json['paperTexture'] = 0.0;
-    json['developmentSoftness'] = 0.0;
-    json['chemicalIrregularity'] = 0.0;
-    json['halationAmount'] = 0.0;
-    json['sharpen'] = 0.0;
-    json['sharpness'] = 1.0;
-    json['dehaze'] = 0.0;
-    json['highlightWarmAmount'] = 0.0;
-    json['softFocus'] = previewBeauty > 0.0 ? (previewBeauty * 0.08) : 0.0;
-    json['skinHueProtect'] = previewBeauty > 0.0 ? 1.0 : json['skinHueProtect'];
-    json['skinLumaSoften'] =
-        previewBeauty > 0.0 ? (previewBeauty * 0.04) : json['skinLumaSoften'];
-    json['grainSize'] = 1.0;
-    json['luminanceNoise'] = 0.0;
-    json['chromaNoise'] = 0.0;
-    json['exposureVariation'] = 0.0;
-    json['vignetteAmount'] = effectiveVignette.clamp(0.0, 0.18);
+    if (previewBeauty > 0.0) {
+      json['skinHueProtect'] = 1.0;
+      json['skinSatProtect'] = skinSatProtect.clamp(0.0, 1.0);
+      json['skinLumaSoften'] = switch (mode) {
+        PreviewPerformanceMode.lightweight =>
+          (previewBeauty * 0.05).clamp(0.0, 0.12),
+        PreviewPerformanceMode.performance =>
+          (previewBeauty * 0.07).clamp(0.0, 0.18),
+      };
+      json['softFocus'] = switch (mode) {
+        PreviewPerformanceMode.lightweight =>
+          (previewBeauty * 0.04).clamp(0.0, 0.08),
+        PreviewPerformanceMode.performance =>
+          (previewBeauty * 0.06).clamp(0.0, 0.12),
+      };
+    } else {
+      json['skinHueProtect'] = 0.0;
+      json['skinSatProtect'] = 0.0;
+      json['skinLumaSoften'] = 0.0;
+      json['softFocus'] = 0.0;
+    }
+
     return json;
   }
 
