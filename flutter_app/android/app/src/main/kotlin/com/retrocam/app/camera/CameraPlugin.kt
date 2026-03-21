@@ -239,6 +239,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "updateLensParams"   -> handleUpdateLensParams(call, result)
             "updateViewportRatio"-> handleUpdateViewportRatio(call, result)
             "syncRuntimeState"   -> handleSyncRuntimeState(call, result)
+            "syncCameraState"    -> handleSyncCameraState(call, result)
             "startRecording"     -> handleStartRecording(result)
             "stopRecording"      -> handleStopRecording(result)
             "saveToGallery"      -> handleSaveToGallery(call, result)
@@ -669,8 +670,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     // ─────────────────────────────────────────────
 
     @Suppress("UNCHECKED_CAST")
-    private fun handleSetPreset(call: MethodCall, result: MethodChannel.Result) {
-        val preset = call.argument<Map<*, *>>("preset")
+    private fun cachePresetAndBuildShaderParams(preset: Map<*, *>?): Pair<String, MutableMap<String, Any>> {
         val cameraId = (preset?.get("cameraId") as? String) ?: (preset?.get("id") as? String) ?: ""
         val cameraChanged = cameraId.isNotEmpty() && cameraId != currentCameraId
         if (cameraId.isNotEmpty()) {
@@ -685,12 +685,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             currentPresetJson = preset
             currentCameraId = cameraId
         }
-        Log.d(TAG, "setPreset: cameraId=$cameraId")
 
+        val params = mutableMapOf<String, Any>()
         if (preset != null) {
-            val params = mutableMapOf<String, Any>()
-
-            // 1. 从 preset 顶层读取通用参数（旧路径兼容）
             (preset["contrast"]            as? Number)?.let { params["contrast"]            = it }
             (preset["saturation"]          as? Number)?.let { params["saturation"]          = it }
             (preset["temperatureShift"]    as? Number)?.let { params["temperatureShift"]    = it }
@@ -700,34 +697,26 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             (preset["grain"]               as? Number)?.let { params["grain"]               = it }
             (preset["sharpen"]             as? Number)?.let { params["sharpen"]             = it }
 
-            // 3. 从 defaultLook 子对象读取完整参数（新路径，由 Flutter setCamera() 传入）
-            // 注意：JSON 键名与 Shader uniform 名可能不同，需要映射（与 iOS 侧保持一致）
-            @Suppress("UNCHECKED_CAST")
             val look = preset["defaultLook"] as? Map<*, *>
             if (look != null) {
-                // 通用参数（直接映射）
                 (look["contrast"]            as? Number)?.let { params["contrast"]            = it }
                 (look["saturation"]          as? Number)?.let { params["saturation"]          = it }
                 (look["vignette"]            as? Number)?.let { params["vignette"]            = it }
                 (look["chromaticAberration"] as? Number)?.let { params["chromaticAberration"] = it }
                 (look["grain"]               as? Number)?.let { params["grain"]               = it }
-                // 字段名映射（JSON 键名 → Shader uniform 名）
-                (look["temperature"]         as? Number)?.let { params["temperatureShift"]    = it }  // temperature → temperatureShift
-                (look["tint"]                as? Number)?.let { params["tintShift"]           = it }  // tint → tintShift
-                (look["halation"]            as? Number)?.let { params["halationAmount"]      = it }  // halation → halationAmount
-                (look["bloom"]               as? Number)?.let { params["bloomAmount"]         = it }  // bloom → bloomAmount
-                (look["sharpness"]           as? Number)?.let { params["sharpen"]             = it }  // sharpness → sharpen
-                // ── FIX: Lightroom 风格曲线参数（原来缺失，导致链路断裂）──────────────────────
-                (look["highlights"]          as? Number)?.let { params["highlights"]          = it }  // 高光压缩/提亮
-                (look["shadows"]             as? Number)?.let { params["shadows"]             = it }  // 阴影压缩/提亮
-                (look["whites"]              as? Number)?.let { params["whites"]              = it }  // 白场偏移
-                (look["blacks"]              as? Number)?.let { params["blacks"]              = it }  // 黑场偏移
-                (look["clarity"]             as? Number)?.let { params["clarity"]             = it }  // 中间调微对比度
-                (look["vibrance"]            as? Number)?.let { params["vibrance"]            = it }  // 智能饱和度
-                // ── FIX: noiseAmount（JSON 键名 noise → Shader uniform noiseAmount）──────────
-                (look["noise"]               as? Number)?.let { params["noiseAmount"]         = it }  // noise → noiseAmount
-                (look["noiseAmount"]         as? Number)?.let { params["noiseAmount"]         = it }  // noiseAmount 直接映射（兼容两种键名）
-                // FQS/CPM35 专有参数（直接映射）
+                (look["temperature"]         as? Number)?.let { params["temperatureShift"]    = it }
+                (look["tint"]                as? Number)?.let { params["tintShift"]           = it }
+                (look["halation"]            as? Number)?.let { params["halationAmount"]      = it }
+                (look["bloom"]               as? Number)?.let { params["bloomAmount"]         = it }
+                (look["sharpness"]           as? Number)?.let { params["sharpen"]             = it }
+                (look["highlights"]          as? Number)?.let { params["highlights"]          = it }
+                (look["shadows"]             as? Number)?.let { params["shadows"]             = it }
+                (look["whites"]              as? Number)?.let { params["whites"]              = it }
+                (look["blacks"]              as? Number)?.let { params["blacks"]              = it }
+                (look["clarity"]             as? Number)?.let { params["clarity"]             = it }
+                (look["vibrance"]            as? Number)?.let { params["vibrance"]            = it }
+                (look["noise"]               as? Number)?.let { params["noiseAmount"]         = it }
+                (look["noiseAmount"]         as? Number)?.let { params["noiseAmount"]         = it }
                 (look["colorBiasR"]          as? Number)?.let { params["colorBiasR"]          = it }
                 (look["colorBiasG"]          as? Number)?.let { params["colorBiasG"]          = it }
                 (look["colorBiasB"]          as? Number)?.let { params["colorBiasB"]          = it }
@@ -735,7 +724,6 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 (look["luminanceNoise"]      as? Number)?.let { params["luminanceNoise"]      = it }
                 (look["chromaNoise"]         as? Number)?.let { params["chromaNoise"]         = it }
                 (look["highlightWarmAmount"] as? Number)?.let { params["highlightWarmAmount"] = it }
-                // Inst C 专用字段（直接映射）
                 (look["highlightRolloff"]    as? Number)?.let { params["highlightRolloff"]    = it }
                 (look["highlightRolloff2"]   as? Number)?.let { params["highlightRolloff2"]   = it }
                 (look["paperTexture"]        as? Number)?.let { params["paperTexture"]        = it }
@@ -745,11 +733,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 (look["toneCurveStrength"]   as? Number)?.let { params["toneCurveStrength"]   = it }
                 (look["lutStrength"]         as? Number)?.let { params["lutStrength"]         = it }
                 (look["baseLut"]             as? String)?.let { params["baseLut"]             = it }
-                // 用户曝光补偿（胶囊区拖条，必须在此映射，否则预览无效）
-                (look["exposureOffset"]       as? Number)?.let { params["exposureOffset"]       = it }
-                // SQC 专用字段
-                (look["centerGain"]           as? Number)?.let { params["centerGain"]           = it }
-                (look["developmentSoftness"]  as? Number)?.let { params["developmentSoftness"]  = it }
+                (look["exposureOffset"]      as? Number)?.let { params["exposureOffset"]      = it }
+                (look["centerGain"]          as? Number)?.let { params["centerGain"]          = it }
+                (look["developmentSoftness"] as? Number)?.let { params["developmentSoftness"] = it }
                 (look["chemicalIrregularity"] as? Number)?.let { params["chemicalIrregularity"] = it }
                 val skinProtect = look["skinHueProtect"]
                 if (skinProtect is Boolean) params["skinHueProtect"] = if (skinProtect) 1.0 else 0.0
@@ -758,15 +744,20 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 (look["skinLumaSoften"]       as? Number)?.let { params["skinLumaSoften"]       = it }
                 (look["skinRedLimit"]         as? Number)?.let { params["skinRedLimit"]         = it }
             }
+        }
+        return cameraId to params
+    }
 
-            if (params.isNotEmpty()) {
-                glRenderer?.updateParams(params)
-            }
-            // 2. 先 updateParams 设置参数，再 setCameraId 切换 Shader
-            // 顺序很重要：setCameraId 在 GL 线程异步执行，如果先调用它会导致竞态条件（参数被重置）
-            if (cameraId.isNotEmpty()) {
-                glRenderer?.setCameraId(cameraId)
-            }
+    @Suppress("UNCHECKED_CAST")
+    private fun handleSetPreset(call: MethodCall, result: MethodChannel.Result) {
+        val preset = call.argument<Map<*, *>>("preset")
+        val (cameraId, params) = cachePresetAndBuildShaderParams(preset)
+        Log.d(TAG, "setPreset: cameraId=$cameraId")
+        if (params.isNotEmpty()) {
+            glRenderer?.updateParams(params)
+        }
+        if (cameraId.isNotEmpty()) {
+            glRenderer?.setCameraId(cameraId)
         }
         result.success(null)
     }
@@ -2312,6 +2303,112 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 "rendererReady" to (glRenderer != null)
             )
         )
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun handleSyncCameraState(call: MethodCall, result: MethodChannel.Result) {
+        val preset = call.argument<Map<*, *>>("preset")
+        val lensParams = call.argument<Map<String, Any>>("lensParams") ?: emptyMap()
+        val renderParams = call.argument<Map<String, Any>>("renderParams") ?: emptyMap()
+        val zoom = (call.argument<Double>("zoom") ?: 1.0).coerceIn(0.6, 20.0)
+        val version = (call.argument<Int>("version") ?: cachedRenderVersion).coerceAtLeast(0)
+        val nextViewportWidth =
+            (call.argument<Int>("viewportWidth") ?: currentViewportWidth).coerceAtLeast(1)
+        val nextViewportHeight =
+            (call.argument<Int>("viewportHeight") ?: currentViewportHeight).coerceAtLeast(1)
+
+        val (cameraId, presetParams) = cachePresetAndBuildShaderParams(preset)
+
+        val fisheyeMode = (lensParams["fisheyeMode"] as? Boolean) ?: false
+        val circularFisheye =
+            (lensParams["circularFisheye"] as? Boolean) ?: fisheyeMode
+        val vignette = (lensParams["vignette"] as? Number)?.toDouble() ?: 0.0
+        val distortion = (lensParams["distortion"] as? Number)?.toDouble() ?: 0.0
+        val chromaticAberration =
+            (lensParams["chromaticAberration"] as? Number)?.toDouble() ?: 0.0
+        val bloom = (lensParams["bloom"] as? Number)?.toDouble() ?: 0.0
+        val softFocus = (lensParams["softFocus"] as? Number)?.toDouble() ?: 0.0
+
+        cachedLensFisheyeMode = fisheyeMode
+        cachedLensCircularFisheye = circularFisheye
+        cachedLensVignette = vignette
+        cachedLensDistortion = distortion
+        cachedRenderParams = renderParams
+        cachedRenderVersion = version
+
+        val applyState: () -> Unit = {
+            try {
+                camera?.cameraControl?.setZoomRatio(zoom.toFloat())
+            } catch (e: Exception) {
+                Log.w(TAG, "syncCameraState setZoom failed: ${e.message}")
+            }
+
+            glRenderer?.setFisheyeMode(fisheyeMode)
+            glRenderer?.setCircularFisheye(circularFisheye)
+
+            val merged = mutableMapOf<String, Any>()
+            merged.putAll(presetParams)
+            merged.putAll(renderParams)
+            merged["vignette"] = vignette
+            merged["chromaticAberration"] = chromaticAberration
+            merged["bloomAmount"] = bloom
+            merged["softFocus"] = softFocus
+            merged["distortion"] = distortion
+            if (merged.isNotEmpty()) {
+                glRenderer?.updateParams(merged)
+            }
+            if (cameraId.isNotEmpty()) {
+                glRenderer?.setCameraId(cameraId)
+            }
+        }
+
+        val viewportChanged =
+            nextViewportWidth != currentViewportWidth || nextViewportHeight != currentViewportHeight
+        currentViewportWidth = nextViewportWidth
+        currentViewportHeight = nextViewportHeight
+
+        val owner = lifecycleOwner
+        if (!viewportChanged || owner == null || cameraProvider == null || surfaceTexture == null) {
+            applyState()
+            result.success(
+                mapOf(
+                    "appliedVersion" to cachedRenderVersion,
+                    "rendererReady" to (glRenderer != null),
+                    "rebound" to false
+                )
+            )
+            return
+        }
+
+        try {
+            bindCameraUseCases(owner)
+            val latch = rendererReadyLatch
+            val mainExecutor = ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
+            bgExecutor.execute {
+                try {
+                    val ready = latch?.await(5, java.util.concurrent.TimeUnit.SECONDS) ?: true
+                    if (!ready) {
+                        Log.w(TAG, "syncCameraState: renderer ready timeout (5s)")
+                    }
+                    mainExecutor.execute {
+                        applyState()
+                        result.success(
+                            mapOf(
+                                "appliedVersion" to cachedRenderVersion,
+                                "rendererReady" to (glRenderer != null),
+                                "rebound" to true
+                            )
+                        )
+                    }
+                } catch (e: Exception) {
+                    mainExecutor.execute {
+                        result.error("SYNC_CAMERA_STATE_FAILED", e.message, null)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            result.error("SYNC_CAMERA_STATE_FAILED", e.message, null)
+        }
     }
 
     // ─────────────────────────────────────────────

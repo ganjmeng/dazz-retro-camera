@@ -277,6 +277,41 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
+  Future<int?> syncCameraState({
+    required CameraDefinition camera,
+    required Map<String, dynamic> lensParams,
+    required Map<String, dynamic> renderParams,
+    required double zoom,
+    required int viewportWidth,
+    required int viewportHeight,
+    int? version,
+  }) async {
+    try {
+      final presetPayload = <String, dynamic>{
+        'cameraId': camera.id,
+        'defaultLook': camera.defaultLook.toJson(),
+      };
+      final result = await _channel
+          .invokeMethod<Map<dynamic, dynamic>>('syncCameraState', {
+        'preset': presetPayload,
+        'lensParams': lensParams,
+        'renderParams': renderParams,
+        'zoom': zoom,
+        'viewportWidth': viewportWidth,
+        'viewportHeight': viewportHeight,
+        if (version != null) 'version': version,
+      });
+      _lastCameraPresetPayload = Map<String, dynamic>.from(presetPayload);
+      _lastLensParamsPayload = Map<String, dynamic>.from(lensParams);
+      final raw = result?['appliedVersion'];
+      if (raw is num) return raw.toInt();
+      return int.tryParse(raw?.toString() ?? '');
+    } catch (e) {
+      print('Error syncing camera state: $e');
+      return null;
+    }
+  }
+
   /// 设置闪光灯模式 ('off' | 'on' | 'auto')
   Future<void> setFlash(String mode) async {
     try {

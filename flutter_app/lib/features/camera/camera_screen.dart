@@ -1497,8 +1497,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // ── 耗时操作过渡动画（换相机/切滤镜/切比例/切清晰度）──
           AnimatedOpacity(
             opacity: _showTransition ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeInOut,
+            duration: _showTransition
+                ? const Duration(milliseconds: 36)
+                : const Duration(milliseconds: 220),
+            curve: _showTransition ? Curves.easeOut : Curves.easeInOut,
             child: IgnorePointer(
               ignoring: !_showTransition,
               child: Container(
@@ -1506,8 +1508,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 alignment: Alignment.center,
                 child: AnimatedScale(
                   scale: _showTransition ? 1.0 : 0.85,
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeOutBack,
+                  duration: _showTransition
+                      ? const Duration(milliseconds: 120)
+                      : const Duration(milliseconds: 260),
+                  curve: _showTransition
+                      ? Curves.easeOutCubic
+                      : Curves.easeOutBack,
                   child: Container(
                     width: 120,
                     height: 120,
@@ -3567,8 +3573,8 @@ class _OptionsSheet extends ConsumerWidget {
             ratios: camera.modules.ratios,
             activeId: st.activeRatioId,
             onSelect: (id) => onCameraTransition(
-              () => ref.read(cameraAppProvider.notifier).selectRatio(id),
-              minVisible: const Duration(milliseconds: 180),
+              () => ref.read(cameraAppProvider.notifier).selectRatioAndSync(id),
+              minVisible: const Duration(milliseconds: 240),
             ),
           ),
         'filter' => _FilterRow(

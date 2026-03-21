@@ -556,8 +556,6 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   Future<void> _loadCamera(String cameraId) async {
-    final previousCamera = state.camera;
-    final previousRatioId = state.activeRatioId;
     state = state.copyWith(
         isLoading: true, clearError: true, activeCameraId: cameraId);
     try {
@@ -635,20 +633,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       );
       // 关键修复：加载相机后立即将 defaultLook 色彩参数同步到原生 GPU shader
       // 修复 FQS 紫色偏色问题：确保 colorBiasR/G/B、grainSize、sharpness 等专用字段正确传递
-      await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
-      final previousRatio = previousCamera == null || previousRatioId == null
-          ? null
-          : previousCamera.ratioById(previousRatioId) ??
-              previousCamera.ratioById(previousCamera.defaultSelection.ratioId);
-      final nextRatio = camera.ratioById(defaults.ratioId);
-      final ratioChanged = previousRatio == null ||
-          nextRatio == null ||
-          previousRatio.width != nextRatio.width ||
-          previousRatio.height != nextRatio.height;
-      if (ratioChanged) {
-        await _syncViewportRatioToNativeImmediately();
-      }
-      await _syncCurrentPreviewStateToNative();
+      await _syncCameraStateToNative(camera: camera);
     } catch (e) {
       state =
           state.copyWith(isLoading: false, error: 'Failed to load camera: $e');
@@ -734,15 +719,15 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     _applyCurrentRenderParamsToNative();
   }
 
-  void selectRatio(String id) {
+  bool _applyRatioSelection(String id) {
+    if (state.activeRatioId == id) return false;
     // 如果切换到不支持相框的比例，自动清除当前相框选择
     final camera = state.camera;
     if (camera != null && state.activeFrameId != null) {
       final ratio = camera.modules.ratios.where((r) => r.id == id).firstOrNull;
       if (ratio != null && !ratio.supportsFrame) {
         state = state.copyWith(activeRatioId: id, clearFrameId: true);
-        _scheduleViewportRatioSync();
-        return;
+        return true;
       }
       // 当前相框不支持新比例时也自动清除
       final frameOpt = camera.modules.frames
@@ -752,12 +737,21 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           frameOpt.supportedRatios.isNotEmpty &&
           !frameOpt.supportedRatios.contains(id)) {
         state = state.copyWith(activeRatioId: id, clearFrameId: true);
-        _scheduleViewportRatioSync();
-        return;
+        return true;
       }
     }
     state = state.copyWith(activeRatioId: id);
+    return true;
+  }
+
+  void selectRatio(String id) {
+    if (!_applyRatioSelection(id)) return;
     _scheduleViewportRatioSync();
+  }
+
+  Future<void> selectRatioAndSync(String id) async {
+    if (!_applyRatioSelection(id)) return;
+    await _syncViewportRatioToNativeImmediately();
   }
 
   void selectFrame(String id) {
@@ -1946,31 +1940,16 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     syncRuntimeColorContext();
     final camera = state.camera;
     if (camera == null) return;
-    final lens = camera.lensById(state.activeLensId);
-    final renderParams = state.renderParams;
+    final lensParams = _buildActiveLensParams(camera);
+    final renderParams = _buildActiveRenderParamsJson();
     final zoom = state.zoomLevel;
     final svc = _ref.read(cameraServiceProvider.notifier);
 
     if (renderParams != null) {
       final version = ++_renderParamsVersion;
       final ackVersion = await svc.syncRuntimeState(
-        lensParams: {
-          'distortion': lens?.distortion ?? 0.0,
-          'vignette': lens?.vignette ?? 0.0,
-          'zoomFactor': lens?.zoomFactor ?? 1.0,
-          'fisheyeMode': lens?.fisheyeMode ?? false,
-          'circularFisheye':
-              lens?.circularFisheyeCrop ?? (lens?.fisheyeMode ?? false),
-          'chromaticAberration': lens?.chromaticAberration ?? 0.0,
-          'bloom': lens?.bloom ?? 0.0,
-          'softFocus': lens?.softFocus ?? 0.0,
-          'exposure': lens?.exposure ?? 0.0,
-          'contrast': lens?.contrast ?? 0.0,
-          'saturation': lens?.saturation ?? 0.0,
-          'highlightCompression': lens?.highlightCompression ?? 0.0,
-        },
-        renderParams:
-            renderParams.toPreviewJson(mode: state.previewPerformanceMode),
+        lensParams: lensParams,
+        renderParams: renderParams,
         zoom: zoom,
         version: version,
       );
@@ -1983,19 +1962,20 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     }
 
     await svc.updateLensParams(
-      distortion: lens?.distortion ?? 0.0,
-      vignette: lens?.vignette ?? 0.0,
-      zoomFactor: lens?.zoomFactor ?? 1.0,
-      fisheyeMode: lens?.fisheyeMode ?? false,
-      circularFisheye:
-          lens?.circularFisheyeCrop ?? (lens?.fisheyeMode ?? false),
-      chromaticAberration: lens?.chromaticAberration ?? 0.0,
-      bloom: lens?.bloom ?? 0.0,
-      softFocus: lens?.softFocus ?? 0.0,
-      exposure: lens?.exposure ?? 0.0,
-      contrast: lens?.contrast ?? 0.0,
-      saturation: lens?.saturation ?? 0.0,
-      highlightCompression: lens?.highlightCompression ?? 0.0,
+      distortion: (lensParams['distortion'] as num?)?.toDouble() ?? 0.0,
+      vignette: (lensParams['vignette'] as num?)?.toDouble() ?? 0.0,
+      zoomFactor: (lensParams['zoomFactor'] as num?)?.toDouble() ?? 1.0,
+      fisheyeMode: lensParams['fisheyeMode'] as bool? ?? false,
+      circularFisheye: lensParams['circularFisheye'] as bool? ?? false,
+      chromaticAberration:
+          (lensParams['chromaticAberration'] as num?)?.toDouble() ?? 0.0,
+      bloom: (lensParams['bloom'] as num?)?.toDouble() ?? 0.0,
+      softFocus: (lensParams['softFocus'] as num?)?.toDouble() ?? 0.0,
+      exposure: (lensParams['exposure'] as num?)?.toDouble() ?? 0.0,
+      contrast: (lensParams['contrast'] as num?)?.toDouble() ?? 0.0,
+      saturation: (lensParams['saturation'] as num?)?.toDouble() ?? 0.0,
+      highlightCompression:
+          (lensParams['highlightCompression'] as num?)?.toDouble() ?? 0.0,
     );
     if (zoom != 1.0) {
       await svc.setZoom(zoom);
@@ -2012,6 +1992,69 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           width: ratio.width,
           height: ratio.height,
         );
+  }
+
+  Map<String, dynamic> _buildActiveLensParams(CameraDefinition camera) {
+    final lens = camera.lensById(state.activeLensId);
+    return {
+      'distortion': lens?.distortion ?? 0.0,
+      'vignette': lens?.vignette ?? 0.0,
+      'zoomFactor': lens?.zoomFactor ?? 1.0,
+      'fisheyeMode': lens?.fisheyeMode ?? false,
+      'circularFisheye':
+          lens?.circularFisheyeCrop ?? (lens?.fisheyeMode ?? false),
+      'chromaticAberration': lens?.chromaticAberration ?? 0.0,
+      'bloom': lens?.bloom ?? 0.0,
+      'softFocus': lens?.softFocus ?? 0.0,
+      'exposure': lens?.exposure ?? 0.0,
+      'contrast': lens?.contrast ?? 0.0,
+      'saturation': lens?.saturation ?? 0.0,
+      'highlightCompression': lens?.highlightCompression ?? 0.0,
+    };
+  }
+
+  Map<String, dynamic>? _buildActiveRenderParamsJson() {
+    final renderParams = state.renderParams;
+    if (renderParams == null) return null;
+    return renderParams.toPreviewJson(mode: state.previewPerformanceMode);
+  }
+
+  ({int width, int height})? _currentViewportDimensionsFor(
+      CameraDefinition camera) {
+    final ratio = camera.ratioById(state.activeRatioId) ??
+        camera.ratioById(camera.defaultSelection.ratioId);
+    if (ratio == null || ratio.width <= 0 || ratio.height <= 0) return null;
+    return (width: ratio.width, height: ratio.height);
+  }
+
+  Future<void> _syncCameraStateToNative({
+    required CameraDefinition camera,
+  }) async {
+    syncRuntimeColorContext();
+    final viewport = _currentViewportDimensionsFor(camera);
+    final renderParams = _buildActiveRenderParamsJson();
+    if (viewport == null || renderParams == null) {
+      await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
+      await _syncViewportRatioToNativeImmediately();
+      await _syncCurrentPreviewStateToNative();
+      return;
+    }
+    final version = ++_renderParamsVersion;
+    final ackVersion =
+        await _ref.read(cameraServiceProvider.notifier).syncCameraState(
+              camera: camera,
+              lensParams: _buildActiveLensParams(camera),
+              renderParams: renderParams,
+              zoom: state.zoomLevel,
+              viewportWidth: viewport.width,
+              viewportHeight: viewport.height,
+              version: version,
+            );
+    if (ackVersion != null &&
+        ackVersion >= version &&
+        ackVersion > _lastAckedRenderParamsVersion) {
+      _lastAckedRenderParamsVersion = ackVersion;
+    }
   }
 
   void _scheduleViewportRatioSync({bool immediate = false}) {
@@ -2059,7 +2102,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     final camera = state.camera;
     if (camera == null) return;
     if (replayPreset) {
-      await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
+      await _syncCameraStateToNative(camera: camera);
+      return;
     }
     await _syncViewportRatioToNativeImmediately();
     await _syncCurrentPreviewStateToNative();

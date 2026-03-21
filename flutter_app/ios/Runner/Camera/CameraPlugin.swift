@@ -189,10 +189,17 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleSetWhiteBalance(call: call, result: result)
         case "setSharpen":
             handleSetSharpen(call: call, result: result)
+        case "updateViewportRatio":
+            result([
+                "applied": false,
+                "platform": "ios",
+            ])
         case "updateLensParams":
             handleUpdateLensParams(call: call, result: result)
         case "syncRuntimeState":
             handleSyncRuntimeState(call: call, result: result)
+        case "syncCameraState":
+            handleSyncCameraState(call: call, result: result)
         case "saveToGallery":
             handleSaveToGallery(call: call, result: result)
         case "processWithGpu":
@@ -278,12 +285,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     // ─────────────────────────────────────────────
     // setPreset
     // ─────────────────────────────────────────────
-    private func handleSetPreset(call: FlutterMethodCall, result: @escaping FlutterResult) {
-        guard let args = call.arguments as? [String: Any],
-              let presetJson = args["preset"] as? [String: Any] else {
-            result(FlutterError(code: "INVALID_ARG", message: "Invalid preset parameters", details: nil))
-            return
-        }
+    private func cachePreset(_ presetJson: [String: Any]) -> (cameraId: String, shaderParams: [String: Any]) {
         let cameraId = (presetJson["cameraId"] as? String) ?? (presetJson["id"] as? String) ?? ""
         let cameraChanged = !cameraId.isEmpty && cameraId != currentCameraId
         if cameraChanged {
@@ -297,6 +299,16 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cachedPresetJson = presetJson
         let shaderParams = buildShaderParams(from: presetJson)
         cachedPresetShaderParams = shaderParams
+        return (cameraId, shaderParams)
+    }
+
+    private func handleSetPreset(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let presetJson = args["preset"] as? [String: Any] else {
+            result(FlutterError(code: "INVALID_ARG", message: "Invalid preset parameters", details: nil))
+            return
+        }
+        let (_, shaderParams) = cachePreset(presetJson)
         renderer?.updateParams(shaderParams)
         result(["success": true])
     }
@@ -499,6 +511,59 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         merged["softFocus"] = Float(softFocus)
         merged["distortion"] = Float(distortion)
         merged["circularFisheye"] = circularFisheye ? 1.0 : 0.0
+        renderer?.updateParams(merged)
+        result([
+            "appliedVersion": cachedRenderVersion,
+            "rendererReady": renderer != nil,
+        ])
+    }
+
+    private func handleSyncCameraState(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any]
+        let preset = args?["preset"] as? [String: Any]
+        let lens = args?["lensParams"] as? [String: Any] ?? [:]
+        let render = args?["renderParams"] as? [String: Any] ?? [:]
+        let zoom = (args?["zoom"] as? Double) ?? 1.0
+        let version = (args?["version"] as? Int) ?? cachedRenderVersion
+
+        let presetParams: [String: Any]
+        let cameraId: String
+        if let preset {
+            let cached = cachePreset(preset)
+            cameraId = cached.cameraId
+            presetParams = cached.shaderParams
+        } else {
+            cameraId = currentCameraId
+            presetParams = cachedPresetShaderParams
+        }
+
+        let fisheyeMode = lens["fisheyeMode"] as? Bool ?? false
+        let circularFisheye = lens["circularFisheye"] as? Bool ?? fisheyeMode
+        let vignette = lens["vignette"] as? Double ?? 0.0
+        let chromaticAberration = lens["chromaticAberration"] as? Double ?? 0.0
+        let bloom = lens["bloom"] as? Double ?? 0.0
+        let softFocus = lens["softFocus"] as? Double ?? 0.0
+        let distortion = lens["distortion"] as? Double ?? 0.0
+        cachedLensParams = lens
+        cachedRenderParams = render
+        cachedZoom = zoom
+        cachedRenderVersion = max(0, version)
+
+        cameraManager?.setZoom(factor: CGFloat(zoom))
+        renderer?.setFisheyeMode(fisheyeMode)
+        renderer?.setCircularFisheye(circularFisheye)
+
+        var merged = presetParams
+        merged.merge(render) { _, new in new }
+        merged["vignette"] = Float(vignette)
+        merged["chromaticAberration"] = Float(chromaticAberration)
+        merged["bloomAmount"] = Float(bloom)
+        merged["softFocus"] = Float(softFocus)
+        merged["distortion"] = Float(distortion)
+        merged["circularFisheye"] = circularFisheye ? 1.0 : 0.0
+        if !cameraId.isEmpty {
+            merged["cameraId"] = cameraId
+        }
         renderer?.updateParams(merged)
         result([
             "appliedVersion": cachedRenderVersion,
