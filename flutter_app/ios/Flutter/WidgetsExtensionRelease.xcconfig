@@ -1,0 +1,2 @@
+#include? "Pods/Target Support Files/Pods-DazzCameraWidgetsExtension/Pods-DazzCameraWidgetsExtension.release.xcconfig"
+#include "Generated.xcconfig"
