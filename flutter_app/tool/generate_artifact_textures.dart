@@ -160,6 +160,37 @@ img.Image _generateDustTexture(
     }
   }
 
+  // 叠加一层高亮硬点：提升肉眼可见度，但半径很小避免“大片发雾”。
+  final hardSpeckCount = isLight
+      ? 55 + random.nextInt(40)
+      : isLightPlus
+          ? 80 + random.nextInt(50)
+          : 120 + random.nextInt(80);
+  for (var i = 0; i < hardSpeckCount; i++) {
+    final x = random.nextInt(width);
+    final y = random.nextInt(height);
+    final radius = 0.45 +
+        random.nextDouble() *
+            (isLight
+                ? 0.7
+                : isLightPlus
+                    ? 0.9
+                    : 1.2);
+    final alpha = (isLight
+            ? 190
+            : isLightPlus
+                ? 210
+                : 225) +
+        random.nextInt(
+          isLight
+              ? 45
+              : isLightPlus
+                  ? 35
+                  : 30,
+        );
+    _paintHardDot(image, x.toDouble(), y.toDouble(), radius, alpha);
+  }
+
   final hazeClusters = isLight
       ? 2 + random.nextInt(2)
       : isLightPlus
@@ -250,41 +281,68 @@ img.Image _generateScratchTexture(
     }
 
     final alpha = (isLight
-            ? 58
+            ? 120
             : isLightPlus
-                ? 78
-                : 96) +
+                ? 145
+                : 170) +
         random.nextInt(
           isLight
-              ? 52
+              ? 90
               : isLightPlus
-                  ? 62
-                  : 86,
+                  ? 85
+                  : 80,
         );
     final thickness = random.nextDouble() < 0.75
         ? (isLight
-                ? 1.05
+                ? 1.8
                 : isLightPlus
-                    ? 1.35
-                    : 1.7) +
+                    ? 2.2
+                    : 2.8) +
             random.nextDouble() *
                 (isLight
-                    ? 1.15
+                    ? 1.3
                     : isLightPlus
-                        ? 1.35
-                        : 1.65)
+                        ? 1.6
+                        : 1.9)
         : (isLight
-                ? 2.0
+                ? 3.0
                 : isLightPlus
-                    ? 2.5
-                    : 3.0) +
+                    ? 3.8
+                    : 4.6) +
             random.nextDouble() *
                 (isLight
-                    ? 1.7
+                    ? 1.8
                     : isLightPlus
-                        ? 2.0
-                        : 2.4);
+                        ? 2.1
+                        : 2.5);
     _paintPolyline(image, points, thickness, alpha);
+    if (random.nextDouble() < 0.55) {
+      // 叠加短亮白“断裂段”，增强不规则感和可见度
+      final p0 = points.first;
+      final angle = random.nextDouble() * pi;
+      final len = (isLight
+              ? 5.0
+              : isLightPlus
+                  ? 7.0
+                  : 9.0) +
+          random.nextDouble() *
+              (isLight
+                  ? 8.0
+                  : isLightPlus
+                      ? 10.0
+                      : 14.0);
+      final p1 = Point(
+        p0.x + cos(angle) * len,
+        p0.y + sin(angle) * len,
+      );
+      _paintSegment(
+        image,
+        p0,
+        p1,
+        thickness * (0.85 + random.nextDouble() * 0.4),
+        (alpha * 0.95).round(),
+      );
+    }
     if (points.length >= 2 && random.nextDouble() < 0.86) {
       final head = points.first;
       final neck = points[1];
@@ -441,9 +499,32 @@ void _paintSoftDot(
       final distance = sqrt(dx * dx + dy * dy);
       if (distance > radius * 1.35) continue;
       final falloff = max(0.0, 1.0 - (distance / (radius * 1.35)));
-      final localAlpha = (effectiveAlpha * falloff * falloff).round();
+      final localAlpha = (effectiveAlpha * pow(falloff, 1.25)).round();
       if (localAlpha <= 0) continue;
       _blendWhite(image, x, y, localAlpha);
+    }
+  }
+}
+
+void _paintHardDot(
+  img.Image image,
+  double cx,
+  double cy,
+  double radius,
+  int alpha,
+) {
+  final minX = max(0, (cx - radius - 1).floor());
+  final maxX = min(image.width - 1, (cx + radius + 1).ceil());
+  final minY = max(0, (cy - radius - 1).floor());
+  final maxY = min(image.height - 1, (cy + radius + 1).ceil());
+  final effectiveAlpha = alpha.clamp(0, 255);
+  for (var y = minY; y <= maxY; y++) {
+    for (var x = minX; x <= maxX; x++) {
+      final dx = x - cx;
+      final dy = y - cy;
+      final distance = sqrt(dx * dx + dy * dy);
+      if (distance > radius) continue;
+      _blendWhite(image, x, y, effectiveAlpha);
     }
   }
 }
@@ -451,6 +532,9 @@ void _paintSoftDot(
 void _blendWhite(img.Image image, int x, int y, int alpha) {
   final pixel = image.getPixel(x, y);
   final existingAlpha = pixel.a.toInt();
-  final outAlpha = max(existingAlpha, alpha.clamp(0, 255));
+  final addAlpha = alpha.clamp(0, 255);
+  final outAlpha = (existingAlpha + ((255 - existingAlpha) * addAlpha) / 255.0)
+      .round()
+      .clamp(0, 255);
   image.setPixelRgba(x, y, 255, 255, 255, outAlpha);
 }
