@@ -869,6 +869,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
         currentViewportWidth = nextWidth
         currentViewportHeight = nextHeight
+        lastRuntimeStatsAtMs = 0L
 
         val owner = lifecycleOwner
         if (owner == null || cameraProvider == null || surfaceTexture == null) {
@@ -887,6 +888,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 owner = owner,
                 reason = "updateViewportRatio",
                 onReady = {
+                    sendEvent("onCameraReady", activeCameraDebugInfo)
                     result.success(
                         mapOf(
                             "width" to currentViewportWidth,
@@ -2154,6 +2156,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             nextViewportWidth != currentViewportWidth || nextViewportHeight != currentViewportHeight
         currentViewportWidth = nextViewportWidth
         currentViewportHeight = nextViewportHeight
+        if (viewportChanged) {
+            lastRuntimeStatsAtMs = 0L
+        }
 
         val owner = lifecycleOwner
         if ((!viewportChanged && !livePhotoBindingChanged) || owner == null || cameraProvider == null || surfaceTexture == null) {
@@ -2174,6 +2179,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 reason = "syncCameraState",
                 onReady = {
                     applyState()
+                    sendEvent("onCameraReady", activeCameraDebugInfo)
                     result.success(
                         mapOf(
                             "appliedVersion" to cachedRenderVersion,

@@ -287,6 +287,26 @@ class CameraService extends StateNotifier<CameraState> {
     int? version,
   }) async {
     try {
+      final currentPreviewWidth = state.activeCameraDebugInfo['previewWidth'];
+      final currentPreviewHeight = state.activeCameraDebugInfo['previewHeight'];
+      final previewWidth = currentPreviewWidth is num
+          ? currentPreviewWidth.toInt()
+          : int.tryParse(currentPreviewWidth?.toString() ?? '');
+      final previewHeight = currentPreviewHeight is num
+          ? currentPreviewHeight.toInt()
+          : int.tryParse(currentPreviewHeight?.toString() ?? '');
+      final viewportChanged = previewWidth != null &&
+          previewHeight != null &&
+          previewWidth > 0 &&
+          previewHeight > 0 &&
+          (previewWidth != viewportWidth || previewHeight != viewportHeight);
+      if (viewportChanged) {
+        _resetRuntimeSyncCaches();
+        state = state.copyWith(
+          lifecyclePhase: 'running',
+          runtimeStatsUpdatedAtMs: 0,
+        );
+      }
       final presetPayload = <String, dynamic>{
         'cameraId': camera.id,
         'defaultLook': camera.defaultLook.toJson(),
@@ -345,6 +365,11 @@ class CameraService extends StateNotifier<CameraState> {
     required int height,
   }) async {
     try {
+      _resetRuntimeSyncCaches();
+      state = state.copyWith(
+        lifecyclePhase: 'running',
+        runtimeStatsUpdatedAtMs: 0,
+      );
       await _channel.invokeMethod('updateViewportRatio', {
         'width': width,
         'height': height,
