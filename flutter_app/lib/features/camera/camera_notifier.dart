@@ -556,11 +556,24 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   Future<void> _loadCamera(String cameraId) async {
+    final previousState = state;
     state = state.copyWith(
         isLoading: true, clearError: true, activeCameraId: cameraId);
     try {
       final camera = await loadCamera(cameraId);
       final defaults = camera.defaultSelection;
+      final nextFilterId = (previousState.activeFilterId != null &&
+              camera.filterById(previousState.activeFilterId) != null)
+          ? previousState.activeFilterId!
+          : defaults.filterId;
+      final nextLensId = (previousState.activeLensId != null &&
+              camera.lensById(previousState.activeLensId) != null)
+          ? previousState.activeLensId!
+          : defaults.lensId;
+      final nextRatioId = (previousState.activeRatioId != null &&
+              camera.ratioById(previousState.activeRatioId) != null)
+          ? previousState.activeRatioId!
+          : defaults.ratioId;
 
       // 读取保留设定开关和该相机的快照
       final retainState = _ref.read(retainSettingsProvider);
@@ -602,20 +615,20 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         final frame = camera.frameById(frameId);
         if (frame != null &&
             frame.supportedRatios.isNotEmpty &&
-            !frame.supportedRatios.contains(defaults.ratioId)) {
+            !frame.supportedRatios.contains(nextRatioId)) {
           frameId = null;
         }
       }
 
-      final defaultLens = camera.lensById(defaults.lensId);
+      final defaultLens = camera.lensById(nextLensId);
       final nextFisheyeMode = defaultLens?.fisheyeMode ?? false;
       state = state.copyWith(
         camera: camera,
         isLoading: false,
         activeCameraId: cameraId,
-        activeFilterId: defaults.filterId,
-        activeLensId: defaults.lensId,
-        activeRatioId: defaults.ratioId,
+        activeFilterId: nextFilterId,
+        activeLensId: nextLensId,
+        activeRatioId: nextRatioId,
         activeFrameId: frameId,
         // copyWith 的 nullable 语义会在传入 null 时保留旧值，
         // 切机到默认关闭相框的相机时必须显式清空，避免沿用上一台相机的 frameId。
@@ -634,6 +647,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       // 关键修复：加载相机后立即将 defaultLook 色彩参数同步到原生 GPU shader
       // 修复 FQS 紫色偏色问题：确保 colorBiasR/G/B、grainSize、sharpness 等专用字段正确传递
       await _syncCameraStateToNative(camera: camera);
+      await Future<void>.delayed(const Duration(milliseconds: 90));
+      await _syncCurrentPreviewStateToNative();
     } catch (e) {
       state =
           state.copyWith(isLoading: false, error: 'Failed to load camera: $e');
@@ -751,8 +766,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   Future<void> selectRatioAndSync(String id) async {
     if (!_applyRatioSelection(id)) return;
-    // 先立即推送一次当前渲染参数，避免比例切换期间使用旧缓存。
-    _applyCurrentRenderParamsToNative();
+    // 比例切换前先同步一次当前完整运行态，避免原生重建时读取到旧缓存。
+    await _syncCurrentPreviewStateToNative();
     await _syncViewportRatioToNativeImmediately();
   }
 
