@@ -1946,10 +1946,6 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     }
 
     private fun pickMidSpeedSizes(supportedSizes: List<Size>): List<Size> {
-        val profileKey = buildMidProfileKey()
-        val bestW = perfPrefs.getInt("${profileKey}_best_w", 0)
-        val bestH = perfPrefs.getInt("${profileKey}_best_h", 0)
-
         // 1) 优先 12MP binning 原生档位（常见 4000x3000 / 4096x3072），很多 2 亿像素机型更快
         val prefer12Mp = supportedSizes.filter {
             val longSide = maxOf(it.width, it.height)
@@ -1960,39 +1956,26 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 shortSide in 2900..3200
         }.sortedByDescending { it.width.toLong() * it.height.toLong() }
 
-        // 2) 回退：4MP 附近（旧策略）
-        val near4Mp = supportedSizes.filter {
+        // 2) 回退：优先长边至少 2688 的中高分辨率单帧档位，避免掉到 1080/1620 一类小图。
+        val preferMidOutput = supportedSizes.filter {
+            val longSide = maxOf(it.width, it.height)
             val px = it.width.toLong() * it.height.toLong()
-            px in 3_200_000L..4_500_000L
+            longSide >= 2688 && px in 5_000_000L..10_000_000L
         }.sortedByDescending { it.width.toLong() * it.height.toLong() }
 
-        // 3) 再回退：<=8MP 的最大档位，避免掉回全像素慢路径
+        // 3) 再回退：<=8MP 且长边至少 2200 的最大档位，尽量保住中档观感。
         val fallback = supportedSizes.filter {
-            it.width.toLong() * it.height.toLong() <= 8_000_000L
+            val longSide = maxOf(it.width, it.height)
+            val px = it.width.toLong() * it.height.toLong()
+            longSide >= 2200 && px <= 8_000_000L
         }.sortedByDescending { it.width.toLong() * it.height.toLong() }
             .ifEmpty { supportedSizes.sortedBy { it.width.toLong() * it.height.toLong() } }
-        val candidates = (prefer12Mp + near4Mp + fallback)
+        val candidates = (prefer12Mp + preferMidOutput + fallback)
             .distinctBy { "${it.width}x${it.height}" }
 
         if (candidates.isEmpty()) return supportedSizes
-
-        // 已学习到最优尺寸：固定优先该尺寸。
-        if (bestW > 0 && bestH > 0) {
-            val best = candidates.firstOrNull {
-                (it.width == bestW && it.height == bestH) || (it.width == bestH && it.height == bestW)
-            }
-            if (best != null) {
-                return listOf(best) + candidates.filterNot { it == best }
-            }
-        }
-
-        // 未学习到最优尺寸：轮询探索前 3 个候选档位。
-        val explorePool = candidates.take(minOf(3, candidates.size))
-        val idxKey = "${profileKey}_explore_idx"
-        val idx = perfPrefs.getInt(idxKey, 0)
-        val selected = explorePool[idx % explorePool.size]
-        perfPrefs.edit().putInt(idxKey, idx + 1).apply()
-        Log.d(TAG, "mid explore size=${selected.width}x${selected.height}, idx=$idx key=$profileKey")
+        val selected = candidates.first()
+        Log.d(TAG, "mid preferred size=${selected.width}x${selected.height}")
         return listOf(selected) + candidates.filterNot { it == selected }
     }
 
@@ -2057,7 +2040,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                         .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
                         .setResolutionFilter(midFilter)
                         .build()
-                ).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                ).setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
             }
             else -> {
                 // 高清晰度：输出 4096px（~12MP），输入请求 ≤16MP（4096×3072）
@@ -2089,7 +2072,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                         .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
                         .setResolutionFilter(highFilter)
                         .build()
-                ).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                ).setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
             }
         }
         return builder.build()
