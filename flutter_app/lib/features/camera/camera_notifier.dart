@@ -381,11 +381,18 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   final Ref _ref;
   static const Duration _kRenderParamsPushInterval = Duration(milliseconds: 33);
   static const Duration _kZoomPushInterval = Duration(milliseconds: 16);
+  static const Duration _kViewportRatioPushInterval =
+      Duration(milliseconds: 80);
   Timer? _renderParamsPushTimer;
   Timer? _zoomPushTimer;
+  Timer? _viewportRatioPushTimer;
   double? _pendingZoomToNative;
   int _renderParamsVersion = 0;
   int _lastAckedRenderParamsVersion = 0;
+  Future<void>? _cameraSwitchTask;
+  String? _queuedCameraId;
+  bool _viewportRatioSyncQueued = false;
+  bool _isViewportRatioSyncInFlight = false;
 
   CameraAppNotifier(this._ref) : super(const CameraAppState());
 
@@ -493,10 +500,39 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       state = state.copyWith(showCameraManager: false, clearPanel: true);
       return;
     }
-    // 切换前：保存当前相机的设定快照（供下次切回时恢复）
-    await _saveCurrentSnapshot();
-    await _loadCamera(cameraId);
+    _queuedCameraId = cameraId;
+    while (true) {
+      var task = _cameraSwitchTask;
+      if (task == null) {
+        task = _drainCameraSwitchQueue();
+        _cameraSwitchTask = task;
+      }
+      await task;
+      if (_cameraSwitchTask == null && _queuedCameraId == null) {
+        break;
+      }
+    }
     state = state.copyWith(showCameraManager: false);
+  }
+
+  Future<void> _drainCameraSwitchQueue() async {
+    try {
+      while (true) {
+        final nextCameraId = _queuedCameraId;
+        _queuedCameraId = null;
+        if (nextCameraId == null) {
+          break;
+        }
+        if (state.camera != null && state.camera!.id == nextCameraId) {
+          continue;
+        }
+        // 切换前：保存当前相机的设定快照（供下次切回时恢复）
+        await _saveCurrentSnapshot();
+        await _loadCamera(nextCameraId);
+      }
+    } finally {
+      _cameraSwitchTask = null;
+    }
   }
 
   /// 保存当前相机设定快照到 RetainSettingsService
@@ -595,7 +631,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       // 关键修复：加载相机后立即将 defaultLook 色彩参数同步到原生 GPU shader
       // 修复 FQS 紫色偏色问题：确保 colorBiasR/G/B、grainSize、sharpness 等专用字段正确传递
       await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
-      await _syncViewportRatioToNative();
+      await _syncViewportRatioToNativeImmediately();
       await _syncCurrentPreviewStateToNative();
     } catch (e) {
       state =
@@ -689,7 +725,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       final ratio = camera.modules.ratios.where((r) => r.id == id).firstOrNull;
       if (ratio != null && !ratio.supportsFrame) {
         state = state.copyWith(activeRatioId: id, clearFrameId: true);
-        unawaited(_syncViewportRatioToNative());
+        _scheduleViewportRatioSync();
         return;
       }
       // 当前相框不支持新比例时也自动清除
@@ -700,12 +736,12 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           frameOpt.supportedRatios.isNotEmpty &&
           !frameOpt.supportedRatios.contains(id)) {
         state = state.copyWith(activeRatioId: id, clearFrameId: true);
-        unawaited(_syncViewportRatioToNative());
+        _scheduleViewportRatioSync();
         return;
       }
     }
     state = state.copyWith(activeRatioId: id);
-    unawaited(_syncViewportRatioToNative());
+    _scheduleViewportRatioSync();
   }
 
   void selectFrame(String id) {
@@ -827,6 +863,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   void dispose() {
     _renderParamsPushTimer?.cancel();
     _zoomPushTimer?.cancel();
+    _viewportRatioPushTimer?.cancel();
     // Notifier 销毁时尝试保存快照（App 退出 / Provider 被释放时触发）
     // 注意：dispose 被调用时 ProviderContainer 可能已在销毁过程中，
     // _ref.read 会抛出 "Bad state: Tried to read a provider from a ProviderContainer that was already disposed"
@@ -1952,6 +1989,44 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         );
   }
 
+  void _scheduleViewportRatioSync({bool immediate = false}) {
+    _viewportRatioSyncQueued = true;
+    if (immediate) {
+      _viewportRatioPushTimer?.cancel();
+      _viewportRatioPushTimer = null;
+      unawaited(_flushViewportRatioSync());
+      return;
+    }
+    if (_viewportRatioPushTimer != null) return;
+    _viewportRatioPushTimer = Timer(_kViewportRatioPushInterval, () {
+      _viewportRatioPushTimer = null;
+      unawaited(_flushViewportRatioSync());
+    });
+  }
+
+  Future<void> _flushViewportRatioSync() async {
+    if (_isViewportRatioSyncInFlight) {
+      _viewportRatioSyncQueued = true;
+      return;
+    }
+    _isViewportRatioSyncInFlight = true;
+    try {
+      while (_viewportRatioSyncQueued) {
+        _viewportRatioSyncQueued = false;
+        await _syncViewportRatioToNative();
+      }
+    } finally {
+      _isViewportRatioSyncInFlight = false;
+    }
+  }
+
+  Future<void> _syncViewportRatioToNativeImmediately() async {
+    _viewportRatioPushTimer?.cancel();
+    _viewportRatioPushTimer = null;
+    _viewportRatioSyncQueued = true;
+    await _flushViewportRatioSync();
+  }
+
   Future<void> replayCurrentPreviewStateToNative({
     bool replayPreset = true,
   }) async {
@@ -1961,7 +2036,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     if (replayPreset) {
       await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
     }
-    await _syncViewportRatioToNative();
+    await _syncViewportRatioToNativeImmediately();
     await _syncCurrentPreviewStateToNative();
   }
 
