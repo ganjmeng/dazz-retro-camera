@@ -1252,6 +1252,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         // PR2: 中画质先快拍，再后台增强替换同一相册资产（仅 Android 普通单拍）。
         final enableBgEnhance = _kEnableBackgroundEnhanceReplace &&
             Platform.isAndroid &&
+            !livePhotoActive &&
             !state.doubleExpEnabled &&
             state.sharpenLevel == 1 &&
             minimapNormalizedRect == null &&
