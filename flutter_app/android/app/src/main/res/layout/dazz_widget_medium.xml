@@ -6,14 +6,28 @@
     android:orientation="vertical"
     android:padding="16dp">
 
-    <TextView
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="12dp"
-        android:text="DAZZ CAMERAS"
-        android:textColor="#CCFFFFFF"
-        android:textSize="12sp"
-        android:textStyle="bold" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_marginEnd="8dp"
+            android:contentDescription="@null"
+            android:src="@mipmap/ic_launcher" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="DAZZ CAMERAS"
+            android:textColor="#CCFFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <GridLayout
         android:layout_width="match_parent"
@@ -30,10 +44,12 @@
             android:layout_height="match_parent"
             android:layout_columnWeight="1"
             android:background="@drawable/widget_button"
+            android:drawableTop="@android:drawable/ic_menu_camera"
+            android:drawablePadding="8dp"
             android:gravity="center"
             android:padding="10dp"
             android:textColor="#FFFFFFFF"
-            android:textSize="14sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
@@ -42,10 +58,12 @@
             android:layout_height="match_parent"
             android:layout_columnWeight="1"
             android:background="@drawable/widget_button"
+            android:drawableTop="@android:drawable/ic_menu_camera"
+            android:drawablePadding="8dp"
             android:gravity="center"
             android:padding="10dp"
             android:textColor="#FFFFFFFF"
-            android:textSize="14sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
@@ -54,10 +72,12 @@
             android:layout_height="match_parent"
             android:layout_columnWeight="1"
             android:background="@drawable/widget_button"
+            android:drawableTop="@android:drawable/ic_menu_camera"
+            android:drawablePadding="8dp"
             android:gravity="center"
             android:padding="10dp"
             android:textColor="#FFFFFFFF"
-            android:textSize="14sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
@@ -66,10 +86,12 @@
             android:layout_height="match_parent"
             android:layout_columnWeight="1"
             android:background="@drawable/widget_button"
+            android:drawableTop="@android:drawable/ic_menu_camera"
+            android:drawablePadding="8dp"
             android:gravity="center"
             android:padding="10dp"
             android:textColor="#FFFFFFFF"
-            android:textSize="14sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
     </GridLayout>
 </LinearLayout>
