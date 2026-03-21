@@ -18,6 +18,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.media.MediaMetadataRetriever
 import android.util.Log
+import android.util.Rational
 import android.view.Surface
 import android.media.ExifInterface
 import android.hardware.camera2.CaptureRequest
@@ -35,6 +36,21 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
+import androidx.media3.common.Effect
+import androidx.media3.common.MediaItem
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.effect.Brightness
+import androidx.media3.effect.Contrast
+import androidx.media3.effect.GaussianBlur
+import androidx.media3.effect.HslAdjustment
+import androidx.media3.effect.Presentation
+import androidx.media3.effect.RgbAdjustment
+import androidx.media3.transformer.Composition
+import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.Effects
+import androidx.media3.transformer.ExportException
+import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.Transformer
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -54,6 +70,8 @@ import java.util.*
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware {
     private var captureProcessor: CaptureGLProcessor? = null
@@ -110,6 +128,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private var cachedRenderVersion: Int = 0
     private var currentSharpenLevel: Float = 0.5f
     private var currentPreviewResolution: String = "720p"
+    private var currentViewportWidth: Int = 3
+    private var currentViewportHeight: Int = 4
     private var currentCameraId: String = ""
     @Volatile private var pendingShotStartNs: Long = 0L
     @Volatile private var pendingShotLevel: Float = 0.5f
@@ -212,6 +232,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "setWhiteBalance" -> handleSetWhiteBalance(call, result)
             "setSharpen"         -> handleSetSharpen(call, result)
             "updateLensParams"   -> handleUpdateLensParams(call, result)
+            "updateViewportRatio"-> handleUpdateViewportRatio(call, result)
             "syncRuntimeState"   -> handleSyncRuntimeState(call, result)
             "startRecording"     -> handleStartRecording(result)
             "stopRecording"      -> handleStopRecording(result)
@@ -380,7 +401,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 .build()
         )
 
-        preview = previewBuilder.build().also { prev ->
+        val previewUseCase = previewBuilder.build().also { prev ->
             // GL 渲染模式：相机帧 → CameraGLRenderer（EGL + 着色器）→ Flutter SurfaceTexture
             prev.setSurfaceProvider(cameraExecutor) { request ->
                 val w = request.resolution.width
@@ -427,16 +448,20 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 }
             }
         }
+        preview = previewUseCase
 
-        imageCapture = buildImageCapture(currentSharpenLevel)
-        imageCapture?.flashMode = currentFlashMode
-        imageAnalysis = ImageAnalysis.Builder()
+        val imageCaptureUseCase = buildImageCapture(currentSharpenLevel).also {
+            it.flashMode = currentFlashMode
+        }
+        imageCapture = imageCaptureUseCase
+        val imageAnalysisUseCase = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build().also { analysis ->
                 analysis.setAnalyzer(bgExecutor) { image ->
                     analyzeRuntimeLuma(image)
                 }
             }
+        imageAnalysis = imageAnalysisUseCase
 
         val recorder = Recorder.Builder()
             .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
@@ -444,25 +469,27 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val candidateVideoCapture = VideoCapture.withOutput(recorder)
         provider.unbindAll()
         try {
-            camera = provider.bindToLifecycle(
-                owner,
-                cameraSelector,
-                preview,
-                imageCapture,
-                candidateVideoCapture,
-                imageAnalysis
+            camera = bindUseCaseGroup(
+                provider = provider,
+                owner = owner,
+                cameraSelector = cameraSelector,
+                previewUseCase = previewUseCase,
+                imageCaptureUseCase = imageCaptureUseCase,
+                imageAnalysisUseCase = imageAnalysisUseCase,
+                videoCaptureUseCase = candidateVideoCapture
             )
             videoCapture = candidateVideoCapture
             supportsLivePhoto = true
         } catch (e: Exception) {
             Log.w(TAG, "bindCameraUseCases: live photo bind rejected, fallback to photo-only: ${e.message}")
             provider.unbindAll()
-            camera = provider.bindToLifecycle(
-                owner,
-                cameraSelector,
-                preview,
-                imageCapture,
-                imageAnalysis
+            camera = bindUseCaseGroup(
+                provider = provider,
+                owner = owner,
+                cameraSelector = cameraSelector,
+                previewUseCase = previewUseCase,
+                imageCaptureUseCase = imageCaptureUseCase,
+                imageAnalysisUseCase = imageAnalysisUseCase
             )
             videoCapture = null
             supportsLivePhoto = false
@@ -470,6 +497,37 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         // 绑定成功后读取当前摄像头的传感器信息，供 Debug 面板显示
         @Suppress("UnsafeOptInUsageError")
         readActiveCameraInfo()
+    }
+
+    private fun buildCurrentViewPort(): ViewPort? {
+        val width = currentViewportWidth
+        val height = currentViewportHeight
+        if (width <= 0 || height <= 0) return null
+        val rotation = activityBinding?.activity?.display?.rotation ?: Surface.ROTATION_0
+        return try {
+            ViewPort.Builder(Rational(width, height), rotation).build()
+        } catch (e: Exception) {
+            Log.w(TAG, "buildCurrentViewPort failed: ${e.message}")
+            null
+        }
+    }
+
+    private fun bindUseCaseGroup(
+        provider: ProcessCameraProvider,
+        owner: LifecycleOwner,
+        cameraSelector: CameraSelector,
+        previewUseCase: Preview,
+        imageCaptureUseCase: ImageCapture,
+        imageAnalysisUseCase: ImageAnalysis,
+        videoCaptureUseCase: VideoCapture<Recorder>? = null
+    ): Camera {
+        val useCaseGroup = UseCaseGroup.Builder()
+            .addUseCase(previewUseCase)
+            .addUseCase(imageCaptureUseCase)
+            .addUseCase(imageAnalysisUseCase)
+        videoCaptureUseCase?.let { useCaseGroup.addUseCase(it) }
+        buildCurrentViewPort()?.let { useCaseGroup.setViewPort(it) }
+        return provider.bindToLifecycle(owner, cameraSelector, useCaseGroup.build())
     }
 
     /** 读取当前绑定摄像头的传感器信息，存入 activeCameraDebugInfo */
@@ -727,6 +785,52 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         )
     }
 
+    private fun handleUpdateViewportRatio(call: MethodCall, result: MethodChannel.Result) {
+        currentViewportWidth = (call.argument<Int>("width") ?: currentViewportWidth).coerceAtLeast(1)
+        currentViewportHeight = (call.argument<Int>("height") ?: currentViewportHeight).coerceAtLeast(1)
+
+        val owner = lifecycleOwner
+        if (owner == null || cameraProvider == null || surfaceTexture == null) {
+            result.success(
+                mapOf(
+                    "width" to currentViewportWidth,
+                    "height" to currentViewportHeight,
+                    "rebound" to false
+                )
+            )
+            return
+        }
+
+        try {
+            bindCameraUseCases(owner)
+            val latch = rendererReadyLatch
+            val mainExecutor = ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
+            bgExecutor.execute {
+                try {
+                    val ready = latch?.await(5, java.util.concurrent.TimeUnit.SECONDS) ?: true
+                    if (!ready) {
+                        Log.w(TAG, "updateViewportRatio: renderer ready timeout (5s)")
+                    }
+                    mainExecutor.execute {
+                        result.success(
+                            mapOf(
+                                "width" to currentViewportWidth,
+                                "height" to currentViewportHeight,
+                                "rebound" to true
+                            )
+                        )
+                    }
+                } catch (e: Exception) {
+                    mainExecutor.execute {
+                        result.error("UPDATE_VIEWPORT_RATIO_FAILED", e.message, null)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            result.error("UPDATE_VIEWPORT_RATIO_FAILED", e.message, null)
+        }
+    }
+
     // ─────────────────────────────────────────────
     // switchLens
     // ─────────────────────────────────────────────
@@ -973,6 +1077,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private fun handleSaveMotionPhoto(call: MethodCall, result: MethodChannel.Result) {
         val imagePath = call.argument<String>("imagePath")
         val videoPath = call.argument<String>("videoPath")
+        val renderParams = call.argument<Map<String, Any>>("renderParams") ?: emptyMap()
         if (imagePath.isNullOrEmpty() || videoPath.isNullOrEmpty()) {
             result.error("INVALID_ARG", "imagePath and videoPath are required", null)
             return
@@ -989,6 +1094,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         bgExecutor.execute {
             var xmpImageFile: File? = null
             var motionPhotoFile: File? = null
+            var preparedVideoFile: File? = null
             try {
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
                 val displayName = if (cameraId.isNotEmpty()) {
@@ -996,8 +1102,14 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 } else {
                     "DAZZ_MOTION_${timestamp}_MP.jpg"
                 }
+                preparedVideoFile = prepareMotionPhotoVideoForSaving(
+                    sourceVideoFile = videoFile,
+                    renderParams = renderParams,
+                    timestamp = timestamp,
+                )
+                val motionVideoFile = preparedVideoFile ?: videoFile
                 val presentationTimestampUs =
-                    resolveMotionPhotoPresentationTimestampUs(videoFile)
+                    resolveMotionPhotoPresentationTimestampUs(motionVideoFile)
 
                 xmpImageFile = File(context.cacheDir, "motion_xmp_${timestamp}.jpg")
                 imageFile.copyTo(xmpImageFile, overwrite = true)
@@ -1005,7 +1117,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 exif.setAttribute(
                     ExifInterface.TAG_XMP,
                     buildMotionPhotoXmp(
-                        videoLength = videoFile.length(),
+                        videoLength = motionVideoFile.length(),
                         presentationTimestampUs = presentationTimestampUs,
                     )
                 )
@@ -1015,7 +1127,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 FileInputStream(xmpImageFile).use { input ->
                     FileOutputStream(motionPhotoFile).use { output ->
                         input.copyTo(output)
-                        FileInputStream(videoFile).use { videoInput ->
+                        FileInputStream(motionVideoFile).use { videoInput ->
                             videoInput.copyTo(output)
                         }
                     }
@@ -1074,10 +1186,238 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             } finally {
                 runCatching { imageFile.delete() }
                 runCatching { videoFile.delete() }
+                if (preparedVideoFile != null && preparedVideoFile != videoFile) {
+                    runCatching { preparedVideoFile?.delete() }
+                }
                 runCatching { xmpImageFile?.delete() }
                 runCatching { motionPhotoFile?.delete() }
             }
         }
+    }
+
+    private fun prepareMotionPhotoVideoForSaving(
+        sourceVideoFile: File,
+        renderParams: Map<String, Any>,
+        timestamp: String,
+    ): File? {
+        val context = flutterPluginBinding.applicationContext
+        val targetSize = resolveMotionPhotoTargetVideoSize(sourceVideoFile)
+        val videoEffects = buildMotionPhotoVideoEffects(
+            renderParams = renderParams,
+            targetWidth = targetSize.first,
+            targetHeight = targetSize.second,
+        )
+        if (videoEffects.isEmpty()) {
+            return sourceVideoFile
+        }
+
+        val outFile = File(context.cacheDir, "motion_video_prepared_${timestamp}.mp4")
+        if (outFile.exists()) {
+            outFile.delete()
+        }
+
+        val latch = CountDownLatch(1)
+        val exportError = AtomicReference<Throwable?>(null)
+        val mainExecutor = ContextCompat.getMainExecutor(context)
+
+        mainExecutor.execute {
+            try {
+                val transformer = Transformer.Builder(context)
+                    .addListener(object : Transformer.Listener {
+                        override fun onCompleted(
+                            composition: Composition,
+                            exportResult: ExportResult,
+                        ) {
+                            latch.countDown()
+                        }
+
+                        override fun onError(
+                            composition: Composition,
+                            exportResult: ExportResult,
+                            exportException: ExportException,
+                        ) {
+                            exportError.set(exportException)
+                            latch.countDown()
+                        }
+                    })
+                    .build()
+
+                val editedMediaItem = EditedMediaItem.Builder(
+                    MediaItem.fromUri(Uri.fromFile(sourceVideoFile))
+                )
+                    .setEffects(
+                        Effects(
+                            emptyList<AudioProcessor>(),
+                            videoEffects,
+                        )
+                    )
+                    .build()
+
+                transformer.start(editedMediaItem, outFile.absolutePath)
+            } catch (t: Throwable) {
+                exportError.set(t)
+                latch.countDown()
+            }
+        }
+
+        val finished = latch.await(45, TimeUnit.SECONDS)
+        val error = exportError.get()
+        if (!finished) {
+            runCatching { outFile.delete() }
+            Log.w(TAG, "prepareMotionPhotoVideoForSaving timed out, keeping original video")
+            return sourceVideoFile
+        }
+        if (error != null || !outFile.exists() || outFile.length() <= 0L) {
+            runCatching { outFile.delete() }
+            Log.w(
+                TAG,
+                "prepareMotionPhotoVideoForSaving failed, keeping original video",
+                error,
+            )
+            return sourceVideoFile
+        }
+        Log.d(
+            TAG,
+            "prepareMotionPhotoVideoForSaving exported lightweight GPU video ${outFile.absolutePath}",
+        )
+        return outFile
+    }
+
+    private fun shouldApplyLightweightMotionVideoEffects(renderParams: Map<String, Any>): Boolean {
+        fun value(key: String, fallback: Double = 0.0): Double =
+            (renderParams[key] as? Number)?.toDouble() ?: fallback
+
+        return kotlin.math.abs(value("exposureOffset")) > 0.01 ||
+            kotlin.math.abs(value("contrast", 1.0) - 1.0) > 0.01 ||
+            kotlin.math.abs(value("saturation", 1.0) - 1.0) > 0.01 ||
+            kotlin.math.abs(value("temperatureShift")) > 0.01 ||
+            kotlin.math.abs(value("tintShift")) > 0.01 ||
+            kotlin.math.abs(value("vignetteAmount")) > 0.01 ||
+            kotlin.math.abs(value("softFocus")) > 0.01 ||
+            kotlin.math.abs(value("sharpen")) > 0.01
+    }
+
+    private fun resolveMotionPhotoTargetVideoSize(sourceVideoFile: File): Pair<Int, Int> {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(sourceVideoFile.absolutePath)
+            val rawWidth = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
+            )?.toIntOrNull() ?: 1080
+            val rawHeight = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
+            )?.toIntOrNull() ?: 1440
+            val rotation = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION
+            )?.toIntOrNull() ?: 0
+            val isQuarterTurn = rotation == 90 || rotation == 270
+            val displayWidth = if (isQuarterTurn) rawHeight else rawWidth
+            val displayHeight = if (isQuarterTurn) rawWidth else rawHeight
+            val viewportAspect = normalizedMotionPhotoAspectRatio()
+            val sourceAspect =
+                displayWidth.toDouble() / displayHeight.toDouble().coerceAtLeast(1.0)
+
+            val targetWidth: Int
+            val targetHeight: Int
+            if (sourceAspect > viewportAspect) {
+                targetHeight = displayHeight
+                targetWidth = roundEven(targetHeight * viewportAspect)
+                    .coerceAtMost(displayWidth)
+            } else {
+                targetWidth = displayWidth
+                targetHeight = roundEven(targetWidth / viewportAspect)
+                    .coerceAtMost(displayHeight)
+            }
+            targetWidth.coerceAtLeast(2) to targetHeight.coerceAtLeast(2)
+        } catch (e: Exception) {
+            Log.w(TAG, "resolveMotionPhotoTargetVideoSize failed, falling back to viewport ratio", e)
+            val width = roundEven(1440.0 * normalizedMotionPhotoAspectRatio()).coerceAtLeast(2)
+            width to 1440
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
+    private fun buildMotionPhotoVideoEffects(
+        renderParams: Map<String, Any>,
+        targetWidth: Int,
+        targetHeight: Int,
+    ): MutableList<Effect> {
+        fun value(key: String, fallback: Double = 0.0): Double =
+            (renderParams[key] as? Number)?.toDouble() ?: fallback
+
+        val effects = mutableListOf<Effect>()
+        if (targetWidth > 0 && targetHeight > 0) {
+            effects += Presentation.createForWidthAndHeight(
+                targetWidth,
+                targetHeight,
+                Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP,
+            )
+        }
+
+        val exposureOffset = value("exposureOffset").coerceIn(-2.0, 2.0)
+        if (kotlin.math.abs(exposureOffset) > 0.01) {
+            effects += Brightness((exposureOffset / 2.0).toFloat().coerceIn(-1f, 1f))
+        }
+
+        val contrast = value("contrast", 1.0)
+        if (kotlin.math.abs(contrast - 1.0) > 0.01) {
+            effects += Contrast((contrast - 1.0).toFloat().coerceIn(-1f, 1f))
+        }
+
+        val saturation = value("saturation", 1.0)
+        val saturationAdjustment = ((saturation - 1.0) * 100.0).toFloat().coerceIn(-100f, 100f)
+        if (kotlin.math.abs(saturationAdjustment) > 0.5f) {
+            effects += HslAdjustment.Builder()
+                .adjustSaturation(saturationAdjustment)
+                .build()
+        }
+
+        val temperatureShift = value("temperatureShift")
+        val tintShift = value("tintShift")
+        if (kotlin.math.abs(temperatureShift) > 0.01 || kotlin.math.abs(tintShift) > 0.01) {
+            val redScale = (1.0 + (temperatureShift / 1000.0) * 0.30).coerceAtLeast(0.0)
+            val blueScale = (1.0 - (temperatureShift / 1000.0) * 0.30).coerceAtLeast(0.0)
+            val greenScale = (1.0 + (tintShift / 1000.0) * 0.20).coerceAtLeast(0.0)
+            effects += RgbAdjustment.Builder()
+                .setRedScale(redScale.toFloat())
+                .setGreenScale(greenScale.toFloat())
+                .setBlueScale(blueScale.toFloat())
+                .build()
+        }
+
+        val softFocus = value("softFocus")
+        if (softFocus > 0.01) {
+            val sigma = (softFocus * 6.0).coerceIn(0.2, 2.8)
+            effects += GaussianBlur(sigma.toFloat())
+        }
+
+        if (shouldApplyLightweightMotionVideoEffects(renderParams)) {
+            val unsupportedKeys = buildList {
+                if (kotlin.math.abs(value("vignetteAmount")) > 0.01) add("vignetteAmount")
+                if (kotlin.math.abs(value("sharpen")) > 0.01) add("sharpen")
+            }
+            if (unsupportedKeys.isNotEmpty()) {
+                Log.d(
+                    TAG,
+                    "Motion photo video uses lightweight GPU export; unsupported keys kept photo-only: $unsupportedKeys",
+                )
+            }
+        }
+
+        return effects
+    }
+
+    private fun normalizedMotionPhotoAspectRatio(): Double {
+        val width = currentViewportWidth.coerceAtLeast(1)
+        val height = currentViewportHeight.coerceAtLeast(1)
+        return width.toDouble() / height.toDouble()
+    }
+
+    private fun roundEven(value: Double): Int {
+        val rounded = value.toInt()
+        val even = if (rounded % 2 == 0) rounded else rounded - 1
+        return even.coerceAtLeast(2)
     }
 
     private fun buildMotionPhotoXmp(
@@ -1088,16 +1428,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             <x:xmpmeta xmlns:x="adobe:ns:meta/">
               <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
                 <rdf:Description
-                  xmlns:Camera="http://ns.google.com/photos/1.0/camera/"
+                  xmlns:GCamera="http://ns.google.com/photos/1.0/camera/"
                   xmlns:Container="http://ns.google.com/photos/1.0/container/"
                   xmlns:Item="http://ns.google.com/photos/1.0/container/item/"
-                  Camera:MicroVideo="1"
-                  Camera:MicroVideoVersion="1"
-                  Camera:MicroVideoOffset="$videoLength"
-                  Camera:MicroVideoPresentationTimestampUs="$presentationTimestampUs"
-                  Camera:MotionPhoto="1"
-                  Camera:MotionPhotoVersion="1"
-                  Camera:MotionPhotoPresentationTimestampUs="$presentationTimestampUs">
+                  GCamera:MicroVideo="1"
+                  GCamera:MicroVideoVersion="1"
+                  GCamera:MicroVideoOffset="$videoLength"
+                  GCamera:MicroVideoPresentationTimestampUs="$presentationTimestampUs"
+                  GCamera:MotionPhoto="1"
+                  GCamera:MotionPhotoVersion="1"
+                  GCamera:MotionPhotoPresentationTimestampUs="$presentationTimestampUs">
                   <Container:Directory>
                     <rdf:Seq>
                       <rdf:li rdf:parseType="Resource"
@@ -1108,7 +1448,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                       <rdf:li rdf:parseType="Resource"
                         Item:Mime="video/mp4"
                         Item:Semantic="MotionPhoto"
-                        Item:Length="$videoLength"/>
+                        Item:Length="$videoLength"
+                        Item:Padding="0"/>
                     </rdf:Seq>
                   </Container:Directory>
                 </rdf:Description>
@@ -1488,15 +1829,19 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                             imageCapture = newImageCapture
                             imageCapture?.flashMode = currentFlashMode
                             val currentVideoCapture = videoCapture
+                            val previewUseCase = preview ?: throw IllegalStateException("Preview not initialized")
+                            val imageCaptureUseCase = imageCapture ?: throw IllegalStateException("ImageCapture not initialized")
+                            val imageAnalysisUseCase = imageAnalysis ?: throw IllegalStateException("ImageAnalysis not initialized")
                             if (currentVideoCapture != null) {
                                 try {
-                                    camera = provider.bindToLifecycle(
-                                        owner,
-                                        cameraSelector,
-                                        preview,
-                                        imageCapture,
-                                        currentVideoCapture,
-                                        imageAnalysis
+                                    camera = bindUseCaseGroup(
+                                        provider = provider,
+                                        owner = owner,
+                                        cameraSelector = cameraSelector,
+                                        previewUseCase = previewUseCase,
+                                        imageCaptureUseCase = imageCaptureUseCase,
+                                        imageAnalysisUseCase = imageAnalysisUseCase,
+                                        videoCaptureUseCase = currentVideoCapture
                                     )
                                     supportsLivePhoto = true
                                 } catch (e: Exception) {
@@ -1504,22 +1849,24 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                                     provider.unbindAll()
                                     videoCapture = null
                                     supportsLivePhoto = false
-                                    camera = provider.bindToLifecycle(
-                                        owner,
-                                        cameraSelector,
-                                        preview,
-                                        imageCapture,
-                                        imageAnalysis
+                                    camera = bindUseCaseGroup(
+                                        provider = provider,
+                                        owner = owner,
+                                        cameraSelector = cameraSelector,
+                                        previewUseCase = previewUseCase,
+                                        imageCaptureUseCase = imageCaptureUseCase,
+                                        imageAnalysisUseCase = imageAnalysisUseCase
                                     )
                                 }
                             } else {
                                 supportsLivePhoto = false
-                                camera = provider.bindToLifecycle(
-                                    owner,
-                                    cameraSelector,
-                                    preview,
-                                    imageCapture,
-                                    imageAnalysis
+                                camera = bindUseCaseGroup(
+                                    provider = provider,
+                                    owner = owner,
+                                    cameraSelector = cameraSelector,
+                                    previewUseCase = previewUseCase,
+                                    imageCaptureUseCase = imageCaptureUseCase,
+                                    imageAnalysisUseCase = imageAnalysisUseCase
                                 )
                             }
                             Log.d(TAG, "setSharpen: level=$level, imageCapture rebuilt")

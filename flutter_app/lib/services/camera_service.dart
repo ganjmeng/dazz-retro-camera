@@ -289,6 +289,20 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
+  Future<void> updateViewportRatio({
+    required int width,
+    required int height,
+  }) async {
+    try {
+      await _channel.invokeMethod('updateViewportRatio', {
+        'width': width,
+        'height': height,
+      });
+    } catch (e) {
+      print('Error updating viewport ratio: $e');
+    }
+  }
+
   /// 点击对焦 + 对焦点曝光
   /// [x], [y]: 归一化坐标 [0, 1]，原点在取景框左上角
   Future<void> setFocus(double x, double y) async {
@@ -527,6 +541,7 @@ class CameraService extends StateNotifier<CameraState> {
     String cameraId = '',
     double? latitude,
     double? longitude,
+    Map<String, dynamic>? renderParams,
   }) async {
     try {
       final result = await _channel
@@ -536,6 +551,7 @@ class CameraService extends StateNotifier<CameraState> {
         if (cameraId.isNotEmpty) 'cameraId': cameraId,
         if (latitude != null) 'latitude': latitude,
         if (longitude != null) 'longitude': longitude,
+        if (renderParams != null) 'renderParams': renderParams,
       });
       return result?['uri'] as String?;
     } catch (e) {
@@ -560,12 +576,36 @@ class CameraService extends StateNotifier<CameraState> {
       final galleryAssetId = (result['galleryAssetId'] as String?)?.trim();
       return {
         'filePath': result['filePath'] as String?,
+        'videoPath': result['videoPath'] as String?,
         'galleryAssetId': (galleryAssetId == null || galleryAssetId.isEmpty)
             ? null
             : galleryAssetId,
       };
     } catch (e) {
       print('Error capturing live photo: $e');
+      return null;
+    }
+  }
+
+  Future<String?> saveLivePhoto(
+    String imagePath,
+    String videoPath, {
+    double? latitude,
+    double? longitude,
+    Map<String, dynamic>? renderParams,
+  }) async {
+    try {
+      final result =
+          await _channel.invokeMethod<Map<dynamic, dynamic>>('saveLivePhoto', {
+        'imagePath': imagePath,
+        'videoPath': videoPath,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
+        if (renderParams != null) 'renderParams': renderParams,
+      });
+      return result?['uri'] as String?;
+    } catch (e) {
+      print('Error saving live photo: $e');
       return null;
     }
   }

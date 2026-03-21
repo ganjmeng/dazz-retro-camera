@@ -6,6 +6,12 @@ import MetalKit
 import CoreImage
 import CoreLocation
 
+private extension Comparable {
+    func clamped(to limits: ClosedRange<Self>) -> Self {
+        min(max(self, limits.lowerBound), limits.upperBound)
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // RetroCamPlugin — iOS 相机 MethodChannel 插件
 // Channel: com.retrocam.app/camera_control
@@ -90,6 +96,8 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             handleTakePhoto(call: call, result: result)
         case "captureLivePhoto":
             handleCaptureLivePhoto(call: call, result: result)
+        case "saveLivePhoto":
+            handleSaveLivePhoto(call: call, result: result)
         case "startRecording":
             result(["success": false, "reason": "not_implemented"])
         case "stopRecording":
@@ -526,45 +534,482 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
                 return
             }
 
-            PHPhotoLibrary.requestAuthorization { status in
-                let isGranted: Bool
-                if #available(iOS 14, *) {
-                    isGranted = (status == .authorized || status == .limited)
-                } else {
-                    isGranted = (status == .authorized)
-                }
-                guard isGranted else {
-                    DispatchQueue.main.async {
-                        self.reapplyRuntimeStateToRenderer()
-                        result(FlutterError(code: "PERMISSION_DENIED", message: "Photo library access denied", details: nil))
-                    }
-                    return
-                }
+            DispatchQueue.main.async {
+                self.reapplyRuntimeStateToRenderer()
+                result([
+                    "filePath": fileURL.path,
+                    "videoPath": liveMovieURL.path,
+                ])
+            }
+        }
+    }
 
+    private func handleSaveLivePhoto(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let imagePath = args["imagePath"] as? String,
+              let videoPath = args["videoPath"] as? String else {
+            result(FlutterError(code: "INVALID_ARG", message: "imagePath and videoPath required", details: nil))
+            return
+        }
+        let latitude = args["latitude"] as? Double
+        let longitude = args["longitude"] as? Double
+        let renderParams = args["renderParams"] as? [String: Any]
+        let assetLocation =
+            (latitude != nil && longitude != nil)
+                ? CLLocation(latitude: latitude!, longitude: longitude!)
+                : nil
+        let imageURL = URL(fileURLWithPath: imagePath)
+        let videoURL = URL(fileURLWithPath: videoPath)
+
+        guard FileManager.default.fileExists(atPath: imagePath) else {
+            result(FlutterError(code: "FILE_NOT_FOUND", message: "Image not found: \(imagePath)", details: nil))
+            return
+        }
+        guard FileManager.default.fileExists(atPath: videoPath) else {
+            result(FlutterError(code: "FILE_NOT_FOUND", message: "Video not found: \(videoPath)", details: nil))
+            return
+        }
+
+        PHPhotoLibrary.requestAuthorization { status in
+            let isGranted: Bool
+            if #available(iOS 14, *) {
+                isGranted = (status == .authorized || status == .limited)
+            } else {
+                isGranted = (status == .authorized)
+            }
+            guard isGranted else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "PERMISSION_DENIED", message: "Photo library access denied", details: nil))
+                }
+                return
+            }
+
+            self.prepareLivePhotoVideoForSaving(
+                imageURL: imageURL,
+                videoURL: videoURL,
+                renderParams: renderParams
+            ) { preparedVideoURL in
                 var assetPlaceholder: PHObjectPlaceholder?
                 PHPhotoLibrary.shared().performChanges({
                     let request = PHAssetCreationRequest.forAsset()
                     let options = PHAssetResourceCreationOptions()
                     request.location = assetLocation
-                    request.addResource(with: .photo, fileURL: fileURL, options: options)
-                    request.addResource(with: .pairedVideo, fileURL: liveMovieURL, options: options)
+                    request.addResource(with: .photo, fileURL: imageURL, options: options)
+                    request.addResource(with: .pairedVideo, fileURL: preparedVideoURL, options: options)
                     assetPlaceholder = request.placeholderForCreatedAsset
+
+                    let fetchOptions = PHFetchOptions()
+                    fetchOptions.predicate = NSPredicate(format: "title = %@", "DAZZ")
+                    let albums = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: fetchOptions)
+                    if let album = albums.firstObject,
+                       let placeholder = assetPlaceholder,
+                       let addRequest = PHAssetCollectionChangeRequest(for: album) {
+                        addRequest.addAssets([placeholder] as NSFastEnumeration)
+                    }
                 }) { success, error in
-                    try? FileManager.default.removeItem(at: liveMovieURL)
-                    DispatchQueue.main.async {
-                        self.reapplyRuntimeStateToRenderer()
-                        if success {
-                            result([
-                                "filePath": fileURL.path,
-                                "galleryAssetId": assetPlaceholder?.localIdentifier ?? ""
-                            ])
-                        } else {
+                    let cleanup = {
+                        try? FileManager.default.removeItem(at: imageURL)
+                        try? FileManager.default.removeItem(at: videoURL)
+                        if preparedVideoURL != videoURL {
+                            try? FileManager.default.removeItem(at: preparedVideoURL)
+                        }
+                    }
+                    if !success {
+                        cleanup()
+                        DispatchQueue.main.async {
                             result(FlutterError(code: "SAVE_FAILED", message: error?.localizedDescription, details: nil))
+                        }
+                        return
+                    }
+
+                    guard let localId = assetPlaceholder?.localIdentifier else {
+                        cleanup()
+                        DispatchQueue.main.async {
+                            result(["success": true, "uri": ""])
+                        }
+                        return
+                    }
+
+                    let fetchOptions = PHFetchOptions()
+                    fetchOptions.predicate = NSPredicate(format: "title = %@", "DAZZ")
+                    let albums = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: fetchOptions)
+                    if albums.firstObject != nil {
+                        cleanup()
+                        DispatchQueue.main.async {
+                            result(["success": true, "uri": localId])
+                        }
+                        return
+                    }
+
+                    let assets = PHAsset.fetchAssets(withLocalIdentifiers: [localId], options: nil)
+                    guard let asset = assets.firstObject else {
+                        cleanup()
+                        DispatchQueue.main.async {
+                            result(["success": true, "uri": localId])
+                        }
+                        return
+                    }
+
+                    PHPhotoLibrary.shared().performChanges({
+                        _ = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: "DAZZ")
+                    }) { _, _ in
+                        let albums2 = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: fetchOptions)
+                        if let album = albums2.firstObject {
+                            PHPhotoLibrary.shared().performChanges({
+                                if let addRequest = PHAssetCollectionChangeRequest(for: album) {
+                                    addRequest.addAssets([asset] as NSFastEnumeration)
+                                }
+                            }) { _, _ in
+                                cleanup()
+                                DispatchQueue.main.async {
+                                    result(["success": true, "uri": localId])
+                                }
+                            }
+                        } else {
+                            cleanup()
+                            DispatchQueue.main.async {
+                                result(["success": true, "uri": localId])
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    private func prepareLivePhotoVideoForSaving(
+        imageURL: URL,
+        videoURL: URL,
+        renderParams: [String: Any]?,
+        completion: @escaping (URL) -> Void
+    ) {
+        guard let image = UIImage(contentsOfFile: imageURL.path),
+              image.size.width > 0,
+              image.size.height > 0 else {
+            self.applyLivePhotoVideoEffectsIfNeeded(
+                videoURL: videoURL,
+                renderParams: renderParams,
+                completion: completion
+            )
+            return
+        }
+
+        let targetAspect = image.size.width / image.size.height
+        let asset = AVURLAsset(url: videoURL)
+        guard let sourceVideoTrack = asset.tracks(withMediaType: .video).first else {
+            completion(videoURL)
+            return
+        }
+
+        let transformedSize = sourceVideoTrack.naturalSize.applying(sourceVideoTrack.preferredTransform)
+        let orientedSize = CGSize(width: abs(transformedSize.width), height: abs(transformedSize.height))
+        guard orientedSize.width > 0, orientedSize.height > 0 else {
+            completion(videoURL)
+            return
+        }
+
+        let sourceAspect = orientedSize.width / orientedSize.height
+        if abs(sourceAspect - targetAspect) < 0.01 {
+            self.applyLivePhotoVideoEffectsIfNeeded(
+                videoURL: videoURL,
+                renderParams: renderParams,
+                completion: completion
+            )
+            return
+        }
+
+        let renderSize: CGSize
+        if sourceAspect > targetAspect {
+            renderSize = CGSize(width: orientedSize.height * targetAspect, height: orientedSize.height)
+        } else {
+            renderSize = CGSize(width: orientedSize.width, height: orientedSize.width / targetAspect)
+        }
+
+        let composition = AVMutableComposition()
+        guard let compositionVideoTrack = composition.addMutableTrack(
+            withMediaType: .video,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else {
+            completion(videoURL)
+            return
+        }
+
+        do {
+            try compositionVideoTrack.insertTimeRange(
+                CMTimeRange(start: .zero, duration: asset.duration),
+                of: sourceVideoTrack,
+                at: .zero
+            )
+            if let sourceAudioTrack = asset.tracks(withMediaType: .audio).first,
+               let compositionAudioTrack = composition.addMutableTrack(
+                   withMediaType: .audio,
+                   preferredTrackID: kCMPersistentTrackID_Invalid
+               ) {
+                try compositionAudioTrack.insertTimeRange(
+                    CMTimeRange(start: .zero, duration: asset.duration),
+                    of: sourceAudioTrack,
+                    at: .zero
+                )
+            }
+        } catch {
+            print("[CameraPlugin] prepareLivePhotoVideoForSaving insert failed: \(error)")
+            completion(videoURL)
+            return
+        }
+
+        let xScale = renderSize.width / orientedSize.width
+        let yScale = renderSize.height / orientedSize.height
+        let scale = max(xScale, yScale)
+        let scaledSize = CGSize(width: orientedSize.width * scale, height: orientedSize.height * scale)
+        let tx = (renderSize.width - scaledSize.width) * 0.5
+        let ty = (renderSize.height - scaledSize.height) * 0.5
+
+        var finalTransform = sourceVideoTrack.preferredTransform
+        finalTransform = finalTransform.concatenating(CGAffineTransform(scaleX: scale, y: scale))
+        finalTransform = finalTransform.concatenating(
+            CGAffineTransform(translationX: tx / scale, y: ty / scale)
+        )
+
+        let instruction = AVMutableVideoCompositionInstruction()
+        instruction.timeRange = CMTimeRange(start: .zero, duration: asset.duration)
+
+        let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compositionVideoTrack)
+        layerInstruction.setTransform(finalTransform, at: .zero)
+        instruction.layerInstructions = [layerInstruction]
+
+        let videoComposition = AVMutableVideoComposition()
+        videoComposition.instructions = [instruction]
+        videoComposition.renderSize = CGSize(
+            width: max(1, round(renderSize.width)),
+            height: max(1, round(renderSize.height))
+        )
+        let nominalFrameRate = sourceVideoTrack.nominalFrameRate
+        if nominalFrameRate > 0 {
+            videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(nominalFrameRate.rounded()))
+        } else {
+            videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
+        }
+
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dazz_live_photo_processed", isDirectory: true)
+            .appendingPathComponent("DAZZ_LIVE_PROCESSED_\(Int(Date().timeIntervalSince1970 * 1000)).mov")
+        try? FileManager.default.createDirectory(
+            at: outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? FileManager.default.removeItem(at: outputURL)
+
+        guard let exportSession = AVAssetExportSession(
+            asset: composition,
+            presetName: AVAssetExportPresetHighestQuality
+        ) else {
+            completion(videoURL)
+            return
+        }
+        exportSession.outputURL = outputURL
+        exportSession.outputFileType = .mov
+        exportSession.videoComposition = videoComposition
+        exportSession.shouldOptimizeForNetworkUse = false
+        exportSession.exportAsynchronously {
+            switch exportSession.status {
+            case .completed:
+                self.applyLivePhotoVideoEffectsIfNeeded(
+                    videoURL: outputURL,
+                    renderParams: renderParams,
+                    completion: completion
+                )
+            case .failed, .cancelled:
+                print("[CameraPlugin] prepareLivePhotoVideoForSaving export failed: \(exportSession.error?.localizedDescription ?? "unknown")")
+                try? FileManager.default.removeItem(at: outputURL)
+                self.applyLivePhotoVideoEffectsIfNeeded(
+                    videoURL: videoURL,
+                    renderParams: renderParams,
+                    completion: completion
+                )
+            default:
+                self.applyLivePhotoVideoEffectsIfNeeded(
+                    videoURL: videoURL,
+                    renderParams: renderParams,
+                    completion: completion
+                )
+            }
+        }
+    }
+
+    private func applyLivePhotoVideoEffectsIfNeeded(
+        videoURL: URL,
+        renderParams: [String: Any]?,
+        completion: @escaping (URL) -> Void
+    ) {
+        guard let renderParams,
+              shouldApplyLivePhotoVideoEffects(renderParams: renderParams) else {
+            completion(videoURL)
+            return
+        }
+
+        let asset = AVURLAsset(url: videoURL)
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dazz_live_photo_effects", isDirectory: true)
+            .appendingPathComponent("DAZZ_LIVE_EFFECT_\(Int(Date().timeIntervalSince1970 * 1000)).mov")
+        try? FileManager.default.createDirectory(
+            at: outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? FileManager.default.removeItem(at: outputURL)
+
+        guard let exportSession = AVAssetExportSession(
+            asset: asset,
+            presetName: AVAssetExportPresetHighestQuality
+        ) else {
+            completion(videoURL)
+            return
+        }
+
+        let ciContext = self.ciContext
+        let videoComposition = AVVideoComposition(asset: asset) { request in
+            autoreleasepool {
+                let image = self.applyLivePhotoFilters(
+                    to: request.sourceImage,
+                    renderParams: renderParams
+                )
+                let cropped = image.cropped(to: request.sourceImage.extent)
+                request.finish(with: cropped, context: ciContext)
+            }
+        }
+        if let track = asset.tracks(withMediaType: .video).first {
+            let nominalFrameRate = track.nominalFrameRate
+            if nominalFrameRate > 0 {
+                videoComposition.frameDuration = CMTime(
+                    value: 1,
+                    timescale: CMTimeScale(nominalFrameRate.rounded())
+                )
+            }
+            let transformedSize = track.naturalSize.applying(track.preferredTransform)
+            videoComposition.renderSize = CGSize(
+                width: max(1, abs(transformedSize.width)),
+                height: max(1, abs(transformedSize.height))
+            )
+        }
+
+        exportSession.outputURL = outputURL
+        exportSession.outputFileType = .mov
+        exportSession.videoComposition = videoComposition
+        exportSession.shouldOptimizeForNetworkUse = false
+        exportSession.exportAsynchronously {
+            switch exportSession.status {
+            case .completed:
+                if outputURL != videoURL {
+                    try? FileManager.default.removeItem(at: videoURL)
+                }
+                completion(outputURL)
+            case .failed, .cancelled:
+                print("[CameraPlugin] applyLivePhotoVideoEffectsIfNeeded export failed: \(exportSession.error?.localizedDescription ?? "unknown")")
+                try? FileManager.default.removeItem(at: outputURL)
+                completion(videoURL)
+            default:
+                try? FileManager.default.removeItem(at: outputURL)
+                completion(videoURL)
+            }
+        }
+    }
+
+    private func shouldApplyLivePhotoVideoEffects(renderParams: [String: Any]) -> Bool {
+        func value(_ key: String) -> Double {
+            return (renderParams[key] as? NSNumber)?.doubleValue ?? 0.0
+        }
+        return abs(value("exposureOffset")) > 0.01 ||
+            abs(value("contrast") - 1.0) > 0.01 ||
+            abs(value("saturation") - 1.0) > 0.01 ||
+            abs(value("temperatureShift")) > 0.01 ||
+            abs(value("tintShift")) > 0.01 ||
+            abs(value("vignetteAmount")) > 0.01 ||
+            abs(value("bloomAmount")) > 0.01 ||
+            abs(value("softFocus")) > 0.01 ||
+            abs(value("vibrance")) > 0.01 ||
+            abs(value("sharpen")) > 0.01
+    }
+
+    private func applyLivePhotoFilters(
+        to sourceImage: CIImage,
+        renderParams: [String: Any]
+    ) -> CIImage {
+        func value(_ key: String, _ fallback: Double = 0.0) -> Double {
+            return (renderParams[key] as? NSNumber)?.doubleValue ?? fallback
+        }
+
+        var image = sourceImage
+
+        let exposure = Float(value("exposureOffset"))
+        if abs(exposure) > 0.01,
+           let filter = CIFilter(name: "CIExposureAdjust") {
+            filter.setValue(image, forKey: kCIInputImageKey)
+            filter.setValue(exposure, forKey: kCIInputEVKey)
+            image = filter.outputImage ?? image
+        }
+
+        let vibrance = Float(value("vibrance") / 100.0)
+        if abs(vibrance) > 0.01,
+           let filter = CIFilter(name: "CIVibrance") {
+            filter.setValue(image, forKey: kCIInputImageKey)
+            filter.setValue(vibrance, forKey: "inputAmount")
+            image = filter.outputImage ?? image
+        }
+
+        let saturation = Float(value("saturation", 1.0))
+        let contrast = Float(value("contrast", 1.0))
+        if abs(saturation - 1.0) > 0.01 || abs(contrast - 1.0) > 0.01,
+           let filter = CIFilter(name: "CIColorControls") {
+            filter.setValue(image, forKey: kCIInputImageKey)
+            filter.setValue(saturation, forKey: kCIInputSaturationKey)
+            filter.setValue(contrast, forKey: kCIInputContrastKey)
+            filter.setValue(0.0, forKey: kCIInputBrightnessKey)
+            image = filter.outputImage ?? image
+        }
+
+        let temperatureShift = value("temperatureShift")
+        let tintShift = value("tintShift")
+        if abs(temperatureShift) > 0.01 || abs(tintShift) > 0.01,
+           let filter = CIFilter(name: "CITemperatureAndTint") {
+            let neutral = CIVector(x: 6500, y: 0)
+            let target = CIVector(
+                x: CGFloat((6500 + temperatureShift * 35.0).clamped(to: 2500...9500)),
+                y: CGFloat((tintShift * 1.2).clamped(to: -150...150))
+            )
+            filter.setValue(image, forKey: kCIInputImageKey)
+            filter.setValue(neutral, forKey: "inputNeutral")
+            filter.setValue(target, forKey: "inputTargetNeutral")
+            image = filter.outputImage ?? image
+        }
+
+        let bloomAmount = value("bloomAmount")
+        let softFocus = value("softFocus")
+        let bloomIntensity = Float((bloomAmount * 0.85 + softFocus * 0.55).clamped(to: 0...1))
+        if bloomIntensity > 0.01,
+           let filter = CIFilter(name: "CIBloom") {
+            filter.setValue(image, forKey: kCIInputImageKey)
+            filter.setValue(bloomIntensity * 9.0, forKey: kCIInputRadiusKey)
+            filter.setValue(bloomIntensity * 0.45, forKey: kCIInputIntensityKey)
+            image = filter.outputImage ?? image
+        }
+
+        let sharpen = Float(value("sharpen"))
+        if sharpen > 0.01,
+           let filter = CIFilter(name: "CISharpenLuminance") {
+            filter.setValue(image, forKey: kCIInputImageKey)
+            filter.setValue((sharpen * 0.35).clamped(to: 0...0.8), forKey: kCIInputSharpnessKey)
+            image = filter.outputImage ?? image
+        }
+
+        let vignetteAmount = Float(value("vignetteAmount"))
+        if vignetteAmount > 0.01,
+           let filter = CIFilter(name: "CIVignette") {
+            filter.setValue(image, forKey: kCIInputImageKey)
+            filter.setValue(vignetteAmount * 2.1, forKey: kCIInputIntensityKey)
+            filter.setValue(Float(max(sourceImage.extent.width, sourceImage.extent.height)) * 0.65, forKey: kCIInputRadiusKey)
+            image = filter.outputImage ?? image
+        }
+
+        return image
     }
 
     // ─────────────────────────────────────────────

@@ -9,7 +9,9 @@ import Flutter
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
     // 手动注册相机插件（MethodChannel: com.retrocam.app/camera_control）
-    RetroCamPlugin.register(with: self.registrar(forPlugin: "RetroCamPlugin")!)
+    if let registrar = registrar(forPlugin: "RetroCamPlugin") {
+      RetroCamPlugin.register(with: registrar)
+    }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 }

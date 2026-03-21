@@ -595,6 +595,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       // 关键修复：加载相机后立即将 defaultLook 色彩参数同步到原生 GPU shader
       // 修复 FQS 紫色偏色问题：确保 colorBiasR/G/B、grainSize、sharpness 等专用字段正确传递
       await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
+      await _syncViewportRatioToNative();
       await _syncCurrentPreviewStateToNative();
     } catch (e) {
       state =
@@ -688,6 +689,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       final ratio = camera.modules.ratios.where((r) => r.id == id).firstOrNull;
       if (ratio != null && !ratio.supportsFrame) {
         state = state.copyWith(activeRatioId: id, clearFrameId: true);
+        unawaited(_syncViewportRatioToNative());
         return;
       }
       // 当前相框不支持新比例时也自动清除
@@ -698,10 +700,12 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           frameOpt.supportedRatios.isNotEmpty &&
           !frameOpt.supportedRatios.contains(id)) {
         state = state.copyWith(activeRatioId: id, clearFrameId: true);
+        unawaited(_syncViewportRatioToNative());
         return;
       }
     }
     state = state.copyWith(activeRatioId: id);
+    unawaited(_syncViewportRatioToNative());
   }
 
   void selectFrame(String id) {
@@ -1196,6 +1200,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     int enhanceDeviceQuarter = 0;
     Rect? enhanceMinimapRect;
     Position? capturedLocation;
+    String? livePhotoVideoPath;
     String? originalCopyPath;
 
     try {
@@ -1207,6 +1212,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         }
       }
 
+      String? path;
+      int captureW = 0;
+      int captureH = 0;
       if (livePhotoActive && Platform.isIOS) {
         if (state.locationEnabled) {
           capturedLocation =
@@ -1218,27 +1226,28 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                   latitude: capturedLocation?.latitude,
                   longitude: capturedLocation?.longitude,
                 );
-        final filePath = liveResult?['filePath'] as String?;
-        final galleryAssetId = liveResult?['galleryAssetId'] as String?;
-        if (filePath != null && filePath.isNotEmpty) {
-          return TakePhotoResult(
-            path: filePath,
-            galleryAssetId: galleryAssetId,
-            isLivePhoto: true,
-          );
+        path = liveResult?['filePath'] as String?;
+        livePhotoVideoPath = liveResult?['videoPath'] as String?;
+        final liveVideoPath = livePhotoVideoPath;
+        if (path == null ||
+            path.isEmpty ||
+            liveVideoPath == null ||
+            liveVideoPath.isEmpty) {
+          debugPrint(
+              '[CameraNotifier] Live Photo capture missing temp assets: image=$path video=$livePhotoVideoPath');
+          return null;
         }
-        return null;
+      } else {
+        final captureSw = Stopwatch()..start();
+        final photoResult = await _ref
+            .read(cameraServiceProvider.notifier)
+            .takePhoto(deviceQuarter: deviceQuarter);
+        captureSw.stop();
+        captureMs = captureSw.elapsedMilliseconds;
+        path = photoResult?['filePath'] as String?;
+        captureW = photoResult?['captureWidth'] as int? ?? 0;
+        captureH = photoResult?['captureHeight'] as int? ?? 0;
       }
-
-      final captureSw = Stopwatch()..start();
-      final photoResult = await _ref
-          .read(cameraServiceProvider.notifier)
-          .takePhoto(deviceQuarter: deviceQuarter);
-      captureSw.stop();
-      captureMs = captureSw.elapsedMilliseconds;
-      final path = photoResult?['filePath'] as String?;
-      final captureW = photoResult?['captureWidth'] as int? ?? 0;
-      final captureH = photoResult?['captureHeight'] as int? ?? 0;
       debugPrint(
           '[Perf][takePhoto] capture=$captureMs ms raw=${captureW}x$captureH path=${path ?? "null"}');
       if (captureW > 0 && captureH > 0) {
@@ -1267,7 +1276,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
         // 如果开启位置，并行获取 GPS 坐标（与后处理并行，不阻塞流程）
         Future<Position?>? locationFuture;
-        if (state.locationEnabled) {
+        if (state.locationEnabled && capturedLocation == null) {
           locationFuture = LocationService.instance.getCurrentPosition();
         }
 
@@ -1525,9 +1534,28 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         String? galleryAssetId;
         final gallerySw = Stopwatch()..start();
         Future<String?> saveFuture;
-        if (livePhotoActive && liveVideoStopFuture != null) {
+        final liveVideoPath = livePhotoVideoPath;
+        if (livePhotoActive && Platform.isIOS && liveVideoPath != null) {
+          final liveVideoRenderParams = captureRenderParams?.toPreviewJson(
+                mode: PreviewPerformanceMode.lightweight,
+              ) ??
+              <String, dynamic>{};
+          saveFuture = Future<String?>.value(
+            await _ref.read(cameraServiceProvider.notifier).saveLivePhoto(
+                  path,
+                  liveVideoPath,
+                  latitude: capturedLocation?.latitude,
+                  longitude: capturedLocation?.longitude,
+                  renderParams: liveVideoRenderParams,
+                ),
+          );
+        } else if (livePhotoActive && liveVideoStopFuture != null) {
           final videoPath = await liveVideoStopFuture;
           if (videoPath != null && videoPath.isNotEmpty) {
+            final liveVideoRenderParams = captureRenderParams?.toPreviewJson(
+                  mode: PreviewPerformanceMode.lightweight,
+                ) ??
+                <String, dynamic>{};
             saveFuture = Future<String?>.value(
               await _ref.read(cameraServiceProvider.notifier).saveMotionPhoto(
                     path,
@@ -1535,6 +1563,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
                     cameraId: state.activeCameraId,
                     latitude: capturedLocation?.latitude,
                     longitude: capturedLocation?.longitude,
+                    renderParams: liveVideoRenderParams,
                   ),
             );
           } else {
@@ -1911,6 +1940,18 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     }
   }
 
+  Future<void> _syncViewportRatioToNative() async {
+    final camera = state.camera;
+    if (camera == null) return;
+    final ratio = camera.ratioById(state.activeRatioId) ??
+        camera.ratioById(camera.defaultSelection.ratioId);
+    if (ratio == null || ratio.width <= 0 || ratio.height <= 0) return;
+    await _ref.read(cameraServiceProvider.notifier).updateViewportRatio(
+          width: ratio.width,
+          height: ratio.height,
+        );
+  }
+
   Future<void> replayCurrentPreviewStateToNative({
     bool replayPreset = true,
   }) async {
@@ -1920,6 +1961,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     if (replayPreset) {
       await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
     }
+    await _syncViewportRatioToNative();
     await _syncCurrentPreviewStateToNative();
   }
 
