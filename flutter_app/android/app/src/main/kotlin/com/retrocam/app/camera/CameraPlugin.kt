@@ -45,12 +45,12 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.effect.Brightness
 import androidx.media3.effect.Contrast
 import androidx.media3.effect.GaussianBlur
+import androidx.media3.effect.BaseGlShaderProgram
 import androidx.media3.effect.GlEffect
 import androidx.media3.effect.GlShaderProgram
 import androidx.media3.effect.HslAdjustment
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.RgbAdjustment
-import androidx.media3.effect.SingleFrameGlShaderProgram
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.Effects
@@ -1514,7 +1514,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         private val bloom: Float,
         private val vignette: Float,
         private val sharpen: Float,
-    ) : SingleFrameGlShaderProgram(false) {
+    ) : BaseGlShaderProgram(false, 1) {
         private val glProgram = GlProgram(VERTEX_SHADER, FRAGMENT_SHADER)
         private var width: Int = 1
         private var height: Int = 1
