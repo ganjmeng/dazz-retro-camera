@@ -946,11 +946,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final becameReady = previous?.isReady != true;
     final resumedRunning = previous?.lifecyclePhase != 'running';
     final textureChanged = previous?.textureId != next.textureId;
+    final readyVersionChanged =
+        (previous?.cameraReadyVersion ?? 0) != next.cameraReadyVersion;
     final signalChanged = nextSignal != prevSignal;
     final firstRuntimeFrame = (previous?.runtimeStatsUpdatedAtMs ?? 0) <= 0 &&
         next.runtimeStatsUpdatedAtMs > 0;
 
-    if (becameReady || resumedRunning || textureChanged) {
+    if (becameReady || resumedRunning || textureChanged || readyVersionChanged) {
       _previewAwaitingStatsSinceMs = next.runtimeStatsUpdatedAtMs > 0
           ? 0
           : DateTime.now().millisecondsSinceEpoch;
@@ -961,6 +963,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (!(becameReady ||
         resumedRunning ||
         textureChanged ||
+        readyVersionChanged ||
         signalChanged ||
         firstRuntimeFrame)) {
       return;
@@ -976,6 +979,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       state.textureId?.toString() ?? '',
       state.currentLens,
       state.lifecyclePhase,
+      state.cameraReadyVersion.toString(),
       info['cameraId']?.toString() ?? '',
       info['facing']?.toString() ?? '',
       info['sensorMp']?.toString() ?? '',

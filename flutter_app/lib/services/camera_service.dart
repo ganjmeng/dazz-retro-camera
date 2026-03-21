@@ -26,6 +26,7 @@ class CameraState {
   /// Android Camera2 传感器调试信息（onCameraReady 事件携带）
   final Map<String, dynamic> activeCameraDebugInfo;
   final bool supportsLivePhoto;
+  final int cameraReadyVersion;
 
   double get previewSourceAspectRatio {
     final rawAspect = activeCameraDebugInfo['previewAspectRatio'];
@@ -63,6 +64,7 @@ class CameraState {
     this.runtimeStatsUpdatedAtMs = 0,
     this.activeCameraDebugInfo = const {},
     this.supportsLivePhoto = false,
+    this.cameraReadyVersion = 0,
   });
 
   CameraState copyWith({
@@ -77,6 +79,7 @@ class CameraState {
     int? runtimeStatsUpdatedAtMs,
     Map<String, dynamic>? activeCameraDebugInfo,
     bool? supportsLivePhoto,
+    int? cameraReadyVersion,
   }) {
     return CameraState(
       isReady: isReady ?? this.isReady,
@@ -92,6 +95,7 @@ class CameraState {
       activeCameraDebugInfo:
           activeCameraDebugInfo ?? this.activeCameraDebugInfo,
       supportsLivePhoto: supportsLivePhoto ?? this.supportsLivePhoto,
+      cameraReadyVersion: cameraReadyVersion ?? this.cameraReadyVersion,
     );
   }
 }
@@ -706,6 +710,7 @@ class CameraService extends StateNotifier<CameraState> {
           runtimeStatsUpdatedAtMs: 0,
           activeCameraDebugInfo: const {},
           supportsLivePhoto: false,
+          cameraReadyVersion: 0,
         );
       } catch (e) {
         print('Error disposing camera: $e');
@@ -734,6 +739,7 @@ class CameraService extends StateNotifier<CameraState> {
           activeCameraDebugInfo:
               debugInfo.isNotEmpty ? debugInfo : state.activeCameraDebugInfo,
           supportsLivePhoto: payload?['supportsLivePhoto'] as bool? ?? false,
+          cameraReadyVersion: state.cameraReadyVersion + 1,
         );
         break;
       case AppConstants.eventError:
