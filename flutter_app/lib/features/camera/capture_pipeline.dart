@@ -1677,10 +1677,9 @@ class CapturePipeline {
       Canvas canvas, double ox, double oy, double w, double h, double strength,
       {double noiseAmount = 0.0}) {
     final rng = math.Random(DateTime.now().microsecondsSinceEpoch);
-    // 颗粒数量限制在 2000 以内（原来最多 8000），视觉效果几乎无差异
-    final count = (w * h * strength * 0.004).clamp(100, 2000).toInt();
-    final baseSize = (strength * 2.5).clamp(0.5, 3.0);
-    final alpha = (strength * 120).clamp(30, 140).toInt();
+    final count = (w * h * strength * 0.0048).clamp(140, 2600).toInt();
+    final baseSize = (strength * 2.9).clamp(0.6, 3.4);
+    final alpha = (strength * 145).clamp(42, 165).toInt();
 
     // 亮颗粒 Path（overlay 模式）
     final brightPath = Path();
@@ -1699,8 +1698,8 @@ class CapturePipeline {
       }
     }
 
-    final brightness = (strength * 60).clamp(20, 80).toInt();
-    final noiseAlpha = (noiseAmount * 80).clamp(0, 100).toInt();
+    final brightness = (strength * 78).clamp(28, 100).toInt();
+    final noiseAlpha = (noiseAmount * 96).clamp(0, 120).toInt();
     canvas.drawPath(
       brightPath,
       Paint()

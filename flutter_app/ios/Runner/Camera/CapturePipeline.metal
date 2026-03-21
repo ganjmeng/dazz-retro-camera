@@ -412,7 +412,10 @@ static float3 cp_grain(float3 color, float2 uv, float amount, float grainSize, f
     float grain  = cp_random(uv * 500.0, time * 0.1) - 0.5;
     float grain2 = cp_random(uv * 250.0, time * 0.07 + time * 0.13) - 0.5;
     float g = mix(grain, grain2, 0.3);
-    return clamp(color + float3(g * amount * 0.25), 0.0, 1.0);
+    float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float lumMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 2.0);
+    lumMask = mix(0.55, 1.0, lumMask);
+    return clamp(color + float3(g * amount * 0.28 * lumMask), 0.0, 1.0);
 }
 
 /// Vignette（smoothstep 暗角，与预览统一）

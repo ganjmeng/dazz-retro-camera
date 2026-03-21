@@ -498,8 +498,8 @@ vec3 applyGrain(vec3 c, vec2 uv, float amount, float time, float grainSz) {
     grain *= 0.667;
     float lum = luminance(c);
     float lumMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 2.0);
-    lumMask = mix(0.3, 1.0, lumMask);
-    return clamp(c + grain * amount * 0.25 * lumMask, 0.0, 1.0);
+    lumMask = mix(0.5, 1.0, lumMask);
+    return clamp(c + grain * amount * 0.30 * lumMask, 0.0, 1.0);
 }
 
 // ── Pass 18: Digital Noise（成片专用：hash 暗部增强噪点）────────────────────
