@@ -952,10 +952,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final firstRuntimeFrame = (previous?.runtimeStatsUpdatedAtMs ?? 0) <= 0 &&
         next.runtimeStatsUpdatedAtMs > 0;
 
-    if (becameReady || resumedRunning || textureChanged || readyVersionChanged) {
+    if (becameReady || resumedRunning || textureChanged) {
       _previewAwaitingStatsSinceMs = next.runtimeStatsUpdatedAtMs > 0
           ? 0
           : DateTime.now().millisecondsSinceEpoch;
+    } else if (readyVersionChanged) {
+      final prevStats = previous?.runtimeStatsUpdatedAtMs ?? 0;
+      if (prevStats <= 0 && next.runtimeStatsUpdatedAtMs <= 0) {
+        _previewAwaitingStatsSinceMs = DateTime.now().millisecondsSinceEpoch;
+      }
     } else if (firstRuntimeFrame) {
       _previewAwaitingStatsSinceMs = 0;
     }

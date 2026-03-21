@@ -888,6 +888,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 owner = owner,
                 reason = "updateViewportRatio",
                 onReady = {
+                    scheduleRendererStateReplay("updateViewportRatio")
                     sendEvent("onCameraReady", activeCameraDebugInfo)
                     result.success(
                         mapOf(
@@ -927,6 +928,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 owner = owner,
                 reason = "switchLens",
                 onReady = {
+                    scheduleRendererStateReplay("switchLens")
                     sendEvent("onCameraReady", activeCameraDebugInfo)
                     result.success(null)
                 },
@@ -2179,6 +2181,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 reason = "syncCameraState",
                 onReady = {
                     applyState()
+                    scheduleRendererStateReplay("syncCameraState")
                     sendEvent("onCameraReady", activeCameraDebugInfo)
                     result.success(
                         mapOf(
