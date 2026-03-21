@@ -345,11 +345,6 @@ class CameraService extends StateNotifier<CameraState> {
     required int height,
   }) async {
     try {
-      _resetRuntimeSyncCaches();
-      state = state.copyWith(
-        lifecyclePhase: 'running',
-        runtimeStatsUpdatedAtMs: 0,
-      );
       await _channel.invokeMethod('updateViewportRatio', {
         'width': width,
         'height': height,

@@ -2085,7 +2085,6 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       await _syncCameraStateToNative(camera: camera);
       return;
     }
-    await _syncViewportRatioToNativeImmediately();
     await _syncCurrentPreviewStateToNative();
   }
 
