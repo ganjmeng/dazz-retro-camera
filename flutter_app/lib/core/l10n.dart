@@ -230,6 +230,8 @@ class S {
   String get film => get('film');
   String get saveOriginalOn => get('saveOriginalOn');
   String get saveOriginalOff => get('saveOriginalOff');
+  String get livePhotoSaveOriginalBlocked =>
+      get('livePhotoSaveOriginalBlocked');
   String get noPhotos => get('noPhotos');
   String get noPhotoHint => get('noPhotoHint');
   String get galleryPermDesc => get('galleryPermDesc');
@@ -1276,6 +1278,14 @@ const Map<String, Map<AppLanguage, String>> _t = {
     AppLanguage.ms: 'Simpan Asal Mati',
     AppLanguage.ja: '原板保存オフ',
     AppLanguage.ko: '원본 저장 끔',
+  },
+  'livePhotoSaveOriginalBlocked': {
+    AppLanguage.zhHans: '实况模式不支持底片',
+    AppLanguage.zhHant: '實況模式不支援底片',
+    AppLanguage.en: 'Live Photo does not support originals',
+    AppLanguage.ms: 'Live Photo tidak menyokong filem asal',
+    AppLanguage.ja: 'Live Photoでは原板保存に対応していません',
+    AppLanguage.ko: '실황 사진에서는 원본 저장을 지원하지 않습니다',
   },
   'noPhotos': {
     AppLanguage.zhHans: '还没有照片',

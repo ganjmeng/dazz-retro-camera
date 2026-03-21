@@ -754,9 +754,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     AppPrefsService.instance.setLocationEnabled(enabled);
   }
 
-  void setSaveOriginalEnabled(bool enabled) {
+  bool setSaveOriginalEnabled(bool enabled) {
+    if (enabled && state.livePhotoEnabled) {
+      return false;
+    }
     state = state.copyWith(saveOriginalEnabled: enabled);
     AppPrefsService.instance.setSaveOriginalEnabled(enabled);
+    return true;
   }
 
   int beautyLevelForStrength(double value) {
@@ -958,8 +962,12 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   void toggleLivePhoto() {
     final next = !state.livePhotoEnabled;
+    if (next && state.saveOriginalEnabled) {
+      AppPrefsService.instance.setSaveOriginalEnabled(false);
+    }
     state = state.copyWith(
       livePhotoEnabled: next,
+      saveOriginalEnabled: next ? false : state.saveOriginalEnabled,
       burstCount: next ? 0 : state.burstCount,
       doubleExpEnabled: next ? false : state.doubleExpEnabled,
       clearDoubleExpFirst: next,

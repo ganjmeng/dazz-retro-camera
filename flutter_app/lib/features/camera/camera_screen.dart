@@ -556,6 +556,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<void> _toggleLivePhoto(CameraAppState st, CameraState camSvc) async {
     if (!camSvc.supportsLivePhoto) return;
     final next = !st.livePhotoEnabled;
+    final hadSaveOriginal = st.saveOriginalEnabled;
     if (next) {
       final granted = await _ensureLivePhotoMicrophonePermission();
       if (!granted) return;
@@ -564,6 +565,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _showViewfinderHint(next ? _s().livePhotoOn : _s().livePhotoOff);
     if (next) {
       _showViewfinderTopHint(_s().livePhotoEffect);
+      if (hadSaveOriginal) {
+        _showViewfinderHint(_s().livePhotoSaveOriginalBlocked);
+      }
     }
   }
 
@@ -2654,6 +2658,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return GestureDetector(
       onTap: () {
         final next = !st.saveOriginalEnabled;
+        if (next && st.livePhotoEnabled) {
+          _showViewfinderHint(_s().livePhotoSaveOriginalBlocked);
+          return;
+        }
         ref.read(cameraAppProvider.notifier).setSaveOriginalEnabled(next);
         _showViewfinderHint(next ? _s().saveOriginalOn : _s().saveOriginalOff);
       },
