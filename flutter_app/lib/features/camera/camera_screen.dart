@@ -552,6 +552,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final frozen = await _captureViewfinderFreezeFrame();
     if (mounted && token == _ratioTransitionVersion) {
       setState(() {
+        _showTransition = true;
         _frozenViewfinderBytes = frozen;
         _showFrozenViewfinder = frozen != null;
         _showRatioTransitionMask = true;
@@ -571,6 +572,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }
       if (!mounted || token != _ratioTransitionVersion) return;
       setState(() {
+        _showTransition = false;
         _showFrozenViewfinder = false;
         _showRatioTransitionMask = false;
       });

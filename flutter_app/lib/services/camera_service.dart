@@ -148,7 +148,6 @@ class CameraService extends StateNotifier<CameraState> {
         textureId: null,
         lifecyclePhase: 'initializing',
         runtimeStatsUpdatedAtMs: 0,
-        activeCameraDebugInfo: const {},
         supportsLivePhoto: false,
       );
       _resetRuntimeSyncCaches();

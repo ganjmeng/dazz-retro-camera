@@ -156,6 +156,9 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let lens: AVCaptureDevice.Position = (lensStr == "front") ? .front : .back
         let previewPreset: AVCaptureSession.Preset =
             (resolutionStr == "1080p") ? .hd1920x1080 : .hd1280x720
+        let previewWidth = (resolutionStr == "1080p") ? 1920 : 1280
+        let previewHeight = (resolutionStr == "1080p") ? 1080 : 720
+        let previewAspectRatio = Double(min(previewWidth, previewHeight)) / Double(max(previewWidth, previewHeight))
 
         // 释放旧资源
         cameraManager?.stopSession()
@@ -190,6 +193,9 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             "sensorMp": "0.0",
             "focalLengths": "?",
             "facing": lensStr,
+            "previewWidth": previewWidth,
+            "previewHeight": previewHeight,
+            "previewAspectRatio": previewAspectRatio,
             "brand": "apple",
             "model": d.model,
             "device": d.name,
@@ -1636,6 +1642,11 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             if let v = cachedLensParams["chromaticAberration"] as? Double { p.chromaticAberration = Float(v) }
             if let v = cachedLensParams["bloom"] as? Double { p.bloomAmount = Float(v) }
             if let v = cachedLensParams["distortion"] as? Double { p.lensDistortion = Float(v) }
+            if let v = cachedLensParams["softFocus"] as? Double { p.softFocus = Float(v) }
+            if let v = cachedLensParams["exposure"] as? Double { p.exposureOffset = Float(v) }
+            if let v = cachedLensParams["contrast"] as? Double { p.contrast = Float(1.0 + v) }
+            if let v = cachedLensParams["saturation"] as? Double { p.saturation = Float(1.0 + v) }
+            if let v = cachedLensParams["highlightCompression"] as? Double { p.highlightRolloff = Float(v) }
             if let v = cachedLensParams["circularFisheye"] as? Bool { p.circularFisheye = v ? 1.0 : 0.0 }
             renderer.setCCDParams(p)
         }

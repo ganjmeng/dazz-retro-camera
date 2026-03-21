@@ -140,6 +140,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private var cachedLensCircularFisheye: Boolean = false
     private var cachedLensVignette: Double = 0.0
     private var cachedLensDistortion: Double = 0.0
+    private var cachedLensParams: Map<String, Any> = emptyMap()
     // GL Renderer
     private var glRenderer: CameraGLRenderer? = null
     // ── 用于 switchLens 等待新 renderer 就绪 ──
@@ -736,6 +737,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 cachedLensCircularFisheye = false
                 cachedLensVignette = 0.0
                 cachedLensDistortion = 0.0
+                cachedLensParams = emptyMap()
             }
             currentPresetJson = preset
             currentCameraId = cameraId
@@ -1954,6 +1956,20 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         cachedLensCircularFisheye = circularFisheye
         cachedLensVignette = vignette
         cachedLensDistortion = distortion
+        cachedLensParams = mapOf(
+            "vignette" to vignette,
+            "chromaticAberration" to chromaticAberration,
+            "bloomAmount" to bloom,
+            "softFocus" to softFocus,
+            "distortion" to distortion,
+        )
+        cachedLensParams = mapOf(
+            "vignette" to vignette,
+            "chromaticAberration" to chromaticAberration,
+            "bloomAmount" to bloom,
+            "softFocus" to softFocus,
+            "distortion" to distortion,
+        )
 
         // 将鱼眼模式传递到 GL 渲染器
         glRenderer?.setFisheyeMode(fisheyeMode)
@@ -2073,6 +2089,13 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         cachedLensCircularFisheye = circularFisheye
         cachedLensVignette = vignette
         cachedLensDistortion = distortion
+        cachedLensParams = mapOf(
+            "vignette" to vignette,
+            "chromaticAberration" to chromaticAberration,
+            "bloomAmount" to bloom,
+            "softFocus" to softFocus,
+            "distortion" to distortion,
+        )
         cachedRenderParams = renderParams
         cachedRenderVersion = version
 
@@ -2750,11 +2773,17 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         // 因此必须在此处从缓存中恢复 lens 参数。
         renderer.setFisheyeMode(cachedLensFisheyeMode)
         renderer.setCircularFisheye(cachedLensCircularFisheye)
-        renderer.updateParams(mapOf(
-            "vignette" to cachedLensVignette,
-            "distortion" to cachedLensDistortion
-        ))
-        Log.d(TAG, "reapplyPresetToRenderer: restored lens params fisheyeMode=$cachedLensFisheyeMode, circularFisheye=$cachedLensCircularFisheye, vignette=$cachedLensVignette, distortion=$cachedLensDistortion")
+        renderer.updateParams(
+            if (cachedLensParams.isNotEmpty()) {
+                cachedLensParams
+            } else {
+                mapOf(
+                    "vignette" to cachedLensVignette,
+                    "distortion" to cachedLensDistortion
+                )
+            }
+        )
+        Log.d(TAG, "reapplyPresetToRenderer: restored lens params fisheyeMode=$cachedLensFisheyeMode, circularFisheye=$cachedLensCircularFisheye, cachedLensKeys=${cachedLensParams.keys}")
     }
 
     private fun sendEvent(type: String, payload: Map<String, Any>) {
