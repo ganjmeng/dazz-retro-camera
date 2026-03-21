@@ -1970,6 +1970,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           width: ratio.width,
           height: ratio.height,
         );
+    // 比例切换后强制重放一次当前预览状态。
+    // 目的：覆盖原生 rebind/no-op 路径下可能出现的 shader 参数丢失，
+    // 确保跨比例切换后特效稳定存在（Android / iOS 同步兜底）。
+    await _syncCurrentPreviewStateToNative();
   }
 
   Map<String, dynamic> _buildActiveLensParams(CameraDefinition camera) {
