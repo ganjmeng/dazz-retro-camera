@@ -62,7 +62,6 @@ void main() {
         '<GCamera:MicroVideoOffset>',
         'Item:Mime="image/jpeg"',
         'Item:Semantic="Primary"',
-        'Item:Semantic="GainMap"',
         'Item:Mime="video/mp4"',
         'Item:Semantic="MotionPhoto"',
         'Item:Length="',
@@ -73,8 +72,6 @@ void main() {
         '<OpCamera:VideoLength>',
         'xmlns:xmpNote="http://ns.adobe.com/xmp/note/"',
         '<xmpNote:HasExtendedXMP>',
-        'xmlns:hdrgm="http://ns.adobe.com/hdr-gain-map/1.0/"',
-        'hdrgm:Version="1.0"',
       ];
 
       for (final tag in requiredTags) {

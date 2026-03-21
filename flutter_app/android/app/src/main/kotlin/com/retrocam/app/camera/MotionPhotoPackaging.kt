@@ -1,6 +1,5 @@
 package com.retrocam.app.camera
 
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -41,7 +40,6 @@ internal object MotionPhotoPackaging {
     data class PackagingMetadata(
         val imageWidth: Int? = null,
         val imageHeight: Int? = null,
-        val gainMapBytes: ByteArray? = null,
     )
 
     fun buildDisplayName(cameraId: String, timestamp: String): String {
@@ -56,34 +54,12 @@ internal object MotionPhotoPackaging {
         videoLength: Long,
         presentationTimestampUs: Long,
         extendedGuid: String?,
-        gainMapLength: Long = 0L,
     ): String {
         val hasExtended = extendedGuid?.isNotEmpty() == true
-        val hasGainMap = gainMapLength > 0L
         val extendedNode = if (hasExtended) {
             "<xmpNote:HasExtendedXMP>$extendedGuid</xmpNote:HasExtendedXMP>"
         } else {
             "<xmpNote:HasExtendedXMP></xmpNote:HasExtendedXMP>"
-        }
-        val gainMapNode = if (hasGainMap) {
-            """
-                      <rdf:li rdf:parseType="Resource"
-                          Item:Mime="image/jpeg"
-                          Item:Semantic="GainMap"
-                          Item:Length="$gainMapLength"
-                          Item:Padding="0"/>
-            """.trimIndent()
-        } else {
-            ""
-        }
-        val hdrgmNode = if (hasGainMap) {
-            """
-                <rdf:Description rdf:about=""
-                    xmlns:hdrgm="http://ns.adobe.com/hdr-gain-map/1.0/"
-                    hdrgm:Version="1.0"/>
-            """.trimIndent()
-        } else {
-            ""
         }
         return """
             <x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 5.1.0-jc003">
@@ -118,7 +94,6 @@ internal object MotionPhotoPackaging {
                           Item:Semantic="Primary"
                           Item:Length="0"
                           Item:Padding="0"/>
-                      $gainMapNode
                       <rdf:li rdf:parseType="Resource"
                           Item:Mime="video/mp4"
                           Item:Semantic="MotionPhoto"
@@ -134,7 +109,6 @@ internal object MotionPhotoPackaging {
                   <OpCamera:OLivePhotoVersion>2</OpCamera:OLivePhotoVersion>
                   <OpCamera:VideoLength>$videoLength</OpCamera:VideoLength>
                 </rdf:Description>
-                $hdrgmNode
               </rdf:RDF>
             </x:xmpmeta>
         """.trimIndent()
@@ -149,21 +123,16 @@ internal object MotionPhotoPackaging {
     ) {
         val extendedBytes = buildExtendedXmpPayload(metadata)
         val extendedGuid = extendedBytes?.let { md5Hex(it) }
-        val gainMapBytes = metadata.gainMapBytes
         val xmpXml = buildMotionPhotoXmp(
             videoLength = videoFile.length(),
             presentationTimestampUs = presentationTimestampUs,
             extendedGuid = extendedGuid,
-            gainMapLength = gainMapBytes?.size?.toLong() ?: 0L,
         )
         val jpegBytes = imageFile.readBytes()
         val output = ByteArrayOutputStream(
-            jpegBytes.size + videoFile.length().toInt() + (gainMapBytes?.size ?: 0) + 4096,
+            jpegBytes.size + videoFile.length().toInt() + 4096,
         )
         output.write(stripAndInjectXmp(jpegBytes, xmpXml, extendedGuid, extendedBytes))
-        if (gainMapBytes != null) {
-            output.write(gainMapBytes)
-        }
         output.write(videoFile.readBytes())
         FileOutputStream(outputFile).use { it.write(output.toByteArray()) }
     }
@@ -246,7 +215,6 @@ internal object MotionPhotoPackaging {
         return PackagingMetadata(
             imageWidth = options.outWidth.takeIf { it > 0 },
             imageHeight = options.outHeight.takeIf { it > 0 },
-            gainMapBytes = buildGainMapBytes(imageFile),
         )
     }
 
@@ -264,37 +232,6 @@ internal object MotionPhotoPackaging {
               </rdf:RDF>
             </x:xmpmeta>
         """.trimIndent().toByteArray(UTF_8)
-    }
-
-    private fun buildGainMapBytes(imageFile: File): ByteArray? {
-        val bitmap = try {
-            BitmapFactory.decodeFile(imageFile.absolutePath) ?: return null
-        } catch (_: RuntimeException) {
-            return null
-        }
-        return try {
-            val targetWidth = bitmap.width.coerceAtMost(512).coerceAtLeast(1)
-            val targetHeight = bitmap.height.coerceAtMost(512).coerceAtLeast(1)
-            val scaled = Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
-            val gainMap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
-            for (y in 0 until targetHeight) {
-                for (x in 0 until targetWidth) {
-                    val color = scaled.getPixel(x, y)
-                    val r = (color shr 16) and 0xFF
-                    val g = (color shr 8) and 0xFF
-                    val b = color and 0xFF
-                    val luma = ((r * 77) + (g * 150) + (b * 29)) shr 8
-                    val gray = (0xFF shl 24) or (luma shl 16) or (luma shl 8) or luma
-                    gainMap.setPixel(x, y, gray)
-                }
-            }
-            ByteArrayOutputStream().use { output ->
-                gainMap.compress(Bitmap.CompressFormat.JPEG, 82, output)
-                output.toByteArray()
-            }
-        } finally {
-            bitmap.recycle()
-        }
     }
 
     private fun writeApp1Segment(output: ByteArrayOutputStream, payload: ByteArray) {

@@ -50,7 +50,6 @@ class MotionPhotoPackagingTest {
                 metadata = MotionPhotoPackaging.PackagingMetadata(
                     imageWidth = 3072,
                     imageHeight = 4096,
-                    gainMapBytes = image.readBytes(),
                 ),
             )
 
@@ -63,8 +62,6 @@ class MotionPhotoPackagingTest {
             assertTrue(inspection.xmpXml.contains("<Camera:MicroVideo>1</Camera:MicroVideo>"))
             assertTrue(inspection.xmpXml.contains("<GCamera:MicroVideo>1</GCamera:MicroVideo>"))
             assertTrue(inspection.xmpXml.contains("<OpCamera:MotionPhotoOwner>oplus</OpCamera:MotionPhotoOwner>"))
-            assertTrue(inspection.xmpXml.contains("Item:Semantic=\"GainMap\""))
-            assertTrue(inspection.xmpXml.contains("hdrgm:Version=\"1.0\""))
             assertTrue(inspection.xmpXml.contains("Item:Semantic=\"MotionPhoto\""))
             assertEquals(video.length(), inspection.itemLength)
             assertEquals(video.length(), inspection.microVideoOffset)
