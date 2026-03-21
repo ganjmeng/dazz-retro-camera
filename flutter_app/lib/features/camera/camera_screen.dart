@@ -979,6 +979,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       info['cameraId']?.toString() ?? '',
       info['facing']?.toString() ?? '',
       info['sensorMp']?.toString() ?? '',
+      info['previewWidth']?.toString() ?? '',
+      info['previewHeight']?.toString() ?? '',
+      info['previewAspectRatio']?.toString() ?? '',
     ].join('|');
   }
 
@@ -2348,8 +2351,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 只要 textureId 就绪，即可显示预览；
     // renderParams 为 null 时（JSON 尚未加载）用默认空参数，避免黑屏
     if (camSvc.textureId != null) {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
       final waitingFirstFrame = camSvc.lifecyclePhase == 'running' &&
-          camSvc.runtimeStatsUpdatedAtMs <= 0;
+          camSvc.runtimeStatsUpdatedAtMs <= 0 &&
+          _previewAwaitingStatsSinceMs > 0 &&
+          (nowMs - _previewAwaitingStatsSinceMs) <
+              _kPreviewBootstrapSoftRecoverDelayMs;
       if (waitingFirstFrame) {
         return Container(
           color: Colors.black,
