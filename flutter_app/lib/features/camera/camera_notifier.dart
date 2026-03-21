@@ -751,8 +751,6 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   Future<void> selectRatioAndSync(String id) async {
     if (!_applyRatioSelection(id)) return;
-    // 先立即推送一次当前渲染参数，避免比例切换期间使用旧缓存。
-    _applyCurrentRenderParamsToNative();
     await _syncViewportRatioToNativeImmediately();
   }
 
@@ -1965,20 +1963,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   Future<void> _syncViewportRatioToNative() async {
     final camera = state.camera;
     if (camera == null) return;
-    final ratio = camera.ratioById(state.activeRatioId) ??
-        camera.ratioById(camera.defaultSelection.ratioId);
-    if (ratio == null || ratio.width <= 0 || ratio.height <= 0) return;
-    await _ref.read(cameraServiceProvider.notifier).updateViewportRatio(
-          width: ratio.width,
-          height: ratio.height,
-        );
-    // 比例切换后，优先做一次整包同步（preset+lens+render+zoom），
-    // 再做两次延迟 runtime 重放，覆盖 renderer 重建窗口内的参数丢失。
+    // 统一通过 syncCameraState 下发 viewport + preset + lens + render + zoom，
+    // 避免 updateViewportRatio 与 syncCameraState 双通道并发导致旧比例/旧参数回放。
     await _syncCameraStateToNative(camera: camera);
-    await Future<void>.delayed(const Duration(milliseconds: 90));
-    await _syncCurrentPreviewStateToNative();
-    await Future<void>.delayed(const Duration(milliseconds: 180));
-    await _syncCurrentPreviewStateToNative();
   }
 
   Map<String, dynamic> _buildActiveLensParams(CameraDefinition camera) {
@@ -2020,9 +2007,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     syncRuntimeColorContext();
     final viewport = _currentViewportDimensionsFor(camera);
     final renderParams = _buildActiveRenderParamsJson();
-    if (viewport == null || renderParams == null) {
+    if (viewport == null) {
       await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
-      await _syncViewportRatioToNativeImmediately();
+      await _syncCurrentPreviewStateToNative();
+      return;
+    }
+    if (renderParams == null) {
+      await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
       await _syncCurrentPreviewStateToNative();
       return;
     }

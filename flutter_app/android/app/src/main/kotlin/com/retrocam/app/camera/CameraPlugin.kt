@@ -839,11 +839,21 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private fun handleUpdateRenderParams(call: MethodCall, result: MethodChannel.Result) {
         val params = call.argument<Map<String, Any>>("params") ?: emptyMap()
         val version = (call.argument<Int>("version") ?: cachedRenderVersion).coerceAtLeast(0)
+        if (version < cachedRenderVersion) {
+            result.success(
+                mapOf(
+                    "appliedVersion" to cachedRenderVersion,
+                    "rendererReady" to (glRenderer != null),
+                    "staleIgnored" to true
+                )
+            )
+            return
+        }
         if (params.isNotEmpty()) {
             cachedRenderParams = params
             glRenderer?.updateParams(params)
         }
-        cachedRenderVersion = version
+        cachedRenderVersion = maxOf(cachedRenderVersion, version)
         rebuildEffectivePreviewParams()
         result.success(
             mapOf(
@@ -2031,6 +2041,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val renderParams = call.argument<Map<String, Any>>("renderParams") ?: emptyMap()
         val zoom = (call.argument<Double>("zoom") ?: 1.0).coerceIn(0.6, 20.0)
         val version = (call.argument<Int>("version") ?: cachedRenderVersion).coerceAtLeast(0)
+        if (version < cachedRenderVersion) {
+            result.success(
+                mapOf(
+                    "appliedVersion" to cachedRenderVersion,
+                    "rendererReady" to (glRenderer != null),
+                    "staleIgnored" to true
+                )
+            )
+            return
+        }
 
         val fisheyeMode = (lensParams["fisheyeMode"] as? Boolean) ?: false
         val circularFisheye =
@@ -2065,7 +2085,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         merged["softFocus"] = softFocus
         merged["distortion"] = distortion
         cachedRenderParams = renderParams
-        cachedRenderVersion = version
+        cachedRenderVersion = maxOf(cachedRenderVersion, version)
         cachedLensParams = mapOf(
             "vignette" to vignette,
             "chromaticAberration" to chromaticAberration,
@@ -2091,6 +2111,17 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val renderParams = call.argument<Map<String, Any>>("renderParams") ?: emptyMap()
         val zoom = (call.argument<Double>("zoom") ?: 1.0).coerceIn(0.6, 20.0)
         val version = (call.argument<Int>("version") ?: cachedRenderVersion).coerceAtLeast(0)
+        if (version < cachedRenderVersion) {
+            result.success(
+                mapOf(
+                    "appliedVersion" to cachedRenderVersion,
+                    "rendererReady" to (glRenderer != null),
+                    "rebound" to false,
+                    "staleIgnored" to true
+                )
+            )
+            return
+        }
         val nextViewportWidth =
             (call.argument<Int>("viewportWidth") ?: currentViewportWidth).coerceAtLeast(1)
         val nextViewportHeight =
@@ -2122,7 +2153,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "distortion" to distortion,
         )
         cachedRenderParams = renderParams
-        cachedRenderVersion = version
+        cachedRenderVersion = maxOf(cachedRenderVersion, version)
         rebuildEffectivePreviewParams()
 
         val applyState: () -> Unit = {

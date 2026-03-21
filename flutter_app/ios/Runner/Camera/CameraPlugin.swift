@@ -298,6 +298,15 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let args = call.arguments as? [String: Any]
         let params = args?["params"] as? [String: Any] ?? [:]
         let version = (args?["version"] as? Int) ?? cachedRenderVersion
+        if version < cachedRenderVersion {
+            result([
+                "success": true,
+                "appliedVersion": cachedRenderVersion,
+                "rendererReady": renderer != nil,
+                "staleIgnored": true,
+            ])
+            return
+        }
         if !params.isEmpty {
             cachedRenderParams = params
         }
@@ -467,6 +476,14 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let render = args?["renderParams"] as? [String: Any] ?? [:]
         let zoom = (args?["zoom"] as? Double) ?? 1.0
         let version = (args?["version"] as? Int) ?? cachedRenderVersion
+        if version < cachedRenderVersion {
+            result([
+                "appliedVersion": cachedRenderVersion,
+                "rendererReady": renderer != nil,
+                "staleIgnored": true,
+            ])
+            return
+        }
 
         let fisheyeMode = lens["fisheyeMode"] as? Bool ?? false
         let circularFisheye = lens["circularFisheye"] as? Bool ?? fisheyeMode
@@ -506,6 +523,14 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let render = args?["renderParams"] as? [String: Any] ?? [:]
         let zoom = (args?["zoom"] as? Double) ?? 1.0
         let version = (args?["version"] as? Int) ?? cachedRenderVersion
+        if version < cachedRenderVersion {
+            result([
+                "appliedVersion": cachedRenderVersion,
+                "rendererReady": renderer != nil,
+                "staleIgnored": true,
+            ])
+            return
+        }
 
         let presetParams: [String: Any]
         let cameraId: String
