@@ -34,7 +34,7 @@ class CapturePipeline {
   final CameraDefinition camera;
   // 临时调试开关：先关闭共享重后处理，验证成片是否被 capture 管线拉平成同一种质感。
   static const bool _kDisableSharedDartFallbackPost = true;
-  static const bool _kDisableArtifactOverlays = true;
+  static const bool _kDisableArtifactOverlays = false;
   static const int _kFrameTextureCacheMaxEntries = 6;
   static final Map<String, ui.Image> _frameTextureCache = <String, ui.Image>{};
   static final List<String> _frameTextureLru = <String>[];
