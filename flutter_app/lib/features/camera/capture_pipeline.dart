@@ -278,7 +278,7 @@ class CapturePipeline {
               await drawPaperTexture(srcImage!, renderParams.paperTexture);
         }
         final captureDevelopmentSoftness =
-            (renderParams.developmentSoftness * 0.35).clamp(0.0, 1.0);
+            (renderParams.developmentSoftness * 0.16).clamp(0.0, 1.0);
         if (captureDevelopmentSoftness > 0.001) {
           srcImage = await drawDevelopmentSoftness(
               srcImage!, captureDevelopmentSoftness);
@@ -287,7 +287,7 @@ class CapturePipeline {
           srcImage = await drawDehaze(srcImage!, renderParams.effectiveDehaze);
         }
         final captureHighlightWarm =
-            (renderParams.highlightWarmAmount * 0.4).clamp(0.0, 1.0);
+            (renderParams.highlightWarmAmount * 0.18).clamp(0.0, 1.0);
         if (captureHighlightWarm > 0.001) {
           srcImage = await drawHighlightWarmth(srcImage!, captureHighlightWarm);
         }
@@ -1772,11 +1772,11 @@ class CapturePipeline {
     double softFocus,
     PreviewRenderParams renderParams,
   ) {
-    final opacity = (bloomStrength * 0.12 + softFocus * 0.08).clamp(0.0, 0.22);
+    final opacity = (bloomStrength * 0.07 + softFocus * 0.045).clamp(0.0, 0.14);
     if (opacity < 0.01) return;
 
     // 模拟模糊：用 4 个小偏移叠加模拟柔焦效果
-    final blurRadius = (bloomStrength * 7 + softFocus * 12).clamp(0.0, 16.0);
+    final blurRadius = (bloomStrength * 4.5 + softFocus * 8.0).clamp(0.0, 10.0);
     final shifts = [
       Offset(-blurRadius * 0.5, -blurRadius * 0.5),
       Offset(blurRadius * 0.5, -blurRadius * 0.5),

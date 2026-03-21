@@ -1074,13 +1074,13 @@ class PreviewRenderParams {
     // Capture should keep texture and contrast. A few global "atmosphere" terms
     // were making almost every camera look veiled/washed, especially on bright
     // indoor scenes. Keep the look, but compress the haze-inducing terms.
-    json['bloomAmount'] = (read('bloomAmount') * 0.38).clamp(0.0, 1.0);
-    json['softFocus'] = (read('softFocus') * 0.28).clamp(0.0, 1.0);
+    json['bloomAmount'] = (read('bloomAmount') * 0.18).clamp(0.0, 1.0);
+    json['softFocus'] = (read('softFocus') * 0.14).clamp(0.0, 1.0);
     json['developmentSoftness'] =
-        (read('developmentSoftness') * 0.35).clamp(0.0, 1.0);
+        (read('developmentSoftness') * 0.16).clamp(0.0, 1.0);
     json['highlightWarmAmount'] =
-        (read('highlightWarmAmount') * 0.4).clamp(0.0, 1.0);
-    json['skinLumaSoften'] = (read('skinLumaSoften') * 0.65).clamp(0.0, 0.30);
+        (read('highlightWarmAmount') * 0.18).clamp(0.0, 1.0);
+    json['skinLumaSoften'] = (read('skinLumaSoften') * 0.45).clamp(0.0, 0.30);
 
     return json;
   }
