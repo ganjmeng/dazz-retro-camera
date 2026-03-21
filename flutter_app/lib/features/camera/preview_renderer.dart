@@ -1038,30 +1038,50 @@ class PreviewRenderParams {
 
     final previewBeauty = (effectiveBeautyStrength * 0.82).clamp(0.0, 1.0);
 
-    json['clarity'] = previewBeauty > 0.0 ? (-previewBeauty * 16.0) : 0.0;
+    // Lightweight preview should stay fast/stable: keep LUT + exposure, and
+    // disable expensive or visually noisy enhancement passes.
+    json['clarity'] = previewBeauty > 0.0 ? (-previewBeauty * 6.0) : 0.0;
     json['grainAmount'] = 0.0;
     json['noiseAmount'] = 0.0;
     json['chromaticAberration'] = 0.0;
     json['bloomAmount'] = 0.0;
     json['paperTexture'] = 0.0;
-    json['developmentSoftness'] =
-        previewBeauty > 0.0 ? (previewBeauty * 0.24) : 0.0;
+    json['developmentSoftness'] = 0.0;
     json['chemicalIrregularity'] = 0.0;
     json['halationAmount'] = 0.0;
-    json['sharpen'] = previewBeauty > 0.0 ? (0.16 - previewBeauty * 0.16) : 0.0;
-    json['sharpness'] =
-        previewBeauty > 0.0 ? (1.0 - previewBeauty * 0.24) : 1.0;
+    json['sharpen'] = 0.0;
+    json['sharpness'] = 1.0;
     json['dehaze'] = 0.0;
     json['highlightWarmAmount'] = 0.0;
-    json['softFocus'] = previewBeauty > 0.0 ? (previewBeauty * 0.18) : 0.0;
+    json['softFocus'] = previewBeauty > 0.0 ? (previewBeauty * 0.08) : 0.0;
     json['skinHueProtect'] = previewBeauty > 0.0 ? 1.0 : json['skinHueProtect'];
     json['skinLumaSoften'] =
-        previewBeauty > 0.0 ? (previewBeauty * 0.08) : json['skinLumaSoften'];
+        previewBeauty > 0.0 ? (previewBeauty * 0.04) : json['skinLumaSoften'];
     json['grainSize'] = 1.0;
     json['luminanceNoise'] = 0.0;
     json['chromaNoise'] = 0.0;
     json['exposureVariation'] = 0.0;
     json['vignetteAmount'] = effectiveVignette.clamp(0.0, 0.18);
+    return json;
+  }
+
+  Map<String, dynamic> toCaptureJson() {
+    final json = Map<String, dynamic>.from(toJson());
+
+    double read(String key, [double fallback = 0.0]) =>
+        (json[key] as num?)?.toDouble() ?? fallback;
+
+    // Capture should keep texture and contrast. A few global "atmosphere" terms
+    // were making almost every camera look veiled/washed, especially on bright
+    // indoor scenes. Keep the look, but compress the haze-inducing terms.
+    json['bloomAmount'] = (read('bloomAmount') * 0.38).clamp(0.0, 1.0);
+    json['softFocus'] = (read('softFocus') * 0.28).clamp(0.0, 1.0);
+    json['developmentSoftness'] =
+        (read('developmentSoftness') * 0.35).clamp(0.0, 1.0);
+    json['highlightWarmAmount'] =
+        (read('highlightWarmAmount') * 0.4).clamp(0.0, 1.0);
+    json['skinLumaSoften'] = (read('skinLumaSoften') * 0.65).clamp(0.0, 0.30);
+
     return json;
   }
 }

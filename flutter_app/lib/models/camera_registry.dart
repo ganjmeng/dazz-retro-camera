@@ -43,7 +43,7 @@ class CameraEntry {
 }
 
 /// 默认相机排序（用户未自定义时使用，重置时恢复此顺序）
-/// 顺序：FXN-R, CPM35, Inst C, U300, CCD-R, D Classic, GRD-R, FQS, BW Classic, Inst SQC, FISHEYE
+/// 顺序：FXN-R, CPM35, Inst C, U300, CCD-R, D Classic, GRD-R, FQS, BW Classic, Inst SQC
 const List<String> kDefaultCameraOrder = [
   'fxn_r',
   'cpm35',
@@ -55,7 +55,6 @@ const List<String> kDefaultCameraOrder = [
   'fqs',
   'bw_classic',
   'inst_sqc',
-  'fisheye',
 ];
 
 /// Widget / 快捷启动默认相机顺序。
@@ -241,23 +240,6 @@ const List<CameraEntry> kAllCameras = [
       'assets/samples/sqc_sample_1.jpg',
       'assets/samples/sqc_sample_2.jpg',
       'assets/samples/sqc_sample_3.jpg',
-    ],
-  ),
-  CameraEntry(
-    id: 'fisheye',
-    name: 'FISHEYE',
-    assetPath: 'assets/cameras/fisheye.json',
-    category: 'creative',
-    focalLengthLabel: '10mm',
-    premium: false,
-    sortOrder: 110,
-    iconPath: 'assets/thumbnails/cameras/fisheye_icon.jpg',
-    description: '鱼眼镜头极致畸变，超广角视野，街头滑板文化美学。',
-    tags: ['鱼眼', '畸变', '创意', '超广角'],
-    samplePhotos: [
-      'assets/samples/fisheye_sample_1.jpg',
-      'assets/samples/fisheye_sample_2.jpg',
-      'assets/samples/fisheye_sample_3.jpg',
     ],
   ),
 ];

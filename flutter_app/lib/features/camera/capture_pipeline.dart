@@ -122,6 +122,7 @@ class CapturePipeline {
     bool circularFisheye = false,
   }) async {
     try {
+      final captureParamsJson = renderParams?.toCaptureJson();
       final useCircularFisheye = circularFisheye && fisheyeMode;
       final isLandscapeCapture = deviceQuarter == 1 || deviceQuarter == 3;
       // ── 1. 先尝试 GPU 快速路径（无相框/水印时完全跳过 Dart 解码）─────────────
@@ -143,7 +144,7 @@ class CapturePipeline {
           debugPrint(
               "[CapturePipeline] Attempting to use native GPU pipeline...");
           final gpuParams = <String, dynamic>{
-            ...?renderParams?.toJson(),
+            ...?captureParamsJson,
             if (fisheyeMode) 'fisheyeMode': 1.0,
             if (fisheyeMode) 'circularFisheye': useCircularFisheye ? 1.0 : 0.0,
           };
@@ -276,16 +277,19 @@ class CapturePipeline {
           srcImage =
               await drawPaperTexture(srcImage!, renderParams.paperTexture);
         }
-        if (renderParams.developmentSoftness > 0.001) {
+        final captureDevelopmentSoftness =
+            (renderParams.developmentSoftness * 0.35).clamp(0.0, 1.0);
+        if (captureDevelopmentSoftness > 0.001) {
           srcImage = await drawDevelopmentSoftness(
-              srcImage!, renderParams.developmentSoftness);
+              srcImage!, captureDevelopmentSoftness);
         }
         if (renderParams.effectiveDehaze > 0.001) {
           srcImage = await drawDehaze(srcImage!, renderParams.effectiveDehaze);
         }
-        if (renderParams.highlightWarmAmount > 0.001) {
-          srcImage = await drawHighlightWarmth(
-              srcImage!, renderParams.highlightWarmAmount);
+        final captureHighlightWarm =
+            (renderParams.highlightWarmAmount * 0.4).clamp(0.0, 1.0);
+        if (captureHighlightWarm > 0.001) {
+          srcImage = await drawHighlightWarmth(srcImage!, captureHighlightWarm);
         }
         if (renderParams.hasBwMixer) {
           final mixer = renderParams.bwChannelMixer;
