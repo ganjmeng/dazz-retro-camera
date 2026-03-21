@@ -21,7 +21,6 @@ import android.media.MediaMetadataRetriever
 import android.util.Log
 import android.util.Rational
 import android.view.Surface
-import android.media.ExifInterface
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CameraCharacteristics
 import androidx.camera.camera2.interop.Camera2CameraControl
@@ -71,7 +70,6 @@ import io.flutter.view.TextureRegistry
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.CountDownLatch
@@ -1099,16 +1097,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val context = flutterPluginBinding.applicationContext
 
         bgExecutor.execute {
-            var xmpImageFile: File? = null
             var motionPhotoFile: File? = null
             var preparedVideoFile: File? = null
             try {
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-                val displayName = if (cameraId.isNotEmpty()) {
-                    "DAZZ_${cameraId}_${timestamp}_MP.jpg"
-                } else {
-                    "DAZZ_MOTION_${timestamp}_MP.jpg"
-                }
+                val displayName = MotionPhotoPackaging.buildDisplayName(cameraId, timestamp)
                 preparedVideoFile = prepareMotionPhotoVideoForSaving(
                     sourceVideoFile = videoFile,
                     renderParams = renderParams,
@@ -1118,27 +1111,13 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 val presentationTimestampUs =
                     resolveMotionPhotoPresentationTimestampUs(motionVideoFile)
 
-                xmpImageFile = File(context.cacheDir, "motion_xmp_${timestamp}.jpg")
-                imageFile.copyTo(xmpImageFile, overwrite = true)
-                val exif = ExifInterface(xmpImageFile.absolutePath)
-                exif.setAttribute(
-                    ExifInterface.TAG_XMP,
-                    buildMotionPhotoXmp(
-                        videoLength = motionVideoFile.length(),
-                        presentationTimestampUs = presentationTimestampUs,
-                    )
-                )
-                exif.saveAttributes()
-
                 motionPhotoFile = File(context.cacheDir, "motion_out_${timestamp}.jpg")
-                FileInputStream(xmpImageFile).use { input ->
-                    FileOutputStream(motionPhotoFile).use { output ->
-                        input.copyTo(output)
-                        FileInputStream(motionVideoFile).use { videoInput ->
-                            videoInput.copyTo(output)
-                        }
-                    }
-                }
+                MotionPhotoPackaging.packageMotionPhoto(
+                    imageFile = imageFile,
+                    videoFile = motionVideoFile,
+                    outputFile = motionPhotoFile,
+                    presentationTimestampUs = presentationTimestampUs,
+                )
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     val contentValues = ContentValues().apply {
@@ -1196,7 +1175,6 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 if (preparedVideoFile != null && preparedVideoFile != videoFile) {
                     runCatching { preparedVideoFile?.delete() }
                 }
-                runCatching { xmpImageFile?.delete() }
                 runCatching { motionPhotoFile?.delete() }
             }
         }
@@ -1297,9 +1275,18 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         return kotlin.math.abs(value("exposureOffset")) > 0.01 ||
             kotlin.math.abs(value("contrast", 1.0) - 1.0) > 0.01 ||
             kotlin.math.abs(value("saturation", 1.0) - 1.0) > 0.01 ||
+            kotlin.math.abs(value("highlights")) > 0.01 ||
+            kotlin.math.abs(value("shadows")) > 0.01 ||
+            kotlin.math.abs(value("whites")) > 0.01 ||
+            kotlin.math.abs(value("blacks")) > 0.01 ||
+            kotlin.math.abs(value("clarity")) > 0.01 ||
             kotlin.math.abs(value("vibrance")) > 0.01 ||
+            kotlin.math.abs(value("colorBiasR")) > 0.001 ||
+            kotlin.math.abs(value("colorBiasG")) > 0.001 ||
+            kotlin.math.abs(value("colorBiasB")) > 0.001 ||
             kotlin.math.abs(value("temperatureShift")) > 0.01 ||
             kotlin.math.abs(value("tintShift")) > 0.01 ||
+            kotlin.math.abs(value("highlightRolloff")) > 0.01 ||
             kotlin.math.abs(value("vignetteAmount")) > 0.01 ||
             kotlin.math.abs(value("bloomAmount")) > 0.01 ||
             kotlin.math.abs(value("softFocus")) > 0.01 ||
@@ -1382,14 +1369,6 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 .build()
         }
 
-        val vibrance = value("vibrance")
-        val vibranceAdjustment = (vibrance * 0.35).toFloat().coerceIn(-100f, 100f)
-        if (kotlin.math.abs(vibranceAdjustment) > 0.5f) {
-            effects += HslAdjustment.Builder()
-                .adjustSaturation(vibranceAdjustment)
-                .build()
-        }
-
         val temperatureShift = value("temperatureShift")
         val tintShift = value("tintShift")
         if (kotlin.math.abs(temperatureShift) > 0.01 || kotlin.math.abs(tintShift) > 0.01) {
@@ -1410,20 +1389,43 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
 
         val bloomAmount = value("bloomAmount")
-        if (bloomAmount > 0.01) {
-            val sigma = (bloomAmount * 10.0).coerceIn(0.4, 3.2)
-            effects += GaussianBlur(sigma.toFloat())
-        }
-
+        val vibrance = value("vibrance")
+        val highlights = value("highlights")
+        val shadows = value("shadows")
+        val whites = value("whites")
+        val blacks = value("blacks")
+        val clarity = value("clarity")
+        val colorBiasR = value("colorBiasR")
+        val colorBiasG = value("colorBiasG")
+        val colorBiasB = value("colorBiasB")
+        val highlightRolloff = value("highlightRolloff")
         val vignetteAmount = value("vignetteAmount")
         val sharpenAmount = value("sharpen")
-        if (kotlin.math.abs(vibrance) > 0.01 ||
+        if (kotlin.math.abs(highlights) > 0.01 ||
+            kotlin.math.abs(shadows) > 0.01 ||
+            kotlin.math.abs(whites) > 0.01 ||
+            kotlin.math.abs(blacks) > 0.01 ||
+            kotlin.math.abs(clarity) > 0.01 ||
+            kotlin.math.abs(vibrance) > 0.01 ||
+            kotlin.math.abs(colorBiasR) > 0.001 ||
+            kotlin.math.abs(colorBiasG) > 0.001 ||
+            kotlin.math.abs(colorBiasB) > 0.001 ||
+            kotlin.math.abs(highlightRolloff) > 0.01 ||
             kotlin.math.abs(bloomAmount) > 0.01 ||
             kotlin.math.abs(vignetteAmount) > 0.01 ||
             kotlin.math.abs(sharpenAmount) > 0.01
         ) {
             effects += MotionPhotoEnhanceEffect(
+                highlights = highlights.toFloat(),
+                shadows = shadows.toFloat(),
+                whites = whites.toFloat(),
+                blacks = blacks.toFloat(),
+                clarity = clarity.toFloat(),
                 vibrance = (vibrance / 100.0).toFloat().coerceIn(-1f, 1f),
+                colorBiasR = colorBiasR.toFloat(),
+                colorBiasG = colorBiasG.toFloat(),
+                colorBiasB = colorBiasB.toFloat(),
+                highlightRolloff = highlightRolloff.toFloat().coerceAtLeast(0f),
                 bloom = bloomAmount.toFloat().coerceIn(0f, 1f),
                 vignette = vignetteAmount.toFloat().coerceIn(0f, 1f),
                 sharpen = sharpenAmount.toFloat().coerceIn(0f, 1f),
@@ -1446,7 +1448,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     }
 
     private class MotionPhotoEnhanceEffect(
+        private val highlights: Float,
+        private val shadows: Float,
+        private val whites: Float,
+        private val blacks: Float,
+        private val clarity: Float,
         private val vibrance: Float,
+        private val colorBiasR: Float,
+        private val colorBiasG: Float,
+        private val colorBiasB: Float,
+        private val highlightRolloff: Float,
         private val bloom: Float,
         private val vignette: Float,
         private val sharpen: Float,
@@ -1456,7 +1467,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             useHdr: Boolean,
         ): GlShaderProgram {
             return MotionPhotoEnhanceShaderProgram(
+                highlights = highlights,
+                shadows = shadows,
+                whites = whites,
+                blacks = blacks,
+                clarity = clarity,
                 vibrance = vibrance,
+                colorBiasR = colorBiasR,
+                colorBiasG = colorBiasG,
+                colorBiasB = colorBiasB,
+                highlightRolloff = highlightRolloff,
                 bloom = bloom,
                 vignette = vignette,
                 sharpen = sharpen,
@@ -1464,7 +1484,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
 
         override fun isNoOp(inputWidth: Int, inputHeight: Int): Boolean {
-            return kotlin.math.abs(vibrance) < 0.001f &&
+            return kotlin.math.abs(highlights) < 0.001f &&
+                kotlin.math.abs(shadows) < 0.001f &&
+                kotlin.math.abs(whites) < 0.001f &&
+                kotlin.math.abs(blacks) < 0.001f &&
+                kotlin.math.abs(clarity) < 0.001f &&
+                kotlin.math.abs(vibrance) < 0.001f &&
+                kotlin.math.abs(colorBiasR) < 0.0001f &&
+                kotlin.math.abs(colorBiasG) < 0.0001f &&
+                kotlin.math.abs(colorBiasB) < 0.0001f &&
+                kotlin.math.abs(highlightRolloff) < 0.001f &&
                 kotlin.math.abs(bloom) < 0.001f &&
                 kotlin.math.abs(vignette) < 0.001f &&
                 kotlin.math.abs(sharpen) < 0.001f
@@ -1472,7 +1501,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     }
 
     private class MotionPhotoEnhanceShaderProgram(
+        private val highlights: Float,
+        private val shadows: Float,
+        private val whites: Float,
+        private val blacks: Float,
+        private val clarity: Float,
         private val vibrance: Float,
+        private val colorBiasR: Float,
+        private val colorBiasG: Float,
+        private val colorBiasB: Float,
+        private val highlightRolloff: Float,
         private val bloom: Float,
         private val vignette: Float,
         private val sharpen: Float,
@@ -1502,7 +1540,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             )
             glProgram.setFloatUniform("uTexelWidth", 1f / width.toFloat())
             glProgram.setFloatUniform("uTexelHeight", 1f / height.toFloat())
+            glProgram.setFloatUniform("uHighlights", highlights)
+            glProgram.setFloatUniform("uShadows", shadows)
+            glProgram.setFloatUniform("uWhites", whites)
+            glProgram.setFloatUniform("uBlacks", blacks)
+            glProgram.setFloatUniform("uClarity", clarity)
             glProgram.setFloatUniform("uVibrance", vibrance)
+            glProgram.setFloatUniform("uColorBiasR", colorBiasR)
+            glProgram.setFloatUniform("uColorBiasG", colorBiasG)
+            glProgram.setFloatUniform("uColorBiasB", colorBiasB)
+            glProgram.setFloatUniform("uHighlightRolloff", highlightRolloff)
             glProgram.setFloatUniform("uBloom", bloom)
             glProgram.setFloatUniform("uVignette", vignette)
             glProgram.setFloatUniform("uSharpen", sharpen)
@@ -1532,7 +1579,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 uniform sampler2D uTexSampler;
                 uniform float uTexelWidth;
                 uniform float uTexelHeight;
+                uniform float uHighlights;
+                uniform float uShadows;
+                uniform float uWhites;
+                uniform float uBlacks;
+                uniform float uClarity;
                 uniform float uVibrance;
+                uniform float uColorBiasR;
+                uniform float uColorBiasG;
+                uniform float uColorBiasB;
+                uniform float uHighlightRolloff;
                 uniform float uBloom;
                 uniform float uVignette;
                 uniform float uSharpen;
@@ -1550,14 +1606,72 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                   return mix(color, vec3(luma), boost);
                 }
 
+                vec3 applyBlacksWhites(vec3 color, float blacks, float whites) {
+                  float b = blacks / 200.0;
+                  float w = whites / 200.0;
+                  color = color * (1.0 + w - b) + b;
+                  return clamp(color, 0.0, 1.0);
+                }
+
+                vec3 applyHighlightsShadows(vec3 color, float highlights, float shadows) {
+                  float lum = luminance(color);
+                  float h = highlights / 200.0;
+                  float s = shadows / 200.0;
+                  float highlightMask = smoothstep(0.5, 1.0, lum);
+                  float shadowMask = 1.0 - smoothstep(0.0, 0.5, lum);
+                  color = color + color * h * highlightMask - color * h * highlightMask * highlightMask;
+                  color = color + (1.0 - color) * s * shadowMask;
+                  return clamp(color, 0.0, 1.0);
+                }
+
+                vec3 applyClarity(vec3 color, vec2 uv) {
+                  if (abs(uClarity) < 0.5) return color;
+                  vec3 blurred = vec3(0.0);
+                  float w = uTexelWidth * 3.0;
+                  float h = uTexelHeight * 3.0;
+                  blurred += texture2D(uTexSampler, uv + vec2(-w, -h)).rgb * 0.0625;
+                  blurred += texture2D(uTexSampler, uv + vec2(0.0, -h)).rgb * 0.125;
+                  blurred += texture2D(uTexSampler, uv + vec2(w, -h)).rgb * 0.0625;
+                  blurred += texture2D(uTexSampler, uv + vec2(-w, 0.0)).rgb * 0.125;
+                  blurred += texture2D(uTexSampler, uv).rgb * 0.25;
+                  blurred += texture2D(uTexSampler, uv + vec2(w, 0.0)).rgb * 0.125;
+                  blurred += texture2D(uTexSampler, uv + vec2(-w, h)).rgb * 0.0625;
+                  blurred += texture2D(uTexSampler, uv + vec2(0.0, h)).rgb * 0.125;
+                  blurred += texture2D(uTexSampler, uv + vec2(w, h)).rgb * 0.0625;
+                  float midMask = 1.0 - abs(luminance(color) * 2.0 - 1.0);
+                  vec3 detail = color - blurred;
+                  return clamp(color + detail * uClarity * 0.003 * midMask, 0.0, 1.0);
+                }
+
+                vec3 applyColorBias(vec3 color) {
+                  return clamp(color + vec3(uColorBiasR, uColorBiasG, uColorBiasB), 0.0, 1.0);
+                }
+
+                vec3 applyHighlightRolloff(vec3 color) {
+                  if (uHighlightRolloff < 0.001) return color;
+                  float lum = luminance(color);
+                  if (lum > 0.70) {
+                    float t = (lum - 0.70) / 0.30;
+                    float compress = 1.0 - t * t * (3.0 - 2.0 * t) * uHighlightRolloff * 0.3;
+                    color *= compress;
+                  }
+                  return clamp(color, 0.0, 1.0);
+                }
+
                 void main() {
                   vec2 texel = vec2(uTexelWidth, uTexelHeight);
                   vec4 center = texture2D(uTexSampler, vTexCoords);
                   vec3 color = center.rgb;
 
+                  color = applyBlacksWhites(color, uBlacks, uWhites);
+                  color = applyHighlightsShadows(color, uHighlights, uShadows);
+                  color = applyClarity(color, vTexCoords);
+
                   if (abs(uVibrance) > 0.001) {
                     color = applyVibrance(color, uVibrance);
                   }
+
+                  color = applyColorBias(color);
 
                   if (uBloom > 0.001 || uSharpen > 0.001) {
                     vec3 north = texture2D(uTexSampler, vTexCoords + vec2(0.0, -texel.y)).rgb;
@@ -1576,6 +1690,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                     }
                   }
 
+                  color = applyHighlightRolloff(color);
+
                   if (uVignette > 0.001) {
                     vec2 centered = vTexCoords - vec2(0.5);
                     float dist = dot(centered, centered) * 3.2;
@@ -1592,48 +1708,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private fun buildMotionPhotoXmp(
         videoLength: Long,
         presentationTimestampUs: Long,
-    ): String {
-        return """
-            <x:xmpmeta xmlns:x="adobe:ns:meta/">
-              <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-                <rdf:Description
-                  xmlns:GCamera="http://ns.google.com/photos/1.0/camera/"
-                  xmlns:Camera="http://ns.google.com/photos/1.0/camera/"
-                  xmlns:Container="http://ns.google.com/photos/1.0/container/"
-                  xmlns:Item="http://ns.google.com/photos/1.0/container/item/"
-                  GCamera:MicroVideo="1"
-                  GCamera:MicroVideoVersion="1"
-                  GCamera:MicroVideoOffset="$videoLength"
-                  GCamera:MicroVideoPresentationTimestampUs="$presentationTimestampUs"
-                  GCamera:MotionPhoto="1"
-                  GCamera:MotionPhotoVersion="1"
-                  GCamera:MotionPhotoPresentationTimestampUs="$presentationTimestampUs"
-                  Camera:MicroVideo="1"
-                  Camera:MicroVideoVersion="1"
-                  Camera:MicroVideoOffset="$videoLength"
-                  Camera:MicroVideoPresentationTimestampUs="$presentationTimestampUs"
-                  Camera:MotionPhoto="1"
-                  Camera:MotionPhotoVersion="1"
-                  Camera:MotionPhotoPresentationTimestampUs="$presentationTimestampUs">
-                  <Container:Directory>
-                    <rdf:Seq>
-                      <rdf:li rdf:parseType="Resource"
-                        Item:Mime="image/jpeg"
-                        Item:Semantic="Primary"
-                        Item:Length="0"
-                        Item:Padding="0"/>
-                      <rdf:li rdf:parseType="Resource"
-                        Item:Mime="video/mp4"
-                        Item:Semantic="MotionPhoto"
-                        Item:Length="$videoLength"
-                        Item:Padding="0"/>
-                    </rdf:Seq>
-                  </Container:Directory>
-                </rdf:Description>
-              </rdf:RDF>
-            </x:xmpmeta>
-        """.trimIndent()
-    }
+    ): String = MotionPhotoPackaging.buildMotionPhotoXmp(
+        videoLength = videoLength,
+        presentationTimestampUs = presentationTimestampUs,
+        extendedGuid = null,
+    )
 
     private fun resolveMotionPhotoPresentationTimestampUs(videoFile: File): Long {
         return try {

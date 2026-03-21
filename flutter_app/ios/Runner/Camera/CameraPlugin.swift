@@ -40,6 +40,75 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     // 当前闪光灯模式
     private var currentFlashMode: AVCaptureDevice.FlashMode = .off
     private let ciContext = CIContext(options: [.priorityRequestLow: false])
+    private lazy var livePhotoColorBiasKernel: CIColorKernel? = {
+        CIColorKernel(source: """
+        kernel vec4 livePhotoColorBias(
+            __sample src,
+            float biasR,
+            float biasG,
+            float biasB
+        ) {
+            vec3 color = src.rgb;
+            color.r = clamp(color.r + biasR, 0.0, 1.0);
+            color.g = clamp(color.g + biasG, 0.0, 1.0);
+            color.b = clamp(color.b + biasB, 0.0, 1.0);
+            return vec4(color, src.a);
+        }
+        """)
+    }()
+    private lazy var livePhotoToneKernel: CIColorKernel? = {
+        CIColorKernel(source: """
+        kernel vec4 livePhotoTone(
+            __sample src,
+            float highlights,
+            float shadows,
+            float whites,
+            float blacks,
+            float highlightRolloff
+        ) {
+            vec3 color = src.rgb;
+            float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+            float hiMask = clamp((luma - 0.5) * 2.0, 0.0, 1.0);
+            float shMask = clamp((0.5 - luma) * 2.0, 0.0, 1.0);
+            float whMask = clamp((luma - 0.75) * 4.0, 0.0, 1.0);
+            float blMask = clamp((0.25 - luma) * 4.0, 0.0, 1.0);
+            color += hiMask * highlights * 0.01;
+            color += shMask * shadows * 0.01;
+            color += whMask * whites * 0.01;
+            color += blMask * blacks * 0.01;
+            color = clamp(color, 0.0, 1.0);
+
+            if (highlightRolloff > 0.001) {
+                float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
+                float threshold = 1.0 - highlightRolloff;
+                if (lum > threshold) {
+                    float highlight = clamp((lum - threshold) / max(highlightRolloff, 0.0001), 0.0, 1.0);
+                    float compress = 1.0 - highlight * highlight * 0.3;
+                    color = clamp(color * compress, 0.0, 1.0);
+                }
+            }
+
+            return vec4(color, src.a);
+        }
+        """)
+    }()
+    private lazy var livePhotoVibranceKernel: CIColorKernel? = {
+        CIColorKernel(source: """
+        kernel vec4 livePhotoVibrance(
+            __sample src,
+            float vibrance
+        ) {
+            vec3 color = src.rgb;
+            float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+            float maxC = max(max(color.r, color.g), color.b);
+            float minC = min(min(color.r, color.g), color.b);
+            float sat = maxC > 0.0 ? (maxC - minC) / maxC : 0.0;
+            float boost = (1.0 - sat) * vibrance * 0.02;
+            color = clamp(mix(vec3(luma), color, 1.0 + boost), 0.0, 1.0);
+            return vec4(color, src.a);
+        }
+        """)
+    }()
     private var cachedPresetJson: [String: Any] = [:]
     private var cachedPresetShaderParams: [String: Any] = [:]
     private var cachedRenderParams: [String: Any] = [:]
@@ -920,8 +989,17 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         return abs(value("exposureOffset")) > 0.01 ||
             abs(value("contrast") - 1.0) > 0.01 ||
             abs(value("saturation") - 1.0) > 0.01 ||
+            abs(value("highlights")) > 0.01 ||
+            abs(value("shadows")) > 0.01 ||
+            abs(value("whites")) > 0.01 ||
+            abs(value("blacks")) > 0.01 ||
+            abs(value("clarity")) > 0.01 ||
             abs(value("temperatureShift")) > 0.01 ||
             abs(value("tintShift")) > 0.01 ||
+            abs(value("colorBiasR")) > 0.001 ||
+            abs(value("colorBiasG")) > 0.001 ||
+            abs(value("colorBiasB")) > 0.001 ||
+            abs(value("highlightRolloff")) > 0.01 ||
             abs(value("vignetteAmount")) > 0.01 ||
             abs(value("bloomAmount")) > 0.01 ||
             abs(value("softFocus")) > 0.01 ||
@@ -947,25 +1025,6 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             image = filter.outputImage ?? image
         }
 
-        let vibrance = Float(value("vibrance") / 100.0)
-        if abs(vibrance) > 0.01,
-           let filter = CIFilter(name: "CIVibrance") {
-            filter.setValue(image, forKey: kCIInputImageKey)
-            filter.setValue(vibrance, forKey: "inputAmount")
-            image = filter.outputImage ?? image
-        }
-
-        let saturation = Float(value("saturation", 1.0))
-        let contrast = Float(value("contrast", 1.0))
-        if abs(saturation - 1.0) > 0.01 || abs(contrast - 1.0) > 0.01,
-           let filter = CIFilter(name: "CIColorControls") {
-            filter.setValue(image, forKey: kCIInputImageKey)
-            filter.setValue(saturation, forKey: kCIInputSaturationKey)
-            filter.setValue(contrast, forKey: kCIInputContrastKey)
-            filter.setValue(0.0, forKey: kCIInputBrightnessKey)
-            image = filter.outputImage ?? image
-        }
-
         let temperatureShift = value("temperatureShift")
         let tintShift = value("tintShift")
         if abs(temperatureShift) > 0.01 || abs(tintShift) > 0.01,
@@ -979,6 +1038,87 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             filter.setValue(neutral, forKey: "inputNeutral")
             filter.setValue(target, forKey: "inputTargetNeutral")
             image = filter.outputImage ?? image
+        }
+
+        let colorBiasR = Float(value("colorBiasR"))
+        let colorBiasG = Float(value("colorBiasG"))
+        let colorBiasB = Float(value("colorBiasB"))
+        if (abs(colorBiasR) > 0.001 ||
+            abs(colorBiasG) > 0.001 ||
+            abs(colorBiasB) > 0.001),
+           let kernel = livePhotoColorBiasKernel {
+            image = kernel.apply(
+                extent: image.extent,
+                arguments: [
+                    image,
+                    colorBiasR,
+                    colorBiasG,
+                    colorBiasB,
+                ]
+            ) ?? image
+        }
+
+        let saturation = Float(value("saturation", 1.0))
+        let contrast = Float(value("contrast", 1.0))
+        if abs(saturation - 1.0) > 0.01 || abs(contrast - 1.0) > 0.01,
+           let filter = CIFilter(name: "CIColorControls") {
+            filter.setValue(image, forKey: kCIInputImageKey)
+            filter.setValue(saturation, forKey: kCIInputSaturationKey)
+            filter.setValue(contrast, forKey: kCIInputContrastKey)
+            filter.setValue(0.0, forKey: kCIInputBrightnessKey)
+            image = filter.outputImage ?? image
+        }
+
+        let highlights = Float(value("highlights"))
+        let shadows = Float(value("shadows"))
+        let whites = Float(value("whites"))
+        let blacks = Float(value("blacks"))
+        let highlightRolloff = Float(value("highlightRolloff"))
+        if (abs(highlights) > 0.01 ||
+            abs(shadows) > 0.01 ||
+            abs(whites) > 0.01 ||
+            abs(blacks) > 0.01 ||
+            abs(highlightRolloff) > 0.01),
+           let kernel = livePhotoToneKernel {
+            image = kernel.apply(
+                extent: image.extent,
+                arguments: [
+                    image,
+                    highlights,
+                    shadows,
+                    whites,
+                    blacks,
+                    highlightRolloff,
+                ]
+            ) ?? image
+        }
+
+        let clarity = value("clarity")
+        if abs(clarity) > 0.5 {
+            if clarity > 0,
+               let filter = CIFilter(name: "CIUnsharpMask") {
+                filter.setValue(image, forKey: kCIInputImageKey)
+                filter.setValue((clarity / 80.0).clamped(to: 0.08...1.2), forKey: kCIInputIntensityKey)
+                filter.setValue(1.1, forKey: kCIInputRadiusKey)
+                image = filter.outputImage ?? image
+            } else if let filter = CIFilter(name: "CIGaussianBlur") {
+                filter.setValue(image, forKey: kCIInputImageKey)
+                filter.setValue(abs(clarity / 85.0).clamped(to: 0.08...0.9), forKey: kCIInputRadiusKey)
+                let blurred = (filter.outputImage ?? image).cropped(to: image.extent)
+                image = blurred
+            }
+        }
+
+        let vibrance = Float(value("vibrance"))
+        if abs(vibrance) > 0.01,
+           let kernel = livePhotoVibranceKernel {
+            image = kernel.apply(
+                extent: image.extent,
+                arguments: [
+                    image,
+                    vibrance,
+                ]
+            ) ?? image
         }
 
         let bloomAmount = value("bloomAmount")
