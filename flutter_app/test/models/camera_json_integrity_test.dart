@@ -36,6 +36,36 @@ void main() {
       }
     });
 
+    test('Non-fisheye cameras include ND right after standard lens', () async {
+      for (final file in jsonFiles) {
+        final content = await file.readAsString();
+        final json = jsonDecode(content) as Map<String, dynamic>;
+        final cameraId = json['id'] as String? ?? '';
+        final lenses = (json['modules'] as Map<String, dynamic>)['lenses'] as List<dynamic>;
+        final lensIds = lenses
+            .map((lens) => (lens as Map<String, dynamic>)['id'] as String)
+            .toList();
+
+        if (cameraId == 'fisheye') {
+          expect(
+            lensIds.contains('nd'),
+            isFalse,
+            reason: 'Fish eye camera should not expose ND lens',
+          );
+          continue;
+        }
+
+        final stdIndex = lensIds.indexOf('std');
+        expect(stdIndex, isNonNegative,
+            reason: 'Standard lens missing in ${file.path}');
+        expect(
+          lensIds.length > stdIndex + 1 ? lensIds[stdIndex + 1] : null,
+          'nd',
+          reason: 'ND lens should be placed immediately after standard in ${file.path}',
+        );
+      }
+    });
+
     test('DefaultLook parameters should be correctly parsed', () async {
       // Create a mock JSON with all DefaultLook parameters to verify parsing
       final mockJson = {

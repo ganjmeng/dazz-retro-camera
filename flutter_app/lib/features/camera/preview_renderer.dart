@@ -1099,11 +1099,15 @@ class PreviewFilterWidget extends StatelessWidget {
         final sensorAspect =
             sourceAspectRatio > 0.01 ? sourceAspectRatio : 3 / 4;
         final containerAspect = containerW / containerH;
-        final keepSourceAspect = params.isFrontCamera ||
-            params.activeLens?.circularFisheyeCrop == true;
+        final circularFisheye = params.activeLens?.circularFisheyeCrop == true;
+        final keepSourceAspect = params.isFrontCamera && !circularFisheye;
         double contentW, contentH;
 
-        if (keepSourceAspect) {
+        if (circularFisheye) {
+          final squareEdge = containerW < containerH ? containerW : containerH;
+          contentW = squareEdge;
+          contentH = squareEdge;
+        } else if (keepSourceAspect) {
           if (containerAspect >= sensorAspect) {
             contentH = containerH;
             contentW = containerH * sensorAspect;

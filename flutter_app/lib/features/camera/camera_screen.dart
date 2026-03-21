@@ -1286,7 +1286,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         kBottomPanelH -
         bottomSafeH -
         kSliderAreaH;
-    final aspectRatio = st.previewAspectRatio; // width/height
+    final circularFisheye =
+        st.renderParams?.activeLens?.circularFisheyeCrop == true;
+    final aspectRatio =
+        circularFisheye ? 1.0 : st.previewAspectRatio; // width/height
     // 宽屏设备（平板/折叠屏）限制取景框最大宽度，避免画面过宽失调
     final maxVfW =
         (screenW - kViewfinderHPadding * 2).clamp(0.0, kMaxViewfinderW);
