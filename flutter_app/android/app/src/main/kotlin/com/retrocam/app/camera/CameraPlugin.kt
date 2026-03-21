@@ -135,6 +135,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private var currentPreviewResolution: String = "720p"
     private var currentViewportWidth: Int = 3
     private var currentViewportHeight: Int = 4
+    @Volatile private var rebindGeneration: Long = 0L
     private var currentCameraId: String = ""
     @Volatile private var pendingShotStartNs: Long = 0L
     @Volatile private var pendingShotLevel: Float = 0.5f
@@ -287,40 +288,19 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 val provider = ProcessCameraProvider.getInstance(context).get()
                 cameraProvider = provider
 
-                val mainExecutor = ContextCompat.getMainExecutor(context)
-                mainExecutor.execute {
-                    try {
-                        bindCameraUseCases(owner)
-                        // ── FIX: 等待新 renderer 就绪后再返回 ──────────────
-                        // bindCameraUseCases 中 SurfaceProvider 回调在 cameraExecutor 上异步执行，
-                        // 如果立即返回 result.success，Dart 层并行执行的 setCamera()
-                        // 可能在 renderer 创建前执行（glRenderer 为 null），参数丢失。
-                        // 等待 latch 确保 renderer 就绪 + reapplyPresetToRenderer 完成。
-                        val latch = rendererReadyLatch
-                        val textureId = entry.id()
-                        bgExecutor.execute {
-                            try {
-                                val ready = latch?.await(5, java.util.concurrent.TimeUnit.SECONDS) ?: true
-                                if (!ready) {
-                                    Log.w(TAG, "initCamera: renderer ready timeout (5s)")
-                                }
-                                mainExecutor.execute {
-                                    result.success(mapOf("textureId" to textureId))
-                                    sendEvent("onCameraReady", activeCameraDebugInfo)
-                                }
-                            } catch (e: Exception) {
-                                mainExecutor.execute {
-                                    result.error("CAMERA_INIT_FAILED", e.message, null)
-                                    sendEvent("onError", mapOf("message" to (e.message ?: "Unknown error")))
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
+                rebindCameraUseCasesSafely(
+                    owner = owner,
+                    reason = "initCamera",
+                    onReady = {
+                        result.success(mapOf("textureId" to entry.id()))
+                        sendEvent("onCameraReady", activeCameraDebugInfo)
+                    },
+                    onError = { e ->
                         Log.e(TAG, "bindCameraUseCases failed", e)
                         result.error("CAMERA_INIT_FAILED", e.message, null)
                         sendEvent("onError", mapOf("message" to (e.message ?: "Unknown error")))
                     }
-                }
+                )
             } catch (e: Exception) {
                 Log.e(TAG, "initCamera failed", e)
                 val mainExecutor = ContextCompat.getMainExecutor(context)
@@ -546,6 +526,46 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 listOf(Quality.FHD, Quality.HD),
                 FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
             )
+        }
+    }
+
+    private fun rebindCameraUseCasesSafely(
+        owner: LifecycleOwner,
+        reason: String,
+        onReady: ((Boolean) -> Unit)? = null,
+        onError: ((Exception) -> Unit)? = null
+    ) {
+        val context = flutterPluginBinding.applicationContext
+        val mainExecutor = ContextCompat.getMainExecutor(context)
+        val generation = ++rebindGeneration
+        mainExecutor.execute {
+            try {
+                bindCameraUseCases(owner)
+                val latch = rendererReadyLatch
+                bgExecutor.execute {
+                    try {
+                        val ready = latch?.await(5, TimeUnit.SECONDS) ?: true
+                        if (!ready) {
+                            Log.w(TAG, "$reason: renderer ready timeout (5s)")
+                        }
+                        mainExecutor.execute {
+                            if (generation != rebindGeneration) {
+                                Log.d(TAG, "$reason: stale rebind generation $generation skipped")
+                                return@execute
+                            }
+                            onReady?.invoke(ready)
+                        }
+                    } catch (e: Exception) {
+                        mainExecutor.execute {
+                            if (generation != rebindGeneration) return@execute
+                            onError?.invoke(e)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                if (generation != rebindGeneration) return@execute
+                onError?.invoke(e)
+            }
         }
     }
 
@@ -824,30 +844,22 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
 
         try {
-            bindCameraUseCases(owner)
-            val latch = rendererReadyLatch
-            val mainExecutor = ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
-            bgExecutor.execute {
-                try {
-                    val ready = latch?.await(5, java.util.concurrent.TimeUnit.SECONDS) ?: true
-                    if (!ready) {
-                        Log.w(TAG, "updateViewportRatio: renderer ready timeout (5s)")
-                    }
-                    mainExecutor.execute {
-                        result.success(
-                            mapOf(
-                                "width" to currentViewportWidth,
-                                "height" to currentViewportHeight,
-                                "rebound" to true
-                            )
+            rebindCameraUseCasesSafely(
+                owner = owner,
+                reason = "updateViewportRatio",
+                onReady = {
+                    result.success(
+                        mapOf(
+                            "width" to currentViewportWidth,
+                            "height" to currentViewportHeight,
+                            "rebound" to true
                         )
-                    }
-                } catch (e: Exception) {
-                    mainExecutor.execute {
-                        result.error("UPDATE_VIEWPORT_RATIO_FAILED", e.message, null)
-                    }
+                    )
+                },
+                onError = { e ->
+                    result.error("UPDATE_VIEWPORT_RATIO_FAILED", e.message, null)
                 }
-            }
+            )
         } catch (e: Exception) {
             result.error("UPDATE_VIEWPORT_RATIO_FAILED", e.message, null)
         }
@@ -869,27 +881,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             return
         }
         try {
-            bindCameraUseCases(owner)
-
-            // ── FIX: 等待新 renderer 就绪后再返回，避免 Dart 层竞态 ────────
-            // bindCameraUseCases 中 SurfaceProvider 回调在 cameraExecutor 上异步执行，
-            // 如果立即返回 result.success，Dart 层的 setCamera() + updateLensParams()
-            // 会在新 renderer 创建前执行，导致参数发到 null。
-            // 在 bgExecutor 上等待 latch（不阻塞主线程），完成后在主线程回调 result。
-            val latch = rendererReadyLatch
-            val mainExecutor = ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
-            bgExecutor.execute {
-                try {
-                    // 等待新 renderer 就绪，最多 5 秒超时
-                    val ready = latch?.await(5, java.util.concurrent.TimeUnit.SECONDS) ?: true
-                    if (!ready) {
-                        Log.w(TAG, "switchLens: renderer ready timeout (5s)")
-                    }
-                    mainExecutor.execute { result.success(null) }
-                } catch (e: Exception) {
-                    mainExecutor.execute { result.error("SWITCH_LENS_FAILED", e.message, null) }
-                }
-            }
+            rebindCameraUseCasesSafely(
+                owner = owner,
+                reason = "switchLens",
+                onReady = { result.success(null) },
+                onError = { e -> result.error("SWITCH_LENS_FAILED", e.message, null) }
+            )
         } catch (e: Exception) {
             result.error("SWITCH_LENS_FAILED", e.message, null)
         }
@@ -2394,31 +2391,23 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
 
         try {
-            bindCameraUseCases(owner)
-            val latch = rendererReadyLatch
-            val mainExecutor = ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
-            bgExecutor.execute {
-                try {
-                    val ready = latch?.await(5, java.util.concurrent.TimeUnit.SECONDS) ?: true
-                    if (!ready) {
-                        Log.w(TAG, "syncCameraState: renderer ready timeout (5s)")
-                    }
-                    mainExecutor.execute {
-                        applyState()
-                        result.success(
-                            mapOf(
-                                "appliedVersion" to cachedRenderVersion,
-                                "rendererReady" to (glRenderer != null),
-                                "rebound" to true
-                            )
+            rebindCameraUseCasesSafely(
+                owner = owner,
+                reason = "syncCameraState",
+                onReady = {
+                    applyState()
+                    result.success(
+                        mapOf(
+                            "appliedVersion" to cachedRenderVersion,
+                            "rendererReady" to (glRenderer != null),
+                            "rebound" to true
                         )
-                    }
-                } catch (e: Exception) {
-                    mainExecutor.execute {
-                        result.error("SYNC_CAMERA_STATE_FAILED", e.message, null)
-                    }
+                    )
+                },
+                onError = { e ->
+                    result.error("SYNC_CAMERA_STATE_FAILED", e.message, null)
                 }
-            }
+            )
         } catch (e: Exception) {
             result.error("SYNC_CAMERA_STATE_FAILED", e.message, null)
         }
