@@ -2006,35 +2006,21 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }) async {
     syncRuntimeColorContext();
     final viewport = _currentViewportDimensionsFor(camera);
-    final renderParams = _buildActiveRenderParamsJson();
-    if (viewport == null) {
-      await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
-      await _syncCurrentPreviewStateToNative();
-      return;
+    // 稳定优先：沿用 setCamera -> updateViewportRatio -> runtimeState 重放的链路。
+    // 该链路在 ba0b04c 之前长期稳定，避免 syncCameraState 与其它推送并发时
+    // 发生旧状态覆盖新比例的问题。
+    await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
+    if (viewport != null) {
+      await _ref.read(cameraServiceProvider.notifier).updateViewportRatio(
+            width: viewport.width,
+            height: viewport.height,
+          );
     }
-    if (renderParams == null) {
-      await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
-      await _syncCurrentPreviewStateToNative();
-      return;
-    }
-    final version = ++_renderParamsVersion;
-    final ackVersion =
-        await _ref.read(cameraServiceProvider.notifier).syncCameraState(
-              camera: camera,
-              lensParams: _buildActiveLensParams(camera),
-              renderParams: renderParams,
-              zoom: state.zoomLevel,
-              viewportWidth: viewport.width,
-              viewportHeight: viewport.height,
-              livePhotoEnabled: state.livePhotoEnabled &&
-                  _supportsLivePhotoForCurrentSelection,
-              version: version,
-            );
-    if (ackVersion != null &&
-        ackVersion >= version &&
-        ackVersion > _lastAckedRenderParamsVersion) {
-      _lastAckedRenderParamsVersion = ackVersion;
-    }
+    await _syncCurrentPreviewStateToNative();
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+    await _syncCurrentPreviewStateToNative();
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    await _syncCurrentPreviewStateToNative();
   }
 
   void _scheduleViewportRatioSync({bool immediate = false}) {
