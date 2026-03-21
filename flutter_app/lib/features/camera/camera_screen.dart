@@ -1290,30 +1290,22 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         kSliderAreaH;
     final circularFisheye =
         st.renderParams?.activeLens?.circularFisheyeCrop == true;
-    final targetAspectRatio =
+    final aspectRatio =
         circularFisheye ? 1.0 : st.previewAspectRatio; // width/height
-    final sourceAspectRatio = camSvc.previewSourceAspectRatio > 0.01
-        ? camSvc.previewSourceAspectRatio
-        : targetAspectRatio;
-    // 预览外框保持传感器基准比例稳定，比例切换通过内部裁切遮罩表达，
-    // 避免不同默认比例相机之间切换时整块画面忽大忽小、像被二次缩放。
-    final layoutAspectRatio = circularFisheye ? 1.0 : sourceAspectRatio;
     // 宽屏设备（平板/折叠屏）限制取景框最大宽度，避免画面过宽失调
     final maxVfW =
         (screenW - kViewfinderHPadding * 2).clamp(0.0, kMaxViewfinderW);
     double viewfinderW;
     double viewfinderH;
-    if (layoutAspectRatio < 0.75) {
+    if (aspectRatio < 0.75) {
       // 竖向比例（如 9:16 = 0.5625）：高度撑满可用空间，宽度按比例缩窄
       viewfinderH = maxViewfinderH;
-      viewfinderW = (viewfinderH * layoutAspectRatio).clamp(0.0, maxVfW);
+      viewfinderW = (viewfinderH * aspectRatio).clamp(0.0, maxVfW);
     } else {
       // 横向或方形比例（1:1, 3:4, 2:3）：宽度撑满（受宽屏限制），高度按比例
       viewfinderW = maxVfW;
-      viewfinderH = (viewfinderW / layoutAspectRatio).clamp(
-        viewfinderW * 0.5,
-        maxViewfinderH,
-      );
+      viewfinderH =
+          (viewfinderW / aspectRatio).clamp(viewfinderW * 0.5, maxViewfinderH);
     }
     // 取景框在顶部栏和底部面板之间的可用空间内垂直居中
     // 注意：去掉 clamp 上限，确保 1:1/3:4 等比例下取景框能真正居中
@@ -1404,7 +1396,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     viewfinderH,
                     viewfinderW,
                     s,
-                    targetAspectRatio: targetAspectRatio,
                     overlayCacheWidth: overlayCacheWidth,
                   );
                 }),
@@ -1582,14 +1573,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ── 取景框区域（上段）──────────────────────────────────────────────────────────────
   // 布局：圆角取景框，内部只有预览画面和网格线（控制胶囊已移到取景框外部）
   Widget _buildViewfinderArea(
-    CameraAppState st,
-    CameraState camSvc,
-    double areaH,
-    double areaW,
-    S s, {
-    required double targetAspectRatio,
-    required int overlayCacheWidth,
-  }) {
+      CameraAppState st, CameraState camSvc, double areaH, double screenW, S s,
+      {required int overlayCacheWidth}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.hardEdge, // 强制裁剪，防止 OverflowBox 内容溢出圆角边界
@@ -1598,11 +1583,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         children: [
           // 相机预览
           _buildPreview(st, camSvc),
-          _buildRatioCropMask(
-            areaW: areaW,
-            areaH: areaH,
-            targetAspectRatio: targetAspectRatio,
-          ),
           // 三等分网格线：小窗开启时网格移入小窗内部，小窗关闭时全局显示
           if (st.gridEnabled && !st.minimapEnabled) _buildGrid(),
           // 调试信息浮层（开发调试用）
@@ -1882,7 +1862,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             _MinimapOverlay(
               zoomLevel: st.zoomLevel,
               gridEnabled: st.gridEnabled,
-              areaW: areaW,
+              areaW: screenW,
               areaH: areaH,
             ),
         ],
@@ -1918,87 +1898,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // 快门行
           _buildShutterRow(st),
           // 底部安全区域已移入 _buildShutterRow
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRatioCropMask({
-    required double areaW,
-    required double areaH,
-    required double targetAspectRatio,
-  }) {
-    if (targetAspectRatio <= 0.01) return const SizedBox.shrink();
-    final containerAspect = areaW / areaH;
-    if ((containerAspect - targetAspectRatio).abs() < 0.005) {
-      return const SizedBox.shrink();
-    }
-
-    const maskColor = Color(0x66000000);
-    final borderColor = Colors.white.withAlpha(46);
-
-    if (targetAspectRatio > containerAspect) {
-      final cropH = areaW / targetAspectRatio;
-      final barH = ((areaH - cropH) / 2).clamp(0.0, areaH / 2);
-      return IgnorePointer(
-        child: Stack(
-          children: [
-            Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: barH,
-                child: const ColoredBox(color: maskColor)),
-            Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: barH,
-                child: const ColoredBox(color: maskColor)),
-            Positioned(
-              top: barH,
-              left: 0,
-              right: 0,
-              height: cropH,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  border: Border.all(color: borderColor, width: 0.8),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final cropW = areaH * targetAspectRatio;
-    final barW = ((areaW - cropW) / 2).clamp(0.0, areaW / 2);
-    return IgnorePointer(
-      child: Stack(
-        children: [
-          Positioned(
-              top: 0,
-              bottom: 0,
-              left: 0,
-              width: barW,
-              child: const ColoredBox(color: maskColor)),
-          Positioned(
-              top: 0,
-              bottom: 0,
-              right: 0,
-              width: barW,
-              child: const ColoredBox(color: maskColor)),
-          Positioned(
-            top: 0,
-            bottom: 0,
-            left: barW,
-            width: cropW,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border.all(color: borderColor, width: 0.8),
-              ),
-            ),
-          ),
         ],
       ),
     );
