@@ -74,56 +74,56 @@ img.Image _generateDustTexture(
   final isLight = variant == _TextureVariant.light;
   final isLightPlus = variant == _TextureVariant.lightPlus;
   final speckCount = isLight
-      ? 90 + random.nextInt(60)
+      ? 140 + random.nextInt(90)
       : isLightPlus
-          ? 130 + random.nextInt(80)
-          : 220 + random.nextInt(120);
+          ? 190 + random.nextInt(110)
+          : 320 + random.nextInt(180);
   for (var i = 0; i < speckCount; i++) {
     final x = random.nextInt(width);
     final y = random.nextInt(height);
-    final radius = random.nextDouble() < 0.88
-        ? 0.8 +
+    final radius = random.nextDouble() < 0.90
+        ? 0.55 +
             random.nextDouble() *
                 (isLight
-                    ? 1.8
+                    ? 1.15
                     : isLightPlus
-                        ? 2.3
-                        : 3.0)
+                        ? 1.35
+                        : 1.65)
         : (isLight
-                ? 2.2
+                ? 1.2
                 : isLightPlus
-                    ? 3.0
-                    : 4.0) +
+                    ? 1.45
+                    : 1.85) +
             random.nextDouble() *
                 (isLight
-                    ? 5.0
+                    ? 1.7
                     : isLightPlus
-                        ? 7.5
-                        : 10.0);
+                        ? 2.1
+                        : 2.7);
     final alpha = random.nextDouble() < 0.9
         ? (isLight
-                ? 7
+                ? 34
                 : isLightPlus
-                    ? 10
-                    : 12) +
+                    ? 48
+                    : 64) +
             random.nextInt(
               isLight
-                  ? 14
+                  ? 46
                   : isLightPlus
-                      ? 22
-                      : 30,
+                      ? 64
+                      : 96,
             )
         : (isLight
-                ? 18
+                ? 62
                 : isLightPlus
-                    ? 30
-                    : 40) +
+                    ? 82
+                    : 110) +
             random.nextInt(
               isLight
-                  ? 24
+                  ? 54
                   : isLightPlus
-                      ? 40
-                      : 70,
+                      ? 70
+                      : 95,
             );
     _paintSoftDot(image, x.toDouble(), y.toDouble(), radius, alpha);
 
@@ -135,16 +135,16 @@ img.Image _generateDustTexture(
                 : 0.12)) {
       final trailAngle = random.nextDouble() * pi;
       final trailLength = (isLight
-              ? 3
+              ? 2
               : isLightPlus
-                  ? 4
-                  : 5) +
+                  ? 3
+                  : 4) +
           random.nextInt(
             isLight
-                ? 8
+                ? 6
                 : isLightPlus
-                    ? 12
-                    : 20,
+                    ? 8
+                    : 12,
           );
       for (var t = 0; t < trailLength; t++) {
         final dx = cos(trailAngle) * t * 0.7;
@@ -153,48 +153,48 @@ img.Image _generateDustTexture(
           image,
           x + dx,
           y + dy,
-          max(0.8, radius * 0.35),
-          (alpha * 0.16).round(),
+          max(0.55, radius * 0.28),
+          (alpha * 0.22).round(),
         );
       }
     }
   }
 
   final hazeClusters = isLight
-      ? 3 + random.nextInt(4)
+      ? 2 + random.nextInt(2)
       : isLightPlus
-          ? 6 + random.nextInt(5)
-          : 10 + random.nextInt(8);
+          ? 3 + random.nextInt(2)
+          : 4 + random.nextInt(3);
   for (var i = 0; i < hazeClusters; i++) {
     final x = random.nextInt(width).toDouble();
     final y = random.nextInt(height).toDouble();
     final radius = (isLight
-            ? 10
+            ? 6
             : isLightPlus
-                ? 12
-                : 18) +
+                ? 8
+                : 10) +
         random.nextDouble() *
             (isLight
-                ? 20
+                ? 10
                 : isLightPlus
-                    ? 28
-                    : 45);
+                    ? 14
+                    : 18);
     _paintSoftDot(
       image,
       x,
       y,
       radius,
       (isLight
-              ? 4
+              ? 8
               : isLightPlus
-                  ? 7
-                  : 10) +
+                  ? 12
+                  : 16) +
           random.nextInt(
             isLight
-                ? 7
+                ? 8
                 : isLightPlus
                     ? 10
-                    : 16,
+                    : 14,
           ),
     );
   }
@@ -215,31 +215,31 @@ img.Image _generateScratchTexture(
   final isLight = variant == _TextureVariant.light;
   final isLightPlus = variant == _TextureVariant.lightPlus;
   final scratchCount = isLight
-      ? 8 + random.nextInt(6)
+      ? 14 + random.nextInt(8)
       : isLightPlus
-          ? 12 + random.nextInt(8)
-          : 22 + random.nextInt(12);
+          ? 20 + random.nextInt(12)
+          : 34 + random.nextInt(18);
   for (var i = 0; i < scratchCount; i++) {
     final points = <Point<double>>[];
     final startX = random.nextDouble() * width;
     final startY = random.nextDouble() * height;
     final angle = random.nextDouble() * pi;
-    final segments = 2 + random.nextInt(4);
+    final segments = 1 + random.nextInt(2);
     final step = (isLight
-            ? 14
+            ? 6
             : isLightPlus
-                ? 17
-                : 20) +
+                ? 8
+                : 10) +
         random.nextDouble() *
             (isLight
-                ? 34
+                ? 10
                 : isLightPlus
-                    ? 42
-                    : 60);
+                    ? 14
+                    : 18);
     points.add(Point(startX, startY));
     for (var s = 0; s < segments; s++) {
       final last = points.last;
-      final jitter = (random.nextDouble() - 0.5) * 0.7;
+      final jitter = (random.nextDouble() - 0.5) * 2.6;
       final bend = angle + jitter;
       points.add(
         Point(
@@ -250,72 +250,86 @@ img.Image _generateScratchTexture(
     }
 
     final alpha = (isLight
-            ? 8
+            ? 58
             : isLightPlus
-                ? 12
-                : 18) +
+                ? 78
+                : 96) +
         random.nextInt(
           isLight
-              ? 20
+              ? 52
               : isLightPlus
-                  ? 30
-                  : 60,
+                  ? 62
+                  : 86,
         );
     final thickness = random.nextDouble() < 0.75
         ? (isLight
-                ? 0.6
+                ? 1.05
                 : isLightPlus
-                    ? 0.8
-                    : 1.0) +
+                    ? 1.35
+                    : 1.7) +
             random.nextDouble() *
                 (isLight
-                    ? 0.8
+                    ? 1.15
                     : isLightPlus
-                        ? 0.95
-                        : 1.2)
+                        ? 1.35
+                        : 1.65)
         : (isLight
-                ? 1.3
+                ? 2.0
                 : isLightPlus
-                    ? 1.6
-                    : 2.2) +
+                    ? 2.5
+                    : 3.0) +
             random.nextDouble() *
                 (isLight
-                    ? 1.0
+                    ? 1.7
                     : isLightPlus
-                        ? 1.2
-                        : 2.0);
+                        ? 2.0
+                        : 2.4);
     _paintPolyline(image, points, thickness, alpha);
+    if (points.length >= 2 && random.nextDouble() < 0.86) {
+      final head = points.first;
+      final neck = points[1];
+      _paintSegment(
+        image,
+        head,
+        Point(
+          head.x + (neck.x - head.x) * 0.45,
+          head.y + (neck.y - head.y) * 0.45,
+        ),
+        thickness * (0.95 + random.nextDouble() * 0.45),
+        (alpha * 0.92).round(),
+      );
+    }
 
     if (random.nextDouble() <
         (isLight
-            ? 0.25
+            ? 0.34
             : isLightPlus
-                ? 0.34
-                : 0.45)) {
-      _paintPolyline(image, points, thickness + 1.4, (alpha * 0.18).round());
+                ? 0.46
+                : 0.58)) {
+      _paintPolyline(image, points, thickness + 1.6, (alpha * 0.28).round());
     }
   }
 
   final fiberCount = isLight
-      ? 6 + random.nextInt(5)
+      ? 7 + random.nextInt(6)
       : isLightPlus
-          ? 9 + random.nextInt(6)
-          : 14 + random.nextInt(10);
+          ? 10 + random.nextInt(7)
+          : 16 + random.nextInt(10);
   for (var i = 0; i < fiberCount; i++) {
     final startX = random.nextDouble() * width;
     final startY = random.nextDouble() * height;
     final angle = random.nextDouble() * pi;
     final length = (isLight
-            ? 24
+            ? 14
             : isLightPlus
-                ? 30
-                : 40) +
+                ? 18
+                : 22) +
         random.nextDouble() *
             (isLight
-                ? 50
+                ? 24
                 : isLightPlus
-                    ? 65
-                    : 90);
+                    ? 30
+                    : 38);
     final controlJitter = (isLight
             ? 8
             : isLightPlus
@@ -354,22 +368,22 @@ img.Image _generateScratchTexture(
       image,
       points,
       (isLight
-              ? 0.55
+              ? 0.7
               : isLightPlus
-                  ? 0.72
-                  : 0.9) +
+                  ? 0.9
+                  : 1.2) +
           random.nextDouble(),
       (isLight
-              ? 5
+              ? 10
               : isLightPlus
-                  ? 7
-                  : 10) +
+                  ? 14
+                  : 20) +
           random.nextInt(
             isLight
-                ? 10
+                ? 12
                 : isLightPlus
-                    ? 14
-                    : 20,
+                    ? 18
+                    : 24,
           ),
     );
   }
