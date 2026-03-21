@@ -791,8 +791,21 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     }
 
     private fun handleUpdateViewportRatio(call: MethodCall, result: MethodChannel.Result) {
-        currentViewportWidth = (call.argument<Int>("width") ?: currentViewportWidth).coerceAtLeast(1)
-        currentViewportHeight = (call.argument<Int>("height") ?: currentViewportHeight).coerceAtLeast(1)
+        val nextWidth = (call.argument<Int>("width") ?: currentViewportWidth).coerceAtLeast(1)
+        val nextHeight = (call.argument<Int>("height") ?: currentViewportHeight).coerceAtLeast(1)
+        if (nextWidth == currentViewportWidth && nextHeight == currentViewportHeight) {
+            result.success(
+                mapOf(
+                    "width" to currentViewportWidth,
+                    "height" to currentViewportHeight,
+                    "rebound" to false,
+                    "skipped" to true
+                )
+            )
+            return
+        }
+        currentViewportWidth = nextWidth
+        currentViewportHeight = nextHeight
 
         val owner = lifecycleOwner
         if (owner == null || cameraProvider == null || surfaceTexture == null) {

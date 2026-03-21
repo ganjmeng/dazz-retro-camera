@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../models/preset.dart';
@@ -111,6 +112,13 @@ class CameraService extends StateNotifier<CameraState> {
   bool _isDisposed = false;
   int _initGeneration = 0;
   Completer<String?>? _pendingVideoRecordedCompleter;
+  Map<String, dynamic>? _lastCameraPresetPayload;
+  Map<String, dynamic>? _lastLensParamsPayload;
+
+  void _resetRuntimeSyncCaches() {
+    _lastCameraPresetPayload = null;
+    _lastLensParamsPayload = null;
+  }
 
   Future<T> _serializeLifecycle<T>(Future<T> Function() action) async {
     final completer = Completer<T>();
@@ -143,6 +151,7 @@ class CameraService extends StateNotifier<CameraState> {
         activeCameraDebugInfo: const {},
         supportsLivePhoto: false,
       );
+      _resetRuntimeSyncCaches();
 
       // 相机权限已在 CameraScreen._requestPermissions() 中一次性请求
       // 这里只检查相机权限是否已授予，不再重复弹出权限对话框
@@ -218,6 +227,7 @@ class CameraService extends StateNotifier<CameraState> {
     await _serializeLifecycle(() async {
       try {
         await _channel.invokeMethod('stopPreview');
+        _resetRuntimeSyncCaches();
         state = state.copyWith(
           isReady: false,
           textureId: null,
@@ -256,7 +266,12 @@ class CameraService extends StateNotifier<CameraState> {
         'cameraId': camera.id,
         'defaultLook': camera.defaultLook.toJson(),
       };
+      if (_lastCameraPresetPayload != null &&
+          mapEquals(_lastCameraPresetPayload, presetPayload)) {
+        return;
+      }
       await _channel.invokeMethod('setPreset', {'preset': presetPayload});
+      _lastCameraPresetPayload = Map<String, dynamic>.from(presetPayload);
     } catch (e) {
       print('Error setting camera: \$e');
     }
@@ -340,7 +355,7 @@ class CameraService extends StateNotifier<CameraState> {
     double highlightCompression = 0.0,
   }) async {
     try {
-      await _channel.invokeMethod('updateLensParams', {
+      final payload = <String, dynamic>{
         'distortion': distortion,
         'vignette': vignette,
         'zoomFactor': zoomFactor,
@@ -353,7 +368,13 @@ class CameraService extends StateNotifier<CameraState> {
         'contrast': contrast,
         'saturation': saturation,
         'highlightCompression': highlightCompression,
-      });
+      };
+      if (_lastLensParamsPayload != null &&
+          mapEquals(_lastLensParamsPayload, payload)) {
+        return;
+      }
+      await _channel.invokeMethod('updateLensParams', payload);
+      _lastLensParamsPayload = Map<String, dynamic>.from(payload);
     } catch (e) {
       print('Error updating lens params: $e');
     }
@@ -636,6 +657,7 @@ class CameraService extends StateNotifier<CameraState> {
         await _eventSubscription?.cancel();
         _eventSubscription = null;
         await _channel.invokeMethod('dispose');
+        _resetRuntimeSyncCaches();
         state = state.copyWith(
           isReady: false,
           textureId: null,
@@ -718,6 +740,7 @@ class CameraService extends StateNotifier<CameraState> {
   @override
   void dispose() {
     _isDisposed = true;
+    _resetRuntimeSyncCaches();
     // Provider 销毁阶段不阻塞等待；尽力释放原生资源。
     unawaited(_channel.invokeMethod('dispose'));
     _eventSubscription?.cancel();

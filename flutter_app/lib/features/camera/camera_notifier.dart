@@ -363,6 +363,10 @@ class CameraAppState {
     return ratio.width / ratio.height;
   }
 
+  String get previewResolutionTag {
+    return sharpenLevel == 0 ? '720p' : '1080p';
+  }
+
   String get lensLabel {
     // Use the camera's focalLengthLabel (e.g. "28mm"), falling back to lens nameEn
     final fll = camera?.focalLengthLabel;
@@ -552,6 +556,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   Future<void> _loadCamera(String cameraId) async {
+    final previousCamera = state.camera;
+    final previousRatioId = state.activeRatioId;
     state = state.copyWith(
         isLoading: true, clearError: true, activeCameraId: cameraId);
     try {
@@ -623,15 +629,25 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         colorTempK: colorK,
         wbMode: wbMode,
         fisheyeMode: nextFisheyeMode,
-        livePhotoEnabled: camera.supportsLivePhoto && !nextFisheyeMode
-            ? state.livePhotoEnabled
-            : false,
+        // 切换相机后统一关闭 live photo，避免沿用上一台相机的开启状态。
+        livePhotoEnabled: false,
         clearPanel: true,
       );
       // 关键修复：加载相机后立即将 defaultLook 色彩参数同步到原生 GPU shader
       // 修复 FQS 紫色偏色问题：确保 colorBiasR/G/B、grainSize、sharpness 等专用字段正确传递
       await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
-      await _syncViewportRatioToNativeImmediately();
+      final previousRatio = previousCamera == null || previousRatioId == null
+          ? null
+          : previousCamera.ratioById(previousRatioId) ??
+              previousCamera.ratioById(previousCamera.defaultSelection.ratioId);
+      final nextRatio = camera.ratioById(defaults.ratioId);
+      final ratioChanged = previousRatio == null ||
+          nextRatio == null ||
+          previousRatio.width != nextRatio.width ||
+          previousRatio.height != nextRatio.height;
+      if (ratioChanged) {
+        await _syncViewportRatioToNativeImmediately();
+      }
       await _syncCurrentPreviewStateToNative();
     } catch (e) {
       state =
@@ -1020,11 +1036,20 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   void toggleLivePhoto() {
-    if (!_supportsLivePhotoForCurrentSelection) {
+    setLivePhotoEnabled(!state.livePhotoEnabled);
+  }
+
+  void setLivePhotoEnabled(
+    bool enabled, {
+    bool bypassSupportCheck = false,
+  }) {
+    if (!bypassSupportCheck &&
+        enabled &&
+        !_supportsLivePhotoForCurrentSelection) {
       state = state.copyWith(livePhotoEnabled: false);
       return;
     }
-    final next = !state.livePhotoEnabled;
+    final next = enabled;
     if (next && state.saveOriginalEnabled) {
       AppPrefsService.instance.setSaveOriginalEnabled(false);
     }
@@ -1090,7 +1115,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     try {
       // 1. 重新初始化相机（重新获取 textureId，重建 renderer）
       await svc.initCamera(
-        resolution: state.previewPerformanceMode.resolutionTag,
+        resolution: state.previewResolutionTag,
       );
 
       // 2. 同步相机 shader 参数
@@ -1160,7 +1185,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
     // 4. 重新初始化相机（重建 SurfaceTexture + CameraGLRenderer，等待 renderer 就绪）
     await svc.initCamera(
-      resolution: state.previewPerformanceMode.resolutionTag,
+      resolution: state.previewResolutionTag,
     );
 
     // 5. 重新发送当前相机参数到新 renderer

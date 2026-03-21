@@ -120,36 +120,21 @@ class _GalleryCache {
 }
 
 class _LivePhotoSupport {
-  static const List<int> _motionPhotoMarker = <int>[
-    0x43,
-    0x61,
-    0x6D,
-    0x65,
-    0x72,
-    0x61,
-    0x3A,
-    0x4D,
-    0x6F,
-    0x74,
-    0x69,
-    0x6F,
-    0x6E,
-    0x50,
-    0x68,
-    0x6F,
-    0x74,
-    0x6F,
-    0x3D,
-    0x22,
-    0x31,
-    0x22,
-  ];
   static const List<int> _ftypMarker = <int>[0x66, 0x74, 0x79, 0x70];
   static final RegExp _microVideoOffsetPattern = RegExp(
-    r'Camera:MicroVideoOffset="(\d+)"',
+    r'(?:Camera|GCamera):MicroVideoOffset(?:="|>)(\d+)(?:"|<)',
   );
   static final RegExp _containerItemLengthPattern = RegExp(
     r'Item:Semantic="MotionPhoto"[\s\S]*?Item:Length="(\d+)"',
+  );
+  static final RegExp _motionPhotoEnabledPattern = RegExp(
+    r'(?:Camera|GCamera):MotionPhoto(?:="|>)(1)(?:"|<)',
+  );
+  static final RegExp _microVideoEnabledPattern = RegExp(
+    r'(?:Camera|GCamera):MicroVideo(?:="|>)(1)(?:"|<)',
+  );
+  static final RegExp _oppoLivePhotoPattern = RegExp(
+    r'OpCamera:OLivePhotoVersion(?:="|>)(\d+)(?:"|<)',
   );
 
   static final Map<String, bool> _liveAssetCache = <String, bool>{};
@@ -197,7 +182,7 @@ class _LivePhotoSupport {
       try {
         final probeLength = math.min((await raf.length()).toInt(), 256 * 1024);
         final head = await raf.read(probeLength);
-        final isLive = _indexOfBytes(head, _motionPhotoMarker) >= 0;
+        final isLive = _containsLivePhotoMetadata(head);
         _liveAssetCache[asset.id] = isLive;
         return isLive;
       } finally {
@@ -287,21 +272,6 @@ class _LivePhotoSupport {
     }
   }
 
-  static int _indexOfBytes(List<int> source, List<int> pattern) {
-    if (pattern.isEmpty || source.length < pattern.length) return -1;
-    for (int i = 0; i <= source.length - pattern.length; i++) {
-      bool matched = true;
-      for (int j = 0; j < pattern.length; j++) {
-        if (source[i + j] != pattern[j]) {
-          matched = false;
-          break;
-        }
-      }
-      if (matched) return i;
-    }
-    return -1;
-  }
-
   static int _lastIndexOfBytes(List<int> source, List<int> pattern) {
     if (pattern.isEmpty || source.length < pattern.length) return -1;
     for (int i = source.length - pattern.length; i >= 0; i--) {
@@ -331,6 +301,15 @@ class _LivePhotoSupport {
       return containerOffset;
     }
     return null;
+  }
+
+  static bool _containsLivePhotoMetadata(List<int> head) {
+    if (head.isEmpty) return false;
+    final text = String.fromCharCodes(head);
+    return _motionPhotoEnabledPattern.hasMatch(text) ||
+        _microVideoEnabledPattern.hasMatch(text) ||
+        _oppoLivePhotoPattern.hasMatch(text) ||
+        _containerItemLengthPattern.hasMatch(text);
   }
 
   static Future<bool> _isValidMp4Start(
