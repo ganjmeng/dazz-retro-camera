@@ -470,7 +470,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         imageAnalysis = imageAnalysisUseCase
 
         val recorder = Recorder.Builder()
-            .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
+            .setQualitySelector(currentVideoQualitySelector())
             .build()
         val candidateVideoCapture = VideoCapture.withOutput(recorder)
         provider.unbindAll()
@@ -534,6 +534,19 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         videoCaptureUseCase?.let { useCaseGroup.addUseCase(it) }
         buildCurrentViewPort()?.let { useCaseGroup.setViewPort(it) }
         return provider.bindToLifecycle(owner, cameraSelector, useCaseGroup.build())
+    }
+
+    private fun currentVideoQualitySelector(): QualitySelector {
+        return when {
+            currentSharpenLevel < 0.2f -> QualitySelector.fromOrderedList(
+                listOf(Quality.HD, Quality.SD),
+                FallbackStrategy.lowerQualityOrHigherThan(Quality.HD)
+            )
+            else -> QualitySelector.fromOrderedList(
+                listOf(Quality.FHD, Quality.HD),
+                FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
+            )
+        }
     }
 
     /** 读取当前绑定摄像头的传感器信息，存入 activeCameraDebugInfo */
