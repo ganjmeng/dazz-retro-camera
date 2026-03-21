@@ -1116,34 +1116,20 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         resolution: state.previewResolutionTag,
       );
 
-      // 2. 同步相机 shader 参数
       final camera = state.camera;
       if (camera != null) {
-        await svc.setCamera(camera);
-        // 3. 同步镜头参数
-        final lens = camera.lensById(state.activeLensId);
-        await svc.updateLensParams(
-          distortion: lens?.distortion ?? 0.0,
-          vignette: lens?.vignette ?? 0.0,
-          zoomFactor: lens?.zoomFactor ?? 1.0,
-          fisheyeMode: lens?.fisheyeMode ?? false,
-          circularFisheye:
-              lens?.circularFisheyeCrop ?? (lens?.fisheyeMode ?? false),
-          chromaticAberration: lens?.chromaticAberration ?? 0.0,
-          bloom: lens?.bloom ?? 0.0,
-          softFocus: lens?.softFocus ?? 0.0,
-          exposure: lens?.exposure ?? 0.0,
-          contrast: lens?.contrast ?? 0.0,
-          saturation: lens?.saturation ?? 0.0,
-          highlightCompression: lens?.highlightCompression ?? 0.0,
-        );
+        await _syncCameraStateToNative(camera: camera);
       }
 
-      // 4. 设置目标分辨率（initCamera 默认用中档，这里覆盖为用户选择的档位）
+      // 2. 设置目标分辨率（initCamera 默认用中档，这里覆盖为用户选择的档位）
       await svc.setSharpen(levels[next]);
 
-      // 5. 同步完整渲染参数（滤镜 + defaultLook）
-      _applyCurrentRenderParamsToNative();
+      // 3. 分辨率切换可能再次重建 renderer，完成后再整包同步一次。
+      if (camera != null) {
+        await _syncCameraStateToNative(camera: camera);
+      } else {
+        _applyCurrentRenderParamsToNative();
+      }
     } finally {
       // 隐藏加载遇罩（无论成功还是失败）
       state = state.copyWith(isLoading: false);
@@ -1186,33 +1172,21 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       resolution: state.previewResolutionTag,
     );
 
-    // 5. 重新发送当前相机参数到新 renderer
     final camera = state.camera;
     if (camera != null) {
-      await svc.setCamera(camera);
-      // 同步镜头参数
-      final lens = camera.lensById(state.activeLensId);
-      await svc.updateLensParams(
-        distortion: lens?.distortion ?? 0.0,
-        vignette: lens?.vignette ?? 0.0,
-        zoomFactor: lens?.zoomFactor ?? 1.0,
-        fisheyeMode: lens?.fisheyeMode ?? false,
-        chromaticAberration: lens?.chromaticAberration ?? 0.0,
-        bloom: lens?.bloom ?? 0.0,
-        softFocus: lens?.softFocus ?? 0.0,
-        exposure: lens?.exposure ?? 0.0,
-        contrast: lens?.contrast ?? 0.0,
-        saturation: lens?.saturation ?? 0.0,
-        highlightCompression: lens?.highlightCompression ?? 0.0,
-      );
+      await _syncCameraStateToNative(camera: camera);
     }
 
-    // 6. 同步清晰度档位
+    // 5. 同步清晰度档位
     const sharpenLevels = [0.0, 0.5, 1.0];
     await svc.setSharpen(sharpenLevels[state.sharpenLevel]);
 
-    // 7. 同步完整渲染参数（滤镜+镜头+defaultLook 组合值）
-    _applyCurrentRenderParamsToNative();
+    // 6. 分辨率切换后再次做完整原子同步，避免新 renderer 丢效果。
+    if (camera != null) {
+      await _syncCameraStateToNative(camera: camera);
+    } else {
+      _applyCurrentRenderParamsToNative();
+    }
   }
 
   // ── Take photo ──

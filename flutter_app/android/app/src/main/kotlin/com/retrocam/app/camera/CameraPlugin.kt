@@ -125,7 +125,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
     // Filter state
     private var currentPresetJson: Map<*, *>? = null
+    private var cachedPresetShaderParams: Map<String, Any> = emptyMap()
     private var cachedRenderParams: Map<String, Any> = emptyMap()
+    private var cachedEffectivePreviewParams: Map<String, Any> = emptyMap()
     private var cachedRenderVersion: Int = 0
     private var currentSharpenLevel: Float = 0.5f
     private var currentPreviewResolution: String = "720p"
@@ -731,7 +733,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val cameraChanged = cameraId.isNotEmpty() && cameraId != currentCameraId
         if (cameraId.isNotEmpty()) {
             if (cameraChanged) {
+                cachedPresetShaderParams = emptyMap()
                 cachedRenderParams = emptyMap()
+                cachedEffectivePreviewParams = emptyMap()
                 cachedRenderVersion = 0
                 cachedLensFisheyeMode = false
                 cachedLensCircularFisheye = false
@@ -802,7 +806,17 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 (look["skinRedLimit"]         as? Number)?.let { params["skinRedLimit"]         = it }
             }
         }
+        cachedPresetShaderParams = params.toMap()
+        rebuildEffectivePreviewParams()
         return cameraId to params
+    }
+
+    private fun rebuildEffectivePreviewParams() {
+        val merged = mutableMapOf<String, Any>()
+        merged.putAll(cachedPresetShaderParams)
+        merged.putAll(cachedRenderParams)
+        merged.putAll(cachedLensParams)
+        cachedEffectivePreviewParams = merged
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -830,6 +844,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             glRenderer?.updateParams(params)
         }
         cachedRenderVersion = version
+        rebuildEffectivePreviewParams()
         result.success(
             mapOf(
                 "appliedVersion" to cachedRenderVersion,
@@ -1963,13 +1978,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "softFocus" to softFocus,
             "distortion" to distortion,
         )
-        cachedLensParams = mapOf(
-            "vignette" to vignette,
-            "chromaticAberration" to chromaticAberration,
-            "bloomAmount" to bloom,
-            "softFocus" to softFocus,
-            "distortion" to distortion,
-        )
+        rebuildEffectivePreviewParams()
 
         // 将鱼眼模式传递到 GL 渲染器
         glRenderer?.setFisheyeMode(fisheyeMode)
@@ -2049,6 +2058,14 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         merged["distortion"] = distortion
         cachedRenderParams = renderParams
         cachedRenderVersion = version
+        cachedLensParams = mapOf(
+            "vignette" to vignette,
+            "chromaticAberration" to chromaticAberration,
+            "bloomAmount" to bloom,
+            "softFocus" to softFocus,
+            "distortion" to distortion,
+        )
+        rebuildEffectivePreviewParams()
         glRenderer?.updateParams(merged)
 
         result.success(
@@ -2098,6 +2115,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         )
         cachedRenderParams = renderParams
         cachedRenderVersion = version
+        rebuildEffectivePreviewParams()
 
         val applyState: () -> Unit = {
             try {
@@ -2690,24 +2708,28 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
      */
     @Suppress("UNCHECKED_CAST")
     private fun reapplyPresetToRenderer(renderer: CameraGLRenderer) {
-        val preset = currentPresetJson ?: return
-        val cameraId = (preset["cameraId"] as? String) ?: (preset["id"] as? String) ?: ""
+        val preset = currentPresetJson
+        val cameraId = currentCameraId.ifEmpty {
+            (preset?.get("cameraId") as? String) ?: (preset?.get("id") as? String) ?: ""
+        }
         Log.d(TAG, "reapplyPresetToRenderer: cameraId=$cameraId")
 
         val params = mutableMapOf<String, Any>()
 
         // 从 preset 顶层读取通用参数（旧路径兼容）
-        (preset["contrast"]            as? Number)?.let { params["contrast"]            = it }
-        (preset["saturation"]          as? Number)?.let { params["saturation"]          = it }
-        (preset["temperatureShift"]    as? Number)?.let { params["temperatureShift"]    = it }
-        (preset["chromaticAberration"] as? Number)?.let { params["chromaticAberration"] = it }
-        (preset["noise"]               as? Number)?.let { params["noise"]               = it }
-        (preset["vignette"]            as? Number)?.let { params["vignette"]            = it }
-        (preset["grain"]               as? Number)?.let { params["grain"]               = it }
-        (preset["sharpen"]             as? Number)?.let { params["sharpen"]             = it }
+        if (preset != null) {
+            (preset["contrast"]            as? Number)?.let { params["contrast"]            = it }
+            (preset["saturation"]          as? Number)?.let { params["saturation"]          = it }
+            (preset["temperatureShift"]    as? Number)?.let { params["temperatureShift"]    = it }
+            (preset["chromaticAberration"] as? Number)?.let { params["chromaticAberration"] = it }
+            (preset["noise"]               as? Number)?.let { params["noise"]               = it }
+            (preset["vignette"]            as? Number)?.let { params["vignette"]            = it }
+            (preset["grain"]               as? Number)?.let { params["grain"]               = it }
+            (preset["sharpen"]             as? Number)?.let { params["sharpen"]             = it }
+        }
 
         // 从 defaultLook 子对象读取完整参数
-        val look = preset["defaultLook"] as? Map<*, *>
+        val look = preset?.get("defaultLook") as? Map<*, *>
         if (look != null) {
             (look["contrast"]            as? Number)?.let { params["contrast"]            = it }
             (look["saturation"]          as? Number)?.let { params["saturation"]          = it }
@@ -2756,13 +2778,14 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             (look["skinRedLimit"]         as? Number)?.let { params["skinRedLimit"]         = it }
         }
 
-        if (params.isNotEmpty()) {
-            renderer.updateParams(params)
-        }
         if (cameraId.isNotEmpty()) {
             renderer.setCameraId(cameraId)
         }
-        if (cachedRenderParams.isNotEmpty()) {
+        if (cachedEffectivePreviewParams.isNotEmpty()) {
+            renderer.updateParams(cachedEffectivePreviewParams)
+        } else if (params.isNotEmpty()) {
+            renderer.updateParams(params)
+        } else if (cachedRenderParams.isNotEmpty()) {
             renderer.updateParams(cachedRenderParams)
         }
 
@@ -2773,16 +2796,18 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         // 因此必须在此处从缓存中恢复 lens 参数。
         renderer.setFisheyeMode(cachedLensFisheyeMode)
         renderer.setCircularFisheye(cachedLensCircularFisheye)
-        renderer.updateParams(
-            if (cachedLensParams.isNotEmpty()) {
-                cachedLensParams
-            } else {
-                mapOf(
-                    "vignette" to cachedLensVignette,
-                    "distortion" to cachedLensDistortion
-                )
-            }
-        )
+        if (cachedEffectivePreviewParams.isEmpty()) {
+            renderer.updateParams(
+                if (cachedLensParams.isNotEmpty()) {
+                    cachedLensParams
+                } else {
+                    mapOf(
+                        "vignette" to cachedLensVignette,
+                        "distortion" to cachedLensDistortion
+                    )
+                }
+            )
+        }
         Log.d(TAG, "reapplyPresetToRenderer: restored lens params fisheyeMode=$cachedLensFisheyeMode, circularFisheye=$cachedLensCircularFisheye, cachedLensKeys=${cachedLensParams.keys}")
     }
 

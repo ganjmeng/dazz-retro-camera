@@ -722,6 +722,7 @@ class CameraService extends StateNotifier<CameraState> {
         if (payload != null && payload.isNotEmpty) {
           payload.forEach((k, v) => debugInfo[k.toString()] = v);
         }
+        _resetRuntimeSyncCaches();
         state = state.copyWith(
           isReady: true,
           activeCameraDebugInfo:

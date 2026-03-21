@@ -44,6 +44,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     private var cachedPresetShaderParams: [String: Any] = [:]
     private var cachedRenderParams: [String: Any] = [:]
     private var cachedLensParams: [String: Any] = [:]
+    private var cachedEffectivePreviewParams: [String: Any] = [:]
     private var cachedZoom: Double = 1.0
     private var cachedRenderVersion: Int = 0
     private var currentCameraId: String = ""
@@ -228,6 +229,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         if cameraChanged {
             cachedRenderParams = [:]
             cachedLensParams = [:]
+            cachedEffectivePreviewParams = [:]
             cachedRenderVersion = 0
         }
         if !cameraId.isEmpty {
@@ -236,7 +238,35 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cachedPresetJson = presetJson
         let shaderParams = buildShaderParams(from: presetJson)
         cachedPresetShaderParams = shaderParams
+        rebuildEffectivePreviewParams()
         return (cameraId, shaderParams)
+    }
+
+    private func rebuildEffectivePreviewParams() {
+        var merged = cachedPresetShaderParams
+        merged.merge(cachedRenderParams) { _, new in new }
+        for (key, value) in cachedLensParams {
+            switch key {
+            case "vignette":
+                merged["vignette"] = Float((value as? Double) ?? 0.0)
+            case "chromaticAberration":
+                merged["chromaticAberration"] = Float((value as? Double) ?? 0.0)
+            case "bloom":
+                merged["bloomAmount"] = Float((value as? Double) ?? 0.0)
+            case "softFocus":
+                merged["softFocus"] = Float((value as? Double) ?? 0.0)
+            case "distortion":
+                merged["distortion"] = Float((value as? Double) ?? 0.0)
+            case "circularFisheye":
+                merged["circularFisheye"] = ((value as? Bool) ?? false) ? 1.0 : 0.0
+            default:
+                continue
+            }
+        }
+        if !currentCameraId.isEmpty {
+            merged["cameraId"] = currentCameraId
+        }
+        cachedEffectivePreviewParams = merged
     }
 
     private func handleSetPreset(call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -261,6 +291,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             cachedRenderParams = params
         }
         cachedRenderVersion = max(0, version)
+        rebuildEffectivePreviewParams()
         renderer?.updateParams(params)
         result([
             "success": true,
@@ -396,6 +427,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             "softFocus": softFocus,
             "distortion": distortion,
         ]
+        rebuildEffectivePreviewParams()
 
         // 将鱼眼模式传递到 Metal 渲染器
         renderer?.setFisheyeMode(fisheyeMode)
@@ -436,6 +468,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cachedRenderParams = render
         cachedZoom = zoom
         cachedRenderVersion = max(0, version)
+        rebuildEffectivePreviewParams()
 
         cameraManager?.setZoom(factor: CGFloat(zoom))
         renderer?.setFisheyeMode(fisheyeMode)
@@ -485,6 +518,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cachedRenderParams = render
         cachedZoom = zoom
         cachedRenderVersion = max(0, version)
+        rebuildEffectivePreviewParams()
 
         cameraManager?.setZoom(factor: CGFloat(zoom))
         renderer?.setFisheyeMode(fisheyeMode)
@@ -1623,11 +1657,14 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
 
     private func reapplyRuntimeStateToRenderer() {
         guard let renderer else { return }
-        if !cachedPresetShaderParams.isEmpty {
-            renderer.updateParams(cachedPresetShaderParams)
-        } else if !cachedPresetJson.isEmpty {
+        if cachedEffectivePreviewParams.isEmpty && !cachedPresetJson.isEmpty {
             // 兼容旧缓存路径，确保 renderer 重建后不会丢失预览风格参数。
             cachedPresetShaderParams = buildShaderParams(from: cachedPresetJson)
+            rebuildEffectivePreviewParams()
+        }
+        if !cachedEffectivePreviewParams.isEmpty {
+            renderer.updateParams(cachedEffectivePreviewParams)
+        } else if !cachedPresetShaderParams.isEmpty {
             renderer.updateParams(cachedPresetShaderParams)
         }
         if let fisheyeMode = cachedLensParams["fisheyeMode"] as? Bool {
@@ -1649,9 +1686,6 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             if let v = cachedLensParams["highlightCompression"] as? Double { p.highlightRolloff = Float(v) }
             if let v = cachedLensParams["circularFisheye"] as? Bool { p.circularFisheye = v ? 1.0 : 0.0 }
             renderer.setCCDParams(p)
-        }
-        if !cachedRenderParams.isEmpty {
-            renderer.updateParams(cachedRenderParams)
         }
         cameraManager?.setZoom(factor: CGFloat(cachedZoom))
     }
