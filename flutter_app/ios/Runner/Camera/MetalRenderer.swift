@@ -358,7 +358,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = num("deviceCcm22") { ccdParams.deviceCcm22 = v }
 
         // ── 纹理加载（#2 路径缓存：相同路径不重复加载）────────────────────────────────
-        if let lutAsset = params["lut"] as? String {
+        if let lutAsset = (params["baseLut"] as? String) ?? (params["lut"] as? String) {
             if !lutAsset.isEmpty {
                 if lutAsset != cachedLutPath {
                     cachedLutPath = lutAsset
