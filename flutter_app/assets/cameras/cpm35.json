@@ -120,7 +120,7 @@
         "vignette": 0.07,
         "sharpness": 0.96,
         "halation": 0.022,
-        "thumbnail": "assets/thumbnails/films/film_gold200.jpg"
+        "thumbnail": "assets/thumbnails/films/kodak_portra_400.jpg"
       },
       {
         "id": "cpm35_fade",
@@ -134,7 +134,7 @@
         "vignette": 0.08,
         "sharpness": 0.9,
         "halation": 0.014,
-        "thumbnail": "assets/thumbnails/films/film_gold200.jpg"
+        "thumbnail": "assets/thumbnails/films/film_scan.jpg"
       }
     ],
     "lenses": [
@@ -610,19 +610,22 @@
       "id": "cpm35_gold_warm",
       "name": "Gold Warm",
       "lut": "assets/lut/cameras/cpm35_kodak_gold_warm.cube",
-      "description": "Kodak Gold 200 标准暖调"
+      "description": "Kodak Gold 200 标准暖调",
+      "thumbnail": "assets/thumbnails/films/film_gold200.jpg"
     },
     {
       "id": "cpm35_colorplus",
       "name": "ColorPlus",
       "lut": "assets/lut/cameras/cpm35_kodak_colorplus.cube",
-      "description": "Kodak ColorPlus 200，颜色更克制"
+      "description": "Kodak ColorPlus 200，颜色更克制",
+      "thumbnail": "assets/thumbnails/films/kodak_portra_400.jpg"
     },
     {
       "id": "cpm35_portrait",
       "name": "Portrait",
       "lut": "assets/lut/cameras/cpm35_kodak_portrait.cube",
-      "description": "人像优化，肤色更橙暖"
+      "description": "人像优化，肤色更橙暖",
+      "thumbnail": "assets/thumbnails/films/film_scan.jpg"
     }
   ]
 }

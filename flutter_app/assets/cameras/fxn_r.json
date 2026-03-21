@@ -100,7 +100,8 @@
         "grainSize": 0.95,
         "vignette": 0.07,
         "sharpness": 1.08,
-        "halation": 0.015
+        "halation": 0.015,
+        "thumbnail": "assets/thumbnails/films/fxnr_std.jpg"
       },
       {
         "id": "fxnr_cool",
@@ -113,7 +114,8 @@
         "grainSize": 1.2,
         "vignette": 0.09,
         "sharpness": 1.08,
-        "halation": 0.018
+        "halation": 0.018,
+        "thumbnail": "assets/thumbnails/films/fxnr_cold.jpg"
       },
       {
         "id": "fxnr_fade",
@@ -126,7 +128,8 @@
         "grainSize": 1.4,
         "vignette": 0.11,
         "sharpness": 0.94,
-        "halation": 0.015
+        "halation": 0.015,
+        "thumbnail": "assets/thumbnails/films/fxnr_fade.jpg"
       }
     ],
     "lenses": [

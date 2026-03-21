@@ -1428,23 +1428,25 @@ class _FilterRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 80,
+      height: 114,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: filters.length,
         itemBuilder: (ctx, i) {
           final f = filters[i];
           final isActive = f.id == activeId;
+          const cardWidth = 120.0;
+          const cardHeight = 80.0; // 800:533 ≈ 1.50
           return GestureDetector(
             onTap: () => onSelect(f.id),
             child: Container(
-              width: 64,
+              width: cardWidth,
               margin: const EdgeInsets.only(right: 10),
               child: Column(
                 children: [
                   Container(
-                    width: 52,
-                    height: 52,
+                    width: cardWidth,
+                    height: cardHeight,
                     decoration: BoxDecoration(
                       color: const Color(0xFF2A2A2A),
                       borderRadius: BorderRadius.circular(10),
@@ -1452,20 +1454,34 @@ class _FilterRow extends StatelessWidget {
                           ? Border.all(color: const Color(0xFFFF8C00), width: 2)
                           : Border.all(color: Colors.white12),
                     ),
-                    child: Icon(
-                      Icons.filter_vintage_outlined,
-                      color:
-                          isActive ? const Color(0xFFFF8C00) : Colors.white38,
-                      size: 24,
-                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: f.thumbnail != null && f.thumbnail!.isNotEmpty
+                        ? Image.asset(
+                            f.thumbnail!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Icon(
+                              Icons.filter_vintage_outlined,
+                              color: isActive
+                                  ? const Color(0xFFFF8C00)
+                                  : Colors.white38,
+                              size: 28,
+                            ),
+                          )
+                        : Icon(
+                            Icons.filter_vintage_outlined,
+                            color: isActive
+                                ? const Color(0xFFFF8C00)
+                                : Colors.white38,
+                            size: 28,
+                          ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     f.nameEn,
                     style: TextStyle(
                       color:
                           isActive ? const Color(0xFFFF8C00) : Colors.white38,
-                      fontSize: 10,
+                      fontSize: 11,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

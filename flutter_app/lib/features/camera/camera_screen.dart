@@ -4317,38 +4317,51 @@ class _FilterRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 72,
+      height: 114,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: filters.length,
         itemBuilder: (ctx, i) {
           final f = filters[i];
           final isActive = f.id == activeId;
+          const cardWidth = 120.0;
+          const cardHeight = 80.0; // 800:533 ≈ 1.50
           return GestureDetector(
             onTap: () => onSelect(f.id),
             child: Container(
-              width: 60,
+              width: cardWidth,
               margin: const EdgeInsets.only(right: 10),
               child: Column(
                 children: [
                   Container(
-                    width: 48,
-                    height: 48,
+                    width: cardWidth,
+                    height: cardHeight,
                     decoration: BoxDecoration(
                       color: _kLightGray,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10),
                       border:
                           isActive ? Border.all(color: _kBlue, width: 2) : null,
                     ),
-                    child: const Icon(Icons.filter_vintage_outlined,
-                        color: Colors.white54, size: 24),
+                    clipBehavior: Clip.antiAlias,
+                    child: f.thumbnail != null && f.thumbnail!.isNotEmpty
+                        ? Image.asset(
+                            f.thumbnail!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.filter_vintage_outlined,
+                              color: Colors.white54,
+                              size: 28,
+                            ),
+                          )
+                        : const Icon(Icons.filter_vintage_outlined,
+                            color: Colors.white54, size: 28),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     f.nameEn,
                     style: TextStyle(
                       color: isActive ? _kWhite : Colors.grey,
-                      fontSize: 10,
+                      fontSize: 11,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
