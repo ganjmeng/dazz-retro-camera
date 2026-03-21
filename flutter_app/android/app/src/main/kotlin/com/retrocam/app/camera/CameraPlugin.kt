@@ -12,7 +12,6 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.SurfaceTexture
 import android.graphics.Typeface
-import android.opengl.GLES20
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -36,18 +35,12 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
-import androidx.media3.common.VideoFrameProcessingException
 import androidx.media3.common.Effect
-import androidx.media3.common.util.GlProgram
-import androidx.media3.common.util.GlUtil
 import androidx.media3.common.MediaItem
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.effect.Brightness
 import androidx.media3.effect.Contrast
 import androidx.media3.effect.GaussianBlur
-import androidx.media3.effect.BaseGlShaderProgram
-import androidx.media3.effect.GlEffect
-import androidx.media3.effect.GlShaderProgram
 import androidx.media3.effect.HslAdjustment
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.RgbAdjustment
@@ -1431,48 +1424,28 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             effects += GaussianBlur(sigma.toFloat())
         }
 
-        val bloomAmount = value("bloomAmount")
-        val vibrance = value("vibrance")
-        val highlights = value("highlights")
-        val shadows = value("shadows")
-        val whites = value("whites")
-        val blacks = value("blacks")
-        val clarity = value("clarity")
-        val colorBiasR = value("colorBiasR")
-        val colorBiasG = value("colorBiasG")
-        val colorBiasB = value("colorBiasB")
-        val highlightRolloff = value("highlightRolloff")
-        val vignetteAmount = value("vignetteAmount")
-        val sharpenAmount = value("sharpen")
-        if (kotlin.math.abs(highlights) > 0.01 ||
-            kotlin.math.abs(shadows) > 0.01 ||
-            kotlin.math.abs(whites) > 0.01 ||
-            kotlin.math.abs(blacks) > 0.01 ||
-            kotlin.math.abs(clarity) > 0.01 ||
-            kotlin.math.abs(vibrance) > 0.01 ||
-            kotlin.math.abs(colorBiasR) > 0.001 ||
-            kotlin.math.abs(colorBiasG) > 0.001 ||
-            kotlin.math.abs(colorBiasB) > 0.001 ||
-            kotlin.math.abs(highlightRolloff) > 0.01 ||
-            kotlin.math.abs(bloomAmount) > 0.01 ||
-            kotlin.math.abs(vignetteAmount) > 0.01 ||
-            kotlin.math.abs(sharpenAmount) > 0.01
-        ) {
-            effects += MotionPhotoEnhanceEffect(
-                highlights = highlights.toFloat(),
-                shadows = shadows.toFloat(),
-                whites = whites.toFloat(),
-                blacks = blacks.toFloat(),
-                clarity = clarity.toFloat(),
-                vibrance = (vibrance / 100.0).toFloat().coerceIn(-1f, 1f),
-                colorBiasR = colorBiasR.toFloat(),
-                colorBiasG = colorBiasG.toFloat(),
-                colorBiasB = colorBiasB.toFloat(),
-                highlightRolloff = highlightRolloff.toFloat().coerceAtLeast(0f),
-                bloom = bloomAmount.toFloat().coerceIn(0f, 1f),
-                vignette = vignetteAmount.toFloat().coerceIn(0f, 1f),
-                sharpen = sharpenAmount.toFloat().coerceIn(0f, 1f),
-            )
+        if (shouldApplyLightweightMotionVideoEffects(renderParams)) {
+            val unsupportedKeys = buildList {
+                if (kotlin.math.abs(value("bloomAmount")) > 0.01) add("bloomAmount")
+                if (kotlin.math.abs(value("vignetteAmount")) > 0.01) add("vignetteAmount")
+                if (kotlin.math.abs(value("sharpen")) > 0.01) add("sharpen")
+                if (kotlin.math.abs(value("highlights")) > 0.01) add("highlights")
+                if (kotlin.math.abs(value("shadows")) > 0.01) add("shadows")
+                if (kotlin.math.abs(value("whites")) > 0.01) add("whites")
+                if (kotlin.math.abs(value("blacks")) > 0.01) add("blacks")
+                if (kotlin.math.abs(value("clarity")) > 0.01) add("clarity")
+                if (kotlin.math.abs(value("vibrance")) > 0.01) add("vibrance")
+                if (kotlin.math.abs(value("colorBiasR")) > 0.001) add("colorBiasR")
+                if (kotlin.math.abs(value("colorBiasG")) > 0.001) add("colorBiasG")
+                if (kotlin.math.abs(value("colorBiasB")) > 0.001) add("colorBiasB")
+                if (kotlin.math.abs(value("highlightRolloff")) > 0.01) add("highlightRolloff")
+            }
+            if (unsupportedKeys.isNotEmpty()) {
+                Log.d(
+                    TAG,
+                    "Motion photo video uses lightweight GPU export; unsupported keys kept photo-only: $unsupportedKeys",
+                )
+            }
         }
 
         return effects
@@ -1488,264 +1461,6 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val rounded = value.toInt()
         val even = if (rounded % 2 == 0) rounded else rounded - 1
         return even.coerceAtLeast(2)
-    }
-
-    private class MotionPhotoEnhanceEffect(
-        private val highlights: Float,
-        private val shadows: Float,
-        private val whites: Float,
-        private val blacks: Float,
-        private val clarity: Float,
-        private val vibrance: Float,
-        private val colorBiasR: Float,
-        private val colorBiasG: Float,
-        private val colorBiasB: Float,
-        private val highlightRolloff: Float,
-        private val bloom: Float,
-        private val vignette: Float,
-        private val sharpen: Float,
-    ) : GlEffect {
-        override fun toGlShaderProgram(
-            context: Context,
-            useHdr: Boolean,
-        ): GlShaderProgram {
-            return MotionPhotoEnhanceShaderProgram(
-                highlights = highlights,
-                shadows = shadows,
-                whites = whites,
-                blacks = blacks,
-                clarity = clarity,
-                vibrance = vibrance,
-                colorBiasR = colorBiasR,
-                colorBiasG = colorBiasG,
-                colorBiasB = colorBiasB,
-                highlightRolloff = highlightRolloff,
-                bloom = bloom,
-                vignette = vignette,
-                sharpen = sharpen,
-            )
-        }
-
-        override fun isNoOp(inputWidth: Int, inputHeight: Int): Boolean {
-            return kotlin.math.abs(highlights) < 0.001f &&
-                kotlin.math.abs(shadows) < 0.001f &&
-                kotlin.math.abs(whites) < 0.001f &&
-                kotlin.math.abs(blacks) < 0.001f &&
-                kotlin.math.abs(clarity) < 0.001f &&
-                kotlin.math.abs(vibrance) < 0.001f &&
-                kotlin.math.abs(colorBiasR) < 0.0001f &&
-                kotlin.math.abs(colorBiasG) < 0.0001f &&
-                kotlin.math.abs(colorBiasB) < 0.0001f &&
-                kotlin.math.abs(highlightRolloff) < 0.001f &&
-                kotlin.math.abs(bloom) < 0.001f &&
-                kotlin.math.abs(vignette) < 0.001f &&
-                kotlin.math.abs(sharpen) < 0.001f
-        }
-    }
-
-    private class MotionPhotoEnhanceShaderProgram(
-        private val highlights: Float,
-        private val shadows: Float,
-        private val whites: Float,
-        private val blacks: Float,
-        private val clarity: Float,
-        private val vibrance: Float,
-        private val colorBiasR: Float,
-        private val colorBiasG: Float,
-        private val colorBiasB: Float,
-        private val highlightRolloff: Float,
-        private val bloom: Float,
-        private val vignette: Float,
-        private val sharpen: Float,
-    ) : BaseGlShaderProgram(false, 1) {
-        private val glProgram = GlProgram(VERTEX_SHADER, FRAGMENT_SHADER)
-        private var width: Int = 1
-        private var height: Int = 1
-
-        override fun configure(inputWidth: Int, inputHeight: Int): androidx.media3.common.util.Size {
-            width = inputWidth.coerceAtLeast(1)
-            height = inputHeight.coerceAtLeast(1)
-            return androidx.media3.common.util.Size(width, height)
-        }
-
-        override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
-            glProgram.use()
-            glProgram.setSamplerTexIdUniform("uTexSampler", inputTexId, 0)
-            glProgram.setBufferAttribute(
-                "aFramePosition",
-                GlUtil.getNormalizedCoordinateBounds(),
-                GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
-            )
-            glProgram.setBufferAttribute(
-                "aTexCoords",
-                GlUtil.getTextureCoordinateBounds(),
-                2,
-            )
-            glProgram.setFloatUniform("uTexelWidth", 1f / width.toFloat())
-            glProgram.setFloatUniform("uTexelHeight", 1f / height.toFloat())
-            glProgram.setFloatUniform("uHighlights", highlights)
-            glProgram.setFloatUniform("uShadows", shadows)
-            glProgram.setFloatUniform("uWhites", whites)
-            glProgram.setFloatUniform("uBlacks", blacks)
-            glProgram.setFloatUniform("uClarity", clarity)
-            glProgram.setFloatUniform("uVibrance", vibrance)
-            glProgram.setFloatUniform("uColorBiasR", colorBiasR)
-            glProgram.setFloatUniform("uColorBiasG", colorBiasG)
-            glProgram.setFloatUniform("uColorBiasB", colorBiasB)
-            glProgram.setFloatUniform("uHighlightRolloff", highlightRolloff)
-            glProgram.setFloatUniform("uBloom", bloom)
-            glProgram.setFloatUniform("uVignette", vignette)
-            glProgram.setFloatUniform("uSharpen", sharpen)
-            glProgram.bindAttributesAndUniforms()
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-            GlUtil.checkGlError()
-        }
-
-        override fun release() {
-            super.release()
-            glProgram.delete()
-        }
-
-        companion object {
-            private const val VERTEX_SHADER = """
-                attribute vec4 aFramePosition;
-                attribute vec2 aTexCoords;
-                varying vec2 vTexCoords;
-                void main() {
-                  gl_Position = aFramePosition;
-                  vTexCoords = aTexCoords;
-                }
-            """
-
-            private const val FRAGMENT_SHADER = """
-                precision mediump float;
-                uniform sampler2D uTexSampler;
-                uniform float uTexelWidth;
-                uniform float uTexelHeight;
-                uniform float uHighlights;
-                uniform float uShadows;
-                uniform float uWhites;
-                uniform float uBlacks;
-                uniform float uClarity;
-                uniform float uVibrance;
-                uniform float uColorBiasR;
-                uniform float uColorBiasG;
-                uniform float uColorBiasB;
-                uniform float uHighlightRolloff;
-                uniform float uBloom;
-                uniform float uVignette;
-                uniform float uSharpen;
-                varying vec2 vTexCoords;
-
-                float luminance(vec3 color) {
-                  return dot(color, vec3(0.299, 0.587, 0.114));
-                }
-
-                vec3 applyVibrance(vec3 color, float amount) {
-                  float luma = luminance(color);
-                  float mx = max(color.r, max(color.g, color.b));
-                  float avg = (color.r + color.g + color.b) / 3.0;
-                  float boost = (mx - avg) * (-amount * 1.4);
-                  return mix(color, vec3(luma), boost);
-                }
-
-                vec3 applyBlacksWhites(vec3 color, float blacks, float whites) {
-                  float b = blacks / 200.0;
-                  float w = whites / 200.0;
-                  color = color * (1.0 + w - b) + b;
-                  return clamp(color, 0.0, 1.0);
-                }
-
-                vec3 applyHighlightsShadows(vec3 color, float highlights, float shadows) {
-                  float lum = luminance(color);
-                  float h = highlights / 200.0;
-                  float s = shadows / 200.0;
-                  float highlightMask = smoothstep(0.5, 1.0, lum);
-                  float shadowMask = 1.0 - smoothstep(0.0, 0.5, lum);
-                  color = color + color * h * highlightMask - color * h * highlightMask * highlightMask;
-                  color = color + (1.0 - color) * s * shadowMask;
-                  return clamp(color, 0.0, 1.0);
-                }
-
-                vec3 applyClarity(vec3 color, vec2 uv) {
-                  if (abs(uClarity) < 0.5) return color;
-                  vec3 blurred = vec3(0.0);
-                  float w = uTexelWidth * 3.0;
-                  float h = uTexelHeight * 3.0;
-                  blurred += texture2D(uTexSampler, uv + vec2(-w, -h)).rgb * 0.0625;
-                  blurred += texture2D(uTexSampler, uv + vec2(0.0, -h)).rgb * 0.125;
-                  blurred += texture2D(uTexSampler, uv + vec2(w, -h)).rgb * 0.0625;
-                  blurred += texture2D(uTexSampler, uv + vec2(-w, 0.0)).rgb * 0.125;
-                  blurred += texture2D(uTexSampler, uv).rgb * 0.25;
-                  blurred += texture2D(uTexSampler, uv + vec2(w, 0.0)).rgb * 0.125;
-                  blurred += texture2D(uTexSampler, uv + vec2(-w, h)).rgb * 0.0625;
-                  blurred += texture2D(uTexSampler, uv + vec2(0.0, h)).rgb * 0.125;
-                  blurred += texture2D(uTexSampler, uv + vec2(w, h)).rgb * 0.0625;
-                  float midMask = 1.0 - abs(luminance(color) * 2.0 - 1.0);
-                  vec3 detail = color - blurred;
-                  return clamp(color + detail * uClarity * 0.003 * midMask, 0.0, 1.0);
-                }
-
-                vec3 applyColorBias(vec3 color) {
-                  return clamp(color + vec3(uColorBiasR, uColorBiasG, uColorBiasB), 0.0, 1.0);
-                }
-
-                vec3 applyHighlightRolloff(vec3 color) {
-                  if (uHighlightRolloff < 0.001) return color;
-                  float lum = luminance(color);
-                  if (lum > 0.70) {
-                    float t = (lum - 0.70) / 0.30;
-                    float compress = 1.0 - t * t * (3.0 - 2.0 * t) * uHighlightRolloff * 0.3;
-                    color *= compress;
-                  }
-                  return clamp(color, 0.0, 1.0);
-                }
-
-                void main() {
-                  vec2 texel = vec2(uTexelWidth, uTexelHeight);
-                  vec4 center = texture2D(uTexSampler, vTexCoords);
-                  vec3 color = center.rgb;
-
-                  color = applyBlacksWhites(color, uBlacks, uWhites);
-                  color = applyHighlightsShadows(color, uHighlights, uShadows);
-                  color = applyClarity(color, vTexCoords);
-
-                  if (abs(uVibrance) > 0.001) {
-                    color = applyVibrance(color, uVibrance);
-                  }
-
-                  color = applyColorBias(color);
-
-                  if (uBloom > 0.001 || uSharpen > 0.001) {
-                    vec3 north = texture2D(uTexSampler, vTexCoords + vec2(0.0, -texel.y)).rgb;
-                    vec3 south = texture2D(uTexSampler, vTexCoords + vec2(0.0, texel.y)).rgb;
-                    vec3 east = texture2D(uTexSampler, vTexCoords + vec2(texel.x, 0.0)).rgb;
-                    vec3 west = texture2D(uTexSampler, vTexCoords + vec2(-texel.x, 0.0)).rgb;
-                    vec3 blur = (north + south + east + west + color) / 5.0;
-
-                    if (uBloom > 0.001) {
-                      float bright = smoothstep(0.62, 1.0, luminance(blur));
-                      color += blur * bright * (uBloom * 0.32);
-                    }
-
-                    if (uSharpen > 0.001) {
-                      color += (color - blur) * (uSharpen * 0.65);
-                    }
-                  }
-
-                  color = applyHighlightRolloff(color);
-
-                  if (uVignette > 0.001) {
-                    vec2 centered = vTexCoords - vec2(0.5);
-                    float dist = dot(centered, centered) * 3.2;
-                    float fade = smoothstep(0.18, 1.0, dist);
-                    color *= 1.0 - fade * (uVignette * 0.42);
-                  }
-
-                  gl_FragColor = vec4(clamp(color, 0.0, 1.0), center.a);
-                }
-            """
-        }
     }
 
     private fun buildMotionPhotoXmp(
