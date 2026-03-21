@@ -284,6 +284,7 @@ class CameraService extends StateNotifier<CameraState> {
     required double zoom,
     required int viewportWidth,
     required int viewportHeight,
+    bool livePhotoEnabled = false,
     int? version,
   }) async {
     try {
@@ -299,6 +300,7 @@ class CameraService extends StateNotifier<CameraState> {
         'zoom': zoom,
         'viewportWidth': viewportWidth,
         'viewportHeight': viewportHeight,
+        'livePhotoEnabled': livePhotoEnabled,
         if (version != null) 'version': version,
       });
       _lastCameraPresetPayload = Map<String, dynamic>.from(presetPayload);

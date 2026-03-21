@@ -115,6 +115,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     @Volatile private var isPhotoCaptureInFlight: Boolean = false
     @Volatile private var pendingStopPreview: Boolean = false
     private var supportsLivePhoto: Boolean = false
+    private var livePhotoPipelineEnabled: Boolean = false
+    private var livePhotoCapabilityKnown: Boolean = false
+    private var livePhotoCapabilityAvailable: Boolean = true
     private var lensFacing: Int = CameraSelector.LENS_FACING_BACK
     private var previewStreamWidth: Int = 0
     private var previewStreamHeight: Int = 0
@@ -449,26 +452,44 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             }
         imageAnalysis = imageAnalysisUseCase
 
-        val recorder = Recorder.Builder()
-            .setQualitySelector(currentVideoQualitySelector())
-            .build()
-        val candidateVideoCapture = VideoCapture.withOutput(recorder)
         provider.unbindAll()
-        try {
-            camera = bindUseCaseGroup(
-                provider = provider,
-                owner = owner,
-                cameraSelector = cameraSelector,
-                previewUseCase = previewUseCase,
-                imageCaptureUseCase = imageCaptureUseCase,
-                imageAnalysisUseCase = imageAnalysisUseCase,
-                videoCaptureUseCase = candidateVideoCapture
-            )
-            videoCapture = candidateVideoCapture
-            supportsLivePhoto = true
-        } catch (e: Exception) {
-            Log.w(TAG, "bindCameraUseCases: live photo bind rejected, fallback to photo-only: ${e.message}")
-            provider.unbindAll()
+        if (livePhotoPipelineEnabled) {
+            val recorder = Recorder.Builder()
+                .setQualitySelector(currentVideoQualitySelector())
+                .build()
+            val candidateVideoCapture = VideoCapture.withOutput(recorder)
+            try {
+                camera = bindUseCaseGroup(
+                    provider = provider,
+                    owner = owner,
+                    cameraSelector = cameraSelector,
+                    previewUseCase = previewUseCase,
+                    imageCaptureUseCase = imageCaptureUseCase,
+                    imageAnalysisUseCase = imageAnalysisUseCase,
+                    videoCaptureUseCase = candidateVideoCapture
+                )
+                videoCapture = candidateVideoCapture
+                livePhotoCapabilityKnown = true
+                livePhotoCapabilityAvailable = true
+                supportsLivePhoto = true
+            } catch (e: Exception) {
+                Log.w(TAG, "bindCameraUseCases: live photo bind rejected, fallback to photo-only: ${e.message}")
+                provider.unbindAll()
+                camera = bindUseCaseGroup(
+                    provider = provider,
+                    owner = owner,
+                    cameraSelector = cameraSelector,
+                    previewUseCase = previewUseCase,
+                    imageCaptureUseCase = imageCaptureUseCase,
+                    imageAnalysisUseCase = imageAnalysisUseCase
+                )
+                videoCapture = null
+                livePhotoPipelineEnabled = false
+                livePhotoCapabilityKnown = true
+                livePhotoCapabilityAvailable = false
+                supportsLivePhoto = false
+            }
+        } else {
             camera = bindUseCaseGroup(
                 provider = provider,
                 owner = owner,
@@ -478,7 +499,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 imageAnalysisUseCase = imageAnalysisUseCase
             )
             videoCapture = null
-            supportsLivePhoto = false
+            supportsLivePhoto = if (livePhotoCapabilityKnown) {
+                livePhotoCapabilityAvailable
+            } else {
+                true
+            }
         }
         // 绑定成功后读取当前摄像头的传感器信息，供 Debug 面板显示
         @Suppress("UnsafeOptInUsageError")
@@ -522,8 +547,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 listOf(Quality.HD, Quality.SD),
                 FallbackStrategy.lowerQualityOrHigherThan(Quality.HD)
             )
-            else -> QualitySelector.fromOrderedList(
+            currentSharpenLevel < 0.7f -> QualitySelector.fromOrderedList(
                 listOf(Quality.FHD, Quality.HD),
+                FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
+            )
+            else -> QualitySelector.fromOrderedList(
+                listOf(Quality.UHD, Quality.FHD, Quality.HD),
                 FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
             )
         }
@@ -2098,7 +2127,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                             provider.unbindAll()
                             imageCapture = newImageCapture
                             imageCapture?.flashMode = currentFlashMode
-                            val currentVideoCapture = videoCapture
+                            val currentVideoCapture =
+                                if (livePhotoPipelineEnabled) videoCapture else null
                             val previewUseCase = preview ?: throw IllegalStateException("Preview not initialized")
                             val imageCaptureUseCase = imageCapture ?: throw IllegalStateException("ImageCapture not initialized")
                             val imageAnalysisUseCase = imageAnalysis ?: throw IllegalStateException("ImageAnalysis not initialized")
@@ -2326,6 +2356,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             (call.argument<Int>("viewportWidth") ?: currentViewportWidth).coerceAtLeast(1)
         val nextViewportHeight =
             (call.argument<Int>("viewportHeight") ?: currentViewportHeight).coerceAtLeast(1)
+        val nextLivePhotoEnabled =
+            call.argument<Boolean>("livePhotoEnabled") ?: livePhotoPipelineEnabled
 
         val (cameraId, presetParams) = cachePresetAndBuildShaderParams(preset)
 
@@ -2372,13 +2404,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             }
         }
 
+        val livePhotoBindingChanged = nextLivePhotoEnabled != livePhotoPipelineEnabled
+        livePhotoPipelineEnabled = nextLivePhotoEnabled
+
         val viewportChanged =
             nextViewportWidth != currentViewportWidth || nextViewportHeight != currentViewportHeight
         currentViewportWidth = nextViewportWidth
         currentViewportHeight = nextViewportHeight
 
         val owner = lifecycleOwner
-        if (!viewportChanged || owner == null || cameraProvider == null || surfaceTexture == null) {
+        if ((!viewportChanged && !livePhotoBindingChanged) || owner == null || cameraProvider == null || surfaceTexture == null) {
             applyState()
             result.success(
                 mapOf(
@@ -2418,59 +2453,88 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     // ─────────────────────────────────────────────
 
     private fun handleStartRecording(result: MethodChannel.Result) {
-        val vc = videoCapture
-        if (vc == null) {
-            result.error("NOT_INITIALIZED", "Camera not initialized", null)
-            return
-        }
         if (recording != null) {
             result.success(mapOf("success" to false, "reason" to "already_recording"))
             return
         }
-
-        val context = flutterPluginBinding.applicationContext
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val displayName = "DAZZ_VID_${timestamp}.mp4"
-
-        val fileOutputOptions: FileOutputOptions
-        val videoFile: File
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val moviesDir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
-                ?: context.filesDir
-            videoFile = File(moviesDir, displayName)
-        } else {
-            val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
-            val dazzDir = File(moviesDir, DAZZ_ALBUM).apply { mkdirs() }
-            videoFile = File(dazzDir, displayName)
+        val owner = lifecycleOwner
+        if (owner == null || cameraProvider == null || surfaceTexture == null) {
+            result.error("NOT_INITIALIZED", "Camera not initialized", null)
+            return
         }
-        fileOutputOptions = FileOutputOptions.Builder(videoFile).build()
 
-        recording = vc.output
-            .prepareRecording(context, fileOutputOptions)
-            .start(cameraExecutor) { event ->
-                when (event) {
-                    is VideoRecordEvent.Start -> {
-                        sendEvent("onRecordingStateChanged", mapOf("isRecording" to true))
-                    }
-                    is VideoRecordEvent.Finalize -> {
-                        if (!event.hasError()) {
-                            sendEvent("onVideoRecorded", mapOf("filePath" to videoFile.absolutePath))
-                        } else {
-                            sendEvent("onError", mapOf("message" to "Recording error: ${event.error}"))
-                        }
-                        sendEvent("onRecordingStateChanged", mapOf("isRecording" to false))
-                        recording = null
-                        if (pendingStopPreview) {
-                            val mainExecutor =
-                                ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
-                            mainExecutor.execute { stopPreviewSession() }
-                        }
-                    }
-                    else -> {}
-                }
+        fun startWithBoundVideoCapture() {
+            val vc = videoCapture
+            if (vc == null) {
+                result.error("NOT_INITIALIZED", "Video capture not initialized", null)
+                return
             }
 
-        result.success(mapOf("success" to true))
+            val context = flutterPluginBinding.applicationContext
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val displayName = "DAZZ_VID_${timestamp}.mp4"
+
+            val fileOutputOptions: FileOutputOptions
+            val videoFile: File
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val moviesDir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
+                    ?: context.filesDir
+                videoFile = File(moviesDir, displayName)
+            } else {
+                val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+                val dazzDir = File(moviesDir, DAZZ_ALBUM).apply { mkdirs() }
+                videoFile = File(dazzDir, displayName)
+            }
+            fileOutputOptions = FileOutputOptions.Builder(videoFile).build()
+
+            recording = vc.output
+                .prepareRecording(context, fileOutputOptions)
+                .start(cameraExecutor) { event ->
+                    when (event) {
+                        is VideoRecordEvent.Start -> {
+                            sendEvent("onRecordingStateChanged", mapOf("isRecording" to true))
+                        }
+                        is VideoRecordEvent.Finalize -> {
+                            if (!event.hasError()) {
+                                sendEvent("onVideoRecorded", mapOf("filePath" to videoFile.absolutePath))
+                            } else {
+                                sendEvent("onError", mapOf("message" to "Recording error: ${event.error}"))
+                            }
+                            sendEvent("onRecordingStateChanged", mapOf("isRecording" to false))
+                            recording = null
+                            if (pendingStopPreview) {
+                                val mainExecutor =
+                                    ContextCompat.getMainExecutor(flutterPluginBinding.applicationContext)
+                                mainExecutor.execute { stopPreviewSession() }
+                            }
+                        }
+                        else -> {}
+                    }
+                }
+
+            result.success(mapOf("success" to true))
+        }
+
+        if (videoCapture != null) {
+            startWithBoundVideoCapture()
+            return
+        }
+
+        livePhotoPipelineEnabled = true
+        try {
+            rebindCameraUseCasesSafely(
+                owner = owner,
+                reason = "startRecording",
+                onReady = { startWithBoundVideoCapture() },
+                onError = { e ->
+                    livePhotoPipelineEnabled = false
+                    result.error("START_RECORDING_FAILED", e.message, null)
+                }
+            )
+        } catch (e: Exception) {
+            livePhotoPipelineEnabled = false
+            result.error("START_RECORDING_FAILED", e.message, null)
+        }
     }
 
     private fun handleStopRecording(result: MethodChannel.Result) {

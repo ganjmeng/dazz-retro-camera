@@ -1056,6 +1056,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       clearFrameId: next,
       activeWatermarkId: next ? 'none' : state.activeWatermarkId,
     );
+    final camera = state.camera;
+    if (camera != null) {
+      unawaited(_syncCameraStateToNative(camera: camera));
+    }
   }
 
   /// 设置双重曝光第一张照片路径
@@ -2048,6 +2052,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
               zoom: state.zoomLevel,
               viewportWidth: viewport.width,
               viewportHeight: viewport.height,
+              livePhotoEnabled: state.livePhotoEnabled &&
+                  _supportsLivePhotoForCurrentSelection,
               version: version,
             );
     if (ackVersion != null &&
