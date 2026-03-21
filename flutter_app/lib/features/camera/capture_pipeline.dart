@@ -1023,7 +1023,7 @@ class CapturePipeline {
           _dustLightPlusAssets[rng.nextInt(_dustLightPlusAssets.length)];
       final texture =
           await _getFrameTexture(asset, width.toInt(), height.toInt());
-      final opacity = (0.20 + dustAmount * 0.60).clamp(0.0, 1.0).toDouble();
+      final opacity = (0.35 + dustAmount * 0.85).clamp(0.0, 1.0).toDouble();
       canvas.save();
       canvas.translate(bounds.center.dx, bounds.center.dy);
       canvas.rotate((rng.nextDouble() - 0.5) * 0.16);
@@ -1041,7 +1041,7 @@ class CapturePipeline {
         Rect.fromLTWH(0, 0, bounds.width, bounds.height),
         Paint()
           ..filterQuality = FilterQuality.high
-          ..blendMode = BlendMode.screen
+          ..blendMode = BlendMode.plus
           ..color = Colors.white.withValues(alpha: opacity),
       );
       canvas.restore();
@@ -1052,7 +1052,7 @@ class CapturePipeline {
           _scratchLightPlusAssets[rng.nextInt(_scratchLightPlusAssets.length)];
       final texture =
           await _getFrameTexture(asset, width.toInt(), height.toInt());
-      final opacity = (0.15 + scratchAmount * 0.65).clamp(0.0, 1.0).toDouble();
+      final opacity = (0.28 + scratchAmount * 0.90).clamp(0.0, 1.0).toDouble();
       canvas.save();
       canvas.translate(bounds.center.dx, bounds.center.dy);
       final rotation = (rng.nextDouble() * 2 - 1) * 0.45;
@@ -1074,7 +1074,7 @@ class CapturePipeline {
         Rect.fromLTWH(0, 0, bounds.width, bounds.height),
         Paint()
           ..filterQuality = FilterQuality.high
-          ..blendMode = BlendMode.screen
+          ..blendMode = BlendMode.srcOver
           ..color = Colors.white.withValues(alpha: opacity),
       );
       canvas.restore();
