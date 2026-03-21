@@ -12,6 +12,7 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.SurfaceTexture
 import android.graphics.Typeface
+import android.opengl.GLES20
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -36,15 +37,21 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
+import androidx.media3.common.VideoFrameProcessingException
 import androidx.media3.common.Effect
+import androidx.media3.common.util.GlProgram
+import androidx.media3.common.util.GlUtil
 import androidx.media3.common.MediaItem
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.effect.Brightness
 import androidx.media3.effect.Contrast
 import androidx.media3.effect.GaussianBlur
+import androidx.media3.effect.GlEffect
+import androidx.media3.effect.GlShaderProgram
 import androidx.media3.effect.HslAdjustment
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.RgbAdjustment
+import androidx.media3.effect.SingleFrameGlShaderProgram
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.Effects
@@ -1290,9 +1297,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         return kotlin.math.abs(value("exposureOffset")) > 0.01 ||
             kotlin.math.abs(value("contrast", 1.0) - 1.0) > 0.01 ||
             kotlin.math.abs(value("saturation", 1.0) - 1.0) > 0.01 ||
+            kotlin.math.abs(value("vibrance")) > 0.01 ||
             kotlin.math.abs(value("temperatureShift")) > 0.01 ||
             kotlin.math.abs(value("tintShift")) > 0.01 ||
             kotlin.math.abs(value("vignetteAmount")) > 0.01 ||
+            kotlin.math.abs(value("bloomAmount")) > 0.01 ||
             kotlin.math.abs(value("softFocus")) > 0.01 ||
             kotlin.math.abs(value("sharpen")) > 0.01
     }
@@ -1373,6 +1382,14 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 .build()
         }
 
+        val vibrance = value("vibrance")
+        val vibranceAdjustment = (vibrance * 0.35).toFloat().coerceIn(-100f, 100f)
+        if (kotlin.math.abs(vibranceAdjustment) > 0.5f) {
+            effects += HslAdjustment.Builder()
+                .adjustSaturation(vibranceAdjustment)
+                .build()
+        }
+
         val temperatureShift = value("temperatureShift")
         val tintShift = value("tintShift")
         if (kotlin.math.abs(temperatureShift) > 0.01 || kotlin.math.abs(tintShift) > 0.01) {
@@ -1392,17 +1409,25 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             effects += GaussianBlur(sigma.toFloat())
         }
 
-        if (shouldApplyLightweightMotionVideoEffects(renderParams)) {
-            val unsupportedKeys = buildList {
-                if (kotlin.math.abs(value("vignetteAmount")) > 0.01) add("vignetteAmount")
-                if (kotlin.math.abs(value("sharpen")) > 0.01) add("sharpen")
-            }
-            if (unsupportedKeys.isNotEmpty()) {
-                Log.d(
-                    TAG,
-                    "Motion photo video uses lightweight GPU export; unsupported keys kept photo-only: $unsupportedKeys",
-                )
-            }
+        val bloomAmount = value("bloomAmount")
+        if (bloomAmount > 0.01) {
+            val sigma = (bloomAmount * 10.0).coerceIn(0.4, 3.2)
+            effects += GaussianBlur(sigma.toFloat())
+        }
+
+        val vignetteAmount = value("vignetteAmount")
+        val sharpenAmount = value("sharpen")
+        if (kotlin.math.abs(vibrance) > 0.01 ||
+            kotlin.math.abs(bloomAmount) > 0.01 ||
+            kotlin.math.abs(vignetteAmount) > 0.01 ||
+            kotlin.math.abs(sharpenAmount) > 0.01
+        ) {
+            effects += MotionPhotoEnhanceEffect(
+                vibrance = (vibrance / 100.0).toFloat().coerceIn(-1f, 1f),
+                bloom = bloomAmount.toFloat().coerceIn(0f, 1f),
+                vignette = vignetteAmount.toFloat().coerceIn(0f, 1f),
+                sharpen = sharpenAmount.toFloat().coerceIn(0f, 1f),
+            )
         }
 
         return effects
@@ -1420,6 +1445,150 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         return even.coerceAtLeast(2)
     }
 
+    private class MotionPhotoEnhanceEffect(
+        private val vibrance: Float,
+        private val bloom: Float,
+        private val vignette: Float,
+        private val sharpen: Float,
+    ) : GlEffect {
+        override fun toGlShaderProgram(
+            context: Context,
+            useHdr: Boolean,
+        ): GlShaderProgram {
+            return MotionPhotoEnhanceShaderProgram(
+                vibrance = vibrance,
+                bloom = bloom,
+                vignette = vignette,
+                sharpen = sharpen,
+            )
+        }
+
+        override fun isNoOp(inputWidth: Int, inputHeight: Int): Boolean {
+            return kotlin.math.abs(vibrance) < 0.001f &&
+                kotlin.math.abs(bloom) < 0.001f &&
+                kotlin.math.abs(vignette) < 0.001f &&
+                kotlin.math.abs(sharpen) < 0.001f
+        }
+    }
+
+    private class MotionPhotoEnhanceShaderProgram(
+        private val vibrance: Float,
+        private val bloom: Float,
+        private val vignette: Float,
+        private val sharpen: Float,
+    ) : SingleFrameGlShaderProgram(false) {
+        private val glProgram = GlProgram(VERTEX_SHADER, FRAGMENT_SHADER)
+        private var width: Int = 1
+        private var height: Int = 1
+
+        override fun configure(inputWidth: Int, inputHeight: Int): androidx.media3.common.util.Size {
+            width = inputWidth.coerceAtLeast(1)
+            height = inputHeight.coerceAtLeast(1)
+            return androidx.media3.common.util.Size(width, height)
+        }
+
+        override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
+            glProgram.use()
+            glProgram.setSamplerTexIdUniform("uTexSampler", inputTexId, 0)
+            glProgram.setBufferAttribute(
+                "aFramePosition",
+                GlUtil.getNormalizedCoordinateBounds(),
+                GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
+            )
+            glProgram.setBufferAttribute(
+                "aTexCoords",
+                GlUtil.getTextureCoordinateBounds(),
+                2,
+            )
+            glProgram.setFloatUniform("uTexelWidth", 1f / width.toFloat())
+            glProgram.setFloatUniform("uTexelHeight", 1f / height.toFloat())
+            glProgram.setFloatUniform("uVibrance", vibrance)
+            glProgram.setFloatUniform("uBloom", bloom)
+            glProgram.setFloatUniform("uVignette", vignette)
+            glProgram.setFloatUniform("uSharpen", sharpen)
+            glProgram.bindAttributesAndUniforms()
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+            GlUtil.checkGlError()
+        }
+
+        override fun release() {
+            super.release()
+            glProgram.delete()
+        }
+
+        companion object {
+            private const val VERTEX_SHADER = """
+                attribute vec4 aFramePosition;
+                attribute vec2 aTexCoords;
+                varying vec2 vTexCoords;
+                void main() {
+                  gl_Position = aFramePosition;
+                  vTexCoords = aTexCoords;
+                }
+            """
+
+            private const val FRAGMENT_SHADER = """
+                precision mediump float;
+                uniform sampler2D uTexSampler;
+                uniform float uTexelWidth;
+                uniform float uTexelHeight;
+                uniform float uVibrance;
+                uniform float uBloom;
+                uniform float uVignette;
+                uniform float uSharpen;
+                varying vec2 vTexCoords;
+
+                float luminance(vec3 color) {
+                  return dot(color, vec3(0.299, 0.587, 0.114));
+                }
+
+                vec3 applyVibrance(vec3 color, float amount) {
+                  float luma = luminance(color);
+                  float mx = max(color.r, max(color.g, color.b));
+                  float avg = (color.r + color.g + color.b) / 3.0;
+                  float boost = (mx - avg) * (-amount * 1.4);
+                  return mix(color, vec3(luma), boost);
+                }
+
+                void main() {
+                  vec2 texel = vec2(uTexelWidth, uTexelHeight);
+                  vec4 center = texture2D(uTexSampler, vTexCoords);
+                  vec3 color = center.rgb;
+
+                  if (abs(uVibrance) > 0.001) {
+                    color = applyVibrance(color, uVibrance);
+                  }
+
+                  if (uBloom > 0.001 || uSharpen > 0.001) {
+                    vec3 north = texture2D(uTexSampler, vTexCoords + vec2(0.0, -texel.y)).rgb;
+                    vec3 south = texture2D(uTexSampler, vTexCoords + vec2(0.0, texel.y)).rgb;
+                    vec3 east = texture2D(uTexSampler, vTexCoords + vec2(texel.x, 0.0)).rgb;
+                    vec3 west = texture2D(uTexSampler, vTexCoords + vec2(-texel.x, 0.0)).rgb;
+                    vec3 blur = (north + south + east + west + color) / 5.0;
+
+                    if (uBloom > 0.001) {
+                      float bright = smoothstep(0.62, 1.0, luminance(blur));
+                      color += blur * bright * (uBloom * 0.32);
+                    }
+
+                    if (uSharpen > 0.001) {
+                      color += (color - blur) * (uSharpen * 0.65);
+                    }
+                  }
+
+                  if (uVignette > 0.001) {
+                    vec2 centered = vTexCoords - vec2(0.5);
+                    float dist = dot(centered, centered) * 3.2;
+                    float fade = smoothstep(0.18, 1.0, dist);
+                    color *= 1.0 - fade * (uVignette * 0.42);
+                  }
+
+                  gl_FragColor = vec4(clamp(color, 0.0, 1.0), center.a);
+                }
+            """
+        }
+    }
+
     private fun buildMotionPhotoXmp(
         videoLength: Long,
         presentationTimestampUs: Long,
@@ -1429,6 +1598,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
               <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
                 <rdf:Description
                   xmlns:GCamera="http://ns.google.com/photos/1.0/camera/"
+                  xmlns:Camera="http://ns.google.com/photos/1.0/camera/"
                   xmlns:Container="http://ns.google.com/photos/1.0/container/"
                   xmlns:Item="http://ns.google.com/photos/1.0/container/item/"
                   GCamera:MicroVideo="1"
@@ -1437,7 +1607,14 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                   GCamera:MicroVideoPresentationTimestampUs="$presentationTimestampUs"
                   GCamera:MotionPhoto="1"
                   GCamera:MotionPhotoVersion="1"
-                  GCamera:MotionPhotoPresentationTimestampUs="$presentationTimestampUs">
+                  GCamera:MotionPhotoPresentationTimestampUs="$presentationTimestampUs"
+                  Camera:MicroVideo="1"
+                  Camera:MicroVideoVersion="1"
+                  Camera:MicroVideoOffset="$videoLength"
+                  Camera:MicroVideoPresentationTimestampUs="$presentationTimestampUs"
+                  Camera:MotionPhoto="1"
+                  Camera:MotionPhotoVersion="1"
+                  Camera:MotionPhotoPresentationTimestampUs="$presentationTimestampUs">
                   <Container:Directory>
                     <rdf:Seq>
                       <rdf:li rdf:parseType="Resource"
