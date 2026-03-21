@@ -389,6 +389,15 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   CameraAppNotifier(this._ref) : super(const CameraAppState());
 
+  bool get _supportsLivePhotoForCurrentSelection {
+    final deviceSupports = _ref.read(cameraServiceProvider).supportsLivePhoto;
+    if (!deviceSupports) return false;
+    final camera = state.camera;
+    if (camera == null || !camera.supportsLivePhoto) return false;
+    final lens = camera.lensById(state.activeLensId);
+    return !(lens?.fisheyeMode ?? false);
+  }
+
   double _toDouble(dynamic raw, [double fallback = -1.0]) {
     if (raw is num) return raw.toDouble();
     if (raw == null) return fallback;
@@ -558,6 +567,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         }
       }
 
+      final defaultLens = camera.lensById(defaults.lensId);
+      final nextFisheyeMode = defaultLens?.fisheyeMode ?? false;
       state = state.copyWith(
         camera: camera,
         isLoading: false,
@@ -575,7 +586,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         zoomLevel: zoom,
         colorTempK: colorK,
         wbMode: wbMode,
-        fisheyeMode: camera.lensById(defaults.lensId)?.fisheyeMode ?? false,
+        fisheyeMode: nextFisheyeMode,
+        livePhotoEnabled: camera.supportsLivePhoto && !nextFisheyeMode
+            ? state.livePhotoEnabled
+            : false,
         clearPanel: true,
       );
       // 关键修复：加载相机后立即将 defaultLook 色彩参数同步到原生 GPU shader
@@ -643,7 +657,11 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     }
     final newLens = state.camera?.lensById(newLensId);
     final fisheyeMode = newLens?.fisheyeMode ?? false;
-    state = state.copyWith(activeLensId: newLensId, fisheyeMode: fisheyeMode);
+    state = state.copyWith(
+      activeLensId: newLensId,
+      fisheyeMode: fisheyeMode,
+      livePhotoEnabled: fisheyeMode ? false : state.livePhotoEnabled,
+    );
     // ── FIX: 将所有镜头参数发送到原生层（之前只发了 fisheyeMode 和 vignette）──
     _ref.read(cameraServiceProvider.notifier).updateLensParams(
           distortion: newLens?.distortion ?? 0.0,
@@ -961,6 +979,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   void toggleLivePhoto() {
+    if (!_supportsLivePhotoForCurrentSelection) {
+      state = state.copyWith(livePhotoEnabled: false);
+      return;
+    }
     final next = !state.livePhotoEnabled;
     if (next && state.saveOriginalEnabled) {
       AppPrefsService.instance.setSaveOriginalEnabled(false);
@@ -1166,7 +1188,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     final circularFisheye =
         activeLens?.circularFisheyeCrop ?? state.fisheyeMode;
     final livePhotoActive = state.livePhotoEnabled &&
-        _ref.read(cameraServiceProvider).supportsLivePhoto &&
+        _supportsLivePhotoForCurrentSelection &&
         !state.doubleExpEnabled &&
         state.burstCount == 0;
     bool enhanceFisheyeMode = false;

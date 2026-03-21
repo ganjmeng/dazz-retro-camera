@@ -5,6 +5,7 @@
   "mode": "photo",
   "supportsPhoto": true,
   "supportsVideo": false,
+  "supportsLivePhoto": false,
   "focalLengthLabel": "10mm",
   "sensor": {
     "type": "film",

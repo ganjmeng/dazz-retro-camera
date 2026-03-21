@@ -78,6 +78,7 @@ class CameraDefinition {
   final String mode;
   final bool supportsPhoto;
   final bool supportsVideo;
+  final bool supportsLivePhoto;
   final String? focalLengthLabel;
 
   final SensorConfig sensor;
@@ -99,6 +100,7 @@ class CameraDefinition {
     required this.mode,
     required this.supportsPhoto,
     required this.supportsVideo,
+    this.supportsLivePhoto = true,
     this.focalLengthLabel,
     required this.sensor,
     required this.defaultLook,
@@ -122,6 +124,9 @@ class CameraDefinition {
       supportsPhoto: _parseBoolField(json['supportsPhoto']) ||
           json['supportsPhoto'] == null,
       supportsVideo: _parseBoolField(json['supportsVideo']),
+      supportsLivePhoto: json.containsKey('supportsLivePhoto')
+          ? _parseBoolField(json['supportsLivePhoto'])
+          : true,
       focalLengthLabel: json['focalLengthLabel'] as String?,
       sensor: SensorConfig.fromJson(Map<String, dynamic>.from(
           _coerceNumericStrings(json['sensor'] as Map) as Map)),

@@ -553,8 +553,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return false;
   }
 
+  bool _supportsLivePhotoForCurrentSelection(
+    CameraAppState st,
+    CameraState camSvc,
+  ) {
+    if (!camSvc.supportsLivePhoto) return false;
+    final camera = st.camera;
+    if (camera == null || !camera.supportsLivePhoto) return false;
+    final lens = camera.lensById(st.activeLensId);
+    return !(lens?.fisheyeMode ?? false);
+  }
+
   Future<void> _toggleLivePhoto(CameraAppState st, CameraState camSvc) async {
-    if (!camSvc.supportsLivePhoto) return;
+    if (!_supportsLivePhotoForCurrentSelection(st, camSvc)) return;
     final next = !st.livePhotoEnabled;
     final hadSaveOriginal = st.saveOriginalEnabled;
     if (next) {
@@ -572,7 +583,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Widget _buildLivePhotoButton(CameraAppState st, CameraState camSvc) {
-    if (!camSvc.supportsLivePhoto) return const SizedBox.shrink();
+    if (!_supportsLivePhotoForCurrentSelection(st, camSvc)) {
+      return const SizedBox.shrink();
+    }
     final enabled = st.livePhotoEnabled;
     final color = enabled ? const Color(0xFFFF8A3D) : Colors.white;
     return AnimatedScale(
@@ -1319,7 +1332,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             height: kTopBarH,
             child: Row(
               children: [
-                if (camSvc.supportsLivePhoto)
+                if (_supportsLivePhotoForCurrentSelection(st, camSvc))
                   _buildLivePhotoButton(st, camSvc)
                 else
                   const SizedBox(width: 44),
