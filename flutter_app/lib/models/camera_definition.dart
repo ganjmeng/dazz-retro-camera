@@ -317,6 +317,8 @@ class DefaultLook {
   final double highlightTintB; // -0.2 ~ 0.2 高光色调 B
   final double splitToneBalance; // 0.0 ~ 1.0 分离色调平衡（默认 0.5）
   final double lightLeakAmount; // 0.0 ~ 1.0 漏光强度
+  final double dustAmount; // 0.0 ~ 1.0 灰尘/白点贴图强度
+  final double scratchAmount; // 0.0 ~ 1.0 划痕/纤维贴图强度
   final double luminanceNoise; // 0.0 ~ 0.5 亮度噪声
   final double chromaNoise; // 0.0 ~ 0.5 色度噪声
   final double toneCurveStrength; // 0.0 ~ 1.0 Tone Curve 强度
@@ -401,6 +403,8 @@ class DefaultLook {
     this.highlightTintB = 0,
     this.splitToneBalance = 0.5,
     this.lightLeakAmount = 0,
+    this.dustAmount = 0,
+    this.scratchAmount = 0,
     this.luminanceNoise = 0,
     this.chromaNoise = 0,
     this.toneCurveStrength = 0,
@@ -501,6 +505,8 @@ class DefaultLook {
         highlightTintB: _asDouble(json['highlightTintB']),
         splitToneBalance: _asDouble(json['splitToneBalance'], fallback: 0.5),
         lightLeakAmount: _asDouble(json['lightLeakAmount']),
+        dustAmount: _asDouble(json['dustAmount']),
+        scratchAmount: _asDouble(json['scratchAmount']),
         luminanceNoise: _asDouble(json['luminanceNoise']),
         chromaNoise: _asDouble(json['chromaNoise']),
         toneCurveStrength: _asDouble(json['toneCurveStrength']),
@@ -587,6 +593,8 @@ class DefaultLook {
         if (highlightTintB != 0) 'highlightTintB': highlightTintB,
         if (splitToneBalance != 0.5) 'splitToneBalance': splitToneBalance,
         if (lightLeakAmount != 0) 'lightLeakAmount': lightLeakAmount,
+        if (dustAmount != 0) 'dustAmount': dustAmount,
+        if (scratchAmount != 0) 'scratchAmount': scratchAmount,
         if (luminanceNoise != 0) 'luminanceNoise': luminanceNoise,
         if (chromaNoise != 0) 'chromaNoise': chromaNoise,
         if (toneCurveStrength != 0) 'toneCurveStrength': toneCurveStrength,

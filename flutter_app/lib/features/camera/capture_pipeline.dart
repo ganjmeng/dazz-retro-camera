@@ -39,6 +39,22 @@ class CapturePipeline {
   static final Map<String, Uint8List> _frameAssetBytesCache =
       <String, Uint8List>{};
   static final List<String> _frameAssetBytesLru = <String>[];
+  static const List<String> _dustLightPlusAssets = <String>[
+    'assets/textures/artifacts/light_plus/dust_01.png',
+    'assets/textures/artifacts/light_plus/dust_02.png',
+    'assets/textures/artifacts/light_plus/dust_03.png',
+    'assets/textures/artifacts/light_plus/dust_04.png',
+    'assets/textures/artifacts/light_plus/dust_05.png',
+    'assets/textures/artifacts/light_plus/dust_06.png',
+  ];
+  static const List<String> _scratchLightPlusAssets = <String>[
+    'assets/textures/artifacts/light_plus/scratch_01.png',
+    'assets/textures/artifacts/light_plus/scratch_02.png',
+    'assets/textures/artifacts/light_plus/scratch_03.png',
+    'assets/textures/artifacts/light_plus/scratch_04.png',
+    'assets/textures/artifacts/light_plus/scratch_05.png',
+    'assets/textures/artifacts/light_plus/scratch_06.png',
+  ];
 
   /// 输出图像最大边长（像素）。超过此値时等比缩小画布。
   /// 各清晰度档位的输出最大边长（像素）
@@ -805,6 +821,16 @@ class CapturePipeline {
             outW, outH, lightLeakStrength);
       }
 
+      // ── 4d2. Dust / Scratch Overlay ────────────────────────────────────────
+      await _drawArtifactOverlays(
+        canvas,
+        frameOffsetX + leftPx,
+        frameOffsetY + topPx,
+        outW,
+        outH,
+        imagePath,
+      );
+
       // ── 4e. 色差（Chromatic Aberration）──────────────────────────────────────
       // GPU 成片管线已包含 Chromatic Aberration Pass，仅在 Dart 降级时由 Canvas 补充
       if (!gpuProcessed &&
@@ -961,6 +987,85 @@ class CapturePipeline {
     } catch (e, st) {
       debugPrint('[CapturePipeline] Error: $e\n$st');
       return null;
+    }
+  }
+
+  Future<void> _drawArtifactOverlays(
+    Canvas canvas,
+    double x,
+    double y,
+    double width,
+    double height,
+    String imagePath,
+  ) async {
+    final dustAmount = camera.defaultLook.dustAmount;
+    final scratchAmount = camera.defaultLook.scratchAmount;
+    if (dustAmount <= 0.001 && scratchAmount <= 0.001) return;
+
+    final seed = imagePath.hashCode ^ camera.id.hashCode;
+    final rng = math.Random(seed);
+    final bounds = Rect.fromLTWH(x, y, width, height);
+
+    if (dustAmount > 0.001) {
+      final asset =
+          _dustLightPlusAssets[rng.nextInt(_dustLightPlusAssets.length)];
+      final texture =
+          await _getFrameTexture(asset, width.toInt(), height.toInt());
+      final opacity = (0.20 + dustAmount * 0.60).clamp(0.0, 1.0).toDouble();
+      canvas.save();
+      canvas.translate(bounds.center.dx, bounds.center.dy);
+      canvas.rotate((rng.nextDouble() - 0.5) * 0.16);
+      final scale = 1.0 + (rng.nextDouble() - 0.5) * 0.08;
+      canvas.scale(scale, scale);
+      canvas.translate(-bounds.width / 2, -bounds.height / 2);
+      canvas.drawImageRect(
+        texture,
+        Rect.fromLTWH(
+          0,
+          0,
+          texture.width.toDouble(),
+          texture.height.toDouble(),
+        ),
+        Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+        Paint()
+          ..filterQuality = FilterQuality.high
+          ..blendMode = BlendMode.screen
+          ..color = Colors.white.withValues(alpha: opacity),
+      );
+      canvas.restore();
+    }
+
+    if (scratchAmount > 0.001 && rng.nextDouble() < 0.82) {
+      final asset =
+          _scratchLightPlusAssets[rng.nextInt(_scratchLightPlusAssets.length)];
+      final texture =
+          await _getFrameTexture(asset, width.toInt(), height.toInt());
+      final opacity = (0.15 + scratchAmount * 0.65).clamp(0.0, 1.0).toDouble();
+      canvas.save();
+      canvas.translate(bounds.center.dx, bounds.center.dy);
+      final rotation = (rng.nextDouble() * 2 - 1) * 0.45;
+      canvas.rotate(rotation);
+      final mirrorX = rng.nextBool() ? -1.0 : 1.0;
+      final mirrorY = rng.nextBool() ? -1.0 : 1.0;
+      canvas.scale(mirrorX, mirrorY);
+      final scale = 0.98 + rng.nextDouble() * 0.08;
+      canvas.scale(scale, scale);
+      canvas.translate(-bounds.width / 2, -bounds.height / 2);
+      canvas.drawImageRect(
+        texture,
+        Rect.fromLTWH(
+          0,
+          0,
+          texture.width.toDouble(),
+          texture.height.toDouble(),
+        ),
+        Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+        Paint()
+          ..filterQuality = FilterQuality.high
+          ..blendMode = BlendMode.screen
+          ..color = Colors.white.withValues(alpha: opacity),
+      );
+      canvas.restore();
     }
   }
 

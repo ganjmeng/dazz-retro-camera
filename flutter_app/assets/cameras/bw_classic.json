@@ -82,6 +82,8 @@
     "highlightTintB": 0.0,
     "splitToneBalance": 0.5,
     "lightLeakAmount": 0.0,
+    "dustAmount": 0.08,
+    "scratchAmount": 0.03,
     "bloomResponse": 0.0,
     "halationResponse": 0.0,
     "fadeResponse": 0.0,
