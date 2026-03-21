@@ -49,6 +49,9 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     private var cachedRenderVersion: Int = 0
     private var currentCameraId: String = ""
     private var currentSharpenLevel: Float = 0.5
+    private var currentPreviewWidth: Int = 1280
+    private var currentPreviewHeight: Int = 720
+    private var currentPreviewAspectRatio: Double = 3.0 / 4.0
     private var mirrorFrontCameraEnabled = true
     private var mirrorBackCameraEnabled = false
 
@@ -160,6 +163,9 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         let previewWidth = (resolutionStr == "1080p") ? 1920 : 1280
         let previewHeight = (resolutionStr == "1080p") ? 1080 : 720
         let previewAspectRatio = Double(min(previewWidth, previewHeight)) / Double(max(previewWidth, previewHeight))
+        currentPreviewWidth = previewWidth
+        currentPreviewHeight = previewHeight
+        currentPreviewAspectRatio = previewAspectRatio
 
         // 释放旧资源
         cameraManager?.stopSession()
@@ -187,21 +193,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cameraManager?.startSession()
         reapplyRuntimeStateToRenderer()
         startRuntimeStatsTimer()
-        let d = UIDevice.current
-        emitEvent(type: "onCameraReady", payload: [
-            "cameraId": lensStr,
-            "sensorSize": "?",
-            "sensorMp": "0.0",
-            "focalLengths": "?",
-            "facing": lensStr,
-            "previewWidth": previewWidth,
-            "previewHeight": previewHeight,
-            "previewAspectRatio": previewAspectRatio,
-            "brand": "apple",
-            "model": d.model,
-            "device": d.name,
-            "supportsLivePhoto": cameraManager?.supportsLivePhotoCapture ?? false
-        ])
+        emitCameraReadyEvent(lens: lensStr)
 
         result(["textureId": textureId])
     }
@@ -216,8 +208,27 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
         cameraManager?.switchCamera(to: position)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
             self?.reapplyRuntimeStateToRenderer()
+            self?.emitCameraReadyEvent(lens: lensStr)
         }
         result(nil)
+    }
+
+    private func emitCameraReadyEvent(lens: String) {
+        let d = UIDevice.current
+        emitEvent(type: "onCameraReady", payload: [
+            "cameraId": lens,
+            "sensorSize": "?",
+            "sensorMp": "0.0",
+            "focalLengths": "?",
+            "facing": lens,
+            "previewWidth": currentPreviewWidth,
+            "previewHeight": currentPreviewHeight,
+            "previewAspectRatio": currentPreviewAspectRatio,
+            "brand": "apple",
+            "model": d.model,
+            "device": d.name,
+            "supportsLivePhoto": cameraManager?.supportsLivePhotoCapture ?? false
+        ])
     }
 
     // ─────────────────────────────────────────────

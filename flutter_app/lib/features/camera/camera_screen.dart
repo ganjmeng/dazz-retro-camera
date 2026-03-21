@@ -76,6 +76,10 @@ const _kLifecycleResumeReinitLead = Duration(milliseconds: 40);
 const _kFlipCameraTransitionLead = Duration(milliseconds: 120);
 const _kNativeReplayBurstGap = Duration(milliseconds: 60);
 const _kNativeReplayFinalGap = Duration(milliseconds: 100);
+const _kPreviewBootstrapSoftRecoverDelayMs = 900;
+const _kPreviewBootstrapHardRecoverDelayMs = 2200;
+const _kPreviewStaleSoftRecoverDelayMs = 1800;
+const _kPreviewStaleHardRecoverDelayMs = 3600;
 const _kRatioTransitionFrameAnim = Duration(milliseconds: 240);
 const _kRatioFreezeFadeOut = Duration(milliseconds: 120);
 // 宽屏适配：取景框最大宽度（平板/折叠屏展开态限制取景框不超过此宽度，避免画面过宽失调）
@@ -143,6 +147,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Timer? _sceneHintHideTimer;
   Timer? _previewHealthTimer;
   int _previewSoftResyncCooldownUntilMs = 0;
+  int _previewHardRecoverCooldownUntilMs = 0;
+  int _previewAwaitingStatsSinceMs = 0;
+  bool _previewRecoveryInFlight = false;
   // 曝光水平滑动条是否展开（点击胶囊触发）
   bool _showExposureSlider = false;
   // 色温面板是否展开（点击色温胶囊触发）
@@ -416,6 +423,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (!mounted) return;
     // App 进入后台：保存快照并停预览，避免后台持有相机资源
     _lastNativeReplaySignal = '';
+    _previewAwaitingStatsSinceMs = 0;
     ref.read(cameraAppProvider.notifier).saveCurrentSnapshot();
     await ref.read(cameraServiceProvider.notifier).stopPreview();
   }
@@ -448,6 +456,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<void> _reinitAndSyncCameraPipeline() async {
     if (!mounted) return;
     _lastNativeReplaySignal = '';
+    _previewAwaitingStatsSinceMs = 0;
     final svc = ref.read(cameraServiceProvider.notifier);
     final cameraState = ref.read(cameraAppProvider);
     await svc.initCamera(resolution: cameraState.previewResolutionTag);
@@ -869,18 +878,60 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
       final camSvc = ref.read(cameraServiceProvider);
       if (!camSvc.isReady || camSvc.lifecyclePhase != 'running') return;
+      if (_previewRecoveryInFlight) return;
       final now = DateTime.now().millisecondsSinceEpoch;
+      if (camSvc.runtimeStatsUpdatedAtMs <= 0) {
+        if (_previewAwaitingStatsSinceMs <= 0) {
+          _previewAwaitingStatsSinceMs = now;
+        }
+        final waitingFor = now - _previewAwaitingStatsSinceMs;
+        if (waitingFor >= _kPreviewBootstrapHardRecoverDelayMs &&
+            now >= _previewHardRecoverCooldownUntilMs) {
+          _previewHardRecoverCooldownUntilMs = now + 6000;
+          await _hardRecoverPreviewPipeline();
+          return;
+        }
+        if (waitingFor >= _kPreviewBootstrapSoftRecoverDelayMs &&
+            now >= _previewSoftResyncCooldownUntilMs) {
+          _previewSoftResyncCooldownUntilMs = now + 2500;
+          await _softResyncPreviewParams();
+        }
+        return;
+      }
+      _previewAwaitingStatsSinceMs = 0;
       final staleFor = now - camSvc.runtimeStatsUpdatedAtMs;
-      if (camSvc.runtimeStatsUpdatedAtMs <= 0 || staleFor < 2800) return;
-      if (now < _previewSoftResyncCooldownUntilMs) return;
-      _previewSoftResyncCooldownUntilMs = now + 4500;
-      await _softResyncPreviewParams();
+      if (staleFor >= _kPreviewStaleHardRecoverDelayMs &&
+          now >= _previewHardRecoverCooldownUntilMs) {
+        _previewHardRecoverCooldownUntilMs = now + 7000;
+        await _hardRecoverPreviewPipeline();
+        return;
+      }
+      if (staleFor >= _kPreviewStaleSoftRecoverDelayMs &&
+          now >= _previewSoftResyncCooldownUntilMs) {
+        _previewSoftResyncCooldownUntilMs = now + 4500;
+        await _softResyncPreviewParams();
+      }
     });
   }
 
   Future<void> _softResyncPreviewParams() async {
     if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
-    await _replayPreviewStateWithSettle(includePreset: true);
+    _previewRecoveryInFlight = true;
+    try {
+      await _replayPreviewStateWithSettle(includePreset: true);
+    } finally {
+      _previewRecoveryInFlight = false;
+    }
+  }
+
+  Future<void> _hardRecoverPreviewPipeline() async {
+    if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
+    _previewRecoveryInFlight = true;
+    try {
+      await _reinitAndSyncCameraPipeline();
+    } finally {
+      _previewRecoveryInFlight = false;
+    }
   }
 
   void _handleCameraServiceStateChanged(
@@ -896,11 +947,25 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final resumedRunning = previous?.lifecyclePhase != 'running';
     final textureChanged = previous?.textureId != next.textureId;
     final signalChanged = nextSignal != prevSignal;
+    final firstRuntimeFrame = (previous?.runtimeStatsUpdatedAtMs ?? 0) <= 0 &&
+        next.runtimeStatsUpdatedAtMs > 0;
 
-    if (!(becameReady || resumedRunning || textureChanged || signalChanged)) {
+    if (becameReady || resumedRunning || textureChanged) {
+      _previewAwaitingStatsSinceMs = next.runtimeStatsUpdatedAtMs > 0
+          ? 0
+          : DateTime.now().millisecondsSinceEpoch;
+    } else if (firstRuntimeFrame) {
+      _previewAwaitingStatsSinceMs = 0;
+    }
+
+    if (!(becameReady ||
+        resumedRunning ||
+        textureChanged ||
+        signalChanged ||
+        firstRuntimeFrame)) {
       return;
     }
-    if (nextSignal == _lastNativeReplaySignal) return;
+    if (!firstRuntimeFrame && nextSignal == _lastNativeReplaySignal) return;
     _lastNativeReplaySignal = nextSignal;
     _scheduleNativeReadyReplay();
   }
@@ -2283,6 +2348,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 只要 textureId 就绪，即可显示预览；
     // renderParams 为 null 时（JSON 尚未加载）用默认空参数，避免黑屏
     if (camSvc.textureId != null) {
+      final waitingFirstFrame = camSvc.lifecyclePhase == 'running' &&
+          camSvc.runtimeStatsUpdatedAtMs <= 0;
+      if (waitingFirstFrame) {
+        return Container(
+          color: Colors.black,
+          child: const Center(
+            child: CircularProgressIndicator(
+              color: _kWhite,
+              strokeWidth: 2,
+            ),
+          ),
+        );
+      }
       final params = st.renderParams ?? const PreviewRenderParams();
       return PreviewFilterWidget(
         textureId: camSvc.textureId!,

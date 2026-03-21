@@ -487,7 +487,11 @@ class CameraService extends StateNotifier<CameraState> {
     final newLens = state.currentLens == 'back' ? 'front' : 'back';
     try {
       await _channel.invokeMethod('switchLens', {'lens': newLens});
-      state = state.copyWith(currentLens: newLens);
+      state = state.copyWith(
+        currentLens: newLens,
+        lifecyclePhase: 'running',
+        runtimeStatsUpdatedAtMs: 0,
+      );
     } catch (e) {
       print('Error switching lens: $e');
     }
@@ -725,6 +729,8 @@ class CameraService extends StateNotifier<CameraState> {
         _resetRuntimeSyncCaches();
         state = state.copyWith(
           isReady: true,
+          lifecyclePhase: 'running',
+          runtimeStatsUpdatedAtMs: 0,
           activeCameraDebugInfo:
               debugInfo.isNotEmpty ? debugInfo : state.activeCameraDebugInfo,
           supportsLivePhoto: payload?['supportsLivePhoto'] as bool? ?? false,

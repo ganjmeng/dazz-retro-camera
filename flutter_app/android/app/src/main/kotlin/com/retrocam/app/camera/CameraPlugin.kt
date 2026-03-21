@@ -913,6 +913,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         lensFacing = if (lens == "front") CameraSelector.LENS_FACING_FRONT
                      else CameraSelector.LENS_FACING_BACK
         currentLensPosition = lensFacing // sync for takePhoto isFront detection
+        lastRuntimeStatsAtMs = 0L
 
         val owner = lifecycleOwner
         if (owner == null) {
@@ -923,7 +924,10 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             rebindCameraUseCasesSafely(
                 owner = owner,
                 reason = "switchLens",
-                onReady = { result.success(null) },
+                onReady = {
+                    sendEvent("onCameraReady", activeCameraDebugInfo)
+                    result.success(null)
+                },
                 onError = { e -> result.error("SWITCH_LENS_FAILED", e.message, null) }
             )
         } catch (e: Exception) {
