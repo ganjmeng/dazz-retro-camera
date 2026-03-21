@@ -751,6 +751,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   Future<void> selectRatioAndSync(String id) async {
     if (!_applyRatioSelection(id)) return;
+    // 先立即推送一次当前渲染参数，避免比例切换期间使用旧缓存。
+    _applyCurrentRenderParamsToNative();
     await _syncViewportRatioToNativeImmediately();
   }
 
@@ -1970,9 +1972,12 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           width: ratio.width,
           height: ratio.height,
         );
-    // 比例切换后强制重放一次当前预览状态。
-    // 目的：覆盖原生 rebind/no-op 路径下可能出现的 shader 参数丢失，
-    // 确保跨比例切换后特效稳定存在（Android / iOS 同步兜底）。
+    // 比例切换后，优先做一次整包同步（preset+lens+render+zoom），
+    // 再做两次延迟 runtime 重放，覆盖 renderer 重建窗口内的参数丢失。
+    await _syncCameraStateToNative(camera: camera);
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+    await _syncCurrentPreviewStateToNative();
+    await Future<void>.delayed(const Duration(milliseconds: 180));
     await _syncCurrentPreviewStateToNative();
   }
 
