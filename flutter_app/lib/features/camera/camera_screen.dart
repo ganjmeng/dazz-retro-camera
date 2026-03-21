@@ -973,7 +973,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         firstRuntimeFrame)) {
       return;
     }
-    if (!firstRuntimeFrame && nextSignal == _lastNativeReplaySignal) return;
+    // readyVersionChanged 意味着 native 摄像头完成了一次重建（比例切换/相机切换触发）。
+    // 此时即使 signal 与上次相同，也必须强制重放——因为 signal 可能在重建过程中就已记录，
+    // 但参数在重建完成后被 native 重置，导致特效丢失。
+    if (!firstRuntimeFrame && !readyVersionChanged && nextSignal == _lastNativeReplaySignal) return;
     _lastNativeReplaySignal = nextSignal;
     _scheduleNativeReadyReplay();
   }

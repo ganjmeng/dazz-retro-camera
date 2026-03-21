@@ -1602,7 +1602,9 @@ class _SubPanelState extends ConsumerState<_SubPanel>
               return GestureDetector(
                 onTap: () {
                   HapticFeedback.selectionClick();
-                  ref.read(cameraAppProvider.notifier).selectRatio(r.id);
+                  // selectRatioAndSync 会在比例切换前预同步渲染参数（含特效），
+                  // 避免 native 重建后特效消失。无需 await，后台执行即可。
+                  ref.read(cameraAppProvider.notifier).selectRatioAndSync(r.id);
                   Navigator.of(context).pop();
                 },
                 child: Container(
