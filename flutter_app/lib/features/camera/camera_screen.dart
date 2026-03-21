@@ -15,7 +15,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -74,6 +76,8 @@ const _kLifecycleResumeReinitLead = Duration(milliseconds: 40);
 const _kFlipCameraTransitionLead = Duration(milliseconds: 120);
 const _kNativeReplayBurstGap = Duration(milliseconds: 60);
 const _kNativeReplayFinalGap = Duration(milliseconds: 100);
+const _kRatioTransitionFrameAnim = Duration(milliseconds: 240);
+const _kRatioFreezeFadeOut = Duration(milliseconds: 120);
 // 宽屏适配：取景框最大宽度（平板/折叠屏展开态限制取景框不超过此宽度，避免画面过宽失调）
 // 普通手机最宽约 430dp，此值确保宽屏设备取景框宽度与手机体验一致
 const kMaxViewfinderW = 520.0;
@@ -156,6 +160,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<void>? _lifecycleDrainTask;
   AppLifecycleState? _pendingLifecycleState;
   bool _isCameraTransitioning = false;
+  final GlobalKey _viewfinderRepaintKey = GlobalKey();
+  Uint8List? _frozenViewfinderBytes;
+  bool _showFrozenViewfinder = false;
+  bool _showRatioTransitionMask = false;
+  int _ratioTransitionVersion = 0;
   AppLifecycleState _lastLifecycleState = AppLifecycleState.resumed;
   ProviderSubscription<CameraState>? _cameraServiceSubscription;
   Timer? _nativeReadyReplayTimer;
@@ -513,6 +522,63 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       if (mounted) setState(() => _showTransition = false);
     } finally {
       _isCameraTransitioning = false;
+    }
+  }
+
+  Future<Uint8List?> _captureViewfinderFreezeFrame() async {
+    final boundaryContext = _viewfinderRepaintKey.currentContext;
+    if (boundaryContext == null) return null;
+    final renderObject = boundaryContext.findRenderObject();
+    if (renderObject is! RenderRepaintBoundary) return null;
+    if (renderObject.debugNeedsPaint) {
+      await Future.delayed(const Duration(milliseconds: 16));
+    }
+    try {
+      final mq = MediaQuery.of(context);
+      final pixelRatio = mq.devicePixelRatio.clamp(1.0, 2.0);
+      final ui.Image image = await renderObject.toImage(pixelRatio: pixelRatio);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      return data?.buffer.asUint8List();
+    } catch (e) {
+      debugPrint('[CameraScreen] freeze frame capture failed: $e');
+      return null;
+    }
+  }
+
+  Future<void> _showRatioTransition(Future<void> Function() action,
+      {Duration minVisible = const Duration(milliseconds: 240)}) async {
+    final token = ++_ratioTransitionVersion;
+    final frozen = await _captureViewfinderFreezeFrame();
+    if (mounted && token == _ratioTransitionVersion) {
+      setState(() {
+        _frozenViewfinderBytes = frozen;
+        _showFrozenViewfinder = frozen != null;
+        _showRatioTransitionMask = true;
+      });
+    }
+    final sw = Stopwatch()..start();
+    try {
+      await action().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
+    } finally {
+      sw.stop();
+      final remain = minVisible - sw.elapsed;
+      if (remain > Duration.zero) {
+        await Future.delayed(remain);
+      }
+      if (!mounted || token != _ratioTransitionVersion) return;
+      setState(() {
+        _showFrozenViewfinder = false;
+        _showRatioTransitionMask = false;
+      });
+      Future<void>.delayed(_kRatioFreezeFadeOut, () {
+        if (!mounted || token != _ratioTransitionVersion) return;
+        if (_showFrozenViewfinder) return;
+        setState(() => _frozenViewfinderBytes = null);
+      });
     }
   }
 
@@ -1368,44 +1434,124 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           ),
           // ── 取景框（圆角，垂直居中，水平居中）──
           // PhysicalModel 强制 GPU 层圆角裁剪，解决 Android Texture 直角问题
-          Positioned(
+          AnimatedPositioned(
+            duration: _kRatioTransitionFrameAnim,
+            curve: Curves.easeInOutCubic,
             top: viewfinderTopOffset,
             left: viewfinderLeft,
+            width: viewfinderW,
+            height: viewfinderH,
             child: PhysicalModel(
               color: Colors.black,
               borderRadius: BorderRadius.circular(16),
               clipBehavior: Clip.hardEdge,
-              child: SizedBox(
-                width: viewfinderW,
-                height: viewfinderH,
-                child: Builder(builder: (ctx) {
-                  // 记录取景框尺寸，供对焦坐标归一化使用
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted &&
-                        (_viewfinderW != viewfinderW ||
-                            _viewfinderH != viewfinderH)) {
-                      setState(() {
-                        _viewfinderW = viewfinderW;
-                        _viewfinderH = viewfinderH;
-                      });
-                    }
-                  });
-                  return _buildViewfinderArea(
+              child: Builder(builder: (ctx) {
+                // 记录取景框尺寸，供对焦坐标归一化使用
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted &&
+                      (_viewfinderW != viewfinderW ||
+                          _viewfinderH != viewfinderH)) {
+                    setState(() {
+                      _viewfinderW = viewfinderW;
+                      _viewfinderH = viewfinderH;
+                    });
+                  }
+                });
+                return RepaintBoundary(
+                  key: _viewfinderRepaintKey,
+                  child: _buildViewfinderArea(
                     st,
                     camSvc,
                     viewfinderH,
                     viewfinderW,
                     s,
                     overlayCacheWidth: overlayCacheWidth,
-                  );
-                }),
-              ),
+                  ),
+                );
+              }),
             ),
           ),
+          if (_showRatioTransitionMask || _frozenViewfinderBytes != null)
+            IgnorePointer(
+              child: AnimatedPositioned(
+                duration: _kRatioTransitionFrameAnim,
+                curve: Curves.easeInOutCubic,
+                top: viewfinderTopOffset,
+                left: viewfinderLeft,
+                width: viewfinderW,
+                height: viewfinderH,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      AnimatedOpacity(
+                        opacity: _showRatioTransitionMask ? 1.0 : 0.0,
+                        duration: _kRatioFreezeFadeOut,
+                        curve: Curves.easeOutCubic,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withAlpha(120),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withAlpha(92),
+                                Colors.black.withAlpha(140),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_frozenViewfinderBytes != null)
+                        AnimatedOpacity(
+                          opacity: _showFrozenViewfinder ? 1.0 : 0.0,
+                          duration: _kRatioFreezeFadeOut,
+                          curve: Curves.easeOutCubic,
+                          child: Image.memory(
+                            _frozenViewfinderBytes!,
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          if (_showRatioTransitionMask)
+            IgnorePointer(
+              child: AnimatedPositioned(
+                duration: _kRatioTransitionFrameAnim,
+                curve: Curves.easeInOutCubic,
+                top: viewfinderTopOffset,
+                left: viewfinderLeft,
+                width: viewfinderW,
+                height: viewfinderH,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: AnimatedOpacity(
+                    opacity: _showRatioTransitionMask ? 1.0 : 0.0,
+                    duration: _kRatioFreezeFadeOut,
+                    curve: Curves.easeOutCubic,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: Colors.white.withAlpha(46),
+                          width: 0.8,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           // ── 控制胶囊：固定浮层，与取景框大小/比例/缩放全部无关 ──
           // 从底部往上算：底部面板 + 安全区 + 滑条区 + 内边距
           // 视觉上贴着取景框底部内侧边缘，实际是独立浮层
-          Positioned(
+          AnimatedPositioned(
+            duration: _kRatioTransitionFrameAnim,
+            curve: Curves.easeInOutCubic,
             left: viewfinderLeft,
             right: viewfinderLeft,
             bottom: kBottomPanelH +
@@ -1563,6 +1709,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             child: _OptionsSheet(
               onClose: _closeOptions,
               onCameraTransition: _showCameraTransition,
+              onRatioTransition: _showRatioTransition,
             ),
           ),
         ],
@@ -3047,10 +3194,13 @@ class _OptionsSheet extends ConsumerWidget {
   final VoidCallback onClose;
   final Future<void> Function(FutureOr<void> Function() action,
       {Duration minVisible}) onCameraTransition;
+  final Future<void> Function(Future<void> Function() action,
+      {Duration minVisible}) onRatioTransition;
 
   const _OptionsSheet({
     required this.onClose,
     required this.onCameraTransition,
+    required this.onRatioTransition,
   });
 
   @override
@@ -3572,7 +3722,7 @@ class _OptionsSheet extends ConsumerWidget {
         'ratio' => _RatioRow(
             ratios: camera.modules.ratios,
             activeId: st.activeRatioId,
-            onSelect: (id) => onCameraTransition(
+            onSelect: (id) => onRatioTransition(
               () => ref.read(cameraAppProvider.notifier).selectRatioAndSync(id),
               minVisible: const Duration(milliseconds: 240),
             ),
