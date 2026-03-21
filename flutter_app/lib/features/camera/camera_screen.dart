@@ -1311,39 +1311,41 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             bottom: 0,
             child: _buildBottomPanel(st),
           ),
-          // ── 顶部按钮行：状态栏下方的纯黑色区域，只有 "..." 按钮──
+          // ── 顶部按钮行：左侧 Live Photo，右侧更多菜单──
           Positioned(
             top: statusBarH,
-            left: 0,
-            right: 0,
+            left: 12,
+            right: 8,
             height: kTopBarH,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: GestureDetector(
-                onTap: () =>
-                    ref.read(cameraAppProvider.notifier).toggleTopMenu(),
-                child: SizedBox(
-                  width: 56,
-                  height: kTopBarH,
-                  child: Center(
-                    child: AnimatedBuilder(
-                      animation: _rotateAngle,
-                      builder: (_, __) => Transform.rotate(
-                        angle: _rotateAngle.value,
-                        child: const Text(
-                          '•••',
-                          style: TextStyle(
+            child: Row(
+              children: [
+                if (camSvc.supportsLivePhoto)
+                  _buildLivePhotoButton(st, camSvc)
+                else
+                  const SizedBox(width: 44),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () =>
+                      ref.read(cameraAppProvider.notifier).toggleTopMenu(),
+                  child: SizedBox(
+                    width: 48,
+                    height: kTopBarH,
+                    child: Center(
+                      child: AnimatedBuilder(
+                        animation: _rotateAngle,
+                        builder: (_, __) => Transform.rotate(
+                          angle: _rotateAngle.value,
+                          child: const Icon(
+                            Icons.more_horiz,
                             color: _kWhite,
-                            fontSize: 16,
-                            letterSpacing: 0,
-                            fontWeight: FontWeight.w600,
+                            size: 22,
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
           // ── 取景框（圆角，垂直居中，水平居中）──
@@ -2146,10 +2148,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (camSvc.supportsLivePhoto) ...[
-          _buildLivePhotoButton(st, camSvc),
-          const SizedBox(width: 10),
-        ],
         // 色温按鈕（圆形，点击弹出色温面板）
         // 高亮条件：面板展开 OR 色温不为自动
         GestureDetector(
