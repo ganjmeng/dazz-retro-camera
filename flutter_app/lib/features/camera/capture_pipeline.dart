@@ -32,6 +32,9 @@ class CaptureResult {
 
 class CapturePipeline {
   final CameraDefinition camera;
+  // 临时调试开关：先关闭共享重后处理，验证成片是否被 capture 管线拉平成同一种质感。
+  static const bool _kDisableSharedDartFallbackPost = true;
+  static const bool _kDisableArtifactOverlays = true;
   static const int _kFrameTextureCacheMaxEntries = 6;
   static final Map<String, ui.Image> _frameTextureCache = <String, ui.Image>{};
   static final List<String> _frameTextureLru = <String>[];
@@ -251,7 +254,9 @@ class CapturePipeline {
         final frame = await codec.getNextFrame();
         srcImage = frame.image;
       }
-      if (!gpuProcessed && renderParams != null) {
+      if (!gpuProcessed &&
+          renderParams != null &&
+          !_kDisableSharedDartFallbackPost) {
         debugPrint(
             '[CapturePipeline] Applying universal Dart fallback pipeline for: ${camera.id}');
         // ── 统一 Dart 降级管线（参数驱动，不再按相机 ID 路由）──────────────
@@ -320,6 +325,11 @@ class CapturePipeline {
           );
         }
         debugPrint('[CapturePipeline] Universal fallback pipeline applied.');
+      } else if (!gpuProcessed &&
+          renderParams != null &&
+          _kDisableSharedDartFallbackPost) {
+        debugPrint(
+            '[CapturePipeline] Shared Dart fallback post temporarily disabled for validation.');
       }
 
       // 计算源图尺寸：GPU 路径优先用 JPEG 头部解析，失败再回退解码。
@@ -998,6 +1008,8 @@ class CapturePipeline {
     double height,
     String imagePath,
   ) async {
+    if (_kDisableArtifactOverlays) return;
+
     final dustAmount = camera.defaultLook.dustAmount;
     final scratchAmount = camera.defaultLook.scratchAmount;
     if (dustAmount <= 0.001 && scratchAmount <= 0.001) return;
