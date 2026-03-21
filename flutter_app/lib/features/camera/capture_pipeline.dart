@@ -43,20 +43,20 @@ class CapturePipeline {
       <String, Uint8List>{};
   static final List<String> _frameAssetBytesLru = <String>[];
   static const List<String> _dustLightPlusAssets = <String>[
-    'assets/textures/artifacts/light_plus/dust_01.png',
-    'assets/textures/artifacts/light_plus/dust_02.png',
-    'assets/textures/artifacts/light_plus/dust_03.png',
-    'assets/textures/artifacts/light_plus/dust_04.png',
-    'assets/textures/artifacts/light_plus/dust_05.png',
-    'assets/textures/artifacts/light_plus/dust_06.png',
+    'assets/textures/artifacts/dust_01.png',
+    'assets/textures/artifacts/dust_02.png',
+    'assets/textures/artifacts/dust_03.png',
+    'assets/textures/artifacts/dust_04.png',
+    'assets/textures/artifacts/dust_05.png',
+    'assets/textures/artifacts/dust_06.png',
   ];
   static const List<String> _scratchLightPlusAssets = <String>[
-    'assets/textures/artifacts/light_plus/scratch_01.png',
-    'assets/textures/artifacts/light_plus/scratch_02.png',
-    'assets/textures/artifacts/light_plus/scratch_03.png',
-    'assets/textures/artifacts/light_plus/scratch_04.png',
-    'assets/textures/artifacts/light_plus/scratch_05.png',
-    'assets/textures/artifacts/light_plus/scratch_06.png',
+    'assets/textures/artifacts/scratch_01.png',
+    'assets/textures/artifacts/scratch_02.png',
+    'assets/textures/artifacts/scratch_03.png',
+    'assets/textures/artifacts/scratch_04.png',
+    'assets/textures/artifacts/scratch_05.png',
+    'assets/textures/artifacts/scratch_06.png',
   ];
 
   /// 输出图像最大边长（像素）。超过此値时等比缩小画布。
