@@ -1816,14 +1816,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           _buildPreview(st, camSvc),
           // 三等分网格线：小窗开启时网格移入小窗内部，小窗关闭时全局显示
           if (st.gridEnabled && !st.minimapEnabled) _buildGrid(),
-          // 调试信息浮层（开发调试用）
-          if (st.showDebugOverlay)
-            Positioned(
-              top: 8,
-              left: 8,
-              right: 8,
-              child: _DebugOverlay(st: st),
-            ),
           // 拍摄中黑色半透明蒙层
           if (st.isTakingPhoto)
             Container(
@@ -2095,6 +2087,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               gridEnabled: st.gridEnabled,
               areaW: screenW,
               areaH: areaH,
+            ),
+
+          // 调试信息浮层（开发调试用）
+          // 必须放在 Stack 顶层，避免被下方手势层拦截导致 COPY/CLEAR 点不到。
+          if (st.showDebugOverlay)
+            Positioned(
+              top: 8,
+              left: 8,
+              right: 8,
+              child: _DebugOverlay(st: st),
             ),
         ],
       ),
