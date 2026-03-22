@@ -1059,7 +1059,7 @@ class PreviewRenderParams {
       'tintShift': effectiveTint,
       'exposureOffset': exposureOffset + effectiveLensExposure,
       'beautyStrength': previewBeauty,
-      // 预览白名单策略：非核心特效一律显式置零，避免原生端沿用旧值。
+      // 预览白名单策略：非核心特效显式置零，避免原生端残留历史参数。
       'contrast': 1.0,
       'saturation': 1.0,
       'highlights': 0.0,
