@@ -75,7 +75,6 @@ const _kPageResumeReinitLead = Duration.zero;
 const _kLifecycleResumeReinitLead = Duration(milliseconds: 40);
 const _kFlipCameraTransitionLead = Duration(milliseconds: 120);
 const _kNativeReplayBurstGap = Duration(milliseconds: 60);
-const _kNativeReplayFinalGap = Duration(milliseconds: 100);
 const _kPreviewBootstrapSoftRecoverDelayMs = 900;
 const _kPreviewBootstrapHardRecoverDelayMs = 2200;
 const _kPreviewStaleSoftRecoverDelayMs = 1800;
@@ -449,7 +448,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
     const sharpenLevels = [0.0, 0.5, 1.0];
     await svc.setSharpen(sharpenLevels[sharpenLevel]);
-    await _replayPreviewStateWithSettle(includePreset: true);
+    await _replayPreviewStateWithSettle(includePreset: false);
     _ensurePreviewHealthWatchdog();
   }
 
@@ -918,7 +917,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
     _previewRecoveryInFlight = true;
     try {
-      await _replayPreviewStateWithSettle(includePreset: true);
+      await _replayPreviewStateWithSettle(includePreset: false);
     } finally {
       _previewRecoveryInFlight = false;
     }
@@ -1003,7 +1002,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _nativeReadyReplayTimer?.cancel();
     _nativeReadyReplayTimer = Timer(_kNativeReplayBurstGap, () async {
       if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
-      await _replayPreviewStateWithSettle(includePreset: true);
+      await _replayPreviewStateWithSettle(includePreset: false);
     });
   }
 
@@ -1014,22 +1013,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final notifier = ref.read(cameraAppProvider.notifier);
     final camSvc = ref.read(cameraServiceProvider);
     if (!camSvc.isReady || camSvc.lifecyclePhase != 'running') return;
-
+    // 生命周期改为单事务后，这里只做一次 runtime 重放，避免多次延时重放反复覆盖事务结果。
     await notifier.replayCurrentPreviewStateToNative(
       replayPreset: includePreset,
     );
-
-    await Future.delayed(_kNativeReplayBurstGap);
-    if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
-    final midSvc = ref.read(cameraServiceProvider);
-    if (!midSvc.isReady || midSvc.lifecyclePhase != 'running') return;
-    await notifier.replayCurrentPreviewStateToNative(replayPreset: false);
-
-    await Future.delayed(_kNativeReplayFinalGap);
-    if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
-    final finalSvc = ref.read(cameraServiceProvider);
-    if (!finalSvc.isReady || finalSvc.lifecyclePhase != 'running') return;
-    await notifier.replayCurrentPreviewStateToNative(replayPreset: false);
   }
 
   void _enqueueSceneHint(String nextKey) {
