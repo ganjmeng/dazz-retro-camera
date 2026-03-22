@@ -395,8 +395,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   int _lastAckedRenderParamsVersion = 0;
   Future<void>? _cameraSwitchTask;
   String? _queuedCameraId;
-  bool _viewportRatioSyncQueued = false;
-  bool _isViewportRatioSyncInFlight = false;
+  bool _lifecycleResyncQueued = false;
+  bool _isLifecycleResyncInFlight = false;
+  bool _deferredRenderPushAfterLifecycle = false;
 
   CameraAppNotifier(this._ref) : super(const CameraAppState());
 
@@ -1882,6 +1883,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   // ── FIX: 将当前完整渲染参数（滤镜+镜头+defaultLook 组合后）发送到原生预览 Shader ──
   /// 切换滤镜或镜头后调用，确保原生层实时预览与 Dart 状态同步。
   void _applyCurrentRenderParamsToNative({bool throttled = false}) {
+    if (_isLifecycleResyncInFlight) {
+      _deferredRenderPushAfterLifecycle = true;
+      return;
+    }
     if (!throttled) {
       _renderParamsPushTimer?.cancel();
       _sendRenderParamsNow();
@@ -1961,11 +1966,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   Future<void> _syncViewportRatioToNative() async {
-    final camera = state.camera;
-    if (camera == null) return;
-    // 统一通过 syncCameraState 下发 viewport + preset + lens + render + zoom，
-    // 避免 updateViewportRatio 与 syncCameraState 双通道并发导致旧比例/旧参数回放。
-    await _syncCameraStateToNative(camera: camera);
+    await _flushLifecycleResync();
   }
 
   Map<String, dynamic> _buildActiveLensParams(CameraDefinition camera) {
@@ -2024,41 +2025,45 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   }
 
   void _scheduleViewportRatioSync({bool immediate = false}) {
-    _viewportRatioSyncQueued = true;
+    _lifecycleResyncQueued = true;
     if (immediate) {
       _viewportRatioPushTimer?.cancel();
       _viewportRatioPushTimer = null;
-      unawaited(_flushViewportRatioSync());
+      unawaited(_flushLifecycleResync());
       return;
     }
     if (_viewportRatioPushTimer != null) return;
     _viewportRatioPushTimer = Timer(_kViewportRatioPushInterval, () {
       _viewportRatioPushTimer = null;
-      unawaited(_flushViewportRatioSync());
+      unawaited(_flushLifecycleResync());
     });
   }
 
-  Future<void> _flushViewportRatioSync() async {
-    if (_isViewportRatioSyncInFlight) {
-      _viewportRatioSyncQueued = true;
+  Future<void> _flushLifecycleResync() async {
+    if (_isLifecycleResyncInFlight) {
+      _lifecycleResyncQueued = true;
       return;
     }
-    _isViewportRatioSyncInFlight = true;
+    _isLifecycleResyncInFlight = true;
     try {
-      while (_viewportRatioSyncQueued) {
-        _viewportRatioSyncQueued = false;
+      while (_lifecycleResyncQueued) {
+        _lifecycleResyncQueued = false;
         await _syncViewportRatioToNative();
       }
     } finally {
-      _isViewportRatioSyncInFlight = false;
+      _isLifecycleResyncInFlight = false;
+      if (_deferredRenderPushAfterLifecycle) {
+        _deferredRenderPushAfterLifecycle = false;
+        _applyCurrentRenderParamsToNative();
+      }
     }
   }
 
   Future<void> _syncViewportRatioToNativeImmediately() async {
     _viewportRatioPushTimer?.cancel();
     _viewportRatioPushTimer = null;
-    _viewportRatioSyncQueued = true;
-    await _flushViewportRatioSync();
+    _lifecycleResyncQueued = true;
+    await _flushLifecycleResync();
   }
 
   Future<void> replayCurrentPreviewStateToNative({
