@@ -29,8 +29,8 @@
     "clarity": 11.0,
     "saturation": 0.82,
     "vibrance": -8.0,
-    "grain": 0.36,
-    "grainSize": 1.75,
+    "grain": 0.24,
+    "grainSize": 1.55,
     "bloom": 0.002,
     "vignette": 0.11,
     "colorBiasR": -0.045,
@@ -59,7 +59,7 @@
       }
     ],
     "dehaze": 1.9,
-    "highlightRolloff": 0.16,
+    "highlightRolloff": 0.14,
     "edgeFalloff": 0.05,
     "exposureVariation": 0.024,
     "cornerWarmShift": -0.008,
@@ -70,18 +70,18 @@
     "skinSatProtect": 0.93,
     "skinLumaSoften": 0.022,
     "skinRedLimit": 1.01,
-    "luminanceNoise": 0.15,
-    "chromaNoise": 0.12,
+    "luminanceNoise": 0.09,
+    "chromaNoise": 0.08,
     "toneCurveStrength": 1.0,
     "toneMapToe": 0.18,
     "toneMapShoulder": 0.33,
     "toneMapStrength": 0.42,
     "midGrayDensity": 0.1,
-    "highlightRolloffPivot": 0.6,
+    "highlightRolloffPivot": 0.62,
     "grainAmount": 0.0,
     "vignetteAmount": 0.0,
     "paperTexture": 0.0,
-    "noiseAmount": 0.072,
+    "noiseAmount": 0.034,
     "irregUvScale": 2.5,
     "irregFreq1": 1.0,
     "irregFreq2": 1.7,
@@ -111,10 +111,10 @@
     "sceneWhitesResponse": 0.56,
     "toneCurveResponse": 0.0,
     "sharpen": 0.05,
-    "grainLumaBias": 0.7,
-    "grainColorVariation": 0.12,
-    "highlightRolloffSoftKnee": 0.22,
-    "grainRoughness": 0.62
+    "grainLumaBias": 0.68,
+    "grainColorVariation": 0.09,
+    "highlightRolloffSoftKnee": 0.26,
+    "grainRoughness": 0.55
   },
   "modules": {
     "filters": [
@@ -123,38 +123,44 @@
         "name": "Fuji Superia 400",
         "nameEn": "Fuji Superia 400",
         "lut": "assets/lut/cameras/fqs_superia400_natural.cube",
-        "contrast": 1.02,
+        "contrast": 1.0,
         "saturation": 0.9,
         "grain": "medium",
-        "grainSize": 1.6,
+        "grainSize": 1.45,
         "vignette": 0.08,
-        "sharpness": 0.9,
+        "sharpness": 0.86,
         "thumbnail": "assets/thumbnails/films/fuji_superia_400.jpg",
         "filmRollType": "advance",
         "filmRollStyle": "35mm",
         "advanceDuration": 680,
         "slideDistance": 1.0,
         "motionBlur": 0.07,
-        "sound": "film_advance"
+        "sound": "film_advance",
+        "highlightRolloff": 0.14,
+        "noiseAmount": 0.026,
+        "grainColorVariation": 0.1
       },
       {
         "id": "kodak_portra_400",
         "name": "Superia Soft",
         "nameEn": "Superia Soft",
         "lut": "assets/lut/cameras/fqs_superia400_indoor.cube",
-        "contrast": 0.98,
+        "contrast": 0.97,
         "saturation": 0.86,
         "grain": "light",
-        "grainSize": 1.3,
+        "grainSize": 1.22,
         "vignette": 0.07,
-        "sharpness": 0.94,
+        "sharpness": 0.9,
         "thumbnail": "assets/thumbnails/films/kodak_portra_400.jpg",
         "filmRollType": "advance",
         "filmRollStyle": "35mm",
         "advanceDuration": 650,
         "slideDistance": 0.95,
         "motionBlur": 0.05,
-        "sound": "film_advance"
+        "sound": "film_advance",
+        "highlightRolloff": 0.16,
+        "noiseAmount": 0.018,
+        "grainColorVariation": 0.07
       }
     ],
     "lenses": [
@@ -561,9 +567,7 @@
         "allowOrientationChange": true
       }
     },
-    "extras": [
-
-    ]
+    "extras": []
   },
   "defaultSelection": {
     "filterId": "fuji_superia_400",

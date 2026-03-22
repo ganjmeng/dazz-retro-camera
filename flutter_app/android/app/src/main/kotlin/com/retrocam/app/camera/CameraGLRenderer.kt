@@ -641,14 +641,14 @@ void main() {
         float rough = clamp(uGrainRoughness, 0.0, 1.0);
         float lumaBias = clamp(uGrainLumaBias, 0.0, 1.0);
         float colorVar = clamp(uGrainColorVariation, 0.0, 0.5);
-        vec2 baseScale = vec2(400.0 / gSize, 320.0 / gSize);
+        vec2 baseScale = vec2(220.0 / gSize, 176.0 / gSize);
         float timeSeed = floor(uTime * 18.0) / 18.0;
-        float fine = random(floor(uv * baseScale) / baseScale + vec2(0.17, 0.31), timeSeed * 0.11);
-        float mid = random(floor(uv * (baseScale * 0.35)) / (baseScale * 0.35) + vec2(2.41, 1.73), timeSeed * 0.17);
-        float coarse = random(floor(uv * (baseScale * 0.12)) / (baseScale * 0.12) + vec2(4.13, 3.19), timeSeed * 0.23);
+        float fine = random(uv * baseScale + vec2(0.17, 0.31), timeSeed * 0.11);
+        float mid = random(uv * (baseScale * 0.35) + vec2(2.41, 1.73), timeSeed * 0.17);
+        float coarse = random(uv * (baseScale * 0.12) + vec2(4.13, 3.19), timeSeed * 0.23);
         float high = (fine - 0.5) * 0.60 + (mid - 0.5) * 0.30 + (coarse - 0.5) * 0.10;
-        float low = (random(floor(uv * (baseScale * 0.18)) / (baseScale * 0.18) + vec2(6.31, 5.17), timeSeed * 0.07) - 0.5) * 2.0;
-        float grain = high * mix(1.0, low, rough);
+        float low = (random(uv * (baseScale * 0.18) + vec2(6.31, 5.17), timeSeed * 0.07) - 0.5) * 2.0;
+        float grain = high * mix(1.0, low * 0.65, rough);
         float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
         float dark = smoothstep(0.05, 0.25, lum);
         float bright = 1.0 - smoothstep(0.70, 0.95, lum);
@@ -657,11 +657,14 @@ void main() {
         float mask = mix(midMask, brightFalloff, lumaBias);
         mask *= (1.0 + length(fwidth(vec3(lum))) * 2.0);
         mask *= mix(1.0, 1.18, clamp(vignetteEffect(uv, 0.22), 0.0, 1.0));
+        float colorMix = smoothstep(0.2, 0.8, lum);
         float jitterR = (random(uv * baseScale * 1.03 + vec2(1.7), timeSeed * 0.19) - 0.5) * colorVar;
         float jitterG = (random(uv * baseScale * 1.11 + vec2(2.3), timeSeed * 0.23) - 0.5) * colorVar;
         float jitterB = (random(uv * baseScale * 0.97 + vec2(3.1), timeSeed * 0.29) - 0.5) * colorVar;
-        vec3 grainRgb = vec3(grain + jitterR, grain + jitterG, grain + jitterB);
-        color = clamp(color + grainRgb * uGrainAmount * mask, 0.0, 1.0);
+        vec3 monoGrain = vec3(grain);
+        vec3 colorGrain = vec3(grain + jitterR, grain + jitterG, grain + jitterB);
+        vec3 grainRgb = mix(monoGrain, colorGrain, colorMix);
+        color = clamp(color + grainRgb * uGrainAmount * mask * 0.55, 0.0, 1.0);
     }
 
     // Pass 19: 数字噪点
@@ -883,6 +886,7 @@ void main() {
     @Volatile private var lutStrength: Float = 1.0f
     @Volatile private var lutSize: Float = 33.0f
     @Volatile private var lutPath: String = ""
+    @Volatile private var previewWhitelistEnabled: Boolean = false
     @Volatile private var deviceGamma: Float = 1.0f
     @Volatile private var deviceWhiteScaleR: Float = 1.0f
     @Volatile private var deviceWhiteScaleG: Float = 1.0f
@@ -1405,7 +1409,8 @@ void main() {
         numberOrNull(params["deviceCcm20"])?.let { deviceCcm20 = it }
         numberOrNull(params["deviceCcm21"])?.let { deviceCcm21 = it }
         numberOrNull(params["deviceCcm22"])?.let { deviceCcm22 = it }
-        if (boolOrFalse(params["previewWhitelist"])) {
+        previewWhitelistEnabled = boolOrFalse(params["previewWhitelist"])
+        if (previewWhitelistEnabled) {
             // 预览白名单：仅保留 LUT + 色温/色调 + 曝光 + 美颜相关参数。
             contrast = 1.0f
             saturation = 1.0f
@@ -1518,6 +1523,16 @@ void main() {
     fun getAppliedStateVersion(): Int = appliedStateVersion
 
     fun getRequestedStateVersion(): Int = requestedStateVersion
+
+    fun isPreviewWhitelistEnabled(): Boolean = previewWhitelistEnabled
+
+    fun getDebugLutPath(): String = lutPath
+
+    fun hasDebugLutTexture(): Boolean = lutTextureId != 0
+
+    fun isDebugLutEnabled(): Boolean = lutEnabled > 0.5f
+
+    fun getDebugLutStrength(): Float = lutStrength
 
     // ── 释放 ─────────────────────────────────────────────────────────────────
 

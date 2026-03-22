@@ -30,12 +30,12 @@
     "chromaticAberration": 0.08,
     "bloom": 0.004,
     "flare": 0.0,
-    "grain": 0.16,
+    "grain": 0.12,
     "colorBiasR": -0.015,
     "colorBiasG": 0.022,
     "colorBiasB": 0.01,
     "halation": 0.006,
-    "grainSize": 1.25,
+    "grainSize": 1.15,
     "sharpness": 1.1,
     "centerGain": 0.01,
     "edgeFalloff": 0.052,
@@ -47,9 +47,9 @@
     "skinSatProtect": 0.95,
     "skinLumaSoften": 0.02,
     "skinRedLimit": 1.0,
-    "luminanceNoise": 0.04,
-    "chromaNoise": 0.02,
-    "highlightRolloff": 0.2,
+    "luminanceNoise": 0.025,
+    "chromaNoise": 0.012,
+    "highlightRolloff": 0.17,
     "highlightRolloff2": 0.05,
     "sharpen": 0.06,
     "toneCurveStrength": 1.0,
@@ -57,11 +57,11 @@
     "toneMapShoulder": 0.28,
     "toneMapStrength": 0.32,
     "midGrayDensity": 0.05,
-    "highlightRolloffPivot": 0.65,
+    "highlightRolloffPivot": 0.66,
     "grainAmount": 0.0,
     "vignetteAmount": 0.0,
     "paperTexture": 0.0,
-    "noiseAmount": 0.018,
+    "noiseAmount": 0.012,
     "irregUvScale": 2.5,
     "irregFreq1": 1.0,
     "irregFreq2": 1.7,
@@ -91,10 +91,10 @@
     "sceneHighlightResponse": 0.54,
     "sceneWhitesResponse": 0.54,
     "toneCurveResponse": 1.0,
-    "grainLumaBias": 0.62,
-    "grainColorVariation": 0.09,
-    "highlightRolloffSoftKnee": 0.46,
-    "grainRoughness": 0.45
+    "grainLumaBias": 0.6,
+    "grainColorVariation": 0.06,
+    "highlightRolloffSoftKnee": 0.42,
+    "grainRoughness": 0.36
   },
   "modules": {
     "filters": [
@@ -103,42 +103,48 @@
         "name": "标准",
         "nameEn": "Standard",
         "lut": "assets/lut/cameras/fxnr_33.cube",
-        "contrast": 1.03,
+        "contrast": 1.01,
         "saturation": 0.96,
         "grain": "light",
-        "grainSize": 1.05,
+        "grainSize": 1.0,
         "vignette": 0.07,
-        "sharpness": 1.04,
-        "halation": 0.015,
-        "thumbnail": "assets/thumbnails/films/fxnr_std.jpg"
+        "sharpness": 0.98,
+        "halation": 0.012,
+        "thumbnail": "assets/thumbnails/films/fxnr_std.jpg",
+        "highlightRolloff": 0.17,
+        "noiseAmount": 0.012
       },
       {
         "id": "fxnr_cool",
         "name": "冷调",
         "nameEn": "Cool",
         "lut": "assets/lut/cameras/fxnr_33.cube",
-        "contrast": 1.08,
+        "contrast": 1.05,
         "saturation": 0.98,
         "grain": "light",
-        "grainSize": 1.25,
+        "grainSize": 1.12,
         "vignette": 0.09,
-        "sharpness": 1.02,
-        "halation": 0.018,
-        "thumbnail": "assets/thumbnails/films/fxnr_cold.jpg"
+        "sharpness": 0.96,
+        "halation": 0.015,
+        "thumbnail": "assets/thumbnails/films/fxnr_cold.jpg",
+        "highlightRolloff": 0.18,
+        "noiseAmount": 0.013
       },
       {
         "id": "fxnr_fade",
         "name": "褪色",
         "nameEn": "Fade",
         "lut": "assets/lut/cameras/fxnr_33.cube",
-        "contrast": 0.95,
+        "contrast": 0.93,
         "saturation": 0.84,
         "grain": "medium",
-        "grainSize": 1.5,
+        "grainSize": 1.32,
         "vignette": 0.11,
-        "sharpness": 0.9,
-        "halation": 0.015,
-        "thumbnail": "assets/thumbnails/films/fxnr_fade.jpg"
+        "sharpness": 0.86,
+        "halation": 0.012,
+        "thumbnail": "assets/thumbnails/films/fxnr_fade.jpg",
+        "highlightRolloff": 0.22,
+        "noiseAmount": 0.018
       }
     ],
     "lenses": [
@@ -545,9 +551,7 @@
         "allowOrientationChange": true
       }
     },
-    "extras": [
-
-    ]
+    "extras": []
   },
   "defaultSelection": {
     "filterId": "fxnr_standard",
@@ -630,6 +634,5 @@
       "green"
     ]
   },
-  "defaults": {
-  }
+  "defaults": {}
 }

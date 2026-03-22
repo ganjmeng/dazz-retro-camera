@@ -29,23 +29,17 @@ import java.nio.FloatBuffer
  * 管线顺序（与 capture_pipeline.rs 和 iOS CapturePipeline.metal 完全一致）：
  *   Pass 1:  色差（Chromatic Aberration）
  *   Pass 2:  色温 + Tint
- *   Pass 3:  黑场/白场
- *   Pass 4:  高光/阴影压缩
- *   Pass 5:  对比度
- *   Pass 6:  Clarity（中间调微对比度）
- *   Pass 7:  饱和度 + Vibrance
- *   Pass 8:  RGB 通道偏移（Color Bias）
- *   Pass 9:  Bloom（高光光晕）
- *   Pass 10: Halation（高光辉光）
- *   Pass 11: Highlight Rolloff（高光柔和滚落，成片专属）
- *   Pass 12: Center Gain（中心增亮，成片专属）
- *   Pass 13: Skin Protection（肤色保护，成片专属）
- *   Pass 14: Edge Falloff + Corner Warm Shift（成片专属）
- *   Pass 15: Chemical Irregularity（化学不规则感，成片专属）
- *   Pass 16: Paper Texture（相纸纹理，成片专属）
- *   Pass 17: Film Grain（胶片颗粒）
- *   Pass 18: Digital Noise（数字噪点）
- *   Pass 19: Vignette（暗角）
+ *   Pass 3:  LUT / 基础色彩映射
+ *   Pass 4:  饱和度 + Vibrance + RGB 通道偏移 / B&W Mixer
+ *   Pass 5:  对比度 + Tone Curve + Mid Gray + Filmic Tone Map
+ *   Pass 6:  黑场/白场 + 高光/阴影压缩 + Dehaze
+ *   Pass 7:  Highlight Rolloff（高光柔和滚落，成片专属）
+ *   Pass 8:  Bloom + Halation + Highlight Warm
+ *   Pass 9:  Clarity / Development Softness
+ *   Pass 10: Center Gain / Skin Protection / Edge Falloff
+ *   Pass 11: Chemical Irregularity / Paper Texture / Fade / Split Tone
+ *   Pass 12: Film Grain + Digital Noise
+ *   Pass 13: Light Leak + Vignette
  */
 class CaptureGLProcessor(private val context: Context) {
 
@@ -508,9 +502,10 @@ vec3 applyChemicalIrregularity(vec3 c, vec2 uv, float amount, float time) {
 // ── Pass 16: Paper Texture ────────────────────────────────────────────
 vec3 applyPaperTexture(vec3 c, vec2 uv, float amount, float time) {
     if (amount < 0.001) return c;
-    float n = hash(floor(uv * 200.0) / 200.0 + vec2(time * 0.01));
-    float paper = mix(0.95, 1.05, n);
-    return clamp(c * paper * (1.0 + amount * 0.1) - vec3(amount * 0.02), 0.0, 1.0);
+    float paper1 = hash(uv * 8.0 + vec2(time * 0.01, time * 0.007)) * 2.0 - 1.0;
+    float paper2 = hash(uv * 32.0 + vec2(1.3, 2.1)) * 2.0 - 1.0;
+    float paper = paper1 * 0.7 + paper2 * 0.3;
+    return clamp(c + vec3(paper * amount * 0.04), 0.0, 1.0);
 }
 
 // ── Pass 17: Film Grain（亮度依赖 + grainSize 控制）─────────────────────
@@ -520,14 +515,14 @@ vec3 applyGrain(vec3 c, vec2 uv, float amount, float time, float grainSz, float 
     float rough = clamp(roughness, 0.0, 1.0);
     float lumaBias = clamp(uGrainLumaBias, 0.0, 1.0);
     float colorVar = clamp(uGrainColorVariation, 0.0, 0.5);
-    vec2 baseScale = vec2(400.0 / gSize, 320.0 / gSize);
+    vec2 baseScale = vec2(220.0 / gSize, 176.0 / gSize);
     float seed = 0.0;
-    float fine = hash(floor(uv * baseScale) / baseScale + vec2(0.17, 0.31) + vec2(seed));
-    float mid = hash(floor(uv * (baseScale * 0.35)) / (baseScale * 0.35) + vec2(2.41, 1.73) + vec2(seed));
-    float coarse = hash(floor(uv * (baseScale * 0.12)) / (baseScale * 0.12) + vec2(4.13, 3.19) + vec2(seed));
+    float fine = hash(uv * baseScale + vec2(0.17, 0.31) + vec2(seed));
+    float mid = hash(uv * (baseScale * 0.35) + vec2(2.41, 1.73) + vec2(seed));
+    float coarse = hash(uv * (baseScale * 0.12) + vec2(4.13, 3.19) + vec2(seed));
     float high = (fine - 0.5) * 0.60 + (mid - 0.5) * 0.30 + (coarse - 0.5) * 0.10;
-    float low = (hash(floor(uv * (baseScale * 0.18)) / (baseScale * 0.18) + vec2(6.31, 5.17) + vec2(seed)) - 0.5) * 2.0;
-    float grain = high * mix(1.0, low, rough);
+    float low = ((hash(uv * (baseScale * 0.18) + vec2(6.31, 5.17) + vec2(seed)) - 0.5) * 2.0);
+    float grain = high * mix(1.0, low * 0.65, rough);
     float lum = luminance(c);
     float dark = smoothstep(0.05, 0.25, lum);
     float bright = 1.0 - smoothstep(0.70, 0.95, lum);
@@ -538,11 +533,14 @@ vec3 applyGrain(vec3 c, vec2 uv, float amount, float time, float grainSz, float 
     vec2 vignetteVec = uv * 2.0 - 1.0;
     float vignetteMask = smoothstep(0.30, 1.0, dot(vignetteVec, vignetteVec));
     mask *= mix(1.0, 1.18, vignetteMask);
+    float colorMix = smoothstep(0.2, 0.8, lum);
     float jitterR = (hash(uv * baseScale * 1.03 + vec2(1.7)) - 0.5) * colorVar;
     float jitterG = (hash(uv * baseScale * 1.11 + vec2(2.3)) - 0.5) * colorVar;
     float jitterB = (hash(uv * baseScale * 0.97 + vec2(3.1)) - 0.5) * colorVar;
-    vec3 grainRgb = vec3(grain + jitterR, grain + jitterG, grain + jitterB);
-    return clamp(c + grainRgb * amount * mask, 0.0, 1.0);
+    vec3 monoGrain = vec3(grain);
+    vec3 colorGrain = vec3(grain + jitterR, grain + jitterG, grain + jitterB);
+    vec3 grainRgb = mix(monoGrain, colorGrain, colorMix);
+    return clamp(c + grainRgb * amount * mask * 0.55, 0.0, 1.0);
 }
 
 // ── Pass 18: Digital Noise（成片专用：hash 暗部增强噪点）────────────────────
@@ -711,63 +709,20 @@ void main() {
     color = applyTemperature(color, uTemperatureShift);
     color = applyTint(color, uTintShift);
 
-    // Pass 3: 黑场/白场
-    color = applyBlacksWhites(color, uBlacks, uWhites);
-
-    // Pass 4: 高光/阴影
-    color = applyHighlightsShadows(color, uHighlights, uShadows);
-
-    // Pass 5: 对比度
-    color = applyContrast(color, uContrast);
-
-    // Pass 6: Clarity
-    color = applyClarity(color, uClarity, uInputTexture, uv);
-
-    // Pass 7: 饱和度 + Vibrance
-    color = applySaturation(color, uSaturation);
-    color = applyVibrance(color, uVibrance);
-
-    // Pass 8: RGB 通道偏移
-    color = applyColorBias(color, uColorBiasR, uColorBiasG, uColorBiasB);
-
-    // Pass 9: Bloom（空间扩散光晕）
-    color = applyBloom(color, uBloomAmount, uv);
-
-    // Pass 10: Halation（红橙色胶片辉光）
-    color = applyHalation(color, uHalationAmount, uv);
-
-    // Pass 11: Highlight Rolloff（成片专属）
-    color = applyHighlightRolloff(color, uHighlightRolloff, uHighlightRolloffPivot, uHighlightRolloffSoftKnee);
-
-    // Pass 11b: Highlight Rolloff 2（FXN-R 专属）
-    if (uHighlightRolloff2 > 0.0) {
-        color = applyCaptureHighlightRolloff2(color, uHighlightRolloff2);
+    // Pass 3: LUT（基础色彩映射优先于影调与质感）
+    if (uLutEnabled > 0.5) {
+        vec3 lutColor = sampleLUT(uLutTexture, color, uLutSize);
+        color = mix(color, lutColor, uLutStrength);
     }
 
-    // Pass 12: Center Gain（成片专属）
-    color = applyCenterGain(color, uv, uCenterGain);
-
-    // Pass 13: 肤色保护（成片专属）
-    color = applySkinProtect(color, uSkinHueProtect, uSkinSatProtect, uSkinLumaSoften, uSkinRedLimit);
-
-    // Pass 14: Edge Falloff + Corner Warm（成片专属）
-    color = applyEdgeFalloff(color, uv, uEdgeFalloff);
-    color = applyCornerWarm(color, uv, uCornerWarmShift);
-    color = applyDirectionalBias(color, uv, uTopBottomBias, uLeftRightBias);
-
-    // Pass 14b: Development Softness（显影柔化）
-    color = applyDevelopmentSoften(color, uv, uDevelopmentSoftness);
-
-    // Pass 15: Chemical Irregularity（成片专属）
-    color = applyChemicalIrregularity(color, uv, uChemicalIrregularity, uTime);
-
-    // Pass 16: Paper Texture（成片专属）
-    color = applyPaperTexture(color, uv, uPaperTexture, uTime);
-
-    // Pass 16b: Dehaze / HighlightWarm / B&W Mixer / Tone Curve（JSON 驱动）
-    color = applyDehaze(color, uDehaze);
-    color = applyHighlightWarm(color, uHighlightWarmAmount);
+    // Pass 4: 基础色彩塑形
+    color = applySaturation(color, uSaturation);
+    color = applyVibrance(color, uVibrance);
+    color = applyColorBias(color, uColorBiasR, uColorBiasG, uColorBiasB);
     color = applyBwMixer(color, uBwChannelMixer, uBwMixerEnabled);
+
+    // Pass 5: 全局影调骨架
+    color = applyContrast(color, uContrast);
     if (uToneCurveStrength > 0.0) {
         if (uToneCurveCount >= 2) {
             color = applyDynamicToneCurve(color, uToneCurveStrength);
@@ -788,34 +743,42 @@ void main() {
         uToneMapStrength
     );
 
-    // Pass 17: Film Grain（亮度依赖 + grainSize）
-    color = applyGrain(color, uv, uGrainAmount, uTime, uGrainSize, uGrainRoughness);
+    // Pass 6: 分区调整与雾度控制
+    color = applyBlacksWhites(color, uBlacks, uWhites);
+    color = applyHighlightsShadows(color, uHighlights, uShadows);
+    color = applyDehaze(color, uDehaze);
 
-    // Pass 18: Digital Noise
-    color = applyNoise(color, uv, uNoiseAmount, uTime);
-
-    // Pass 18b: Luminance Noise
-    if (uLuminanceNoise > 0.0) {
-        float ln = hash(uv * 600.0 + vec2(uTime + 1.7)) - 0.5;
-        color = clamp(color + ln * uLuminanceNoise * 0.17, 0.0, 1.0);
-    }
-    // Pass 18c: Chroma Noise
-    if (uChromaNoise > 0.0) {
-        float cr = hash(uv * 500.0 + vec2(uTime + 3.1)) - 0.5;
-        float cg = hash(uv * 500.0 + vec2(uTime + 5.3)) - 0.5;
-        float cb = hash(uv * 500.0 + vec2(uTime + 7.7)) - 0.5;
-        color = clamp(color + vec3(cr, cg, cb) * uChromaNoise * 0.09, 0.0, 1.0);
+    // Pass 7: Highlight Rolloff（高光末端专职压缩）
+    color = applyHighlightRolloff(color, uHighlightRolloff, uHighlightRolloffPivot, uHighlightRolloffSoftKnee);
+    if (uHighlightRolloff2 > 0.0) {
+        color = applyCaptureHighlightRolloff2(color, uHighlightRolloff2);
     }
 
-    // Pass 20: Fade（褒色）
+    // Pass 8: 高光光学响应
+    color = applyBloom(color, uBloomAmount, uv);
+    color = applyHalation(color, uHalationAmount, uv);
+    color = applyHighlightWarm(color, uHighlightWarmAmount);
+
+    // Pass 9: 细节塑形
+    color = applyClarity(color, uClarity, uInputTexture, uv);
+    color = applyDevelopmentSoften(color, uv, uDevelopmentSoftness);
+
+    // Pass 10: 画面空间响应
+    color = applyCenterGain(color, uv, uCenterGain);
+    color = applySkinProtect(color, uSkinHueProtect, uSkinSatProtect, uSkinLumaSoften, uSkinRedLimit);
+    color = applyEdgeFalloff(color, uv, uEdgeFalloff);
+    color = applyCornerWarm(color, uv, uCornerWarmShift);
+    color = applyDirectionalBias(color, uv, uTopBottomBias, uLeftRightBias);
+
+    // Pass 11: 介质前置层
+    color = applyChemicalIrregularity(color, uv, uChemicalIrregularity, uTime);
+    color = applyPaperTexture(color, uv, uPaperTexture, uTime);
     if (uFadeAmount > 0.0) {
         color = color * (1.0 - uFadeAmount) + uFadeAmount;
         float fadeLum = luminance(color);
         float hlCompress = smoothstep(0.8, 1.0, fadeLum) * uFadeAmount * 0.3;
         color = clamp(color - hlCompress, 0.0, 1.0);
     }
-
-    // Pass 21: Split Toning（分离色调）
     if (length(uShadowTint) + length(uHighlightTint) > 0.001) {
         float stLum = luminance(color);
         float shadowMask = 1.0 - smoothstep(0.0, uSplitToneBalance, stLum);
@@ -823,7 +786,21 @@ void main() {
         color = clamp(color + uShadowTint * shadowMask + uHighlightTint * highlightMask, 0.0, 1.0);
     }
 
-    // Pass 22: Light Leak（GPU 漏光）
+    // Pass 12: 质感层
+    color = applyGrain(color, uv, uGrainAmount, uTime, uGrainSize, uGrainRoughness);
+    color = applyNoise(color, uv, uNoiseAmount, uTime);
+    if (uLuminanceNoise > 0.0) {
+        float ln = hash(uv * 600.0 + vec2(uTime + 1.7)) - 0.5;
+        color = clamp(color + ln * uLuminanceNoise * 0.17, 0.0, 1.0);
+    }
+    if (uChromaNoise > 0.0) {
+        float cr = hash(uv * 500.0 + vec2(uTime + 3.1)) - 0.5;
+        float cg = hash(uv * 500.0 + vec2(uTime + 5.3)) - 0.5;
+        float cb = hash(uv * 500.0 + vec2(uTime + 7.7)) - 0.5;
+        color = clamp(color + vec3(cr, cg, cb) * uChromaNoise * 0.09, 0.0, 1.0);
+    }
+
+    // Pass 13: 光学成品层
     if (uLightLeakAmount > 0.001) {
         float angle = hash(vec2(uLightLeakSeed, uLightLeakSeed * 0.7)) * 6.2832;
         vec2 leakCenter = vec2(0.5 + cos(angle) * 0.5, 0.5 + sin(angle) * 0.5);
@@ -834,17 +811,9 @@ void main() {
         color = clamp(1.0 - (1.0 - color) * (1.0 - leakColor * leak), 0.0, 1.0);
     }
 
-    // Pass 23: Vignette
-    // 鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗（与预览 Shader 一致）
     if (!isFisheye || !useCircularFisheye) {
         float vigTotal = min(uVignetteAmount + uLensVignette, 1.0);
         color = applyVignette(color, uv, vigTotal);
-    }
-
-    // Pass 24: LUT 色彩映射（成片专属）
-    if (uLutEnabled > 0.5) {
-        vec3 lutColor = sampleLUT(uLutTexture, color, uLutSize);
-        color = mix(color, lutColor, uLutStrength);
     }
     fragColor = vec4(color, 1.0);
 }"""

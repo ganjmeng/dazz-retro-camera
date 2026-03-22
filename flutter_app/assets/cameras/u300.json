@@ -38,19 +38,19 @@
     "sharpness": 0.94,
     "flare": 0.05,
     "vignette": 0.14,
-    "highlightRolloff": 0.14,
+    "highlightRolloff": 0.12,
     "bloom": 0.0038,
     "halation": 0.0032,
-    "grain": 0.2,
-    "grainSize": 1.8,
-    "luminanceNoise": 0.045,
-    "chromaNoise": 0.022,
+    "grain": 0.14,
+    "grainSize": 1.55,
+    "luminanceNoise": 0.028,
+    "chromaNoise": 0.012,
     "toneCurveStrength": 1.0,
     "toneMapToe": 0.2,
     "toneMapShoulder": 0.32,
     "toneMapStrength": 0.38,
     "midGrayDensity": 0.07,
-    "highlightRolloffPivot": 0.62,
+    "highlightRolloffPivot": 0.64,
     "centerGain": 0.01,
     "edgeFalloff": 0.075,
     "exposureVariation": 0.05,
@@ -66,7 +66,7 @@
     "grainAmount": 0.0,
     "vignetteAmount": 0.0,
     "paperTexture": 0.0,
-    "noiseAmount": 0.018,
+    "noiseAmount": 0.012,
     "irregUvScale": 2.5,
     "irregFreq1": 1.0,
     "irregFreq2": 1.7,
@@ -96,10 +96,10 @@
     "sceneHighlightResponse": 0.52,
     "sceneWhitesResponse": 0.54,
     "toneCurveResponse": 0.85,
-    "grainLumaBias": 0.6,
-    "grainColorVariation": 0.05,
-    "highlightRolloffSoftKnee": 0.36,
-    "grainRoughness": 0.4
+    "grainLumaBias": 0.58,
+    "grainColorVariation": 0.04,
+    "highlightRolloffSoftKnee": 0.34,
+    "grainRoughness": 0.35
   },
   "modules": {
     "filters": [
@@ -108,10 +108,10 @@
         "name": "Gold 200",
         "nameEn": "Gold 200",
         "lut": "assets/lut/cameras/u300_gold.cube",
-        "contrast": 1.02,
-        "saturation": 1.03,
+        "contrast": 1.0,
+        "saturation": 1.01,
         "grain": "medium",
-        "grainSize": 1.6,
+        "grainSize": 1.45,
         "vignette": 0.11,
         "thumbnail": "assets/thumbnails/films/u300_gold.jpg",
         "filmRollType": "advance",
@@ -120,7 +120,9 @@
         "slideDistance": 1.02,
         "motionBlur": 0.07,
         "sound": "film_advance",
-        "sharpness": 0.96
+        "sharpness": 0.92,
+        "highlightRolloff": 0.14,
+        "noiseAmount": 0.014
       }
     ],
     "lenses": [
@@ -508,9 +510,7 @@
         "allowOrientationChange": true
       }
     },
-    "extras": [
-
-    ]
+    "extras": []
   },
   "defaultSelection": {
     "filterId": "u300_gold200",
@@ -592,6 +592,5 @@
     "type": "advance",
     "style": "35mm"
   },
-  "defaults": {
-  }
+  "defaults": {}
 }

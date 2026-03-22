@@ -116,6 +116,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
 
     private var ccdParams = CCDParams()
     private let paramsLock = NSLock()
+    private var previewWhitelistEnabled = false
 
     // MARK: - Camera ID（用于动态切换 Fragment Shader）
 
@@ -370,7 +371,8 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = num("deviceCcm20") { ccdParams.deviceCcm20 = v }
         if let v = num("deviceCcm21") { ccdParams.deviceCcm21 = v }
         if let v = num("deviceCcm22") { ccdParams.deviceCcm22 = v }
-        if boolVal("previewWhitelist") {
+        previewWhitelistEnabled = boolVal("previewWhitelist")
+        if previewWhitelistEnabled {
             // 预览白名单：仅保留 LUT + 色温/色调 + 曝光 + 美颜相关参数。
             ccdParams.contrast = 1.0
             ccdParams.saturation = 1.0
@@ -671,6 +673,36 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         paramsLock.lock()
         ccdParams = params
         paramsLock.unlock()
+    }
+
+    func isPreviewWhitelistEnabled() -> Bool {
+        paramsLock.lock()
+        defer { paramsLock.unlock() }
+        return previewWhitelistEnabled
+    }
+
+    func debugLutPath() -> String {
+        paramsLock.lock()
+        defer { paramsLock.unlock() }
+        return cachedLutPath
+    }
+
+    func hasDebugLutTexture() -> Bool {
+        paramsLock.lock()
+        defer { paramsLock.unlock() }
+        return lutTexture != nil
+    }
+
+    func isDebugLutEnabled() -> Bool {
+        paramsLock.lock()
+        defer { paramsLock.unlock() }
+        return ccdParams.lutEnabled > 0.5
+    }
+
+    func debugLutStrength() -> Float {
+        paramsLock.lock()
+        defer { paramsLock.unlock() }
+        return ccdParams.lutStrength
     }
 
     // MARK: - Capture Current Frame (for photo composition)

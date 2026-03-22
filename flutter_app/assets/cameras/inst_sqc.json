@@ -34,12 +34,12 @@
     "colorBiasR": 0.022,
     "colorBiasG": 0.004,
     "colorBiasB": -0.013,
-    "grain": 0.18,
-    "grainSize": 2.2,
+    "grain": 0.13,
+    "grainSize": 1.95,
     "sharpness": 0.96,
     "bloom": 0.004,
     "halation": 0.002,
-    "highlightRolloff": 0.22,
+    "highlightRolloff": 0.18,
     "vignette": 0.08,
     "edgeFalloff": 0.075,
     "exposureVariation": 0.048,
@@ -54,15 +54,15 @@
     "paperTexture": 0.085,
     "grainAmount": 0.0,
     "vignetteAmount": 0.0,
-    "noiseAmount": 0.022,
-    "luminanceNoise": 0.034,
-    "chromaNoise": 0.012,
+    "noiseAmount": 0.012,
+    "luminanceNoise": 0.022,
+    "chromaNoise": 0.007,
     "toneCurveStrength": 0.86,
     "toneMapToe": 0.22,
     "toneMapShoulder": 0.34,
     "toneMapStrength": 0.42,
     "midGrayDensity": 0.09,
-    "highlightRolloffPivot": 0.61,
+    "highlightRolloffPivot": 0.63,
     "irregUvScale": 2.5,
     "irregFreq1": 1.0,
     "irregFreq2": 1.7,
@@ -93,15 +93,13 @@
     "sceneWhitesResponse": 0.62,
     "toneCurveResponse": 0.86,
     "sharpen": 0.04,
-    "grainLumaBias": 0.62,
-    "grainColorVariation": 0.07,
-    "highlightRolloffSoftKnee": 0.48,
-    "grainRoughness": 0.42
+    "grainLumaBias": 0.6,
+    "grainColorVariation": 0.05,
+    "highlightRolloffSoftKnee": 0.44,
+    "grainRoughness": 0.38
   },
   "modules": {
-    "filters": [
-
-    ],
+    "filters": [],
     "lenses": [
       {
         "id": "std",
@@ -480,9 +478,7 @@
         "allowOrientationChange": true
       }
     },
-    "extras": [
-
-    ]
+    "extras": []
   },
   "defaultSelection": {
     "filterId": null,

@@ -11,21 +11,17 @@
 // 管线顺序（与 fragment_ccd.glsl 和 Android capture_pipeline.rs 完全一致）：
 //   Pass 1:  色差（Chromatic Aberration）
 //   Pass 2:  色温 + Tint
-//   Pass 3:  黑场/白场
-//   Pass 4:  高光/阴影压缩
-//   Pass 5:  对比度
-//   Pass 6:  Clarity（中间调微对比度）
-//   Pass 7:  饱和度 + Vibrance
-//   Pass 8:  RGB 通道偏移
-//   Pass 9:  Bloom（高光光晕）
-//   Pass 10: Highlight Rolloff（高光柔和滴落，成片专属）
-//   Pass 11: Center Gain（中心增亮，成片专属）
-//   Pass 12: Skin Protection（肤色保护，成片专属）
-//   Pass 13: Edge Falloff + Corner Warm Shift（成片专属）
-//   Pass 14: Chemical Irregularity（化学不规则感，成片专属）
-//   Pass 15: Paper Texture（相纸纹理，成片专属）
-//   Pass 16: Film Grain（胶片颗粒）
-//   Pass 17: Vignette（暗角）
+//   Pass 3:  LUT / 基础色彩映射
+//   Pass 4:  饱和度 + Vibrance + RGB 通道偏移 / B&W Mixer
+//   Pass 5:  对比度 + Tone Curve + Mid Gray + Filmic Tone Map
+//   Pass 6:  黑场/白场 + 高光/阴影压缩 + Dehaze
+//   Pass 7:  Highlight Rolloff（高光末端压缩）
+//   Pass 8:  Bloom + Halation + Highlight Warm
+//   Pass 9:  Clarity / Development Softness
+//   Pass 10: Center Gain / Skin Protection / Edge Falloff
+//   Pass 11: Chemical Irregularity / Paper Texture / Fade / Split Tone
+//   Pass 12: Film Grain + Digital Noise
+//   Pass 13: Light Leak + Vignette
 // ═══════════════════════════════════════════════════════════════════════════
 
 #include <metal_stdlib>
@@ -285,6 +281,40 @@ static float3 cp_bloom(float3 color, float bloomAmount) {
         color = clamp(color + float3(bloom * 0.55, bloom * 0.48, bloom * 0.38), 0.0, 1.0);
     }
     return color;
+}
+
+/// Halation（高光暖色辉光）
+static float3 cp_halation(float3 color,
+                          float2 uv,
+                          float amount,
+                          texture2d<float, access::read> inTexture) {
+    if (amount < 0.001) return color;
+    float haloRadius = amount * 12.0;
+    float3 haloColor = float3(0.0);
+    float totalWeight = 0.0;
+    constexpr sampler s(address::clamp_to_edge, filter::linear);
+    for (int i = -2; i <= 2; i++) {
+        for (int j = -2; j <= 2; j++) {
+            if (abs(i) + abs(j) > 3) continue;
+            float2 offset = float2(float(i), float(j)) *
+                float2(1.0 / inTexture.get_width(), 1.0 / inTexture.get_height()) *
+                haloRadius;
+            float3 sampleColor = inTexture.sample(s, clamp(uv + offset, float2(0.0), float2(1.0))).rgb;
+            float sLum = dot(sampleColor, float3(0.2126, 0.7152, 0.0722));
+            float highlight = smoothstep(0.84, 0.99, sLum);
+            float dist = float(abs(i) + abs(j));
+            float w = 1.0 / (1.0 + dist);
+            haloColor += sampleColor * highlight * w;
+            totalWeight += w;
+        }
+    }
+    haloColor /= max(totalWeight, 0.0001);
+    float haloLum = dot(haloColor, float3(0.2126, 0.7152, 0.0722));
+    return clamp(float3(
+        color.r + haloLum * amount * 0.55,
+        color.g + haloLum * amount * 0.16,
+        color.b + haloLum * amount * 0.02
+    ), 0.0, 1.0);
 }
 
 /// Highlight Rolloff（高光柔和滴落，成片专属）
@@ -583,13 +613,13 @@ static float3 cp_grain(
     float rough = clamp(roughness, 0.0, 1.0);
     float lumaWeight = clamp(lumaBias, 0.0, 1.0);
     float colorWeight = clamp(colorVariation, 0.0, 0.5);
-    float2 baseScale = float2(400.0 / gSize, 320.0 / gSize);
-    float fine = cp_random(floor(uv * baseScale) / baseScale + float2(0.17, 0.31), 0.0);
-    float mid = cp_random(floor(uv * (baseScale * 0.35)) / (baseScale * 0.35) + float2(2.41, 1.73), 0.0);
-    float coarse = cp_random(floor(uv * (baseScale * 0.12)) / (baseScale * 0.12) + float2(4.13, 3.19), 0.0);
+    float2 baseScale = float2(220.0 / gSize, 176.0 / gSize);
+    float fine = cp_random(uv * baseScale + float2(0.17, 0.31), 0.0);
+    float mid = cp_random(uv * (baseScale * 0.35) + float2(2.41, 1.73), 0.0);
+    float coarse = cp_random(uv * (baseScale * 0.12) + float2(4.13, 3.19), 0.0);
     float high = (fine - 0.5) * 0.60 + (mid - 0.5) * 0.30 + (coarse - 0.5) * 0.10;
-    float low = (cp_random(floor(uv * (baseScale * 0.18)) / (baseScale * 0.18) + float2(6.31, 5.17), 0.0) - 0.5) * 2.0;
-    float grain = high * mix(1.0, low, rough);
+    float low = (cp_random(uv * (baseScale * 0.18) + float2(6.31, 5.17), 0.0) - 0.5) * 2.0;
+    float grain = high * mix(1.0, low * 0.65, rough);
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
     float dark = smoothstep(0.05, 0.25, lum);
     float bright = 1.0 - smoothstep(0.70, 0.95, lum);
@@ -600,11 +630,14 @@ static float3 cp_grain(
     float2 p = uv * 2.0 - 1.0;
     float vignetteMask = smoothstep(0.30, 1.0, dot(p, p));
     mask *= mix(1.0, 1.18, vignetteMask);
+    float colorMix = smoothstep(0.2, 0.8, lum);
     float jitterR = (cp_random(uv * baseScale * 1.03 + float2(1.7), 0.0) - 0.5) * colorWeight;
     float jitterG = (cp_random(uv * baseScale * 1.11 + float2(2.3), 0.0) - 0.5) * colorWeight;
     float jitterB = (cp_random(uv * baseScale * 0.97 + float2(3.1), 0.0) - 0.5) * colorWeight;
-    float3 grainRgb = float3(grain + jitterR, grain + jitterG, grain + jitterB);
-    return clamp(color + grainRgb * amount * mask, 0.0, 1.0);
+    float3 monoGrain = float3(grain);
+    float3 colorGrain = float3(grain + jitterR, grain + jitterG, grain + jitterB);
+    float3 grainRgb = mix(monoGrain, colorGrain, colorMix);
+    return clamp(color + grainRgb * amount * mask * 0.55, 0.0, 1.0);
 }
 
 /// Vignette（smoothstep 暗角，与预览统一）
@@ -686,48 +719,24 @@ kernel void capturePipeline(
     color = cp_temperatureShift(color, params.temperatureShift);
     color = cp_tint(color, params.tintShift);
 
-    // ── Pass 3: 黑场/白场 ─────────────────────────────────────────────────
-    color = cp_blacksWhites(color, params.blacks, params.whites);
-
-    // ── Pass 4: 高光/阴影压缩 ─────────────────────────────────────────────
-    color = cp_highlightsShadows(color, params.highlights, params.shadows);
-
-    // ── Pass 5: 对比度 ────────────────────────────────────────────────────
-    color = cp_contrast(color, params.contrast);
-
-    // ── Pass 6: Clarity ───────────────────────────────────────────────────
-    if (abs(params.clarity) > 0.5) {
-        color = cp_clarity(color, params.clarity);
+    // ── Pass 3: LUT（基础色彩映射优先于影调与质感）──────────────────────────
+    if (params.lutEnabled > 0.5) {
+        float3 lutColor = cp_sampleLUT(lutTexture, s, color, params.lutSize);
+        color = mix(color, lutColor, params.lutStrength);
     }
 
-    // ── Pass 7: 饱和度 + Vibrance ─────────────────────────────────────────
+    // ── Pass 4: 基础色彩塑形 ──────────────────────────────────────────────
     color = cp_saturation(color, params.saturation);
     if (abs(params.vibrance) > 0.5) {
         color = cp_vibrance(color, params.vibrance);
     }
-
-    // ── Pass 8: RGB 通道偏移 ──────────────────────────────────────────────
     if (abs(params.colorBiasR) + abs(params.colorBiasG) + abs(params.colorBiasB) > 0.001) {
         color = cp_colorBias(color, params.colorBiasR, params.colorBiasG, params.colorBiasB);
     }
+    color = cp_bwMixer(color, params.bwMixerEnabled, params.bwMixerR, params.bwMixerG, params.bwMixerB);
 
-    // ── Pass 9: Bloom（高光光晕）─────────────────────────────────────────
-    color = cp_bloom(color, params.bloomAmount);
-
-    // ── Pass 10: Highlight Rolloff（成片专属）────────────────────────────────────────
-    color = cp_highlightRolloff(
-        color,
-        params.highlightRolloff,
-        params.highlightRolloffPivot,
-        params.highlightRolloffSoftKnee
-    );
-
-    // ── Pass 10b: Highlight Rolloff 2（FXN-R 专属）────────────────────────────────
-    if (params.highlightRolloff2 > 0.001) {
-        color = cp_highlightRolloff2(color, params.highlightRolloff2);
-    }
-
-    // ── Pass 10c: Tone Curve（FXN-R 专属）──────────────────────────────────────────
+    // ── Pass 5: 全局影调骨架 ──────────────────────────────────────────────
+    color = cp_contrast(color, params.contrast);
     if (params.toneCurveStrength > 0.001) {
         int toneCurveCount = int(toneCurve[0] + 0.5);
         float3 curved;
@@ -749,34 +758,56 @@ kernel void capturePipeline(
         params.toneMapShoulder,
         params.toneMapStrength
     );
+
+    // ── Pass 6: 分区调整与雾度控制 ───────────────────────────────────────
+    color = cp_blacksWhites(color, params.blacks, params.whites);
+    color = cp_highlightsShadows(color, params.highlights, params.shadows);
     color = cp_dehaze(color, params.dehaze);
+
+    // ── Pass 7: Highlight Rolloff（高光末端专职压缩）─────────────────────
+    color = cp_highlightRolloff(
+        color,
+        params.highlightRolloff,
+        params.highlightRolloffPivot,
+        params.highlightRolloffSoftKnee
+    );
+    if (params.highlightRolloff2 > 0.001) {
+        color = cp_highlightRolloff2(color, params.highlightRolloff2);
+    }
+
+    // ── Pass 8: 高光光学响应 ──────────────────────────────────────────────
+    color = cp_bloom(color, params.bloomAmount);
+    color = cp_halation(color, uv, params.halationAmount, inTexture);
     color = cp_highlightWarm(color, params.highlightWarmAmount);
-    color = cp_bwMixer(color, params.bwMixerEnabled, params.bwMixerR, params.bwMixerG, params.bwMixerB);
 
-    // ── Pass 11: Center Gain（成片专属）──────────────────────────────────────────
-    color = cp_centerGain(color, uv, params.centerGain);
-
-    // ── Pass 12: Skin Protection（成片专属）──────────────────────────────────────
-    color = cp_skinProtect(color, params.skinHueProtect, params.skinSatProtect,
-                           params.skinLumaSoften, params.skinRedLimit);
-
-    // ── Pass 13: Edge Falloff + Corner Warm Shift（成片专属）───────────────────────
-    color *= cp_edgeFalloff(uv, params.edgeFalloff, params.time);
-    color = cp_cornerWarm(color, uv, params.cornerWarmShift);
-    color = cp_directionalBias(color, uv, params.topBottomBias, params.leftRightBias);
-
-    // ── Pass 13b: Development Softness（显影柔化）────────────────────────────────────
+    // ── Pass 9: 细节塑形 ─────────────────────────────────────────────────
+    if (abs(params.clarity) > 0.5) {
+        color = cp_clarity(color, params.clarity);
+    }
     if (params.developmentSoftness > 0.001) {
         color = cp_developmentSoften(color, uv, params.developmentSoftness, inTexture, gid);
     }
 
-    // ── Pass 14: Chemical Irregularity（成片专属）──────────────────────────────────
+    // ── Pass 10: 画面空间响应 ────────────────────────────────────────────
+    color = cp_centerGain(color, uv, params.centerGain);
+    color = cp_skinProtect(color, params.skinHueProtect, params.skinSatProtect,
+                           params.skinLumaSoften, params.skinRedLimit);
+    color *= cp_edgeFalloff(uv, params.edgeFalloff, params.time);
+    color = cp_cornerWarm(color, uv, params.cornerWarmShift);
+    color = cp_directionalBias(color, uv, params.topBottomBias, params.leftRightBias);
+
+    // ── Pass 11: 介质前置层 ──────────────────────────────────────────────
     color = cp_chemicalIrregularity(color, uv, params.chemicalIrregularity, params.time);
-
-    // ── Pass 15: Paper Texture（成片专属）──────────────────────────────────────────
     color = cp_paperTexture(color, uv, params.paperTexture, params.time);
+    color = cp_fade(color, params.fadeAmount);
+    color = cp_splitTone(
+        color,
+        float3(params.shadowTintR, params.shadowTintG, params.shadowTintB),
+        float3(params.highlightTintR, params.highlightTintG, params.highlightTintB),
+        clamp(params.splitToneBalance, 0.0, 1.0)
+    );
 
-    // ── Pass 16: Film Grain（胶片颗粒）─────────────────────────────────────────────
+    // ── Pass 12: 质感层 ─────────────────────────────────────────────────
     color = cp_grain(
         color,
         uv,
@@ -797,26 +828,13 @@ kernel void capturePipeline(
         float cb = cp_random(uv * 500.0, params.time + 7.7) - 0.5;
         color = clamp(color + float3(cr, cg, cb) * params.chromaNoise * 0.09, 0.0, 1.0);
     }
-    color = cp_fade(color, params.fadeAmount);
-    color = cp_splitTone(
-        color,
-        float3(params.shadowTintR, params.shadowTintG, params.shadowTintB),
-        float3(params.highlightTintR, params.highlightTintG, params.highlightTintB),
-        clamp(params.splitToneBalance, 0.0, 1.0)
-    );
+    // ── Pass 13: 光学成品层 ──────────────────────────────────────────────
     color = cp_lightLeak(color, uv, params.lightLeakAmount, params.lightLeakSeed);
 
-    // ── Pass 17: Vignette（暗角）──────────────────────────────────────────────────
     // 鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗（与预览 Shader 一致）
     float totalVignette = min(params.vignetteAmount + params.lensVignette, 1.0);
     if (totalVignette > 0.001 && (!isFisheye || !useCircularFisheye)) {
         color *= cp_vignette(uv, totalVignette);
-    }
-
-    // ── Pass 18: LUT 色彩映射（成片专属）───────────────────────────────────────────────
-    if (params.lutEnabled > 0.5) {
-        float3 lutColor = cp_sampleLUT(lutTexture, s, color, params.lutSize);
-        color = mix(color, lutColor, params.lutStrength);
     }
     // ── 写入输出纹理 ────────────────────────────────────────────────────────────────────
     outTexture.write(float4(color, 1.0), gid);

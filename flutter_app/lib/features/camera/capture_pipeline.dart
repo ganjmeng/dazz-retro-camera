@@ -259,14 +259,21 @@ class CapturePipeline {
           !_kDisableSharedDartFallbackPost) {
         debugPrint(
             '[CapturePipeline] Applying universal Dart fallback pipeline for: ${camera.id}');
-        // ── 统一 Dart 降级管线（参数驱动，不再按相机 ID 路由）──────────────
-        // 所有相机差异完全由 renderParams（来自 DefaultLook JSON）驱动
-        // 处理顺序与 Native Shader（CaptureGLProcessor / CapturePipeline.metal）一致：
-        //   1. Highlight Rolloff → 2. Sensor Non-uniformity → 3. Skin Protection
-        //   → 4. Chemical Irregularity → 5. Paper Texture → 6. Development Softness
+        // ── 统一 Dart 降级管线（尽量贴近 Native 成片顺序）──────────────
+        // 降级链仍是简化版，但保持同一职责顺序：
+        //   tone/dehaze → rolloff/highlight warm → spatial → skin/softness
+        //   → chemical/paper → bw/tone curve
+        if (renderParams.effectiveDehaze > 0.001) {
+          srcImage = await drawDehaze(srcImage!, renderParams.effectiveDehaze);
+        }
         if (renderParams.highlightRolloff > 0.001) {
           srcImage = await drawHighlightRolloff(
               srcImage!, renderParams.highlightRolloff);
+        }
+        final captureHighlightWarm =
+            (renderParams.highlightWarmAmount * 0.18).clamp(0.0, 1.0);
+        if (captureHighlightWarm > 0.001) {
+          srcImage = await drawHighlightWarmth(srcImage!, captureHighlightWarm);
         }
         if (renderParams.centerGain > 0.001 ||
             renderParams.edgeFalloff > 0.001 ||
@@ -303,14 +310,6 @@ class CapturePipeline {
         if (captureDevelopmentSoftness > 0.001) {
           srcImage = await drawDevelopmentSoftness(
               srcImage!, captureDevelopmentSoftness);
-        }
-        if (renderParams.effectiveDehaze > 0.001) {
-          srcImage = await drawDehaze(srcImage!, renderParams.effectiveDehaze);
-        }
-        final captureHighlightWarm =
-            (renderParams.highlightWarmAmount * 0.18).clamp(0.0, 1.0);
-        if (captureHighlightWarm > 0.001) {
-          srcImage = await drawHighlightWarmth(srcImage!, captureHighlightWarm);
         }
         if (renderParams.hasBwMixer) {
           final mixer = renderParams.bwChannelMixer;
@@ -1021,9 +1020,8 @@ class CapturePipeline {
     if (dustAmount > 0.001) {
       final a = dustAmount.clamp(0.0, 1.0);
       final layerCount = (2 + (a * 4).floor()).clamp(2, 5);
-      // Debug forcing: make dust overlay visibility unmistakable.
-      final brightOpacity = 1.0;
-      final darkOpacity = 1.0;
+      final brightOpacity = (0.10 + a * 0.20).clamp(0.08, 0.24);
+      final darkOpacity = (0.06 + a * 0.16).clamp(0.05, 0.18);
       for (var i = 0; i < layerCount; i++) {
         final asset =
             _dustLightPlusAssets[rng.nextInt(_dustLightPlusAssets.length)];
@@ -1067,8 +1065,8 @@ class CapturePipeline {
 
       // Procedural dust: ensure visibility even when texture assets are low-contrast.
       final dotCount = (18 + a * 120).round();
-      final whiteDotAlpha = 1.0;
-      final darkDotAlpha = 1.0;
+      final whiteDotAlpha = (0.10 + a * 0.16).clamp(0.08, 0.20);
+      final darkDotAlpha = (0.06 + a * 0.12).clamp(0.05, 0.16);
       final whitePaint = Paint()
         ..blendMode = BlendMode.screen
         ..color = Colors.white.withValues(alpha: whiteDotAlpha);
@@ -1096,8 +1094,8 @@ class CapturePipeline {
       final appearProb = (0.6 + a * 0.4).clamp(0.6, 1.0);
       if (rng.nextDouble() < appearProb) {
         final layerCount = (2 + (a * 3).floor()).clamp(2, 4);
-        final brightOpacity = 1.0;
-        final darkOpacity = 1.0;
+        final brightOpacity = (0.08 + a * 0.18).clamp(0.06, 0.20);
+        final darkOpacity = (0.05 + a * 0.12).clamp(0.04, 0.14);
         for (var i = 0; i < layerCount; i++) {
           final asset = _scratchLightPlusAssets[
               rng.nextInt(_scratchLightPlusAssets.length)];
@@ -1150,12 +1148,16 @@ class CapturePipeline {
           ..blendMode = BlendMode.screen
           ..strokeCap = StrokeCap.round
           ..style = PaintingStyle.stroke
-          ..color = Colors.white.withValues(alpha: 1.0);
+          ..color = Colors.white.withValues(
+            alpha: (0.10 + a * 0.18).clamp(0.08, 0.22),
+          );
         final darkLine = Paint()
           ..blendMode = BlendMode.multiply
           ..strokeCap = StrokeCap.round
           ..style = PaintingStyle.stroke
-          ..color = Colors.black.withValues(alpha: 1.0);
+          ..color = Colors.black.withValues(
+            alpha: (0.06 + a * 0.10).clamp(0.05, 0.14),
+          );
         for (var i = 0; i < scratchCount; i++) {
           final cx = bounds.left + rng.nextDouble() * bounds.width;
           final cy = bounds.top + rng.nextDouble() * bounds.height;

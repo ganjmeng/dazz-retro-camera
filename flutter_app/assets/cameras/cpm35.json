@@ -38,13 +38,13 @@
     "vignette": 0.09,
     "sharpen": 0.03,
     "sharpness": 0.94,
-    "grain": 0.34,
-    "grainSize": 1.35,
-    "luminanceNoise": 0.11,
-    "chromaNoise": 0.065,
+    "grain": 0.24,
+    "grainSize": 1.25,
+    "luminanceNoise": 0.07,
+    "chromaNoise": 0.04,
     "bloom": 0.003,
     "halation": 0.006,
-    "highlightRolloff": 0.22,
+    "highlightRolloff": 0.18,
     "developmentSoftness": 0.005,
     "chemicalIrregularity": 0.032,
     "centerGain": 0.018,
@@ -63,11 +63,11 @@
     "toneMapShoulder": 0.34,
     "toneMapStrength": 0.4,
     "midGrayDensity": 0.09,
-    "highlightRolloffPivot": 0.62,
+    "highlightRolloffPivot": 0.64,
     "grainAmount": 0.0,
     "vignetteAmount": 0.0,
     "paperTexture": 0.0,
-    "noiseAmount": 0.05,
+    "noiseAmount": 0.026,
     "irregUvScale": 2.5,
     "irregFreq1": 1.0,
     "irregFreq2": 1.7,
@@ -96,10 +96,10 @@
     "sceneHighlightResponse": 0.6,
     "sceneWhitesResponse": 0.62,
     "toneCurveResponse": 0.86,
-    "grainLumaBias": 0.64,
-    "grainColorVariation": 0.09,
-    "highlightRolloffSoftKnee": 0.38,
-    "grainRoughness": 0.55
+    "grainLumaBias": 0.62,
+    "grainColorVariation": 0.07,
+    "highlightRolloffSoftKnee": 0.34,
+    "grainRoughness": 0.5
   },
   "modules": {
     "filters": [
@@ -108,42 +108,48 @@
         "name": "标准",
         "nameEn": "Standard",
         "lut": "assets/lut/cameras/cpm35_kodak_warm_clean.cube",
-        "contrast": 1.03,
+        "contrast": 1.01,
         "saturation": 1.0,
         "grain": "light",
-        "grainSize": 1.2,
+        "grainSize": 1.1,
         "vignette": 0.06,
-        "sharpness": 0.98,
-        "halation": 0.015,
-        "thumbnail": "assets/thumbnails/films/film_gold200.jpg"
+        "sharpness": 0.94,
+        "halation": 0.012,
+        "thumbnail": "assets/thumbnails/films/film_gold200.jpg",
+        "highlightRolloff": 0.18,
+        "noiseAmount": 0.018
       },
       {
         "id": "cpm35_warm",
         "name": "暖调",
         "nameEn": "Warm",
         "lut": "assets/lut/cameras/cpm35_kodak_warm_clean.cube",
-        "contrast": 1.0,
+        "contrast": 0.99,
         "saturation": 1.02,
         "grain": "light",
-        "grainSize": 1.3,
+        "grainSize": 1.18,
         "vignette": 0.07,
-        "sharpness": 0.94,
-        "halation": 0.022,
-        "thumbnail": "assets/thumbnails/films/kodak_portra_400.jpg"
+        "sharpness": 0.9,
+        "halation": 0.018,
+        "thumbnail": "assets/thumbnails/films/kodak_portra_400.jpg",
+        "highlightRolloff": 0.2,
+        "noiseAmount": 0.02
       },
       {
         "id": "cpm35_fade",
         "name": "褪色",
         "nameEn": "Fade",
         "lut": "assets/lut/cameras/cpm35_kodak_warm_clean.cube",
-        "contrast": 0.97,
+        "contrast": 0.95,
         "saturation": 0.9,
         "grain": "medium",
-        "grainSize": 1.7,
+        "grainSize": 1.45,
         "vignette": 0.08,
-        "sharpness": 0.88,
-        "halation": 0.014,
-        "thumbnail": "assets/thumbnails/films/film_scan.jpg"
+        "sharpness": 0.84,
+        "halation": 0.012,
+        "thumbnail": "assets/thumbnails/films/film_scan.jpg",
+        "highlightRolloff": 0.22,
+        "noiseAmount": 0.024
       }
     ],
     "lenses": [
@@ -531,9 +537,7 @@
         "allowOrientationChange": true
       }
     },
-    "extras": [
-
-    ]
+    "extras": []
   },
   "defaultSelection": {
     "filterId": "cpm35_standard",

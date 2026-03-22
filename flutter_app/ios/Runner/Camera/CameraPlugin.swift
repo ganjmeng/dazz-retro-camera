@@ -215,6 +215,13 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
 
     private func emitCameraReadyEvent(lens: String) {
         let d = UIDevice.current
+        let cachedLut = cachedEffectivePreviewParams["baseLut"] as? String ?? ""
+        let previewWhitelist: Bool = {
+            if let v = cachedEffectivePreviewParams["previewWhitelist"] as? Bool { return v }
+            if let v = cachedEffectivePreviewParams["previewWhitelist"] as? NSNumber { return v.intValue != 0 }
+            if let v = cachedEffectivePreviewParams["previewWhitelist"] as? String { return v == "1" || v.lowercased() == "true" }
+            return false
+        }()
         emitEvent(type: "onCameraReady", payload: [
             "cameraId": lens,
             "sensorSize": "?",
@@ -227,7 +234,15 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             "brand": "apple",
             "model": d.model,
             "device": d.name,
-            "supportsLivePhoto": cameraManager?.supportsLivePhotoCapture ?? false
+            "supportsLivePhoto": cameraManager?.supportsLivePhotoCapture ?? false,
+            "previewWhitelist": previewWhitelist,
+            "previewBaseLut": cachedLut,
+            "previewLutStrength": (cachedEffectivePreviewParams["lutStrength"] as? NSNumber)?.doubleValue ?? -1.0,
+            "previewRendererWhitelist": renderer?.isPreviewWhitelistEnabled() ?? false,
+            "previewRendererLutPath": renderer?.debugLutPath() ?? "",
+            "previewRendererLutEnabled": renderer?.isDebugLutEnabled() ?? false,
+            "previewRendererHasLutTexture": renderer?.hasDebugLutTexture() ?? false,
+            "previewRendererLutStrength": renderer?.debugLutStrength() ?? -1.0
         ])
     }
 

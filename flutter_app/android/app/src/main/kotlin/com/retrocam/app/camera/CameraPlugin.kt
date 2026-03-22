@@ -293,7 +293,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                     reason = "initCamera",
                     onReady = {
                         result.success(mapOf("textureId" to entry.id()))
-                        sendEvent("onCameraReady", activeCameraDebugInfo)
+                        sendEvent("onCameraReady", buildCameraReadyDebugPayload())
                     },
                     onError = { e ->
                         Log.e(TAG, "bindCameraUseCases failed", e)
@@ -932,7 +932,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 reason = "updateViewportRatio",
                 onReady = {
                     scheduleRendererStateReplay("updateViewportRatio")
-                    sendEvent("onCameraReady", activeCameraDebugInfo)
+                    sendEvent("onCameraReady", buildCameraReadyDebugPayload())
                     result.success(
                         mapOf(
                             "width" to currentViewportWidth,
@@ -972,7 +972,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 reason = "switchLens",
                 onReady = {
                     scheduleRendererStateReplay("switchLens")
-                    sendEvent("onCameraReady", activeCameraDebugInfo)
+                    sendEvent("onCameraReady", buildCameraReadyDebugPayload())
                     result.success(null)
                 },
                 onError = { e -> result.error("SWITCH_LENS_FAILED", e.message, null) }
@@ -2315,7 +2315,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                                 "rendererNull=${glRenderer == null}"
                         )
                     }
-                    sendEvent("onCameraReady", activeCameraDebugInfo)
+                    sendEvent("onCameraReady", buildCameraReadyDebugPayload())
                     val payload = mutableMapOf<String, Any>(
                         "appliedVersion" to cachedRenderVersion,
                         "rendererReady" to rendererReady,
@@ -2889,6 +2889,31 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "replayApplied" to replayApplied
         )
     }
+
+    private fun buildPreviewDebugPayload(): Map<String, Any> {
+        val renderer = glRenderer
+        val cachedPreview = cachedEffectivePreviewParams
+        val cachedLut = cachedPreview["baseLut"] as? String ?: ""
+        val previewWhitelist = when (val raw = cachedPreview["previewWhitelist"]) {
+            is Boolean -> raw
+            is Number -> raw.toInt() != 0
+            is String -> raw == "1" || raw.equals("true", ignoreCase = true)
+            else -> false
+        }
+        return mapOf(
+            "previewWhitelist" to previewWhitelist,
+            "previewBaseLut" to cachedLut,
+            "previewLutStrength" to ((cachedPreview["lutStrength"] as? Number)?.toDouble() ?: -1.0),
+            "previewRendererWhitelist" to (renderer?.isPreviewWhitelistEnabled() ?: false),
+            "previewRendererLutPath" to (renderer?.getDebugLutPath() ?: ""),
+            "previewRendererLutEnabled" to (renderer?.isDebugLutEnabled() ?: false),
+            "previewRendererHasLutTexture" to (renderer?.hasDebugLutTexture() ?: false),
+            "previewRendererLutStrength" to ((renderer?.getDebugLutStrength() ?: -1.0f).toDouble()),
+        )
+    }
+
+    private fun buildCameraReadyDebugPayload(): Map<String, Any> =
+        activeCameraDebugInfo + buildPreviewDebugPayload()
 
     private fun isRendererReadyForVersion(
         targetVersion: Int,

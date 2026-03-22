@@ -478,6 +478,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   String buildLifecycleTraceReport() {
     final camera = state.camera;
+    final debugInfo = _ref.read(cameraServiceProvider).activeCameraDebugInfo;
+    final previewBaseLut = debugInfo['previewBaseLut']?.toString() ?? '';
+    final previewRendererLutPath =
+        debugInfo['previewRendererLutPath']?.toString() ?? '';
     final lines = <String>[
       'DAZZ LIFECYCLE TRACE',
       'cameraId=${state.activeCameraId}',
@@ -492,6 +496,14 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       'ackVersion=${state.lastAckedRenderParamsVersion}',
       'previewMode=${state.previewPerformanceMode.name}',
       'cameraName=${camera?.name ?? "null"}',
+      'previewWhitelist=${debugInfo['previewWhitelist'] ?? 'null'}',
+      'previewBaseLut=${previewBaseLut.isEmpty ? 'null' : previewBaseLut}',
+      'previewLutStrength=${debugInfo['previewLutStrength'] ?? 'null'}',
+      'previewRendererWhitelist=${debugInfo['previewRendererWhitelist'] ?? 'null'}',
+      'previewRendererLutEnabled=${debugInfo['previewRendererLutEnabled'] ?? 'null'}',
+      'previewRendererHasLutTexture=${debugInfo['previewRendererHasLutTexture'] ?? 'null'}',
+      'previewRendererLutPath=${previewRendererLutPath.isEmpty ? 'null' : previewRendererLutPath}',
+      'previewRendererLutStrength=${debugInfo['previewRendererLutStrength'] ?? 'null'}',
       'traceLines=${state.lifecycleTrace.length}',
       '---',
       ...state.lifecycleTrace,
@@ -2020,12 +2032,19 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     final json = params.toPreviewJson(mode: state.previewPerformanceMode);
     final version = ++_renderParamsVersion;
     _publishLifecycleDebugStatus();
+    _recordLifecycleTrace(
+        'previewPush.begin v=$version whitelist=${json['previewWhitelist'] ?? false} '
+        'lut=${json['baseLut'] ?? 'null'} lutStrength=${json['lutStrength'] ?? 'null'} '
+        'temp=${json['temperatureShift'] ?? 'null'} tint=${json['tintShift'] ?? 'null'} '
+        'exp=${json['exposureOffset'] ?? 'null'} beauty=${json['beautyStrength'] ?? 'null'}');
     debugPrint(
         '[CameraNotifier] _applyCurrentRenderParamsToNative: sending ${json.length} params to native (v=$version)');
     _ref
         .read(cameraServiceProvider.notifier)
         .updateRenderParams(json, version: version)
         .then((ackVersion) {
+      _recordLifecycleTrace(
+          'previewPush.done v=$version ack=${ackVersion ?? -1}');
       if (ackVersion != null &&
           ackVersion >= version &&
           ackVersion > _lastAckedRenderParamsVersion) {
@@ -2055,7 +2074,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     if (renderParams != null) {
       final version = ++_renderParamsVersion;
       _recordLifecycleTrace(
-          'runtimeSync.begin token=${syncToken ?? -1} v=$version lens=${snapshot.activeLensId} ratio=${snapshot.activeRatioId}');
+          'runtimeSync.begin token=${syncToken ?? -1} v=$version lens=${snapshot.activeLensId} '
+          'ratio=${snapshot.activeRatioId} whitelist=${renderParams['previewWhitelist'] ?? false} '
+          'lut=${renderParams['baseLut'] ?? 'null'}');
       final ackVersion = await svc.syncRuntimeState(
         lensParams: lensParams,
         renderParams: renderParams,
@@ -2144,13 +2165,18 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     final zoom = sourceState.zoomLevel;
     final version = ++_renderParamsVersion;
     _publishLifecycleDebugStatus();
-    _recordLifecycleTrace(
-        'cameraSync.begin token=$syncToken cam=${camera.id} ratio=${sourceState.activeRatioId} v=$version');
     if (renderParams == null) {
+      _recordLifecycleTrace(
+          'cameraSync.begin token=$syncToken cam=${camera.id} ratio=${sourceState.activeRatioId} '
+          'v=$version whitelist=false lut=null');
       _recordLifecycleTrace(
           'cameraSync.skip token=$syncToken reason=noRenderParams');
       return;
     }
+    _recordLifecycleTrace(
+        'cameraSync.begin token=$syncToken cam=${camera.id} ratio=${sourceState.activeRatioId} '
+        'v=$version whitelist=${renderParams['previewWhitelist'] ?? false} '
+        'lut=${renderParams['baseLut'] ?? 'null'}');
     final ack =
         await _ref.read(cameraServiceProvider.notifier).syncCameraState(
               camera: camera,

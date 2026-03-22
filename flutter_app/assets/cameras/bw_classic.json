@@ -36,13 +36,13 @@
     "vignette": 0.1,
     "sharpen": 0.16,
     "sharpness": 1.12,
-    "grain": 0.5,
-    "grainSize": 2.2,
-    "luminanceNoise": 0.2,
+    "grain": 0.34,
+    "grainSize": 1.9,
+    "luminanceNoise": 0.12,
     "chromaNoise": 0.0,
     "bloom": 0.0,
     "halation": 0.0,
-    "highlightRolloff": 0.3,
+    "highlightRolloff": 0.24,
     "developmentSoftness": 0.012,
     "chemicalIrregularity": 0.05,
     "centerGain": 0.0,
@@ -61,7 +61,7 @@
     "toneMapShoulder": 0.48,
     "toneMapStrength": 0.68,
     "midGrayDensity": 0.2,
-    "highlightRolloffPivot": 0.6,
+    "highlightRolloffPivot": 0.62,
     "skinHueProtect": false,
     "skinSatProtect": 1.0,
     "skinLumaSoften": 0.0,
@@ -69,7 +69,7 @@
     "grainAmount": 0.0,
     "vignetteAmount": 0.0,
     "paperTexture": 0.1,
-    "noiseAmount": 0.06,
+    "noiseAmount": 0.028,
     "irregUvScale": 2.5,
     "irregFreq1": 1.0,
     "irregFreq2": 1.7,
@@ -99,10 +99,10 @@
     "sceneHighlightResponse": 0.34,
     "sceneWhitesResponse": 0.32,
     "toneCurveResponse": 0.9,
-    "grainLumaBias": 0.72,
+    "grainLumaBias": 0.7,
     "grainColorVariation": 0.0,
-    "highlightRolloffSoftKnee": 0.42,
-    "grainRoughness": 0.65
+    "highlightRolloffSoftKnee": 0.38,
+    "grainRoughness": 0.58
   },
   "modules": {
     "filters": [
@@ -111,38 +111,42 @@
         "name": "Tri-X 400",
         "nameEn": "Tri-X 400",
         "lut": "assets/lut/cameras/bw_trix400.cube",
-        "contrast": 1.38,
+        "contrast": 1.32,
         "saturation": 0.0,
         "grain": "medium",
-        "grainSize": 2.0,
+        "grainSize": 1.8,
         "vignette": 0.15,
-        "sharpness": 1.0,
+        "sharpness": 0.96,
         "thumbnail": "assets/thumbnails/films/trix_400.jpg",
         "filmRollType": "advance",
         "filmRollStyle": "35mm",
         "advanceDuration": 700,
         "slideDistance": 1.0,
         "motionBlur": 0.08,
-        "sound": "film_advance"
+        "sound": "film_advance",
+        "highlightRolloff": 0.26,
+        "noiseAmount": 0.026
       },
       {
         "id": "hp5_plus",
         "name": "HP5 Plus",
         "nameEn": "HP5 Plus",
         "lut": "assets/lut/cameras/bw_hp5.cube",
-        "contrast": 1.08,
+        "contrast": 1.04,
         "saturation": 0.0,
         "grain": "light",
-        "grainSize": 1.7,
+        "grainSize": 1.55,
         "vignette": 0.07,
-        "sharpness": 0.92,
+        "sharpness": 0.9,
         "thumbnail": "assets/thumbnails/films/hp5_plus.jpg",
         "filmRollType": "advance",
         "filmRollStyle": "35mm",
         "advanceDuration": 650,
         "slideDistance": 0.95,
         "motionBlur": 0.06,
-        "sound": "film_advance"
+        "sound": "film_advance",
+        "highlightRolloff": 0.2,
+        "noiseAmount": 0.018
       }
     ],
     "lenses": [
@@ -265,9 +269,7 @@
         "height": 4
       }
     ],
-    "frames": [
-
-    ],
+    "frames": [],
     "watermarks": {
       "presets": [
         {
@@ -290,9 +292,7 @@
         "allowOrientationChange": true
       }
     },
-    "extras": [
-
-    ]
+    "extras": []
   },
   "defaultSelection": {
     "filterId": "trix_400",

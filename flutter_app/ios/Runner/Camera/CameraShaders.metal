@@ -465,14 +465,14 @@ float3 applyStructuredGrain(
     float rough = clamp(roughness, 0.0, 1.0);
     float lumaWeight = clamp(lumaBias, 0.0, 1.0);
     float colorWeight = clamp(colorVar, 0.0, 0.5);
-    float2 baseScale = float2(400.0 / gSize, 320.0 / gSize);
+    float2 baseScale = float2(220.0 / gSize, 176.0 / gSize);
     float timeSeed = floor(time * 18.0) / 18.0;
-    float fine = random(floor(uv * baseScale) / baseScale + float2(0.17, 0.31), timeSeed * 0.11);
-    float mid = random(floor(uv * (baseScale * 0.35)) / (baseScale * 0.35) + float2(2.41, 1.73), timeSeed * 0.17);
-    float coarse = random(floor(uv * (baseScale * 0.12)) / (baseScale * 0.12) + float2(4.13, 3.19), timeSeed * 0.23);
+    float fine = random(uv * baseScale + float2(0.17, 0.31), timeSeed * 0.11);
+    float mid = random(uv * (baseScale * 0.35) + float2(2.41, 1.73), timeSeed * 0.17);
+    float coarse = random(uv * (baseScale * 0.12) + float2(4.13, 3.19), timeSeed * 0.23);
     float high = (fine - 0.5) * 0.60 + (mid - 0.5) * 0.30 + (coarse - 0.5) * 0.10;
-    float low = (random(floor(uv * (baseScale * 0.18)) / (baseScale * 0.18) + float2(6.31, 5.17), timeSeed * 0.07) - 0.5) * 2.0;
-    float grain = high * mix(1.0, low, rough);
+    float low = (random(uv * (baseScale * 0.18) + float2(6.31, 5.17), timeSeed * 0.07) - 0.5) * 2.0;
+    float grain = high * mix(1.0, low * 0.65, rough);
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
     float dark = smoothstep(0.05, 0.25, lum);
     float bright = 1.0 - smoothstep(0.70, 0.95, lum);
@@ -483,11 +483,14 @@ float3 applyStructuredGrain(
     float2 p = uv * 2.0 - 1.0;
     float vignetteMask = smoothstep(0.30, 1.0, dot(p, p));
     mask *= mix(1.0, 1.18, vignetteMask);
+    float colorMix = smoothstep(0.2, 0.8, lum);
     float jitterR = (random(uv * baseScale * 1.03 + float2(1.7), timeSeed * 0.19) - 0.5) * colorWeight;
     float jitterG = (random(uv * baseScale * 1.11 + float2(2.3), timeSeed * 0.23) - 0.5) * colorWeight;
     float jitterB = (random(uv * baseScale * 0.97 + float2(3.1), timeSeed * 0.29) - 0.5) * colorWeight;
-    float3 grainRgb = float3(grain + jitterR, grain + jitterG, grain + jitterB);
-    return clamp(color + grainRgb * amount * mask, 0.0, 1.0);
+    float3 monoGrain = float3(grain);
+    float3 colorGrain = float3(grain + jitterR, grain + jitterG, grain + jitterB);
+    float3 grainRgb = mix(monoGrain, colorGrain, colorMix);
+    return clamp(color + grainRgb * amount * mask * 0.55, 0.0, 1.0);
 }
 
 // MARK: - CCD 风格片段着色器
