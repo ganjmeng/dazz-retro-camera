@@ -125,6 +125,11 @@ uniform float uLuminanceNoise;       // 亮度噪声
 uniform float uChromaNoise;           // 色度噪声
 uniform float uDehaze;
 uniform float uHighlightWarmAmount;
+uniform float uToneMapToe;
+uniform float uToneMapShoulder;
+uniform float uToneMapStrength;
+uniform float uMidGrayDensity;
+uniform float uHighlightRolloffPivot;
 uniform float uTopBottomBias;
 uniform float uLeftRightBias;
 uniform float uBwMixerEnabled;
@@ -387,11 +392,12 @@ vec3 applyHalation(vec3 c, float amount, vec2 uv) {
 }
 
 // ── Pass 11: Highlight Rolloff ────────────────────────────────────
-vec3 applyHighlightRolloff(vec3 c, float rolloff) {
+vec3 applyHighlightRolloff(vec3 c, float rolloff, float pivot) {
     if (rolloff < 0.001) return c;
     float lum = luminance(c);
-    if (lum <= 0.76) return c;
-    float mask = smoothstep(0.76, 1.0, lum);
+    float t0 = clamp(pivot, 0.5, 0.95);
+    if (lum <= t0) return c;
+    float mask = smoothstep(t0, 1.0, lum);
     vec3 compressed = vec3(
         c.r * (1.0 - mask * rolloff * 0.12),
         c.g * (1.0 - mask * rolloff * 0.16),
@@ -551,6 +557,34 @@ vec3 applyDehaze(vec3 c, float amount) {
     return outColor;
 }
 
+float filmicCurve(float x, float toe, float shoulder) {
+    float c = clamp(x, 0.0, 1.0);
+    float toeCurve = mix(c, c * c, clamp(toe, 0.0, 1.0));
+    float shoulderCurve =
+        1.0 - pow(max(1.0 - toeCurve, 0.0), 1.0 + clamp(shoulder, 0.0, 1.0) * 1.8);
+    return clamp(mix(toeCurve, shoulderCurve, clamp(shoulder, 0.0, 1.0)), 0.0, 1.0);
+}
+
+vec3 applyFilmicToneMap(vec3 c, float toe, float shoulder, float strength) {
+    if (strength < 0.001) return c;
+    vec3 mapped = vec3(
+        filmicCurve(c.r, toe, shoulder),
+        filmicCurve(c.g, toe, shoulder),
+        filmicCurve(c.b, toe, shoulder)
+    );
+    return clamp(mix(c, mapped, clamp(strength, 0.0, 1.0)), 0.0, 1.0);
+}
+
+vec3 applyMidGrayDensity(vec3 c, float density) {
+    if (abs(density) < 0.001) return c;
+    float lum = luminance(c);
+    float anchor = 0.18;
+    float dist = abs(lum - anchor);
+    float mask = exp(-dist * 10.0);
+    float gain = exp2(clamp(density, -1.0, 1.0) * 0.8 * mask);
+    return clamp(c * gain, 0.0, 1.0);
+}
+
 vec3 applyHighlightWarm(vec3 c, float amount) {
     if (amount < 0.001) return c;
     float lum = luminance(c);
@@ -668,7 +702,7 @@ void main() {
     color = applyHalation(color, uHalationAmount, uv);
 
     // Pass 11: Highlight Rolloff（成片专属）
-    color = applyHighlightRolloff(color, uHighlightRolloff);
+    color = applyHighlightRolloff(color, uHighlightRolloff, uHighlightRolloffPivot);
 
     // Pass 11b: Highlight Rolloff 2（FXN-R 专属）
     if (uHighlightRolloff2 > 0.0) {
@@ -711,6 +745,13 @@ void main() {
             color = mix(color, curved, uToneCurveStrength);
         }
     }
+    color = applyMidGrayDensity(color, uMidGrayDensity);
+    color = applyFilmicToneMap(
+        color,
+        uToneMapToe,
+        uToneMapShoulder,
+        uToneMapStrength
+    );
 
     // Pass 17: Film Grain（亮度依赖 + grainSize）
     color = applyGrain(color, uv, uGrainAmount, uTime, uGrainSize);
@@ -844,6 +885,11 @@ void main() {
     private var uChromaNoise = -1
     private var uDehaze = -1
     private var uHighlightWarmAmount = -1
+    private var uToneMapToe = -1
+    private var uToneMapShoulder = -1
+    private var uToneMapStrength = -1
+    private var uMidGrayDensity = -1
+    private var uHighlightRolloffPivot = -1
     private var uTopBottomBias = -1
     private var uLeftRightBias = -1
     private var uBwMixerEnabled = -1
@@ -1380,6 +1426,11 @@ void main() {
         uChromaNoise = loc("uChromaNoise")
         uDehaze = loc("uDehaze")
         uHighlightWarmAmount = loc("uHighlightWarmAmount")
+        uToneMapToe = loc("uToneMapToe")
+        uToneMapShoulder = loc("uToneMapShoulder")
+        uToneMapStrength = loc("uToneMapStrength")
+        uMidGrayDensity = loc("uMidGrayDensity")
+        uHighlightRolloffPivot = loc("uHighlightRolloffPivot")
         uTopBottomBias = loc("uTopBottomBias")
         uLeftRightBias = loc("uLeftRightBias")
         uBwMixerEnabled = loc("uBwMixerEnabled")
@@ -1449,6 +1500,11 @@ void main() {
         GLES30.glUniform1f(uToneCurveStrength, f("toneCurveStrength"))
         GLES30.glUniform1f(uDehaze, f("dehaze"))
         GLES30.glUniform1f(uHighlightWarmAmount, f("highlightWarmAmount"))
+        GLES30.glUniform1f(uToneMapToe, f("toneMapToe"))
+        GLES30.glUniform1f(uToneMapShoulder, f("toneMapShoulder"))
+        GLES30.glUniform1f(uToneMapStrength, f("toneMapStrength"))
+        GLES30.glUniform1f(uMidGrayDensity, f("midGrayDensity"))
+        GLES30.glUniform1f(uHighlightRolloffPivot, f("highlightRolloffPivot", 0.76f))
         GLES30.glUniform1f(uPaperTexture, f("paperTexture"))
         GLES30.glUniform1f(uEdgeFalloff, f("edgeFalloff"))
         GLES30.glUniform1f(uExposureVariation, f("exposureVariation"))
@@ -1542,7 +1598,10 @@ void main() {
             TAG,
             "capture.json ext dehaze=${f("dehaze")} warm=${f("highlightWarmAmount")} " +
                 "tb=${f("topBottomBias")} lr=${f("leftRightBias")} " +
-                "bw=${hasBwMixer} tonePts=${if (toneCount >= 2) toneCount else 0}"
+                "bw=${hasBwMixer} tonePts=${if (toneCount >= 2) toneCount else 0} " +
+                "tmToe=${f("toneMapToe")} tmShoulder=${f("toneMapShoulder")} " +
+                "tmStrength=${f("toneMapStrength")} midGray=${f("midGrayDensity")} " +
+                "rolloffPivot=${f("highlightRolloffPivot", 0.76f)}"
         )
     }
 

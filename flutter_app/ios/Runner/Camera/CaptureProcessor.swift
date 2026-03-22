@@ -82,6 +82,11 @@ struct MetalCaptureParams {
     var deviceCcm21: Float = 0.0
     var deviceCcm22: Float = 1.0
     var circularFisheye: Float = 0
+    var toneMapToe: Float = 0
+    var toneMapShoulder: Float = 0
+    var toneMapStrength: Float = 0
+    var midGrayDensity: Float = 0
+    var highlightRolloffPivot: Float = 0.76
 }
 
 /// 独立的动态曲线参数缓冲（buffer(1)），避免破坏主参数结构体内存布局。
@@ -353,6 +358,14 @@ class CaptureProcessor {
         p.deviceCcm20        = getFloat(params, "deviceCcm20", 0.0)
         p.deviceCcm21        = getFloat(params, "deviceCcm21", 0.0)
         p.deviceCcm22        = getFloat(params, "deviceCcm22", 1.0)
+        p.toneMapToe         = getFloat(params, "toneMapToe", 0.0)
+        p.toneMapShoulder    = getFloat(params, "toneMapShoulder", 0.0)
+        p.toneMapStrength    = getFloat(params, "toneMapStrength", 0.0)
+        p.midGrayDensity     = getFloat(params, "midGrayDensity", 0.0)
+        p.highlightRolloffPivot = getFloat(params, "highlightRolloffPivot", 0.76)
+        if p.toneMapStrength > 0.001 || abs(p.midGrayDensity) > 0.001 {
+            print("[CaptureProcessor] toneMap toe=\(p.toneMapToe) shoulder=\(p.toneMapShoulder) strength=\(p.toneMapStrength) midGray=\(p.midGrayDensity) pivot=\(p.highlightRolloffPivot)")
+        }
 
         return p
     }

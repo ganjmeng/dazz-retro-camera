@@ -483,6 +483,12 @@ class PreviewRenderParams {
   double get effectiveDehaze => (defaultLook.dehaze / 10.0).clamp(0.0, 1.0);
   double get highlightWarmAmount =>
       defaultLook.highlightWarmAmount.clamp(0.0, 1.0);
+  double get toneMapToe => defaultLook.toneMapToe.clamp(0.0, 1.0);
+  double get toneMapShoulder => defaultLook.toneMapShoulder.clamp(0.0, 1.0);
+  double get toneMapStrength => defaultLook.toneMapStrength.clamp(0.0, 1.0);
+  double get midGrayDensity => defaultLook.midGrayDensity.clamp(-1.0, 1.0);
+  double get highlightRolloffPivot =>
+      defaultLook.highlightRolloffPivot.clamp(0.5, 0.95);
   double get topBottomBias => defaultLook.topBottomBias.clamp(-1.0, 1.0);
   double get leftRightBias => defaultLook.leftRightBias.clamp(-1.0, 1.0);
   bool get hasCustomToneCurve => defaultLook.toneCurvePoints.isNotEmpty;
@@ -971,6 +977,11 @@ class PreviewRenderParams {
         'sharpness': effectiveSharpness,
         'dehaze': effectiveDehaze,
         'highlightWarmAmount': highlightWarmAmount,
+        'toneMapToe': toneMapToe,
+        'toneMapShoulder': toneMapShoulder,
+        'toneMapStrength': toneMapStrength,
+        'midGrayDensity': midGrayDensity,
+        'highlightRolloffPivot': highlightRolloffPivot,
         'lensVignette': effectiveVignette,
         'exposureOffset': exposureOffset + effectiveLensExposure,
         'distortion': effectiveDistortion,

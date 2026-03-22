@@ -324,6 +324,12 @@ class DefaultLook {
   final double toneCurveStrength; // 0.0 ~ 1.0 Tone Curve 强度
   final double highlightWarmAmount; // 0.0 ~ 1.0 highlight warmth push
   final List<List<double>> toneCurvePoints; // optional custom tone-curve points
+  // ── Filmic Tone Mapping（JSON 驱动）────────────────────────────────────────────
+  final double toneMapToe; // 0.0 ~ 1.0 阴影卷曲强度（toe）
+  final double toneMapShoulder; // 0.0 ~ 1.0 高光肩部压缩强度（shoulder）
+  final double toneMapStrength; // 0.0 ~ 1.0 filmic 映射混合强度
+  final double midGrayDensity; // -1.0 ~ 1.0 中灰密度（18% 灰锚点附近）
+  final double highlightRolloffPivot; // 0.5 ~ 0.95 高光 rolloff 起始阈值
   // 风格响应权重：让共享渲染算子重新回到 JSON 配置驱动。
   final double bloomResponse; // 0.0 ~ 1.0
   final double halationResponse; // 0.0 ~ 1.0
@@ -410,6 +416,11 @@ class DefaultLook {
     this.toneCurveStrength = 0,
     this.highlightWarmAmount = 0,
     this.toneCurvePoints = const [],
+    this.toneMapToe = 0.0,
+    this.toneMapShoulder = 0.0,
+    this.toneMapStrength = 0.0,
+    this.midGrayDensity = 0.0,
+    this.highlightRolloffPivot = 0.76,
     this.bloomResponse = 1.0,
     this.halationResponse = 1.0,
     this.fadeResponse = 1.0,
@@ -517,6 +528,12 @@ class DefaultLook {
             .where((point) => point.length >= 2)
             .map((point) => [point[0], point[1]])
             .toList(),
+        toneMapToe: _asDouble(json['toneMapToe']),
+        toneMapShoulder: _asDouble(json['toneMapShoulder']),
+        toneMapStrength: _asDouble(json['toneMapStrength']),
+        midGrayDensity: _asDouble(json['midGrayDensity']),
+        highlightRolloffPivot:
+            _asDouble(json['highlightRolloffPivot'], fallback: 0.76),
         bloomResponse: _asDouble(json['bloomResponse'], fallback: 1.0),
         halationResponse: _asDouble(json['halationResponse'], fallback: 1.0),
         fadeResponse: _asDouble(json['fadeResponse'], fallback: 1.0),
@@ -601,6 +618,12 @@ class DefaultLook {
         if (highlightWarmAmount != 0)
           'highlightWarmAmount': highlightWarmAmount,
         if (toneCurvePoints.isNotEmpty) 'toneCurvePoints': toneCurvePoints,
+        if (toneMapToe != 0) 'toneMapToe': toneMapToe,
+        if (toneMapShoulder != 0) 'toneMapShoulder': toneMapShoulder,
+        if (toneMapStrength != 0) 'toneMapStrength': toneMapStrength,
+        if (midGrayDensity != 0) 'midGrayDensity': midGrayDensity,
+        if (highlightRolloffPivot != 0.76)
+          'highlightRolloffPivot': highlightRolloffPivot,
         if (bloomResponse != 1.0) 'bloomResponse': bloomResponse,
         if (halationResponse != 1.0) 'halationResponse': halationResponse,
         if (fadeResponse != 1.0) 'fadeResponse': fadeResponse,

@@ -110,6 +110,11 @@ struct CaptureParams {
     float deviceCcm21;
     float deviceCcm22;
     float circularFisheye;
+    float toneMapToe;
+    float toneMapShoulder;
+    float toneMapStrength;
+    float midGrayDensity;
+    float highlightRolloffPivot;
 };
 
 // ── 工具函数 ─────────────────────────────────────────────────────────────
@@ -259,11 +264,12 @@ static float3 cp_bloom(float3 color, float bloomAmount) {
 }
 
 /// Highlight Rolloff（高光柔和滴落，成片专属）
-static float3 cp_highlightRolloff(float3 color, float rolloff) {
+static float3 cp_highlightRolloff(float3 color, float rolloff, float pivot) {
     if (rolloff < 0.001) return color;
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
-    if (lum > 0.76) {
-        float mask = smoothstep(0.76, 1.0, lum);
+    float t0 = clamp(pivot, 0.5, 0.95);
+    if (lum > t0) {
+        float mask = smoothstep(t0, 1.0, lum);
         float3 compressed = float3(
             color.r * (1.0 - mask * rolloff * 0.10),
             color.g * (1.0 - mask * rolloff * 0.13),
@@ -272,6 +278,34 @@ static float3 cp_highlightRolloff(float3 color, float rolloff) {
         color = clamp(mix(color, compressed, mask * rolloff * 0.75), 0.0, 1.0);
     }
     return color;
+}
+
+static float cp_filmicCurve(float x, float toe, float shoulder) {
+    float c = clamp(x, 0.0, 1.0);
+    float toeCurve = mix(c, c * c, clamp(toe, 0.0, 1.0));
+    float shoulderCurve =
+        1.0 - pow(max(1.0 - toeCurve, 0.0), 1.0 + clamp(shoulder, 0.0, 1.0) * 1.8);
+    return clamp(mix(toeCurve, shoulderCurve, clamp(shoulder, 0.0, 1.0)), 0.0, 1.0);
+}
+
+static float3 cp_filmicToneMap(float3 color, float toe, float shoulder, float strength) {
+    if (strength < 0.001) return color;
+    float3 mapped = float3(
+        cp_filmicCurve(color.r, toe, shoulder),
+        cp_filmicCurve(color.g, toe, shoulder),
+        cp_filmicCurve(color.b, toe, shoulder)
+    );
+    return clamp(mix(color, mapped, clamp(strength, 0.0, 1.0)), 0.0, 1.0);
+}
+
+static float3 cp_midGrayDensity(float3 color, float density) {
+    if (fabs(density) < 0.001) return color;
+    float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float anchor = 0.18;
+    float dist = fabs(lum - anchor);
+    float mask = exp(-dist * 10.0);
+    float gain = exp2(clamp(density, -1.0, 1.0) * 0.8 * mask);
+    return clamp(color * gain, 0.0, 1.0);
 }
 
 /// Center Gain（中心增亮，成片专属）
@@ -547,7 +581,7 @@ kernel void capturePipeline(
     color = cp_bloom(color, params.bloomAmount);
 
     // ── Pass 10: Highlight Rolloff（成片专属）────────────────────────────────────────
-    color = cp_highlightRolloff(color, params.highlightRolloff);
+    color = cp_highlightRolloff(color, params.highlightRolloff, params.highlightRolloffPivot);
 
     // ── Pass 10b: Highlight Rolloff 2（FXN-R 专属）────────────────────────────────
     if (params.highlightRolloff2 > 0.001) {
@@ -569,6 +603,13 @@ kernel void capturePipeline(
         }
         color = mix(color, curved, params.toneCurveStrength);
     }
+    color = cp_midGrayDensity(color, params.midGrayDensity);
+    color = cp_filmicToneMap(
+        color,
+        params.toneMapToe,
+        params.toneMapShoulder,
+        params.toneMapStrength
+    );
 
     // ── Pass 11: Center Gain（成片专属）──────────────────────────────────────────
     color = cp_centerGain(color, uv, params.centerGain);
