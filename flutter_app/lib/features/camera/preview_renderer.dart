@@ -1056,6 +1056,17 @@ class PreviewRenderParams {
     final json = Map<String, dynamic>.from(toJson())
       ..['beautyStrength'] = previewBeauty;
 
+    // Preview keeps only core/base effects.
+    // Advanced atmosphere and texture terms are capture-only.
+    json['grainAmount'] = 0.0;
+    json['luminanceNoise'] = 0.0;
+    json['chromaNoise'] = 0.0;
+    json['noiseAmount'] = 0.0;
+    json['paperTexture'] = 0.0;
+    json['chemicalIrregularity'] = 0.0;
+    json['fadeAmount'] = 0.0;
+    json['lightLeakAmount'] = 0.0;
+
     if (previewBeauty > 0.0) {
       json['skinHueProtect'] = 1.0;
       json['skinSatProtect'] = skinSatProtect.clamp(0.0, 1.0);
