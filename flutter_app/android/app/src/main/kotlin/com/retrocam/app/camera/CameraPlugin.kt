@@ -1980,7 +1980,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private fun scheduleRendererStateReplay(
         reason: String,
         targetVersion: Int? = null,
-        replayDelays: LongArray = longArrayOf(40L, 120L, 260L, 420L),
+        replayDelays: LongArray = longArrayOf(30L, 90L, 170L, 260L),
         onComplete: ((Boolean) -> Unit)? = null
     ) {
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
