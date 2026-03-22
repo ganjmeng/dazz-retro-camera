@@ -1020,9 +1020,9 @@ class CapturePipeline {
 
     if (dustAmount > 0.001) {
       final a = dustAmount.clamp(0.0, 1.0);
-      final layerCount = (1 + (a * 4).floor()).clamp(1, 4);
-      final brightOpacity = (0.14 + a * 0.62).clamp(0.12, 0.82);
-      final darkOpacity = (0.05 + a * 0.26).clamp(0.04, 0.34);
+      final layerCount = (2 + (a * 4).floor()).clamp(2, 5);
+      final brightOpacity = (0.22 + a * 0.68).clamp(0.2, 0.92);
+      final darkOpacity = (0.08 + a * 0.3).clamp(0.08, 0.4);
       for (var i = 0; i < layerCount; i++) {
         final asset =
             _dustLightPlusAssets[rng.nextInt(_dustLightPlusAssets.length)];
@@ -1063,15 +1063,40 @@ class CapturePipeline {
         );
         canvas.restore();
       }
+
+      // Procedural dust: ensure visibility even when texture assets are low-contrast.
+      final dotCount = (18 + a * 120).round();
+      final whiteDotAlpha = (0.14 + a * 0.38).clamp(0.12, 0.52);
+      final darkDotAlpha = (0.08 + a * 0.24).clamp(0.06, 0.34);
+      final whitePaint = Paint()
+        ..blendMode = BlendMode.screen
+        ..color = Colors.white.withValues(alpha: whiteDotAlpha);
+      final darkPaint = Paint()
+        ..blendMode = BlendMode.multiply
+        ..color = Colors.black.withValues(alpha: darkDotAlpha);
+      for (var i = 0; i < dotCount; i++) {
+        final dx = bounds.left + rng.nextDouble() * bounds.width;
+        final dy = bounds.top + rng.nextDouble() * bounds.height;
+        final r = (0.35 + rng.nextDouble() * (1.1 + a * 2.6)).clamp(0.25, 4.5);
+        canvas.drawCircle(Offset(dx, dy), r, whitePaint);
+        if (rng.nextDouble() < 0.72) {
+          canvas.drawCircle(
+            Offset(dx + 0.2 + rng.nextDouble() * 0.8,
+                dy + 0.2 + rng.nextDouble() * 0.8),
+            r * (0.42 + rng.nextDouble() * 0.38),
+            darkPaint,
+          );
+        }
+      }
     }
 
     if (scratchAmount > 0.001) {
       final a = scratchAmount.clamp(0.0, 1.0);
-      final appearProb = (0.25 + a * 0.75).clamp(0.25, 1.0);
+      final appearProb = (0.6 + a * 0.4).clamp(0.6, 1.0);
       if (rng.nextDouble() < appearProb) {
-        final layerCount = (1 + (a * 3).floor()).clamp(1, 3);
-        final brightOpacity = (0.16 + a * 0.70).clamp(0.12, 0.9);
-        final darkOpacity = (0.05 + a * 0.22).clamp(0.04, 0.32);
+        final layerCount = (2 + (a * 3).floor()).clamp(2, 4);
+        final brightOpacity = (0.24 + a * 0.68).clamp(0.2, 0.94);
+        final darkOpacity = (0.08 + a * 0.24).clamp(0.06, 0.36);
         for (var i = 0; i < layerCount; i++) {
           final asset = _scratchLightPlusAssets[
               rng.nextInt(_scratchLightPlusAssets.length)];
@@ -1115,6 +1140,47 @@ class CapturePipeline {
               ..color = Colors.black.withValues(alpha: darkOpacity),
           );
           canvas.restore();
+        }
+
+        // Procedural scratches: visible long/short fibers independent of texture atlas.
+        final scratchCount = (2 + a * 10).round();
+        final baseAngle = (rng.nextDouble() * math.pi) - (math.pi / 2);
+        final whiteLine = Paint()
+          ..blendMode = BlendMode.screen
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke
+          ..color = Colors.white
+              .withValues(alpha: (0.14 + a * 0.32).clamp(0.12, 0.48));
+        final darkLine = Paint()
+          ..blendMode = BlendMode.multiply
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke
+          ..color =
+              Colors.black.withValues(alpha: (0.08 + a * 0.2).clamp(0.06, 0.3));
+        for (var i = 0; i < scratchCount; i++) {
+          final cx = bounds.left + rng.nextDouble() * bounds.width;
+          final cy = bounds.top + rng.nextDouble() * bounds.height;
+          final len = bounds.shortestSide *
+              (0.08 + rng.nextDouble() * (0.16 + a * 0.26));
+          final angle = baseAngle + (rng.nextDouble() - 0.5) * 0.8;
+          final dx = math.cos(angle) * len * 0.5;
+          final dy = math.sin(angle) * len * 0.5;
+          final p1 = Offset(cx - dx, cy - dy);
+          final p2 = Offset(cx + dx, cy + dy);
+          whiteLine.strokeWidth =
+              (0.45 + rng.nextDouble() * (0.9 + a * 1.1)).clamp(0.4, 2.2);
+          darkLine.strokeWidth =
+              (whiteLine.strokeWidth * 0.55).clamp(0.25, 1.2);
+          canvas.drawLine(p1, p2, whiteLine);
+          if (rng.nextDouble() < 0.85) {
+            canvas.drawLine(
+              p1.translate(0.45 + rng.nextDouble() * 0.45,
+                  0.45 + rng.nextDouble() * 0.45),
+              p2.translate(0.45 + rng.nextDouble() * 0.45,
+                  0.45 + rng.nextDouble() * 0.45),
+              darkLine,
+            );
+          }
         }
       }
     }
