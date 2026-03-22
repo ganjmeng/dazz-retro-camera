@@ -1980,18 +1980,36 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private fun scheduleRendererStateReplay(
         reason: String,
         targetVersion: Int? = null,
+        replayDelays: LongArray = longArrayOf(40L, 120L, 260L, 420L),
         onComplete: ((Boolean) -> Unit)? = null
     ) {
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
-        val replayDelays = longArrayOf(60L, 160L, 320L, 560L, 900L)
         if (replayDelays.isEmpty()) {
             onComplete?.invoke(false)
             return
         }
         val finalDelay = replayDelays.maxOrNull() ?: 0L
         var replayAppliedCount = 0
+        var finished = false
+        fun completeOnce(ok: Boolean) {
+            if (finished) return
+            finished = true
+            onComplete?.invoke(ok)
+        }
+        fun versionApplied(): Boolean {
+            if (targetVersion == null) return true
+            val renderer = glRenderer ?: return false
+            val appliedVersion = renderer.getAppliedStateVersion()
+            val requestedVersion = renderer.getRequestedStateVersion()
+            Log.d(
+                TAG,
+                "renderer replay check after $reason: target=$targetVersion requested=$requestedVersion applied=$appliedVersion"
+            )
+            return appliedVersion >= targetVersion
+        }
         replayDelays.forEach { delayMs ->
             handler.postDelayed({
+                if (finished) return@postDelayed
                 try {
                     glRenderer?.let { renderer ->
                         reapplyPresetToRenderer(renderer)
@@ -1999,6 +2017,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                         applyPreviewMirrorToRenderer(renderer)
                         replayAppliedCount += 1
                         Log.d(TAG, "renderer state replayed after $reason (+${delayMs}ms)")
+                        if (replayAppliedCount > 0 && versionApplied()) {
+                            completeOnce(true)
+                        }
                     } ?: run {
                         Log.w(TAG, "renderer replay skipped after $reason (+${delayMs}ms): renderer=null")
                     }
@@ -2009,20 +2030,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
         handler.postDelayed({
             val replayApplied = replayAppliedCount > 0
-            val renderer = glRenderer
-            val versionApplied = if (targetVersion == null) {
-                true
-            } else {
-                val appliedVersion = renderer?.getAppliedStateVersion() ?: -1
-                val requestedVersion = renderer?.getRequestedStateVersion() ?: -1
-                Log.d(
-                    TAG,
-                    "renderer replay check after $reason: target=$targetVersion requested=$requestedVersion applied=$appliedVersion"
-                )
-                appliedVersion >= targetVersion
-            }
-            onComplete?.invoke(replayApplied && versionApplied)
-        }, finalDelay + 10L)
+            completeOnce(replayApplied && versionApplied())
+        }, finalDelay + 120L)
     }
 
     // ─────────────────────────────────────────────
