@@ -2257,6 +2257,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     await _syncCurrentPreviewStateToNative();
   }
 
+  /// 对外暴露的事务化重同步入口：统一走带 token 的生命周期队列。
+  Future<void> resyncLifecycleTransaction({
+    String reason = 'externalResync',
+  }) async {
+    await _syncViewportRatioToNativeImmediately(reason: reason);
+  }
+
   void _pushZoomToNative(double zoom, {bool immediate = false}) {
     _pendingZoomToNative = zoom;
     if (immediate) {

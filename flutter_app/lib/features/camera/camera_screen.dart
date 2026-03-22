@@ -448,7 +448,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final sharpenLevel = ref.read(cameraAppProvider).sharpenLevel;
     const sharpenLevels = [0.0, 0.5, 1.0];
     await svc.setSharpen(sharpenLevels[sharpenLevel]);
-    await _replayPreviewStateWithSettle(includePreset: false);
+    await ref.read(cameraAppProvider.notifier).resyncLifecycleTransaction(
+          reason: 'screenPostInit',
+        );
     _ensurePreviewHealthWatchdog();
   }
 
@@ -461,11 +463,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     await svc.initCamera(resolution: cameraState.previewResolutionTag);
     if (!mounted) return;
     await _syncPipelineAfterCameraInit();
-    // 某些机型在前后台频繁切换时，renderer 就绪与参数下发仍可能出现时间竞态。
-    // 这里延后做一次幂等重放，确保预览效果不会随机丢失。
-    await Future.delayed(const Duration(milliseconds: 60));
-    if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
-    await _replayPreviewStateWithSettle(includePreset: false);
   }
 
   /// 进入二级页面时暂停预览并在返回后重建。
@@ -917,7 +914,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
     _previewRecoveryInFlight = true;
     try {
-      await _replayPreviewStateWithSettle(includePreset: false);
+      await ref.read(cameraAppProvider.notifier).resyncLifecycleTransaction(
+            reason: 'screenSoftResync',
+          );
     } finally {
       _previewRecoveryInFlight = false;
     }
