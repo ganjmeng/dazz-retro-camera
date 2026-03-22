@@ -323,8 +323,11 @@ void main() {
     test('setDoubleExpFirstPath 设置第一张路径', () {
       final c = makeContainer();
       addTearDown(c.dispose);
-      c.read(cameraAppProvider.notifier).setDoubleExpFirstPath('/path/to/first.jpg');
-      expect(c.read(cameraAppProvider).doubleExpFirstPath, '/path/to/first.jpg');
+      c
+          .read(cameraAppProvider.notifier)
+          .setDoubleExpFirstPath('/path/to/first.jpg');
+      expect(
+          c.read(cameraAppProvider).doubleExpFirstPath, '/path/to/first.jpg');
     });
 
     test('clearDoubleExpFirst 清除第一张路径', () {
@@ -389,10 +392,13 @@ void main() {
       expect(c.read(showZoomSliderProvider), isTrue);
     });
 
-    test('doubleExpFirstPathProvider 与 cameraAppProvider.doubleExpFirstPath 同步', () {
+    test('doubleExpFirstPathProvider 与 cameraAppProvider.doubleExpFirstPath 同步',
+        () {
       final c = makeContainer();
       addTearDown(c.dispose);
-      c.read(cameraAppProvider.notifier).setDoubleExpFirstPath('/test/path.jpg');
+      c
+          .read(cameraAppProvider.notifier)
+          .setDoubleExpFirstPath('/test/path.jpg');
       expect(c.read(doubleExpFirstPathProvider), '/test/path.jpg');
     });
 
@@ -464,7 +470,7 @@ void main() {
   });
 
   group('比例切换生命周期回归', () {
-    test('同相机切比例时应走完整生命周期同步链路', () async {
+    test('同相机切比例时应走单事务同步链路，避免重复重放', () async {
       final calls = <MethodCall>[];
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
@@ -507,8 +513,8 @@ void main() {
       expect(methodNames, contains('updateViewportRatio'));
       expect(
         methodNames.where((m) => m == 'syncRuntimeState').length,
-        greaterThanOrEqualTo(3),
-        reason: '比例切换后需要至少 3 次 runtime 重放覆盖重绑窗口',
+        1,
+        reason: '比例切换应采用一次 runtime 同步，避免旧参数多次重放覆盖新比例',
       );
     });
   });

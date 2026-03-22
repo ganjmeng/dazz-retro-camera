@@ -429,6 +429,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   bool _lifecycleResyncQueued = false;
   bool _isLifecycleResyncInFlight = false;
   bool _deferredRenderPushAfterLifecycle = false;
+  int _lifecycleSyncToken = 0;
 
   CameraAppNotifier(this._ref) : super(const CameraAppState());
 
@@ -734,7 +735,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       );
       // 关键修复：加载相机后立即将 defaultLook 色彩参数同步到原生 GPU shader
       // 修复 FQS 紫色偏色问题：确保 colorBiasR/G/B、grainSize、sharpness 等专用字段正确传递
-      await _syncCameraStateToNative(camera: camera);
+      await _syncViewportRatioToNativeImmediately(reason: 'cameraLoad');
       _recordLifecycleTrace('loadCamera.done id=$cameraId');
     } catch (e) {
       state =
@@ -849,13 +850,13 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   void selectRatio(String id) {
     if (!_applyRatioSelection(id)) return;
-    _scheduleViewportRatioSync();
+    _scheduleViewportRatioSync(reason: 'ratioChanged:$id');
   }
 
   Future<void> selectRatioAndSync(String id) async {
     if (!_applyRatioSelection(id)) return;
     _recordLifecycleTrace('selectRatio.request id=$id');
-    await _syncViewportRatioToNativeImmediately();
+    await _syncViewportRatioToNativeImmediately(reason: 'ratioImmediate:$id');
     _recordLifecycleTrace('selectRatio.done id=$id');
   }
 
@@ -1163,7 +1164,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     );
     final camera = state.camera;
     if (camera != null) {
-      unawaited(_syncCameraStateToNative(camera: camera));
+      unawaited(
+        _syncViewportRatioToNativeImmediately(reason: 'livePhotoToggle'),
+      );
     }
   }
 
@@ -1223,7 +1226,8 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
       final camera = state.camera;
       if (camera != null) {
-        await _syncCameraStateToNative(camera: camera);
+        await _syncViewportRatioToNativeImmediately(
+            reason: 'cycleSharpen.init');
       }
 
       // 2. 设置目标分辨率（initCamera 默认用中档，这里覆盖为用户选择的档位）
@@ -1231,7 +1235,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
       // 3. 分辨率切换可能再次重建 renderer，完成后再整包同步一次。
       if (camera != null) {
-        await _syncCameraStateToNative(camera: camera);
+        await _syncViewportRatioToNativeImmediately(
+          reason: 'cycleSharpen.afterSetSharpen',
+        );
       } else {
         _applyCurrentRenderParamsToNative();
       }
@@ -1279,7 +1285,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
     final camera = state.camera;
     if (camera != null) {
-      await _syncCameraStateToNative(camera: camera);
+      await _syncViewportRatioToNativeImmediately(reason: 'flipCamera.init');
     }
 
     // 5. 同步清晰度档位
@@ -1288,7 +1294,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
     // 6. 分辨率切换后再次做完整原子同步，避免新 renderer 丢效果。
     if (camera != null) {
-      await _syncCameraStateToNative(camera: camera);
+      await _syncViewportRatioToNativeImmediately(
+        reason: 'flipCamera.afterSetSharpen',
+      );
     } else {
       _applyCurrentRenderParamsToNative();
     }
@@ -2026,25 +2034,38 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     });
   }
 
-  Future<void> _syncCurrentPreviewStateToNative() async {
-    syncRuntimeColorContext();
-    final camera = state.camera;
+  Future<void> _syncCurrentPreviewStateToNative({
+    CameraAppState? sourceState,
+    int? syncToken,
+  }) async {
+    final snapshot = sourceState ?? state;
+    final camera = snapshot.camera;
     if (camera == null) return;
-    final lensParams = _buildActiveLensParams(camera);
-    final renderParams = _buildActiveRenderParamsJson();
-    final zoom = state.zoomLevel;
+    final lensParams = _buildLensParamsFor(camera, snapshot);
+    final renderParams = _buildRenderParamsJsonFor(snapshot);
+    final zoom = snapshot.zoomLevel;
     final svc = _ref.read(cameraServiceProvider.notifier);
 
+    if (syncToken != null && syncToken != _lifecycleSyncToken) {
+      _recordLifecycleTrace(
+          'runtimeSync.skip stale token=$syncToken latest=$_lifecycleSyncToken');
+      return;
+    }
     if (renderParams != null) {
       final version = ++_renderParamsVersion;
       _recordLifecycleTrace(
-          'runtimeSync.begin v=$version lens=${state.activeLensId} ratio=${state.activeRatioId}');
+          'runtimeSync.begin token=${syncToken ?? -1} v=$version lens=${snapshot.activeLensId} ratio=${snapshot.activeRatioId}');
       final ackVersion = await svc.syncRuntimeState(
         lensParams: lensParams,
         renderParams: renderParams,
         zoom: zoom,
         version: version,
       );
+      if (syncToken != null && syncToken != _lifecycleSyncToken) {
+        _recordLifecycleTrace(
+            'runtimeSync.drop stale token=$syncToken latest=$_lifecycleSyncToken');
+        return;
+      }
       if (ackVersion != null &&
           ackVersion >= version &&
           ackVersion > _lastAckedRenderParamsVersion) {
@@ -2052,7 +2073,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
         _publishLifecycleDebugStatus();
       }
       _recordLifecycleTrace(
-          'runtimeSync.done v=$version ack=${ackVersion ?? -1}');
+          'runtimeSync.done token=${syncToken ?? -1} v=$version ack=${ackVersion ?? -1}');
       return;
     }
 
@@ -2077,8 +2098,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     }
   }
 
-  Map<String, dynamic> _buildActiveLensParams(CameraDefinition camera) {
-    final lens = camera.lensById(state.activeLensId);
+  Map<String, dynamic> _buildLensParamsFor(
+      CameraDefinition camera, CameraAppState source) {
+    final lens = camera.lensById(source.activeLensId);
     return {
       'distortion': lens?.distortion ?? 0.0,
       'vignette': lens?.vignette ?? 0.0,
@@ -2096,15 +2118,15 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     };
   }
 
-  Map<String, dynamic>? _buildActiveRenderParamsJson() {
-    final renderParams = state.renderParams;
+  Map<String, dynamic>? _buildRenderParamsJsonFor(CameraAppState source) {
+    final renderParams = source.renderParams;
     if (renderParams == null) return null;
-    return renderParams.toPreviewJson(mode: state.previewPerformanceMode);
+    return renderParams.toPreviewJson(mode: source.previewPerformanceMode);
   }
 
-  ({int width, int height})? _currentViewportDimensionsFor(
-      CameraDefinition camera) {
-    final ratio = camera.ratioById(state.activeRatioId) ??
+  ({int width, int height})? _viewportDimensionsFor(
+      CameraDefinition camera, CameraAppState source) {
+    final ratio = camera.ratioById(source.activeRatioId) ??
         camera.ratioById(camera.defaultSelection.ratioId);
     if (ratio == null || ratio.width <= 0 || ratio.height <= 0) return null;
     return (width: ratio.width, height: ratio.height);
@@ -2112,15 +2134,18 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   Future<void> _syncCameraStateToNative({
     required CameraDefinition camera,
+    required CameraAppState sourceState,
+    required int syncToken,
   }) async {
-    syncRuntimeColorContext();
-    final viewport = _currentViewportDimensionsFor(camera);
+    final viewport = _viewportDimensionsFor(camera, sourceState);
     _recordLifecycleTrace(
-        'cameraSync.begin cam=${camera.id} ratio=${state.activeRatioId}');
-    // 稳定优先：沿用 setCamera -> updateViewportRatio -> runtimeState 重放的链路。
-    // 该链路在 ba0b04c 之前长期稳定，避免 syncCameraState 与其它推送并发时
-    // 发生旧状态覆盖新比例的问题。
+        'cameraSync.begin token=$syncToken cam=${camera.id} ratio=${sourceState.activeRatioId}');
     await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
+    if (syncToken != _lifecycleSyncToken) {
+      _recordLifecycleTrace(
+          'cameraSync.abort stale token=$syncToken latest=$_lifecycleSyncToken after=setCamera');
+      return;
+    }
     _recordLifecycleTrace('cameraSync.setPreset ok cam=${camera.id}');
     if (viewport != null) {
       _recordLifecycleTrace(
@@ -2129,25 +2154,39 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
             width: viewport.width,
             height: viewport.height,
           );
+      if (syncToken != _lifecycleSyncToken) {
+        _recordLifecycleTrace(
+            'cameraSync.abort stale token=$syncToken latest=$_lifecycleSyncToken after=viewport');
+        return;
+      }
       _recordLifecycleTrace(
           'cameraSync.viewport done ${viewport.width}:${viewport.height}');
     }
-    await _syncCurrentPreviewStateToNative();
-    _recordLifecycleTrace('cameraSync.replay#1 done');
-    await Future<void>.delayed(const Duration(milliseconds: 90));
-    await _syncCurrentPreviewStateToNative();
-    _recordLifecycleTrace('cameraSync.replay#2 done');
-    await Future<void>.delayed(const Duration(milliseconds: 180));
-    await _syncCurrentPreviewStateToNative();
-    _recordLifecycleTrace('cameraSync.replay#3 done');
-    _recordLifecycleTrace('cameraSync.done cam=${camera.id}');
+    await _syncCurrentPreviewStateToNative(
+      sourceState: sourceState,
+      syncToken: syncToken,
+    );
+    if (syncToken != _lifecycleSyncToken) {
+      _recordLifecycleTrace(
+          'cameraSync.abort stale token=$syncToken latest=$_lifecycleSyncToken after=runtime');
+      return;
+    }
+    _recordLifecycleTrace('cameraSync.done token=$syncToken cam=${camera.id}');
   }
 
-  void _scheduleViewportRatioSync({bool immediate = false}) {
+  void _enqueueLifecycleResync(String reason) {
+    _lifecycleSyncToken += 1;
     _lifecycleResyncQueued = true;
     _publishLifecycleDebugStatus();
     _recordLifecycleTrace(
-        'lifecycleQueue.schedule immediate=$immediate inFlight=$_isLifecycleResyncInFlight');
+        'lifecycleQueue.request token=$_lifecycleSyncToken reason=$reason inFlight=$_isLifecycleResyncInFlight');
+  }
+
+  void _scheduleViewportRatioSync({
+    bool immediate = false,
+    String reason = 'ratioChanged',
+  }) {
+    _enqueueLifecycleResync(reason);
     if (immediate) {
       _viewportRatioPushTimer?.cancel();
       _viewportRatioPushTimer = null;
@@ -2174,10 +2213,15 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     try {
       while (_lifecycleResyncQueued) {
         _lifecycleResyncQueued = false;
-        final camera = state.camera;
+        final snapshot = state;
+        final camera = snapshot.camera;
         if (camera == null) continue;
-        // 生命周期统一入口：相机/比例切换都走同一条全量恢复链路。
-        await _syncCameraStateToNative(camera: camera);
+        final token = _lifecycleSyncToken;
+        await _syncCameraStateToNative(
+          camera: camera,
+          sourceState: snapshot,
+          syncToken: token,
+        );
       }
     } finally {
       _isLifecycleResyncInFlight = false;
@@ -2191,22 +2235,23 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     }
   }
 
-  Future<void> _syncViewportRatioToNativeImmediately() async {
+  Future<void> _syncViewportRatioToNativeImmediately({
+    String reason = 'ratioImmediate',
+  }) async {
     _viewportRatioPushTimer?.cancel();
     _viewportRatioPushTimer = null;
-    _lifecycleResyncQueued = true;
-    _publishLifecycleDebugStatus();
+    _enqueueLifecycleResync(reason);
     await _flushLifecycleResync();
   }
 
   Future<void> replayCurrentPreviewStateToNative({
     bool replayPreset = true,
   }) async {
-    syncRuntimeColorContext();
     final camera = state.camera;
     if (camera == null) return;
     if (replayPreset) {
-      await _syncCameraStateToNative(camera: camera);
+      _enqueueLifecycleResync('manualReplayPreset');
+      await _flushLifecycleResync();
       return;
     }
     await _syncCurrentPreviewStateToNative();
