@@ -1019,65 +1019,104 @@ class CapturePipeline {
     final bounds = Rect.fromLTWH(x, y, width, height);
 
     if (dustAmount > 0.001) {
-      final asset =
-          _dustLightPlusAssets[rng.nextInt(_dustLightPlusAssets.length)];
-      final texture =
-          await _getFrameTexture(asset, width.toInt(), height.toInt());
-      final opacity = 1.0;
-      canvas.save();
-      canvas.translate(bounds.center.dx, bounds.center.dy);
-      canvas.rotate((rng.nextDouble() - 0.5) * 0.16);
-      final scale = 1.0 + (rng.nextDouble() - 0.5) * 0.08;
-      canvas.scale(scale, scale);
-      canvas.translate(-bounds.width / 2, -bounds.height / 2);
-      canvas.drawImageRect(
-        texture,
-        Rect.fromLTWH(
+      final a = dustAmount.clamp(0.0, 1.0);
+      final layerCount = (1 + (a * 4).floor()).clamp(1, 4);
+      final brightOpacity = (0.14 + a * 0.62).clamp(0.12, 0.82);
+      final darkOpacity = (0.05 + a * 0.26).clamp(0.04, 0.34);
+      for (var i = 0; i < layerCount; i++) {
+        final asset =
+            _dustLightPlusAssets[rng.nextInt(_dustLightPlusAssets.length)];
+        final texture =
+            await _getFrameTexture(asset, width.toInt(), height.toInt());
+        canvas.save();
+        canvas.translate(bounds.center.dx, bounds.center.dy);
+        canvas.rotate((rng.nextDouble() - 0.5) * 0.24);
+        final scale = 0.94 + rng.nextDouble() * 0.16;
+        canvas.scale(scale, scale);
+        canvas.translate(-bounds.width / 2, -bounds.height / 2);
+        final src = Rect.fromLTWH(
           0,
           0,
           texture.width.toDouble(),
           texture.height.toDouble(),
-        ),
-        Rect.fromLTWH(0, 0, bounds.width, bounds.height),
-        Paint()
-          ..filterQuality = FilterQuality.high
-          ..blendMode = BlendMode.plus
-          ..color = Colors.white.withValues(alpha: opacity),
-      );
-      canvas.restore();
+        );
+        final dst = Rect.fromLTWH(0, 0, bounds.width, bounds.height);
+        // 亮尘（偏白）：对暗部可见
+        canvas.drawImageRect(
+          texture,
+          src,
+          dst,
+          Paint()
+            ..filterQuality = FilterQuality.high
+            ..blendMode = BlendMode.screen
+            ..color = Colors.white.withValues(alpha: brightOpacity),
+        );
+        // 暗尘（偏灰黑）：对亮部可见，避免“只有黑场才看得见”
+        canvas.drawImageRect(
+          texture,
+          src,
+          dst,
+          Paint()
+            ..filterQuality = FilterQuality.high
+            ..blendMode = BlendMode.multiply
+            ..color = Colors.black.withValues(alpha: darkOpacity),
+        );
+        canvas.restore();
+      }
     }
 
-    if (scratchAmount > 0.001 && rng.nextDouble() < 0.82) {
-      final asset =
-          _scratchLightPlusAssets[rng.nextInt(_scratchLightPlusAssets.length)];
-      final texture =
-          await _getFrameTexture(asset, width.toInt(), height.toInt());
-      final opacity = 1.0;
-      canvas.save();
-      canvas.translate(bounds.center.dx, bounds.center.dy);
-      final rotation = (rng.nextDouble() * 2 - 1) * 0.45;
-      canvas.rotate(rotation);
-      final mirrorX = rng.nextBool() ? -1.0 : 1.0;
-      final mirrorY = rng.nextBool() ? -1.0 : 1.0;
-      canvas.scale(mirrorX, mirrorY);
-      final scale = 0.98 + rng.nextDouble() * 0.08;
-      canvas.scale(scale, scale);
-      canvas.translate(-bounds.width / 2, -bounds.height / 2);
-      canvas.drawImageRect(
-        texture,
-        Rect.fromLTWH(
-          0,
-          0,
-          texture.width.toDouble(),
-          texture.height.toDouble(),
-        ),
-        Rect.fromLTWH(0, 0, bounds.width, bounds.height),
-        Paint()
-          ..filterQuality = FilterQuality.high
-          ..blendMode = BlendMode.srcOver
-          ..color = Colors.white.withValues(alpha: opacity),
-      );
-      canvas.restore();
+    if (scratchAmount > 0.001) {
+      final a = scratchAmount.clamp(0.0, 1.0);
+      final appearProb = (0.25 + a * 0.75).clamp(0.25, 1.0);
+      if (rng.nextDouble() < appearProb) {
+        final layerCount = (1 + (a * 3).floor()).clamp(1, 3);
+        final brightOpacity = (0.16 + a * 0.70).clamp(0.12, 0.9);
+        final darkOpacity = (0.05 + a * 0.22).clamp(0.04, 0.32);
+        for (var i = 0; i < layerCount; i++) {
+          final asset = _scratchLightPlusAssets[
+              rng.nextInt(_scratchLightPlusAssets.length)];
+          final texture =
+              await _getFrameTexture(asset, width.toInt(), height.toInt());
+          canvas.save();
+          canvas.translate(bounds.center.dx, bounds.center.dy);
+          final rotation = (rng.nextDouble() * 2 - 1) * 0.55;
+          canvas.rotate(rotation);
+          final mirrorX = rng.nextBool() ? -1.0 : 1.0;
+          final mirrorY = rng.nextBool() ? -1.0 : 1.0;
+          canvas.scale(mirrorX, mirrorY);
+          final scale = 0.9 + rng.nextDouble() * 0.2;
+          canvas.scale(scale, scale);
+          canvas.translate(-bounds.width / 2, -bounds.height / 2);
+          final src = Rect.fromLTWH(
+            0,
+            0,
+            texture.width.toDouble(),
+            texture.height.toDouble(),
+          );
+          final dst = Rect.fromLTWH(0, 0, bounds.width, bounds.height);
+          // 亮划痕
+          canvas.drawImageRect(
+            texture,
+            src,
+            dst,
+            Paint()
+              ..filterQuality = FilterQuality.high
+              ..blendMode = BlendMode.screen
+              ..color = Colors.white.withValues(alpha: brightOpacity),
+          );
+          // 暗划痕
+          canvas.drawImageRect(
+            texture,
+            src,
+            dst,
+            Paint()
+              ..filterQuality = FilterQuality.high
+              ..blendMode = BlendMode.multiply
+              ..color = Colors.black.withValues(alpha: darkOpacity),
+          );
+          canvas.restore();
+        }
+      }
     }
   }
 
