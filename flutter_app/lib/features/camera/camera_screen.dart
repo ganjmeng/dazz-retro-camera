@@ -940,14 +940,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (!mounted || _lastLifecycleState != AppLifecycleState.resumed) return;
     if (!next.isReady || next.lifecyclePhase != 'running') return;
 
-    final prevSignal = previous == null ? '' : _nativeReplaySignalFor(previous);
-    final nextSignal = _nativeReplaySignalFor(next);
     final becameReady = previous?.isReady != true;
     final resumedRunning = previous?.lifecyclePhase != 'running';
     final textureChanged = previous?.textureId != next.textureId;
     final readyVersionChanged =
         (previous?.cameraReadyVersion ?? 0) != next.cameraReadyVersion;
-    final signalChanged = nextSignal != prevSignal;
     final firstRuntimeFrame = (previous?.runtimeStatsUpdatedAtMs ?? 0) <= 0 &&
         next.runtimeStatsUpdatedAtMs > 0;
 
@@ -963,23 +960,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     } else if (firstRuntimeFrame) {
       _previewAwaitingStatsSinceMs = 0;
     }
-
-    if (!(becameReady ||
-        resumedRunning ||
-        textureChanged ||
-        readyVersionChanged ||
-        signalChanged ||
-        firstRuntimeFrame)) {
-      return;
-    }
-    // readyVersionChanged 意味着 native 摄像头完成了一次重建（比例切换/相机切换触发）。
-    // 此时即使 signal 与上次相同，也必须强制重放——因为 signal 可能在重建过程中就已记录，
-    // 但参数在重建完成后被 native 重置，导致特效丢失。
-    if (!firstRuntimeFrame &&
-        !readyVersionChanged &&
-        nextSignal == _lastNativeReplaySignal) return;
-    _lastNativeReplaySignal = nextSignal;
-    _scheduleNativeReadyReplay();
   }
 
   String _nativeReplaySignalFor(CameraState state) {
