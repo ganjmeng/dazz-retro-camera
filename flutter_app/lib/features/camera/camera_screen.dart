@@ -6129,76 +6129,17 @@ class _DebugOverlay extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final params = st.renderParams;
-    final cam = st.camera;
     final camSvc = ref.watch(cameraServiceProvider);
-    final camInfo = camSvc.activeCameraDebugInfo;
-
     final lines = <String>[
-      '── Key Status ──',
       'Svc: ready=${camSvc.isReady} phase=${camSvc.lifecyclePhase} tex=${camSvc.textureId ?? -1} rv=${camSvc.cameraReadyVersion}',
       'Sync: inFlight=${st.lifecycleSyncInFlight} queued=${st.lifecycleSyncQueued} deferred=${st.deferredRenderPushAfterLifecycle}',
       'Version: sent=${st.renderParamsVersion} ack=${st.lastAckedRenderParamsVersion}',
       'Preview: src=${camSvc.previewSourceAspectRatio.toStringAsFixed(3)} rtUpdatedAt=${camSvc.runtimeStatsUpdatedAtMs}',
-      '',
-      'Camera: ${st.activeCameraId}  (${cam?.name ?? "loading"})',
-      'Filter: ${st.activeFilterId ?? "none"}  Lens: ${st.activeLensId ?? "default"}',
-      'Ratio: ${st.activeRatioId ?? "default"}  Frame: ${st.activeFrameId ?? "none"}',
-      '',
-      '── Render Params ──',
-      if (params != null) ...[
-        'Exposure: ${st.exposureValue.toStringAsFixed(2)} EV',
-        'Temp: ${params.effectiveTemperature.toStringAsFixed(0)} (offset: ${st.temperatureOffset.toStringAsFixed(0)})',
-        'Tint: ${params.effectiveTint.toStringAsFixed(0)}',
-        'Contrast: ${params.effectiveContrast.toStringAsFixed(2)}',
-        'Saturation: ${params.effectiveSaturation.toStringAsFixed(2)}',
-        'Vibrance: ${params.effectiveVibrance.toStringAsFixed(0)}',
-        'Highlights: ${params.effectiveHighlights.toStringAsFixed(0)}  Shadows: ${params.effectiveShadows.toStringAsFixed(0)}',
-        'Whites: ${params.effectiveWhites.toStringAsFixed(0)}  Blacks: ${params.effectiveBlacks.toStringAsFixed(0)}',
-        'Clarity: ${params.effectiveClarity.toStringAsFixed(0)}',
-        'Vignette: ${params.effectiveVignette.toStringAsFixed(2)}',
-        'Bloom: ${params.effectiveBloom.toStringAsFixed(2)}  SoftFocus: ${params.effectiveSoftFocus.toStringAsFixed(2)}',
-        'ChromAb: ${params.effectiveChromaticAberration.toStringAsFixed(3)}',
-        'Grain: ${params.effectiveGrain.toStringAsFixed(2)}',
-        'ColorBias R:${params.effectiveColorBiasR.toStringAsFixed(2)} G:${params.effectiveColorBiasG.toStringAsFixed(2)} B:${params.effectiveColorBiasB.toStringAsFixed(2)}',
-        '',
-        '── Policy ──',
-        'LUT:${params.policy.enableLut ? "✓" : "✗"} '
-            'Temp:${params.policy.enableTemperature ? "✓" : "✗"} '
-            'Contrast:${params.policy.enableContrast ? "✓" : "✗"} '
-            'Sat:${params.policy.enableSaturation ? "✓" : "✗"}',
-        'Vignette:${params.policy.enableVignette ? "✓" : "✗"} '
-            'Bloom:${params.policy.enableBloom ? "✓" : "✗"} '
-            'ChromAb:${params.policy.enableChromaticAberration ? "✓" : "✗"} '
-            'Grain:${params.policy.enableGrain ? "✓" : "✗"}',
-      ] else
-        'params: null (loading...)',
-      '',
-      '── UI State ──',
-      'Zoom: ${st.zoomLevel.toStringAsFixed(1)}x  Flash: ${st.flashMode}  Timer: ${st.timerSeconds}s',
-      'WB: ${st.wbMode} (${st.colorTempK}K)  Front: ${st.isFrontCamera}',
-      'Sharpen: ${[
-        "\u4f4e",
-        "\u4e2d",
-        "\u9ad8"
-      ][st.sharpenLevel]}  Grid: ${st.gridEnabled}  Minimap: ${st.minimapEnabled}',
-      '',
-      '\u2500\u2500 Capture Resolution \u2500\u2500',
-      'Raw: ${st.lastCaptureRaw.isEmpty ? "(not captured yet)" : st.lastCaptureRaw}',
-      'Output: ${st.lastCaptureOutput.isEmpty ? "(not captured yet)" : st.lastCaptureOutput}',
-      '',
-      '── Active Camera (Android) ──',
-      if (camInfo.isNotEmpty) ...[
-        'ID: ${camInfo["cameraId"] ?? "?"}  Facing: ${camInfo["facing"] ?? "?"}',
-        'Sensor: ${camInfo["sensorSize"] ?? "?"}  (${camInfo["sensorMp"] ?? "?"}MP)',
-        'Focal: ${camInfo["focalLengths"] ?? "?"}mm',
-      ] else
-        '(iOS or not yet initialized)',
-      '',
-      '── Lifecycle Trace (latest 14) ──',
+      'Cam: ${st.activeCameraId} ratio=${st.activeRatioId ?? "default"} filter=${st.activeFilterId ?? "none"}',
+      '── Trace (latest 16) ──',
       if (st.lifecycleTrace.isNotEmpty)
         ...st.lifecycleTrace.skip(
-          st.lifecycleTrace.length > 14 ? st.lifecycleTrace.length - 14 : 0,
+          st.lifecycleTrace.length > 16 ? st.lifecycleTrace.length - 16 : 0,
         )
       else
         '(empty)',
@@ -6240,7 +6181,7 @@ class _DebugOverlay extends ConsumerWidget {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('已复制诊断串'),
-                        duration: Duration(milliseconds: 900),
+                        duration: Duration(milliseconds: 1100),
                       ),
                     );
                   }
@@ -6255,19 +6196,31 @@ class _DebugOverlay extends ConsumerWidget {
               ),
             ],
           ),
-          ...lines.map((line) => Text(
-                line,
-                style: TextStyle(
-                  color: line.startsWith('──')
-                      ? const Color(0xFF00FF88)
-                      : Colors.white.withAlpha(220),
-                  fontSize: 9.5,
-                  fontFamily: 'monospace',
-                  height: 1.4,
-                  fontWeight:
-                      line.startsWith('──') ? FontWeight.w700 : FontWeight.w400,
-                ),
-              )),
+          const SizedBox(height: 4),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 250),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: lines
+                    .map((line) => Text(
+                          line,
+                          style: TextStyle(
+                            color: line.startsWith('──')
+                                ? const Color(0xFF00FF88)
+                                : Colors.white.withAlpha(220),
+                            fontSize: 9.5,
+                            fontFamily: 'monospace',
+                            height: 1.4,
+                            fontWeight: line.startsWith('──')
+                                ? FontWeight.w700
+                                : FontWeight.w400,
+                          ),
+                        ))
+                    .toList(),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -6284,21 +6237,28 @@ class _TinyDebugButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: const Color(0xFF00FF88).withAlpha(180)),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFF00FF88),
-            fontSize: 8.5,
-            fontFamily: 'monospace',
-            fontWeight: FontWeight.w700,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 52, minHeight: 28),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFF00FF88).withAlpha(180)),
+            color: Colors.black.withAlpha(80),
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF00FF88),
+              fontSize: 10,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ),
