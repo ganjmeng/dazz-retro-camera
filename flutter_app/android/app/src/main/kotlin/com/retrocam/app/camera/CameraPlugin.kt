@@ -2822,9 +2822,6 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             (look["skinRedLimit"]         as? Number)?.let { params["skinRedLimit"]         = it }
         }
 
-        if (cameraId.isNotEmpty()) {
-            renderer.setCameraId(cameraId)
-        }
         if (cachedEffectivePreviewParams.isNotEmpty()) {
             renderer.updateParams(cachedEffectivePreviewParams)
         } else if (params.isNotEmpty()) {
@@ -2851,6 +2848,11 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                     )
                 }
             )
+        }
+        // 与 setPreset 保持一致：先 updateParams 再 setCameraId，避免重绑后相机 ID
+        // 异步切换覆盖刚恢复的 shader 参数。
+        if (cameraId.isNotEmpty()) {
+            renderer.setCameraId(cameraId)
         }
         Log.d(TAG, "reapplyPresetToRenderer: restored lens params fisheyeMode=$cachedLensFisheyeMode, circularFisheye=$cachedLensCircularFisheye, cachedLensKeys=${cachedLensParams.keys}")
     }
