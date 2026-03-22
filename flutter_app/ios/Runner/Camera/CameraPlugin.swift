@@ -1727,7 +1727,12 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
     }
 
     private func scheduleRendererStateReplay(reason: String) {
-        let replayDelays: [DispatchTimeInterval] = [.milliseconds(90), .milliseconds(220)]
+        let replayDelays: [DispatchTimeInterval] = [
+            .milliseconds(30),
+            .milliseconds(90),
+            .milliseconds(170),
+            .milliseconds(260),
+        ]
         for delay in replayDelays {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self else { return }

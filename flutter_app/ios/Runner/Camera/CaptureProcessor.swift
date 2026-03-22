@@ -84,6 +84,16 @@ struct MetalCaptureParams {
     var circularFisheye: Float = 0
 }
 
+/// 独立的动态曲线参数缓冲（buffer(1)），避免破坏主参数结构体内存布局。
+/// 布局：
+/// [0] = toneCurveCount
+/// [1...16] = toneCurveX (0~1)
+/// [17...32] = toneCurveY (0~1)
+private struct ToneCurveUniform {
+    static let pointCapacity = 16
+    static let scalarCount = 1 + pointCapacity + pointCapacity
+}
+
 /**
  * iOS 成片 GPU 处理器
  *
@@ -200,6 +210,7 @@ class CaptureProcessor {
         var captureParams = buildCaptureParams(params: params,
                                                width: inTexture.width,
                                                height: inTexture.height)
+        let toneCurveUniform = buildToneCurveUniform(params: params)
 
         // 4. 加载 LUT 纹理（#7 缓存：相同路径只加载一次）
         var lutTexture: MTLTexture? = nil
@@ -227,6 +238,7 @@ class CaptureProcessor {
         encoder.setTexture(inTexture, index: 0)
         encoder.setTexture(outTexture, index: 1)
         encoder.setBytes(&captureParams, length: MemoryLayout<MetalCaptureParams>.size, index: 0)
+        encoder.setBytes(toneCurveUniform, length: MemoryLayout<Float>.size * toneCurveUniform.count, index: 1)
         // LUT 纹理绑定到 index 2（无 LUT 时不传， shader 通过 lutEnabled 判断）
         if let lut = lutTexture {
             encoder.setTexture(lut, index: 2)
@@ -343,6 +355,39 @@ class CaptureProcessor {
         p.deviceCcm22        = getFloat(params, "deviceCcm22", 1.0)
 
         return p
+    }
+
+    private func buildToneCurveUniform(params: [String: Any]) -> [Float] {
+        var data = [Float](repeating: 0.0, count: ToneCurveUniform.scalarCount)
+        guard let rawPoints = params["toneCurvePoints"] as? [Any] else { return data }
+
+        var points: [(x: Float, y: Float)] = []
+        points.reserveCapacity(rawPoints.count)
+        for item in rawPoints {
+            guard let pair = item as? [Any], pair.count >= 2 else { continue }
+            let xNum = pair[0] as? NSNumber
+            let yNum = pair[1] as? NSNumber
+            guard let x = xNum?.floatValue, let y = yNum?.floatValue else { continue }
+            points.append((
+                x: max(0.0, min(1.0, x / 255.0)),
+                y: max(0.0, min(1.0, y / 255.0))
+            ))
+        }
+        points.sort { $0.x < $1.x }
+        let count = min(points.count, ToneCurveUniform.pointCapacity)
+        guard count >= 2 else { return data }
+
+        data[0] = Float(count)
+        for i in 0..<count {
+            data[1 + i] = points[i].x
+            data[1 + ToneCurveUniform.pointCapacity + i] = points[i].y
+        }
+        for i in count..<ToneCurveUniform.pointCapacity {
+            data[1 + i] = points[count - 1].x
+            data[1 + ToneCurveUniform.pointCapacity + i] = points[count - 1].y
+        }
+        print("[CaptureProcessor] toneCurveCount=\(count)")
+        return data
     }
 
     private func mapCameraId(_ id: String) -> Int32 {

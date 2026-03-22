@@ -392,6 +392,27 @@ static float cp_toneCurve(float x) {
     return outV[9];
 }
 
+static float cp_dynamicToneCurveSample(constant float* curve, float x) {
+    int count = int(curve[0] + 0.5);
+    if (count < 2) return x;
+    float prevX = curve[1];
+    float prevY = curve[1 + 16];
+    if (x <= prevX) return prevY;
+    for (int i = 1; i < 16; i++) {
+        if (i >= count) break;
+        float nextX = curve[1 + i];
+        float nextY = curve[1 + 16 + i];
+        if (x <= nextX) {
+            float span = max(nextX - prevX, 0.0001);
+            float t = clamp((x - prevX) / span, 0.0, 1.0);
+            return mix(prevY, nextY, t);
+        }
+        prevX = nextX;
+        prevY = nextY;
+    }
+    return prevY;
+}
+
 /// Development Softness（显影柔化）
 static float3 cp_developmentSoften(float3 color, float2 uv, float softness,
                                     texture2d<float, access::read> inTex, uint2 gid) {
@@ -450,6 +471,7 @@ kernel void capturePipeline(
     texture2d<float, access::read>   inTexture  [[texture(0)]],
     texture2d<float, access::write>  outTexture [[texture(1)]],
     constant CaptureParams&          params     [[buffer(0)]],
+    constant float*                  toneCurve  [[buffer(1)]],
     texture2d<float>                 lutTexture [[texture(2)]],
     uint2                            gid        [[thread_position_in_grid]])
 {
@@ -534,7 +556,17 @@ kernel void capturePipeline(
 
     // ── Pass 10c: Tone Curve（FXN-R 专属）──────────────────────────────────────────
     if (params.toneCurveStrength > 0.001) {
-        float3 curved = float3(cp_toneCurve(color.r), cp_toneCurve(color.g), cp_toneCurve(color.b));
+        int toneCurveCount = int(toneCurve[0] + 0.5);
+        float3 curved;
+        if (toneCurveCount >= 2) {
+            curved = float3(
+                cp_dynamicToneCurveSample(toneCurve, color.r),
+                cp_dynamicToneCurveSample(toneCurve, color.g),
+                cp_dynamicToneCurveSample(toneCurve, color.b)
+            );
+        } else {
+            curved = float3(cp_toneCurve(color.r), cp_toneCurve(color.g), cp_toneCurve(color.b));
+        }
         color = mix(color, curved, params.toneCurveStrength);
     }
 
