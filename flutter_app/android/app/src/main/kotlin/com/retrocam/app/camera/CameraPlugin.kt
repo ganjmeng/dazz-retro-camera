@@ -579,9 +579,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 val latch = rendererReadyLatch
                 bgExecutor.execute {
                     try {
-                        val ready = latch?.await(5, TimeUnit.SECONDS) ?: true
-                        if (!ready) {
+                        val awaited = latch?.await(5, TimeUnit.SECONDS) ?: true
+                        val ready = awaited && lastRendererReady && glRenderer != null
+                        if (!awaited) {
                             Log.w(TAG, "$reason: renderer ready timeout (5s)")
+                        } else if (!ready) {
+                            Log.w(
+                                TAG,
+                                "$reason: renderer callback completed but renderer unavailable " +
+                                    "(lastRendererReady=$lastRendererReady rendererNull=${glRenderer == null})"
+                            )
                         }
                         mainExecutor.execute {
                             if (generation != rebindGeneration) {
@@ -2249,9 +2256,14 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val owner = lifecycleOwner
         if ((!viewportChanged && !livePhotoBindingChanged) || owner == null || cameraProvider == null || surfaceTexture == null) {
             applyState()
+            val rendererReady = isRendererReadyForVersion(
+                targetVersion = cachedRenderVersion,
+                replayApplied = false,
+                requireReplayApplied = false
+            )
             val payload = mutableMapOf<String, Any>(
                 "appliedVersion" to cachedRenderVersion,
-                "rendererReady" to (lastRendererReady && glRenderer != null),
+                "rendererReady" to rendererReady,
                 "rebound" to false
             )
             payload.putAll(
@@ -2265,37 +2277,59 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
 
         try {
+            fun completeAfterReplay(rebound: Boolean) {
+                applyState()
+                scheduleRendererStateReplay(
+                    reason = "syncCameraState",
+                    targetVersion = cachedRenderVersion
+                ) { replayApplied ->
+                    val rendererReady = isRendererReadyForVersion(
+                        targetVersion = cachedRenderVersion,
+                        replayApplied = replayApplied,
+                        requireReplayApplied = true
+                    )
+                    if (!rendererReady) {
+                        Log.w(
+                            TAG,
+                            "syncCameraState completed but renderer not fully ready: " +
+                                "lastRendererReady=$lastRendererReady replayApplied=$replayApplied " +
+                                "rendererNull=${glRenderer == null}"
+                        )
+                    }
+                    sendEvent("onCameraReady", activeCameraDebugInfo)
+                    val payload = mutableMapOf<String, Any>(
+                        "appliedVersion" to cachedRenderVersion,
+                        "rendererReady" to rendererReady,
+                        "rebound" to rebound
+                    )
+                    payload.putAll(
+                        buildRendererVersionPayload(
+                            targetVersion = cachedRenderVersion,
+                            replayApplied = replayApplied
+                        )
+                    )
+                    result.success(payload)
+                }
+            }
             rebindCameraUseCasesSafely(
                 owner = owner,
                 reason = "syncCameraState",
-                onReady = {
-                    applyState()
-                    scheduleRendererStateReplay(
-                        reason = "syncCameraState",
-                        targetVersion = cachedRenderVersion
-                    ) { replayApplied ->
-                        val rendererReady = (lastRendererReady && glRenderer != null && replayApplied)
-                        if (!rendererReady) {
-                            Log.w(
-                                TAG,
-                                "syncCameraState completed but renderer not fully ready: " +
-                                    "lastRendererReady=$lastRendererReady replayApplied=$replayApplied rendererNull=${glRenderer == null}"
-                            )
-                        }
-                        sendEvent("onCameraReady", activeCameraDebugInfo)
-                        val payload = mutableMapOf<String, Any>(
-                            "appliedVersion" to cachedRenderVersion,
-                            "rendererReady" to rendererReady,
-                            "rebound" to true
-                        )
-                        payload.putAll(
-                            buildRendererVersionPayload(
-                                targetVersion = cachedRenderVersion,
-                                replayApplied = replayApplied
-                            )
-                        )
-                        result.success(payload)
+                onReady = { ready ->
+                    if (ready) {
+                        completeAfterReplay(true)
+                        return@rebindCameraUseCasesSafely
                     }
+                    Log.w(TAG, "syncCameraState: first rebind not ready, retrying once")
+                    rebindCameraUseCasesSafely(
+                        owner = owner,
+                        reason = "syncCameraState.retryRebind",
+                        onReady = {
+                            completeAfterReplay(true)
+                        },
+                        onError = { e ->
+                            result.error("SYNC_CAMERA_STATE_FAILED", e.message, null)
+                        }
+                    )
                 },
                 onError = { e ->
                     result.error("SYNC_CAMERA_STATE_FAILED", e.message, null)
@@ -2815,6 +2849,17 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             "rendererAppliedVersion" to (renderer?.getAppliedStateVersion() ?: -1),
             "replayApplied" to replayApplied
         )
+    }
+
+    private fun isRendererReadyForVersion(
+        targetVersion: Int,
+        replayApplied: Boolean = false,
+        requireReplayApplied: Boolean = false
+    ): Boolean {
+        val renderer = glRenderer ?: return false
+        val versionApplied = renderer.getAppliedStateVersion() >= targetVersion
+        val baseReady = lastRendererReady && versionApplied
+        return if (requireReplayApplied) baseReady && replayApplied else baseReady
     }
 
     // ─────────────────────────────────────────────
