@@ -106,6 +106,9 @@ uniform float uTime;
 uniform float uHighlightRolloff;
 uniform float uHighlightRolloff2;   // 高光柔和滚落 2（FXN-R 专属）
 uniform float uToneCurveStrength;   // Tone Curve 强度（FXN-R 专属）
+uniform int   uToneCurveCount;
+uniform float uToneCurveX[16];
+uniform float uToneCurveY[16];
 uniform float uPaperTexture;
 uniform float uEdgeFalloff;
 uniform float uExposureVariation;
@@ -120,6 +123,12 @@ uniform float uSkinRedLimit;
 uniform float uGrainSize;            // 颗粒大小
 uniform float uLuminanceNoise;       // 亮度噪声
 uniform float uChromaNoise;           // 色度噪声
+uniform float uDehaze;
+uniform float uHighlightWarmAmount;
+uniform float uTopBottomBias;
+uniform float uLeftRightBias;
+uniform float uBwMixerEnabled;
+uniform vec3  uBwChannelMixer;
 // ── Fade / Split Toning / Light Leak ──
 uniform float uFadeAmount;
 uniform vec3  uShadowTint;
@@ -520,6 +529,81 @@ vec3 applyVignette(vec3 c, vec2 uv, float amount) {
     return clamp(c * vignette, 0.0, 1.0);
 }
 
+vec3 applyDirectionalBias(vec3 c, vec2 uv, float topBottomBias, float leftRightBias) {
+    float directional = 1.0 +
+        (uv.y - 0.5) * topBottomBias * 0.35 +
+        (uv.x - 0.5) * leftRightBias * 0.35;
+    return clamp(c * directional, 0.0, 1.0);
+}
+
+vec3 applyDehaze(vec3 c, float amount) {
+    if (amount < 0.001) return c;
+    float minC = min(c.r, min(c.g, c.b));
+    float maxC = max(c.r, max(c.g, c.b));
+    float haze = clamp(minC * 0.65 + (1.0 - (maxC - minC)) * 0.35, 0.0, 1.0);
+    float gain = 1.0 + amount * 0.55;
+    float offset = haze * amount * 0.12;
+    vec3 outColor = vec3(
+        clamp((c.r - offset) * gain, 0.0, 1.0),
+        clamp((c.g - offset) * gain, 0.0, 1.0),
+        clamp((c.b - offset * 1.05) * gain, 0.0, 1.0)
+    );
+    return outColor;
+}
+
+vec3 applyHighlightWarm(vec3 c, float amount) {
+    if (amount < 0.001) return c;
+    float lum = luminance(c);
+    if (lum <= 0.55) return c;
+    float mask = smoothstep(0.55, 1.0, lum) * clamp(amount, 0.0, 1.0);
+    vec3 target = vec3(
+        clamp(c.r + 0.08, 0.0, 1.0),
+        clamp(c.g + 0.035, 0.0, 1.0),
+        clamp(c.b - 0.045, 0.0, 1.0)
+    );
+    vec3 mixMask = vec3(mask, mask * 0.9, mask * 0.85);
+    return clamp(mix(c, target, mixMask), 0.0, 1.0);
+}
+
+vec3 applyBwMixer(vec3 c, vec3 mixer, float enabled) {
+    if (enabled < 0.5) return c;
+    float y = dot(c, mixer);
+    float clampedY = clamp(y, 0.0, 1.0);
+    return vec3(clampedY);
+}
+
+float applyToneCurveDynamicValue(float x) {
+    if (uToneCurveCount < 2) return x;
+    float firstX = uToneCurveX[0];
+    float firstY = uToneCurveY[0];
+    if (x <= firstX) return firstY;
+    float prevX = firstX;
+    float prevY = firstY;
+    for (int i = 1; i < 16; i++) {
+        if (i >= uToneCurveCount) break;
+        float nextX = uToneCurveX[i];
+        float nextY = uToneCurveY[i];
+        if (x <= nextX) {
+            float span = max(nextX - prevX, 0.0001);
+            float t = clamp((x - prevX) / span, 0.0, 1.0);
+            return mix(prevY, nextY, t);
+        }
+        prevX = nextX;
+        prevY = nextY;
+    }
+    return prevY;
+}
+
+vec3 applyDynamicToneCurve(vec3 c, float strength) {
+    if (uToneCurveCount < 2 || strength < 0.001) return c;
+    vec3 curved = vec3(
+        applyToneCurveDynamicValue(c.r),
+        applyToneCurveDynamicValue(c.g),
+        applyToneCurveDynamicValue(c.b)
+    );
+    return mix(c, curved, strength);
+}
+
 // ── 主函数 ────────────────────────────────────────────────────────────
 void main() {
     vec2 uv = vTexCoord;
@@ -591,16 +675,6 @@ void main() {
         color = applyCaptureHighlightRolloff2(color, uHighlightRolloff2);
     }
 
-    // Pass 11c: Tone Curve（FXN-R 专属）
-    if (uToneCurveStrength > 0.0) {
-        vec3 curved = vec3(
-            captureApplyToneCurve(color.r),
-            captureApplyToneCurve(color.g),
-            captureApplyToneCurve(color.b)
-        );
-        color = mix(color, curved, uToneCurveStrength);
-    }
-
     // Pass 12: Center Gain（成片专属）
     color = applyCenterGain(color, uv, uCenterGain);
 
@@ -610,6 +684,7 @@ void main() {
     // Pass 14: Edge Falloff + Corner Warm（成片专属）
     color = applyEdgeFalloff(color, uv, uEdgeFalloff);
     color = applyCornerWarm(color, uv, uCornerWarmShift);
+    color = applyDirectionalBias(color, uv, uTopBottomBias, uLeftRightBias);
 
     // Pass 14b: Development Softness（显影柔化）
     color = applyDevelopmentSoften(color, uv, uDevelopmentSoftness);
@@ -619,6 +694,23 @@ void main() {
 
     // Pass 16: Paper Texture（成片专属）
     color = applyPaperTexture(color, uv, uPaperTexture, uTime);
+
+    // Pass 16b: Dehaze / HighlightWarm / B&W Mixer / Tone Curve（JSON 驱动）
+    color = applyDehaze(color, uDehaze);
+    color = applyHighlightWarm(color, uHighlightWarmAmount);
+    color = applyBwMixer(color, uBwChannelMixer, uBwMixerEnabled);
+    if (uToneCurveStrength > 0.0) {
+        if (uToneCurveCount >= 2) {
+            color = applyDynamicToneCurve(color, uToneCurveStrength);
+        } else {
+            vec3 curved = vec3(
+                captureApplyToneCurve(color.r),
+                captureApplyToneCurve(color.g),
+                captureApplyToneCurve(color.b)
+            );
+            color = mix(color, curved, uToneCurveStrength);
+        }
+    }
 
     // Pass 17: Film Grain（亮度依赖 + grainSize）
     color = applyGrain(color, uv, uGrainAmount, uTime, uGrainSize);
@@ -733,6 +825,9 @@ void main() {
     private var uHighlightRolloff = -1
     private var uHighlightRolloff2 = -1
     private var uToneCurveStrength = -1
+    private var uToneCurveCount = -1
+    private var uToneCurveX = -1
+    private var uToneCurveY = -1
     private var uPaperTexture = -1
     private var uEdgeFalloff = -1
     private var uExposureVariation = -1
@@ -747,6 +842,12 @@ void main() {
     private var uGrainSize = -1
     private var uLuminanceNoise = -1
     private var uChromaNoise = -1
+    private var uDehaze = -1
+    private var uHighlightWarmAmount = -1
+    private var uTopBottomBias = -1
+    private var uLeftRightBias = -1
+    private var uBwMixerEnabled = -1
+    private var uBwChannelMixer = -1
     private var uFadeAmount = -1
     private var uShadowTint = -1
     private var uHighlightTint = -1
@@ -1260,6 +1361,9 @@ void main() {
         uHighlightRolloff = loc("uHighlightRolloff")
         uHighlightRolloff2 = loc("uHighlightRolloff2")
         uToneCurveStrength = loc("uToneCurveStrength")
+        uToneCurveCount = loc("uToneCurveCount")
+        uToneCurveX = loc("uToneCurveX[0]")
+        uToneCurveY = loc("uToneCurveY[0]")
         uPaperTexture = loc("uPaperTexture")
         uEdgeFalloff = loc("uEdgeFalloff")
         uExposureVariation = loc("uExposureVariation")
@@ -1274,6 +1378,12 @@ void main() {
         uGrainSize = loc("uGrainSize")
         uLuminanceNoise = loc("uLuminanceNoise")
         uChromaNoise = loc("uChromaNoise")
+        uDehaze = loc("uDehaze")
+        uHighlightWarmAmount = loc("uHighlightWarmAmount")
+        uTopBottomBias = loc("uTopBottomBias")
+        uLeftRightBias = loc("uLeftRightBias")
+        uBwMixerEnabled = loc("uBwMixerEnabled")
+        uBwChannelMixer = loc("uBwChannelMixer")
         uFadeAmount = loc("uFadeAmount")
         uShadowTint = loc("uShadowTint")
         uHighlightTint = loc("uHighlightTint")
@@ -1303,6 +1413,16 @@ void main() {
             is String -> v.toFloatOrNull() ?: default
             else      -> default
         }
+        fun listFloat(v: Any?): List<Float> {
+            if (v !is List<*>) return emptyList()
+            return v.mapNotNull {
+                when (it) {
+                    is Number -> it.toFloat()
+                    is String -> it.toFloatOrNull()
+                    else -> null
+                }
+            }
+        }
         GLES30.glUniform1f(uContrast, f("contrast", 1.0f))
         GLES30.glUniform1f(uSaturation, f("saturation", 1.0f))
         GLES30.glUniform1f(uTemperatureShift, f("temperatureShift"))
@@ -1327,6 +1447,8 @@ void main() {
         GLES30.glUniform1f(uHighlightRolloff, f("highlightRolloff"))
         GLES30.glUniform1f(uHighlightRolloff2, f("highlightRolloff2"))
         GLES30.glUniform1f(uToneCurveStrength, f("toneCurveStrength"))
+        GLES30.glUniform1f(uDehaze, f("dehaze"))
+        GLES30.glUniform1f(uHighlightWarmAmount, f("highlightWarmAmount"))
         GLES30.glUniform1f(uPaperTexture, f("paperTexture"))
         GLES30.glUniform1f(uEdgeFalloff, f("edgeFalloff"))
         GLES30.glUniform1f(uExposureVariation, f("exposureVariation"))
@@ -1341,6 +1463,44 @@ void main() {
         GLES30.glUniform1f(uGrainSize, f("grainSize", 1.0f))
         GLES30.glUniform1f(uLuminanceNoise, f("luminanceNoise"))
         GLES30.glUniform1f(uChromaNoise, f("chromaNoise"))
+        GLES30.glUniform1f(uTopBottomBias, f("topBottomBias"))
+        GLES30.glUniform1f(uLeftRightBias, f("leftRightBias"))
+        val bwMixer = listFloat(params["bwChannelMixer"])
+        val hasBwMixer = bwMixer.size >= 3
+        GLES30.glUniform1f(uBwMixerEnabled, if (hasBwMixer) 1.0f else 0.0f)
+        GLES30.glUniform3f(
+            uBwChannelMixer,
+            if (hasBwMixer) bwMixer[0] else 0.2126f,
+            if (hasBwMixer) bwMixer[1] else 0.7152f,
+            if (hasBwMixer) bwMixer[2] else 0.0722f,
+        )
+        val tonePairs = mutableListOf<Pair<Float, Float>>()
+        val rawToneCurve = params["toneCurvePoints"]
+        if (rawToneCurve is List<*>) {
+            for (point in rawToneCurve) {
+                if (point !is List<*> || point.size < 2) continue
+                val x = (point[0] as? Number)?.toFloat() ?: continue
+                val y = (point[1] as? Number)?.toFloat() ?: continue
+                tonePairs += Pair((x / 255.0f).coerceIn(0.0f, 1.0f), (y / 255.0f).coerceIn(0.0f, 1.0f))
+            }
+        }
+        tonePairs.sortBy { it.first }
+        val toneX = FloatArray(16)
+        val toneY = FloatArray(16)
+        val toneCount = tonePairs.size.coerceAtMost(16)
+        if (toneCount >= 2) {
+            for (i in 0 until toneCount) {
+                toneX[i] = tonePairs[i].first
+                toneY[i] = tonePairs[i].second
+            }
+            for (i in toneCount until 16) {
+                toneX[i] = toneX[toneCount - 1]
+                toneY[i] = toneY[toneCount - 1]
+            }
+        }
+        GLES30.glUniform1i(uToneCurveCount, if (toneCount >= 2) toneCount else 0)
+        GLES30.glUniform1fv(uToneCurveX, 16, toneX, 0)
+        GLES30.glUniform1fv(uToneCurveY, 16, toneY, 0)
         GLES30.glUniform1f(uFadeAmount, f("fadeAmount"))
         GLES30.glUniform3f(uShadowTint, f("shadowTintR"), f("shadowTintG"), f("shadowTintB"))
         GLES30.glUniform3f(uHighlightTint, f("highlightTintR"), f("highlightTintG"), f("highlightTintB"))
@@ -1378,6 +1538,12 @@ void main() {
         GLES30.glUniform1f(uLutEnabled, 0.0f)  // 默认关闭，由 processImage 覆盖
         GLES30.glUniform1f(uLutStrength, f("lutStrength", 1.0f))
         GLES30.glUniform1f(uLutSize, 33.0f)
+        Log.d(
+            TAG,
+            "capture.json ext dehaze=${f("dehaze")} warm=${f("highlightWarmAmount")} " +
+                "tb=${f("topBottomBias")} lr=${f("leftRightBias")} " +
+                "bw=${hasBwMixer} tonePts=${if (toneCount >= 2) toneCount else 0}"
+        )
     }
 
     /**
