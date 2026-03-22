@@ -396,7 +396,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 previewStreamHeight = h
                 var activeRenderer: CameraGLRenderer? = null
                 var inputSurface: Surface? = null
-                repeat(2) { attempt ->
+                repeat(5) { attempt ->
                     if (inputSurface != null) return@repeat
                     val candidate = CameraGLRenderer(st, flutterPluginBinding.applicationContext)
                     candidate.initialize(w, h)
@@ -410,6 +410,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                             TAG,
                             "GL renderer init attempt ${attempt + 1} failed for ${w}x${h}"
                         )
+                        if (attempt < 4) {
+                            try {
+                                Thread.sleep(120L)
+                            } catch (_: InterruptedException) {
+                            }
+                        }
                     }
                 }
 
@@ -2323,8 +2329,28 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                     rebindCameraUseCasesSafely(
                         owner = owner,
                         reason = "syncCameraState.retryRebind",
-                        onReady = {
-                            completeAfterReplay(true)
+                        onReady = { retryReady ->
+                            if (retryReady) {
+                                completeAfterReplay(true)
+                                return@rebindCameraUseCasesSafely
+                            }
+                            Log.w(
+                                TAG,
+                                "syncCameraState: retry rebind still not ready " +
+                                    "(lastRendererReady=$lastRendererReady rendererNull=${glRenderer == null})"
+                            )
+                            val payload = mutableMapOf<String, Any>(
+                                "appliedVersion" to cachedRenderVersion,
+                                "rendererReady" to false,
+                                "rebound" to true
+                            )
+                            payload.putAll(
+                                buildRendererVersionPayload(
+                                    targetVersion = cachedRenderVersion,
+                                    replayApplied = false
+                                )
+                            )
+                            result.success(payload)
                         },
                         onError = { e ->
                             result.error("SYNC_CAMERA_STATE_FAILED", e.message, null)

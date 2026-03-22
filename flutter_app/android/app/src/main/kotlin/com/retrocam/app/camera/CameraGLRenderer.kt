@@ -888,9 +888,9 @@ void main() {
             initGL(width, height)
             latch.countDown()
         }
-        val ok = latch.await(2, TimeUnit.SECONDS)
+        val ok = latch.await(5, TimeUnit.SECONDS)
         if (!ok) {
-            Log.e(TAG, "GL initialization timed out after 2s")
+            Log.e(TAG, "GL initialization timed out after 5s")
         }
     }
 
