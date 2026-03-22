@@ -1965,10 +1965,6 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     }
   }
 
-  Future<void> _syncViewportRatioToNative() async {
-    await _flushLifecycleResync();
-  }
-
   Map<String, dynamic> _buildActiveLensParams(CameraDefinition camera) {
     final lens = camera.lensById(state.activeLensId);
     return {
@@ -2048,7 +2044,10 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     try {
       while (_lifecycleResyncQueued) {
         _lifecycleResyncQueued = false;
-        await _syncViewportRatioToNative();
+        final camera = state.camera;
+        if (camera == null) continue;
+        // 生命周期统一入口：相机/比例切换都走同一条全量恢复链路。
+        await _syncCameraStateToNative(camera: camera);
       }
     } finally {
       _isLifecycleResyncInFlight = false;

@@ -462,4 +462,54 @@ void main() {
       );
     });
   });
+
+  group('比例切换生命周期回归', () {
+    test('同相机切比例时应走完整生命周期同步链路', () async {
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.retrocam.app/camera_control'),
+        (call) async {
+          calls.add(call);
+          switch (call.method) {
+            case 'syncRuntimeState':
+              final args = (call.arguments as Map?) ?? const {};
+              return {
+                'appliedVersion': (args['version'] as int?) ?? 0,
+                'rendererReady': true,
+              };
+            case 'updateRenderParams':
+              final args = (call.arguments as Map?) ?? const {};
+              return {
+                'appliedVersion': (args['version'] as int?) ?? 0,
+                'rendererReady': true,
+              };
+            case 'updateViewportRatio':
+              return {'rebound': true};
+            default:
+              return null;
+          }
+        },
+      );
+
+      final c = makeContainer();
+      addTearDown(c.dispose);
+      final n = c.read(cameraAppProvider.notifier);
+
+      await n.switchToCamera('inst_c');
+      calls.clear();
+
+      await n.selectRatioAndSync('ratio_1_1');
+
+      expect(c.read(cameraAppProvider).activeRatioId, 'ratio_1_1');
+      final methodNames = calls.map((e) => e.method).toList();
+      expect(methodNames, contains('setPreset'));
+      expect(methodNames, contains('updateViewportRatio'));
+      expect(
+        methodNames.where((m) => m == 'syncRuntimeState').length,
+        greaterThanOrEqualTo(3),
+        reason: '比例切换后需要至少 3 次 runtime 重放覆盖重绑窗口',
+      );
+    });
+  });
 }
