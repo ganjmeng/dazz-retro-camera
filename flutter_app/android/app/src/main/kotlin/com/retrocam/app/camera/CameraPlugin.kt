@@ -1948,9 +1948,17 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
     }
 
-    private fun scheduleRendererStateReplay(reason: String) {
+    private fun scheduleRendererStateReplay(
+        reason: String,
+        onComplete: (() -> Unit)? = null
+    ) {
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
         val replayDelays = longArrayOf(90L, 220L)
+        if (replayDelays.isEmpty()) {
+            onComplete?.invoke()
+            return
+        }
+        val finalDelay = replayDelays.maxOrNull() ?: 0L
         replayDelays.forEach { delayMs ->
             handler.postDelayed({
                 try {
@@ -1964,6 +1972,9 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 }
             }, delayMs)
         }
+        handler.postDelayed({
+            onComplete?.invoke()
+        }, finalDelay + 10L)
     }
 
     // ─────────────────────────────────────────────
@@ -2212,15 +2223,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 reason = "syncCameraState",
                 onReady = {
                     applyState()
-                    scheduleRendererStateReplay("syncCameraState")
-                    sendEvent("onCameraReady", activeCameraDebugInfo)
-                    result.success(
-                        mapOf(
-                            "appliedVersion" to cachedRenderVersion,
-                            "rendererReady" to (glRenderer != null),
-                            "rebound" to true
+                    scheduleRendererStateReplay("syncCameraState") {
+                        sendEvent("onCameraReady", activeCameraDebugInfo)
+                        result.success(
+                            mapOf(
+                                "appliedVersion" to cachedRenderVersion,
+                                "rendererReady" to (glRenderer != null),
+                                "rebound" to true
+                            )
                         )
-                    )
+                    }
                 },
                 onError = { e ->
                     result.error("SYNC_CAMERA_STATE_FAILED", e.message, null)
