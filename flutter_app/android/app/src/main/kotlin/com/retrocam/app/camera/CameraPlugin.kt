@@ -805,9 +805,13 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 (look["colorBiasG"]          as? Number)?.let { params["colorBiasG"]          = it }
                 (look["colorBiasB"]          as? Number)?.let { params["colorBiasB"]          = it }
                 (look["grainSize"]           as? Number)?.let { params["grainSize"]           = it }
+                (look["grainRoughness"]      as? Number)?.let { params["grainRoughness"]      = it }
+                (look["grainLumaBias"]       as? Number)?.let { params["grainLumaBias"]       = it }
+                (look["grainColorVariation"] as? Number)?.let { params["grainColorVariation"] = it }
                 (look["luminanceNoise"]      as? Number)?.let { params["luminanceNoise"]      = it }
                 (look["chromaNoise"]         as? Number)?.let { params["chromaNoise"]         = it }
                 (look["highlightWarmAmount"] as? Number)?.let { params["highlightWarmAmount"] = it }
+                (look["highlightRolloffSoftKnee"] as? Number)?.let { params["highlightRolloffSoftKnee"] = it }
                 (look["highlightRolloff"]    as? Number)?.let { params["highlightRolloff"]    = it }
                 (look["highlightRolloff2"]   as? Number)?.let { params["highlightRolloff2"]   = it }
                 (look["paperTexture"]        as? Number)?.let { params["paperTexture"]        = it }
@@ -2965,9 +2969,13 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             (look["colorBiasG"]          as? Number)?.let { params["colorBiasG"]          = it }
             (look["colorBiasB"]          as? Number)?.let { params["colorBiasB"]          = it }
             (look["grainSize"]           as? Number)?.let { params["grainSize"]           = it }
+            (look["grainRoughness"]      as? Number)?.let { params["grainRoughness"]      = it }
+            (look["grainLumaBias"]       as? Number)?.let { params["grainLumaBias"]       = it }
+            (look["grainColorVariation"] as? Number)?.let { params["grainColorVariation"] = it }
             (look["luminanceNoise"]      as? Number)?.let { params["luminanceNoise"]      = it }
             (look["chromaNoise"]         as? Number)?.let { params["chromaNoise"]         = it }
             (look["highlightWarmAmount"] as? Number)?.let { params["highlightWarmAmount"] = it }
+            (look["highlightRolloffSoftKnee"] as? Number)?.let { params["highlightRolloffSoftKnee"] = it }
             (look["highlightRolloff"]    as? Number)?.let { params["highlightRolloff"]    = it }
             (look["highlightRolloff2"]   as? Number)?.let { params["highlightRolloff2"]   = it }
             (look["paperTexture"]        as? Number)?.let { params["paperTexture"]        = it }

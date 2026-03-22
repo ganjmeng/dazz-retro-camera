@@ -121,6 +121,9 @@ uniform float uSkinSatProtect;
 uniform float uSkinLumaSoften;
 uniform float uSkinRedLimit;
 uniform float uGrainSize;            // 颗粒大小
+uniform float uGrainRoughness;       // 颗粒粗糙度（0.0~1.0）
+uniform float uGrainLumaBias;        // 颗粒亮度偏置
+uniform float uGrainColorVariation;  // 彩色颗粒 RGB 轻微分离
 uniform float uLuminanceNoise;       // 亮度噪声
 uniform float uChromaNoise;           // 色度噪声
 uniform float uDehaze;
@@ -130,6 +133,7 @@ uniform float uToneMapShoulder;
 uniform float uToneMapStrength;
 uniform float uMidGrayDensity;
 uniform float uHighlightRolloffPivot;
+uniform float uHighlightRolloffSoftKnee;
 uniform float uTopBottomBias;
 uniform float uLeftRightBias;
 uniform float uBwMixerEnabled;
@@ -392,20 +396,23 @@ vec3 applyHalation(vec3 c, float amount, vec2 uv) {
 }
 
 // ── Pass 11: Highlight Rolloff ────────────────────────────────────
-vec3 applyHighlightRolloff(vec3 c, float rolloff, float pivot) {
+float applyHighlightRolloffScalar(float x, float amount, float pivot, float knee) {
+    if (x <= pivot) return x;
+    float t = clamp((x - pivot) / max(1e-5, 1.0 - pivot), 0.0, 1.0);
+    t = smoothstep(0.0, 1.0, pow(t, 1.0 + knee));
+    float compressed = pivot + (1.0 - pivot) * (1.0 - exp(-t * (1.0 + amount * 4.0)));
+    return mix(x, compressed, amount);
+}
+
+vec3 applyHighlightRolloff(vec3 c, float rolloff, float pivot, float knee) {
     if (rolloff < 0.001) return c;
-    float lum = luminance(c);
     float p = clamp(pivot, 0.52, 0.92);
-    float kneeStart = max(0.45, p - rolloff * 0.16);
-    float kneeEnd = min(1.0, p + (1.0 - p) * (0.58 + 0.32 * rolloff));
-    if (lum <= kneeStart) return c;
-    float mask = smoothstep(kneeStart, kneeEnd, lum);
-    float targetLum = mix(lum, kneeStart + (lum - kneeStart) * (1.0 - 0.62 * rolloff), mask);
-    float lumScale = targetLum / max(lum, 1e-4);
-    float neutralPull = mask * rolloff * 0.10;
-    vec3 compressed = c * lumScale;
-    compressed = mix(compressed, vec3(luminance(compressed)), neutralPull);
-    return clamp(mix(c, compressed, mask * (0.72 + 0.22 * rolloff)), 0.0, 1.0);
+    float k = clamp(knee, 0.0, 1.0);
+    return clamp(vec3(
+        applyHighlightRolloffScalar(c.r, rolloff, p, k),
+        applyHighlightRolloffScalar(c.g, rolloff, p, k),
+        applyHighlightRolloffScalar(c.b, rolloff, p, k)
+    ), 0.0, 1.0);
 }
 
 // ── Pass 11b: Highlight Rolloff 2（FXN-R 专属，二次压缩）────────────────────
@@ -507,34 +514,44 @@ vec3 applyPaperTexture(vec3 c, vec2 uv, float amount, float time) {
 }
 
 // ── Pass 17: Film Grain（亮度依赖 + grainSize 控制）─────────────────────
-vec3 applyGrain(vec3 c, vec2 uv, float amount, float time, float grainSz) {
+vec3 applyGrain(vec3 c, vec2 uv, float amount, float time, float grainSz, float roughness) {
     if (amount < 0.001) return c;
-    float gSize = clamp(grainSz, 0.55, 2.2);
-    vec2 cell = max(vec2(0.00035), vec2(gSize / 320.0, gSize / 420.0));
-    vec2 gridUv = floor(uv / cell) * cell;
-    float timeSeed = floor(time * 18.0) / 18.0;
-    float g1 = hash(gridUv * 1.0 + vec2(0.17, 0.31) + vec2(timeSeed * 0.11));
-    float g2 = hash(gridUv * 1.9 + vec2(2.41, 1.73) + vec2(timeSeed * 0.17));
-    float g3 = hash(gridUv * 3.7 + vec2(4.13, 3.19) + vec2(timeSeed * 0.23));
-    float grain = (g1 - 0.5) * 0.62 + (g2 - 0.5) * 0.26 + (g3 - 0.5) * 0.12;
-    float clump = smoothstep(0.58, 0.98, g1);
-    grain *= mix(0.72, 1.35, clump);
+    float gSize = clamp(grainSz, 0.55, 2.6);
+    float rough = clamp(roughness, 0.0, 1.0);
+    float lumaBias = clamp(uGrainLumaBias, 0.0, 1.0);
+    float colorVar = clamp(uGrainColorVariation, 0.0, 0.5);
+    vec2 baseScale = vec2(400.0 / gSize, 320.0 / gSize);
+    float seed = 0.0;
+    float fine = hash(floor(uv * baseScale) / baseScale + vec2(0.17, 0.31) + vec2(seed));
+    float mid = hash(floor(uv * (baseScale * 0.35)) / (baseScale * 0.35) + vec2(2.41, 1.73) + vec2(seed));
+    float coarse = hash(floor(uv * (baseScale * 0.12)) / (baseScale * 0.12) + vec2(4.13, 3.19) + vec2(seed));
+    float high = (fine - 0.5) * 0.60 + (mid - 0.5) * 0.30 + (coarse - 0.5) * 0.10;
+    float low = (hash(floor(uv * (baseScale * 0.18)) / (baseScale * 0.18) + vec2(6.31, 5.17) + vec2(seed)) - 0.5) * 2.0;
+    float grain = high * mix(1.0, low, rough);
     float lum = luminance(c);
-    float midMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 1.6);
-    float shadowBoost = smoothstep(0.55, 0.05, lum) * 0.35;
-    float mask = clamp(0.30 + midMask * 0.78 + shadowBoost, 0.0, 1.35);
-    float chromaJitter = (g2 - g3) * 0.045 * amount;
-    vec3 grainRgb = vec3(grain + chromaJitter, grain, grain - chromaJitter);
-    return clamp(c + grainRgb * amount * 0.34 * mask, 0.0, 1.0);
+    float dark = smoothstep(0.05, 0.25, lum);
+    float bright = 1.0 - smoothstep(0.70, 0.95, lum);
+    float midMask = dark * bright;
+    float brightFalloff = 1.0 - smoothstep(0.75, 1.0, lum);
+    float mask = mix(midMask, brightFalloff, lumaBias);
+    mask *= (1.0 + fwidth(lum) * 2.0);
+    vec2 vignetteVec = uv * 2.0 - 1.0;
+    float vignetteMask = smoothstep(0.30, 1.0, dot(vignetteVec, vignetteVec));
+    mask *= mix(1.0, 1.18, vignetteMask);
+    float jitterR = (hash(uv * baseScale * 1.03 + vec2(1.7)) - 0.5) * colorVar;
+    float jitterG = (hash(uv * baseScale * 1.11 + vec2(2.3)) - 0.5) * colorVar;
+    float jitterB = (hash(uv * baseScale * 0.97 + vec2(3.1)) - 0.5) * colorVar;
+    vec3 grainRgb = vec3(grain + jitterR, grain + jitterG, grain + jitterB);
+    return clamp(c + grainRgb * amount * mask, 0.0, 1.0);
 }
 
 // ── Pass 18: Digital Noise（成片专用：hash 暗部增强噪点）────────────────────
 vec3 applyNoise(vec3 c, vec2 uv, float amount, float time) {
     if (amount < 0.001) return c;
     float lum   = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    float noise = hash(uv * 800.0 + vec2(time)) - 0.5;
+    float noise = hash(uv * 800.0 + vec2(0.0)) - 0.5;
     float dark  = 1.0 - lum;
-    return clamp(c + noise * amount * 0.2 * dark, 0.0, 1.0);
+    return clamp(c + noise * amount * 0.24 * dark, 0.0, 1.0);
 }
 
 // ── Pass 19: Vignette（smoothstep 暗角，与预览统一）─────────────────────────
@@ -720,7 +737,7 @@ void main() {
     color = applyHalation(color, uHalationAmount, uv);
 
     // Pass 11: Highlight Rolloff（成片专属）
-    color = applyHighlightRolloff(color, uHighlightRolloff, uHighlightRolloffPivot);
+    color = applyHighlightRolloff(color, uHighlightRolloff, uHighlightRolloffPivot, uHighlightRolloffSoftKnee);
 
     // Pass 11b: Highlight Rolloff 2（FXN-R 专属）
     if (uHighlightRolloff2 > 0.0) {
@@ -772,7 +789,7 @@ void main() {
     );
 
     // Pass 17: Film Grain（亮度依赖 + grainSize）
-    color = applyGrain(color, uv, uGrainAmount, uTime, uGrainSize);
+    color = applyGrain(color, uv, uGrainAmount, uTime, uGrainSize, uGrainRoughness);
 
     // Pass 18: Digital Noise
     color = applyNoise(color, uv, uNoiseAmount, uTime);
@@ -780,14 +797,14 @@ void main() {
     // Pass 18b: Luminance Noise
     if (uLuminanceNoise > 0.0) {
         float ln = hash(uv * 600.0 + vec2(uTime + 1.7)) - 0.5;
-        color = clamp(color + ln * uLuminanceNoise * 0.15, 0.0, 1.0);
+        color = clamp(color + ln * uLuminanceNoise * 0.17, 0.0, 1.0);
     }
     // Pass 18c: Chroma Noise
     if (uChromaNoise > 0.0) {
         float cr = hash(uv * 500.0 + vec2(uTime + 3.1)) - 0.5;
         float cg = hash(uv * 500.0 + vec2(uTime + 5.3)) - 0.5;
         float cb = hash(uv * 500.0 + vec2(uTime + 7.7)) - 0.5;
-        color = clamp(color + vec3(cr, cg, cb) * uChromaNoise * 0.08, 0.0, 1.0);
+        color = clamp(color + vec3(cr, cg, cb) * uChromaNoise * 0.09, 0.0, 1.0);
     }
 
     // Pass 20: Fade（褒色）
@@ -899,6 +916,9 @@ void main() {
     private var uSkinLumaSoften = -1
     private var uSkinRedLimit = -1
     private var uGrainSize = -1
+    private var uGrainRoughness = -1
+    private var uGrainLumaBias = -1
+    private var uGrainColorVariation = -1
     private var uLuminanceNoise = -1
     private var uChromaNoise = -1
     private var uDehaze = -1
@@ -908,6 +928,7 @@ void main() {
     private var uToneMapStrength = -1
     private var uMidGrayDensity = -1
     private var uHighlightRolloffPivot = -1
+    private var uHighlightRolloffSoftKnee = -1
     private var uTopBottomBias = -1
     private var uLeftRightBias = -1
     private var uBwMixerEnabled = -1
@@ -1440,6 +1461,9 @@ void main() {
         uSkinLumaSoften = loc("uSkinLumaSoften")
         uSkinRedLimit = loc("uSkinRedLimit")
         uGrainSize = loc("uGrainSize")
+        uGrainRoughness = loc("uGrainRoughness")
+        uGrainLumaBias = loc("uGrainLumaBias")
+        uGrainColorVariation = loc("uGrainColorVariation")
         uLuminanceNoise = loc("uLuminanceNoise")
         uChromaNoise = loc("uChromaNoise")
         uDehaze = loc("uDehaze")
@@ -1449,6 +1473,7 @@ void main() {
         uToneMapStrength = loc("uToneMapStrength")
         uMidGrayDensity = loc("uMidGrayDensity")
         uHighlightRolloffPivot = loc("uHighlightRolloffPivot")
+        uHighlightRolloffSoftKnee = loc("uHighlightRolloffSoftKnee")
         uTopBottomBias = loc("uTopBottomBias")
         uLeftRightBias = loc("uLeftRightBias")
         uBwMixerEnabled = loc("uBwMixerEnabled")
@@ -1523,6 +1548,7 @@ void main() {
         GLES30.glUniform1f(uToneMapStrength, f("toneMapStrength"))
         GLES30.glUniform1f(uMidGrayDensity, f("midGrayDensity"))
         GLES30.glUniform1f(uHighlightRolloffPivot, f("highlightRolloffPivot", 0.76f))
+        GLES30.glUniform1f(uHighlightRolloffSoftKnee, f("highlightRolloffSoftKnee", 0.35f))
         GLES30.glUniform1f(uPaperTexture, f("paperTexture"))
         GLES30.glUniform1f(uEdgeFalloff, f("edgeFalloff"))
         GLES30.glUniform1f(uExposureVariation, f("exposureVariation"))
@@ -1535,6 +1561,9 @@ void main() {
         GLES30.glUniform1f(uSkinLumaSoften, f("skinLumaSoften"))
         GLES30.glUniform1f(uSkinRedLimit, f("skinRedLimit", 1.0f))
         GLES30.glUniform1f(uGrainSize, f("grainSize", 1.0f))
+        GLES30.glUniform1f(uGrainRoughness, f("grainRoughness", 0.5f))
+        GLES30.glUniform1f(uGrainLumaBias, f("grainLumaBias", 0.65f))
+        GLES30.glUniform1f(uGrainColorVariation, f("grainColorVariation", 0.08f))
         GLES30.glUniform1f(uLuminanceNoise, f("luminanceNoise"))
         GLES30.glUniform1f(uChromaNoise, f("chromaNoise"))
         GLES30.glUniform1f(uTopBottomBias, f("topBottomBias"))

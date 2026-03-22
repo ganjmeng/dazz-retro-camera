@@ -136,6 +136,9 @@ uniform float uTintShift;           // 色调偏移（绿-品红轴）
 uniform float uHalationAmount;      // 高光辉光（如 FQS: 0.12）
 uniform float uBloomAmount;         // 高光光晕（如 CPM35: 0.15）
 uniform float uGrainSize;           // 颗粒大小（如 FQS: 1.2）
+uniform float uGrainRoughness;      // 颗粒粗糙度（0.0~1.0）
+uniform float uGrainLumaBias;       // 颗粒亮度偏置（暗部/中灰更明显）
+uniform float uGrainColorVariation; // 彩色颗粒 RGB 轻微分离
 uniform float uHighlightRolloff;    // 高光滚落（预览用，如 INST C: 0.18）
 uniform float uPaperTexture;        // 相纸纹理（如 INST C: 0.15）
 // ── Fade（褒色）+ Split Toning（分离色调）──
@@ -166,13 +169,23 @@ vec3 previewSampleLUT(vec3 color, sampler2D lut, float lutSize) {
     return texture(lut, vec2(u, v)).rgb;
 }
 // 高光柔和滚落
+float applyHighlightRolloffScalar(float x, float amount, float pivot, float knee) {
+    if (x <= pivot) return x;
+    float t = clamp((x - pivot) / max(1e-5, 1.0 - pivot), 0.0, 1.0);
+    t = smoothstep(0.0, 1.0, pow(t, 1.0 + knee));
+    float compressed = pivot + (1.0 - pivot) * (1.0 - exp(-t * (1.0 + amount * 4.0)));
+    return mix(x, compressed, amount);
+}
+
 vec3 ccdHighlightRolloff(vec3 color, float rolloff) {
     if (rolloff <= 0.0) return color;
-    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
-    float threshold = 1.0 - rolloff;
-    float highlight = clamp((luma - threshold) / rolloff, 0.0, 1.0);
-    float compress = 1.0 - highlight * highlight * 0.3;
-    return clamp(color * compress, 0.0, 1.0);
+    float pivot = clamp(0.76 - rolloff * 0.10, 0.55, 0.90);
+    float knee = 0.35;
+    return clamp(vec3(
+        applyHighlightRolloffScalar(color.r, rolloff, pivot, knee),
+        applyHighlightRolloffScalar(color.g, rolloff, pivot, knee),
+        applyHighlightRolloffScalar(color.b, rolloff, pivot, knee)
+    ), 0.0, 1.0);
 }
 // FXN-R Tone Curve（分段线性插値）
 float fxnrToneCurve(float x) {
@@ -624,23 +637,31 @@ void main() {
 
     // Pass 18: 胶片颗粒（亮度依赖 + grainSize 控制）
     if (uGrainAmount > 0.0) {
-        float gSize = clamp(uGrainSize, 0.55, 2.2);
-        vec2 cell = max(vec2(0.00035), vec2(gSize / 320.0, gSize / 420.0));
-        vec2 gridUv = floor(uv / cell) * cell;
+        float gSize = clamp(uGrainSize, 0.55, 2.6);
+        float rough = clamp(uGrainRoughness, 0.0, 1.0);
+        float lumaBias = clamp(uGrainLumaBias, 0.0, 1.0);
+        float colorVar = clamp(uGrainColorVariation, 0.0, 0.5);
+        vec2 baseScale = vec2(400.0 / gSize, 320.0 / gSize);
         float timeSeed = floor(uTime * 18.0) / 18.0;
-        float g1 = random(gridUv * 1.0 + vec2(0.17, 0.31), timeSeed * 0.11);
-        float g2 = random(gridUv * 1.9 + vec2(2.41, 1.73), timeSeed * 0.17);
-        float g3 = random(gridUv * 3.7 + vec2(4.13, 3.19), timeSeed * 0.23);
-        float grain = (g1 - 0.5) * 0.62 + (g2 - 0.5) * 0.26 + (g3 - 0.5) * 0.12;
-        float clump = smoothstep(0.58, 0.98, g1);
-        grain *= mix(0.72, 1.35, clump);
+        float fine = random(floor(uv * baseScale) / baseScale + vec2(0.17, 0.31), timeSeed * 0.11);
+        float mid = random(floor(uv * (baseScale * 0.35)) / (baseScale * 0.35) + vec2(2.41, 1.73), timeSeed * 0.17);
+        float coarse = random(floor(uv * (baseScale * 0.12)) / (baseScale * 0.12) + vec2(4.13, 3.19), timeSeed * 0.23);
+        float high = (fine - 0.5) * 0.60 + (mid - 0.5) * 0.30 + (coarse - 0.5) * 0.10;
+        float low = (random(floor(uv * (baseScale * 0.18)) / (baseScale * 0.18) + vec2(6.31, 5.17), timeSeed * 0.07) - 0.5) * 2.0;
+        float grain = high * mix(1.0, low, rough);
         float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
-        float midMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 1.6);
-        float shadowBoost = smoothstep(0.55, 0.05, lum) * 0.35;
-        float mask = clamp(0.30 + midMask * 0.78 + shadowBoost, 0.0, 1.35);
-        float chromaJitter = (g2 - g3) * 0.045 * uGrainAmount;
-        vec3 grainRgb = vec3(grain + chromaJitter, grain, grain - chromaJitter);
-        color = clamp(color + grainRgb * uGrainAmount * 0.34 * mask, 0.0, 1.0);
+        float dark = smoothstep(0.05, 0.25, lum);
+        float bright = 1.0 - smoothstep(0.70, 0.95, lum);
+        float midMask = dark * bright;
+        float brightFalloff = 1.0 - smoothstep(0.75, 1.0, lum);
+        float mask = mix(midMask, brightFalloff, lumaBias);
+        mask *= (1.0 + length(fwidth(vec3(lum))) * 2.0);
+        mask *= mix(1.0, 1.18, clamp(vignetteEffect(uv, 0.22), 0.0, 1.0));
+        float jitterR = (random(uv * baseScale * 1.03 + vec2(1.7), timeSeed * 0.19) - 0.5) * colorVar;
+        float jitterG = (random(uv * baseScale * 1.11 + vec2(2.3), timeSeed * 0.23) - 0.5) * colorVar;
+        float jitterB = (random(uv * baseScale * 0.97 + vec2(3.1), timeSeed * 0.29) - 0.5) * colorVar;
+        vec3 grainRgb = vec3(grain + jitterR, grain + jitterG, grain + jitterB);
+        color = clamp(color + grainRgb * uGrainAmount * mask, 0.0, 1.0);
     }
 
     // Pass 19: 数字噪点
@@ -744,6 +765,9 @@ void main() {
     private var uHalationAmount: Int = -1
     private var uBloomAmount: Int = -1
     private var uGrainSize: Int = -1
+    private var uGrainRoughness: Int = -1
+    private var uGrainLumaBias: Int = -1
+    private var uGrainColorVariation: Int = -1
     private var uLuminanceNoise: Int = -1
     private var uChromaNoise: Int = -1
     private var uHighlightRolloff: Int = -1
@@ -824,6 +848,9 @@ void main() {
     @Volatile private var halationAmount: Float = 0.0f
     @Volatile private var bloomAmount: Float = 0.0f
     @Volatile private var grainSize: Float = 1.0f
+    @Volatile private var grainRoughness: Float = 0.5f
+    @Volatile private var grainLumaBias: Float = 0.65f
+    @Volatile private var grainColorVariation: Float = 0.08f
     @Volatile private var luminanceNoise: Float = 0.0f
     @Volatile private var chromaNoise: Float = 0.0f
     @Volatile private var highlightRolloff: Float = 0.0f
@@ -1075,6 +1102,9 @@ void main() {
         uHalationAmount       = GLES30.glGetUniformLocation(programId, "uHalationAmount")
         uBloomAmount          = GLES30.glGetUniformLocation(programId, "uBloomAmount")
         uGrainSize            = GLES30.glGetUniformLocation(programId, "uGrainSize")
+        uGrainRoughness       = GLES30.glGetUniformLocation(programId, "uGrainRoughness")
+        uGrainLumaBias        = GLES30.glGetUniformLocation(programId, "uGrainLumaBias")
+        uGrainColorVariation  = GLES30.glGetUniformLocation(programId, "uGrainColorVariation")
         uLuminanceNoise       = GLES30.glGetUniformLocation(programId, "uLuminanceNoise")
         uChromaNoise          = GLES30.glGetUniformLocation(programId, "uChromaNoise")
         uHighlightRolloff     = GLES30.glGetUniformLocation(programId, "uHighlightRolloff")
@@ -1215,6 +1245,9 @@ void main() {
         GLES30.glUniform1f(uHalationAmount,      halationAmount)
         GLES30.glUniform1f(uBloomAmount,         bloomAmount)
         GLES30.glUniform1f(uGrainSize,           grainSize)
+        GLES30.glUniform1f(uGrainRoughness,      grainRoughness)
+        GLES30.glUniform1f(uGrainLumaBias,       grainLumaBias)
+        GLES30.glUniform1f(uGrainColorVariation, grainColorVariation)
         GLES30.glUniform1f(uLuminanceNoise,      luminanceNoise)
         GLES30.glUniform1f(uChromaNoise,         chromaNoise)
         GLES30.glUniform1f(uHighlightRolloff,    highlightRolloff)
@@ -1323,6 +1356,9 @@ void main() {
         (params["halationAmount"]      as? Number)?.let { halationAmount      = it.toFloat() }
         (params["bloomAmount"]         as? Number)?.let { bloomAmount         = it.toFloat() }
         (params["grainSize"]           as? Number)?.let { grainSize           = it.toFloat() }
+        (params["grainRoughness"]      as? Number)?.let { grainRoughness      = it.toFloat() }
+        (params["grainLumaBias"]       as? Number)?.let { grainLumaBias       = it.toFloat() }
+        (params["grainColorVariation"] as? Number)?.let { grainColorVariation = it.toFloat() }
         (params["luminanceNoise"]      as? Number)?.let { luminanceNoise      = it.toFloat() }
         (params["chromaNoise"]         as? Number)?.let { chromaNoise         = it.toFloat() }
         (params["highlightRolloff"]    as? Number)?.let { highlightRolloff    = it.toFloat() }
@@ -1385,6 +1421,9 @@ void main() {
             grainAmount = 0.0f
             noiseAmount = 0.0f
             grainSize = 1.0f
+            grainRoughness = 0.0f
+            grainLumaBias = 0.65f
+            grainColorVariation = 0.0f
             luminanceNoise = 0.0f
             chromaNoise = 0.0f
             vignetteAmount = 0.0f

@@ -33,7 +33,7 @@
     "grain": 0.16,
     "colorBiasR": -0.015,
     "colorBiasG": 0.022,
-    "colorBiasB": 0.010,
+    "colorBiasB": 0.01,
     "halation": 0.006,
     "grainSize": 1.25,
     "sharpness": 1.1,
@@ -49,7 +49,7 @@
     "skinRedLimit": 1.0,
     "luminanceNoise": 0.04,
     "chromaNoise": 0.02,
-    "highlightRolloff": 0.20,
+    "highlightRolloff": 0.2,
     "highlightRolloff2": 0.05,
     "sharpen": 0.06,
     "toneCurveStrength": 1.0,
@@ -90,7 +90,11 @@
     "sceneShadowResponse": 0.52,
     "sceneHighlightResponse": 0.54,
     "sceneWhitesResponse": 0.54,
-    "toneCurveResponse": 1.0
+    "toneCurveResponse": 1.0,
+    "grainLumaBias": 0.62,
+    "grainColorVariation": 0.09,
+    "highlightRolloffSoftKnee": 0.46,
+    "grainRoughness": 0.45
   },
   "modules": {
     "filters": [
@@ -132,7 +136,7 @@
         "grain": "medium",
         "grainSize": 1.5,
         "vignette": 0.11,
-        "sharpness": 0.90,
+        "sharpness": 0.9,
         "halation": 0.015,
         "thumbnail": "assets/thumbnails/films/fxnr_fade.jpg"
       }
@@ -541,7 +545,9 @@
         "allowOrientationChange": true
       }
     },
-    "extras": []
+    "extras": [
+
+    ]
   },
   "defaultSelection": {
     "filterId": "fxnr_standard",
@@ -624,5 +630,6 @@
       "green"
     ]
   },
-  "defaults": {}
+  "defaults": {
+  }
 }

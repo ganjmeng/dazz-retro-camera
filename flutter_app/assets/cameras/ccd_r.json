@@ -45,7 +45,7 @@
     "toneCurveStrength": 1.0,
     "toneMapToe": 0.18,
     "toneMapShoulder": 0.32,
-    "toneMapStrength": 0.40,
+    "toneMapStrength": 0.4,
     "midGrayDensity": 0.1,
     "highlightRolloffPivot": 0.6,
     "centerGain": 0.02,
@@ -92,10 +92,16 @@
     "sceneShadowResponse": 0.38,
     "sceneHighlightResponse": 0.44,
     "sceneWhitesResponse": 0.44,
-    "toneCurveResponse": 0.0
+    "toneCurveResponse": 0.0,
+    "grainLumaBias": 0.68,
+    "grainColorVariation": 0.11,
+    "highlightRolloffSoftKnee": 0.26,
+    "grainRoughness": 0.7
   },
   "modules": {
-    "filters": [],
+    "filters": [
+
+    ],
     "lenses": [
       {
         "id": "std",
@@ -507,7 +513,9 @@
         "allowOrientationChange": true
       }
     },
-    "extras": []
+    "extras": [
+
+    ]
   },
   "defaultSelection": {
     "filterId": null,
@@ -589,5 +597,6 @@
       "early-ccd"
     ]
   },
-  "defaults": {}
+  "defaults": {
+  }
 }

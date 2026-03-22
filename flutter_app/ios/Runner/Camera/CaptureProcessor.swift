@@ -41,6 +41,7 @@ struct MetalCaptureParams {
     var jpegArtifacts: Float = 0
     var fisheyeMode: Float = 0
     var grainSize: Float = 1.0
+    var grainRoughness: Float = 0.5
     var sharpness: Float = 1.0
     var highlightWarmAmount: Float = 0
     var luminanceNoise: Float = 0
@@ -105,6 +106,9 @@ struct MetalCaptureParams {
     var splitToneBalance: Float = 0.5
     var lightLeakAmount: Float = 0
     var lightLeakSeed: Float = 0
+    var grainLumaBias: Float = 0.65
+    var grainColorVariation: Float = 0.08
+    var highlightRolloffSoftKnee: Float = 0.35
 }
 
 /// 独立的动态曲线参数缓冲（buffer(1)），避免破坏主参数结构体内存布局。
@@ -342,6 +346,9 @@ class CaptureProcessor {
         p.bloomAmount        = getFloat(params, "bloomAmount", 0)
         p.halationAmount     = getFloat(params, "halationAmount", 0)
         p.grainSize          = getFloat(params, "grainSize", 1.0)
+        p.grainRoughness     = getFloat(params, "grainRoughness", 0.5)
+        p.grainLumaBias      = getFloat(params, "grainLumaBias", 0.65)
+        p.grainColorVariation = getFloat(params, "grainColorVariation", 0.08)
         p.sharpness          = getFloat(params, "sharpness", 1.0)
         p.highlightWarmAmount = getFloat(params, "highlightWarmAmount", 0)
         p.luminanceNoise     = getFloat(params, "luminanceNoise", 0)
@@ -384,6 +391,7 @@ class CaptureProcessor {
         p.toneMapStrength    = getFloat(params, "toneMapStrength", 0.0)
         p.midGrayDensity     = getFloat(params, "midGrayDensity", 0.0)
         p.highlightRolloffPivot = getFloat(params, "highlightRolloffPivot", 0.76)
+        p.highlightRolloffSoftKnee = getFloat(params, "highlightRolloffSoftKnee", 0.35)
         p.dehaze             = getFloat(params, "dehaze", 0.0)
         p.lensVignette       = getFloat(params, "lensVignette", 0.0)
         p.topBottomBias      = getFloat(params, "topBottomBias", 0.0)

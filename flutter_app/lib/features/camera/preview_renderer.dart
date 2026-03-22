@@ -467,6 +467,14 @@ class PreviewRenderParams {
     final filterSize = activeFilter?.grainSize ?? defaultLook.grainSize;
     return filterSize.clamp(0.5, 3.0);
   }
+  double get effectiveGrainRoughness =>
+      defaultLook.grainRoughness.clamp(0.0, 1.0);
+  double get effectiveGrainLumaBias =>
+      defaultLook.grainLumaBias.clamp(0.0, 1.0);
+  double get effectiveGrainColorVariation {
+    final base = defaultLook.grainColorVariation.clamp(0.0, 0.5);
+    return hasBwMixer ? base.clamp(0.0, 0.02) : base;
+  }
 
   double get effectiveSharpen {
     final filterDelta = (activeFilter?.sharpness ?? 1.0) - 1.0;
@@ -982,12 +990,17 @@ class PreviewRenderParams {
         'toneMapStrength': toneMapStrength,
         'midGrayDensity': midGrayDensity,
         'highlightRolloffPivot': highlightRolloffPivot,
+        'highlightRolloffSoftKnee':
+            defaultLook.highlightRolloffSoftKnee.clamp(0.0, 1.0),
         'lensVignette': effectiveVignette,
         'exposureOffset': exposureOffset + effectiveLensExposure,
         'distortion': effectiveDistortion,
         'fisheyeMode': effectiveFisheyeMode ? 1.0 : 0.0,
         'softFocus': effectiveSoftFocus,
         'grainSize': effectiveGrainSize,
+        'grainRoughness': effectiveGrainRoughness,
+        'grainLumaBias': effectiveGrainLumaBias,
+        'grainColorVariation': effectiveGrainColorVariation,
         'luminanceNoise': defaultLook.luminanceNoise.clamp(0.0, 0.5),
         'chromaNoise': defaultLook.chromaNoise.clamp(0.0, 0.5),
         'exposureVariation': defaultLook.exposureVariation.clamp(0.0, 0.1),
@@ -1074,6 +1087,9 @@ class PreviewRenderParams {
       'grainAmount': 0.0,
       'noiseAmount': 0.0,
       'grainSize': 1.0,
+      'grainRoughness': 0.0,
+      'grainLumaBias': 0.65,
+      'grainColorVariation': 0.0,
       'luminanceNoise': 0.0,
       'chromaNoise': 0.0,
       'vignetteAmount': 0.0,
@@ -1082,6 +1098,7 @@ class PreviewRenderParams {
       'halationAmount': 0.0,
       'highlightRolloff': 0.0,
       'highlightRolloff2': 0.0,
+      'highlightRolloffSoftKnee': 0.35,
       'toneCurveStrength': 0.0,
       'dehaze': 0.0,
       'highlightWarmAmount': 0.0,

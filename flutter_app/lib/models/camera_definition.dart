@@ -273,6 +273,9 @@ class DefaultLook {
   final double colorBiasB; // -1.0 ~ +1.0 blue channel bias
   final double halation; // 0.0 ~ 1.0 highlight halation（胶片高光发光）
   final double grainSize; // 0.5 ~ 3.0 grain particle size（颗粒大小）
+  final double grainRoughness; // 0.0 ~ 1.0 grain roughness（颗粒粗糙/不均匀程度）
+  final double grainLumaBias; // 0.0 ~ 1.0 grain emphasis from balanced -> shadow biased
+  final double grainColorVariation; // 0.0 ~ 0.5 subtle RGB separation for color grain
   final double sharpen; // 0.0 ~ 2.0 unsharp mask strength
   final double sharpness; // 0.0 ~ 2.0 sharpness multiplier（锐度）
   final double bwChannelR; // 0.0 ~ 1.0 B&W channel mixer R
@@ -330,6 +333,7 @@ class DefaultLook {
   final double toneMapStrength; // 0.0 ~ 1.0 filmic 映射混合强度
   final double midGrayDensity; // -1.0 ~ 1.0 中灰密度（18% 灰锚点附近）
   final double highlightRolloffPivot; // 0.5 ~ 0.95 高光 rolloff 起始阈值
+  final double highlightRolloffSoftKnee; // 0.0 ~ 1.0 高光 rolloff 软膝强度
   // 风格响应权重：让共享渲染算子重新回到 JSON 配置驱动。
   final double bloomResponse; // 0.0 ~ 1.0
   final double halationResponse; // 0.0 ~ 1.0
@@ -369,6 +373,9 @@ class DefaultLook {
     this.colorBiasB = 0,
     this.halation = 0,
     this.grainSize = 1.0,
+    this.grainRoughness = 0.5,
+    this.grainLumaBias = 0.65,
+    this.grainColorVariation = 0.08,
     this.sharpen = 0.0,
     this.sharpness = 1.0,
     this.bwChannelR = 0.0,
@@ -421,6 +428,7 @@ class DefaultLook {
     this.toneMapStrength = 0.0,
     this.midGrayDensity = 0.0,
     this.highlightRolloffPivot = 0.76,
+    this.highlightRolloffSoftKnee = 0.35,
     this.bloomResponse = 1.0,
     this.halationResponse = 1.0,
     this.fadeResponse = 1.0,
@@ -444,6 +452,7 @@ class DefaultLook {
         halation: 0,
         sharpen: 0,
         grainSize: 1.0,
+        grainLumaBias: 0.65,
         sharpness: 1.0,
       );
 
@@ -476,6 +485,10 @@ class DefaultLook {
         colorBiasB: _asDouble(json['colorBiasB']),
         halation: _asDouble(json['halation']),
         grainSize: _asDouble(json['grainSize'], fallback: 1.0),
+        grainRoughness: _asDouble(json['grainRoughness'], fallback: 0.5),
+        grainLumaBias: _asDouble(json['grainLumaBias'], fallback: 0.65),
+        grainColorVariation:
+            _asDouble(json['grainColorVariation'], fallback: 0.08),
         sharpen: _asDouble(json['sharpen']),
         sharpness: _asDouble(json['sharpness'], fallback: 1.0),
         bwChannelR: _asDouble(json['bwChannelR']),
@@ -534,6 +547,8 @@ class DefaultLook {
         midGrayDensity: _asDouble(json['midGrayDensity']),
         highlightRolloffPivot:
             _asDouble(json['highlightRolloffPivot'], fallback: 0.76),
+        highlightRolloffSoftKnee:
+            _asDouble(json['highlightRolloffSoftKnee'], fallback: 0.35),
         bloomResponse: _asDouble(json['bloomResponse'], fallback: 1.0),
         halationResponse: _asDouble(json['halationResponse'], fallback: 1.0),
         fadeResponse: _asDouble(json['fadeResponse'], fallback: 1.0),
@@ -577,6 +592,10 @@ class DefaultLook {
         'colorBiasB': colorBiasB,
         'halation': halation,
         'grainSize': grainSize,
+        'grainRoughness': grainRoughness,
+        if (grainLumaBias != 0.65) 'grainLumaBias': grainLumaBias,
+        if (grainColorVariation != 0.08)
+          'grainColorVariation': grainColorVariation,
         'sharpen': sharpen,
         'sharpness': sharpness,
         if (bwChannelR != 0) 'bwChannelR': bwChannelR,
@@ -624,6 +643,8 @@ class DefaultLook {
         if (midGrayDensity != 0) 'midGrayDensity': midGrayDensity,
         if (highlightRolloffPivot != 0.76)
           'highlightRolloffPivot': highlightRolloffPivot,
+        if (highlightRolloffSoftKnee != 0.35)
+          'highlightRolloffSoftKnee': highlightRolloffSoftKnee,
         if (bloomResponse != 1.0) 'bloomResponse': bloomResponse,
         if (halationResponse != 1.0) 'halationResponse': halationResponse,
         if (fadeResponse != 1.0) 'fadeResponse': fadeResponse,

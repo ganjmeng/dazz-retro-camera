@@ -41,12 +41,12 @@
     "highlightRolloff": 0.14,
     "bloom": 0.0038,
     "halation": 0.0032,
-    "grain": 0.20,
+    "grain": 0.2,
     "grainSize": 1.8,
     "luminanceNoise": 0.045,
     "chromaNoise": 0.022,
     "toneCurveStrength": 1.0,
-    "toneMapToe": 0.20,
+    "toneMapToe": 0.2,
     "toneMapShoulder": 0.32,
     "toneMapStrength": 0.38,
     "midGrayDensity": 0.07,
@@ -95,7 +95,11 @@
     "sceneShadowResponse": 0.56,
     "sceneHighlightResponse": 0.52,
     "sceneWhitesResponse": 0.54,
-    "toneCurveResponse": 0.85
+    "toneCurveResponse": 0.85,
+    "grainLumaBias": 0.6,
+    "grainColorVariation": 0.05,
+    "highlightRolloffSoftKnee": 0.36,
+    "grainRoughness": 0.4
   },
   "modules": {
     "filters": [
@@ -504,7 +508,9 @@
         "allowOrientationChange": true
       }
     },
-    "extras": []
+    "extras": [
+
+    ]
   },
   "defaultSelection": {
     "filterId": "u300_gold200",
@@ -586,5 +592,6 @@
     "type": "advance",
     "style": "35mm"
   },
-  "defaults": {}
+  "defaults": {
+  }
 }

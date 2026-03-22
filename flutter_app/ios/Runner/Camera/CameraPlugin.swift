@@ -1777,10 +1777,14 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             if let v = params["colorBiasG"] as? NSNumber { shaderParams["colorBiasG"] = v.floatValue }
             if let v = params["colorBiasB"] as? NSNumber { shaderParams["colorBiasB"] = v.floatValue }
             if let v = params["grainSize"] as? NSNumber { shaderParams["grainSize"] = v.floatValue }
+            if let v = params["grainRoughness"] as? NSNumber { shaderParams["grainRoughness"] = v.floatValue }
+            if let v = params["grainLumaBias"] as? NSNumber { shaderParams["grainLumaBias"] = v.floatValue }
+            if let v = params["grainColorVariation"] as? NSNumber { shaderParams["grainColorVariation"] = v.floatValue }
             if let v = params["sharpness"] as? NSNumber { shaderParams["sharpness"] = v.floatValue }
             if let v = params["highlightWarmAmount"] as? NSNumber { shaderParams["highlightWarmAmount"] = v.floatValue }
             if let v = params["luminanceNoise"] as? NSNumber { shaderParams["luminanceNoise"] = v.floatValue }
             if let v = params["chromaNoise"] as? NSNumber { shaderParams["chromaNoise"] = v.floatValue }
+            if let v = params["highlightRolloffSoftKnee"] as? NSNumber { shaderParams["highlightRolloffSoftKnee"] = v.floatValue }
         }
         if let dl = presetJson["defaultLook"] as? [String: Any] {
             if let v = dl["contrast"] as? NSNumber { shaderParams["contrast"] = v.floatValue }
@@ -1804,6 +1808,9 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             if let v = dl["colorBiasG"] as? NSNumber { shaderParams["colorBiasG"] = v.floatValue }
             if let v = dl["colorBiasB"] as? NSNumber { shaderParams["colorBiasB"] = v.floatValue }
             if let v = dl["grainSize"] as? NSNumber { shaderParams["grainSize"] = v.floatValue }
+            if let v = dl["grainRoughness"] as? NSNumber { shaderParams["grainRoughness"] = v.floatValue }
+            if let v = dl["grainLumaBias"] as? NSNumber { shaderParams["grainLumaBias"] = v.floatValue }
+            if let v = dl["grainColorVariation"] as? NSNumber { shaderParams["grainColorVariation"] = v.floatValue }
             if let v = dl["sharpness"] as? NSNumber { shaderParams["sharpness"] = v.floatValue }
             if let v = dl["highlightWarmAmount"] as? NSNumber { shaderParams["highlightWarmAmount"] = v.floatValue }
             if let v = dl["luminanceNoise"] as? NSNumber { shaderParams["luminanceNoise"] = v.floatValue }
@@ -1815,6 +1822,7 @@ public class RetroCamPlugin: NSObject, FlutterPlugin {
             if let v = dl["exposureVariation"] as? NSNumber { shaderParams["exposureVariation"] = v.floatValue }
             if let v = dl["cornerWarmShift"] as? NSNumber { shaderParams["cornerWarmShift"] = v.floatValue }
             if let v = dl["toneCurveStrength"] as? NSNumber { shaderParams["toneCurveStrength"] = v.floatValue }
+            if let v = dl["highlightRolloffSoftKnee"] as? NSNumber { shaderParams["highlightRolloffSoftKnee"] = v.floatValue }
             if let v = dl["lutStrength"] as? NSNumber { shaderParams["lutStrength"] = v.floatValue }
             if let v = dl["centerGain"] as? NSNumber { shaderParams["centerGain"] = v.floatValue }
             if let v = dl["developmentSoftness"] as? NSNumber { shaderParams["developmentSoftness"] = v.floatValue }

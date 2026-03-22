@@ -38,7 +38,7 @@
     "colorBiasB": -0.004,
     "grain": 0.16,
     "grainSize": 1.0,
-    "highlightRolloff": 0.10,
+    "highlightRolloff": 0.1,
     "bloom": 0.0,
     "halation": 0.0,
     "vignette": 0.14,
@@ -97,7 +97,7 @@
         255
       ]
     ],
-    "luminanceNoise": 0.10,
+    "luminanceNoise": 0.1,
     "chromaNoise": 0.015,
     "flare": 0.0,
     "vibrance": 0.0,
@@ -126,17 +126,23 @@
     "lightLeakAmount": 0.0,
     "dustAmount": 0.075,
     "scratchAmount": 0.035,
-    "bloomResponse": 0.10,
+    "bloomResponse": 0.1,
     "halationResponse": 0.0,
     "fadeResponse": 0.0,
     "highlightRolloffResponse": 0.2,
     "sceneShadowResponse": 0.2,
     "sceneHighlightResponse": 0.24,
     "sceneWhitesResponse": 0.26,
-    "toneCurveResponse": 0.95
+    "toneCurveResponse": 0.95,
+    "grainLumaBias": 0.58,
+    "grainColorVariation": 0.04,
+    "highlightRolloffSoftKnee": 0.18,
+    "grainRoughness": 0.38
   },
   "modules": {
-    "filters": [],
+    "filters": [
+
+    ],
     "lenses": [
       {
         "id": "std",
@@ -245,7 +251,9 @@
         "height": 16
       }
     ],
-    "frames": [],
+    "frames": [
+
+    ],
     "watermarks": {
       "presets": [
         {
@@ -276,7 +284,9 @@
         "allowOrientationChange": true
       }
     },
-    "extras": []
+    "extras": [
+
+    ]
   },
   "defaultSelection": {
     "filterId": null,

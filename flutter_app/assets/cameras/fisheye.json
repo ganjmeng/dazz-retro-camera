@@ -54,9 +54,9 @@
     "luminanceNoise": 0.07,
     "chromaNoise": 0.05,
     "toneCurveStrength": 1.0,
-    "toneMapToe": 0.20,
+    "toneMapToe": 0.2,
     "toneMapShoulder": 0.33,
-    "toneMapStrength": 0.40,
+    "toneMapStrength": 0.4,
     "midGrayDensity": 0.05,
     "highlightRolloffPivot": 0.63,
     "grainAmount": 0.0,
@@ -90,11 +90,17 @@
     "sceneWhitesResponse": 0.62,
     "toneCurveResponse": 0.0,
     "sharpen": 0.08,
-    "dustAmount": 0.10,
-    "scratchAmount": 0.06
+    "dustAmount": 0.1,
+    "scratchAmount": 0.06,
+    "grainLumaBias": 0.6,
+    "grainColorVariation": 0.08,
+    "highlightRolloffSoftKnee": 0.3,
+    "grainRoughness": 0.5
   },
   "modules": {
-    "filters": [],
+    "filters": [
+
+    ],
     "lenses": [
       {
         "id": "fisheye",
@@ -148,7 +154,9 @@
         "supportsFrame": false
       }
     ],
-    "frames": [],
+    "frames": [
+
+    ],
     "watermarks": {
       "presets": [
         {
@@ -171,7 +179,9 @@
         "allowOrientationChange": true
       }
     },
-    "extras": []
+    "extras": [
+
+    ]
   },
   "defaultSelection": {
     "filterId": null,

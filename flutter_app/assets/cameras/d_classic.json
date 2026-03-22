@@ -87,10 +87,16 @@
     "sceneHighlightResponse": 0.48,
     "sceneWhitesResponse": 0.48,
     "toneCurveResponse": 0.45,
-    "sharpen": 0.08
+    "sharpen": 0.08,
+    "grainLumaBias": 0.66,
+    "grainColorVariation": 0.06,
+    "highlightRolloffSoftKnee": 0.4,
+    "grainRoughness": 0.4
   },
   "modules": {
-    "filters": [],
+    "filters": [
+
+    ],
     "lenses": [
       {
         "id": "std",
@@ -483,7 +489,9 @@
         "allowOrientationChange": true
       }
     },
-    "extras": []
+    "extras": [
+
+    ]
   },
   "defaultSelection": {
     "filterId": null,
@@ -560,5 +568,6 @@
       "2005"
     ]
   },
-  "defaults": {}
+  "defaults": {
+  }
 }

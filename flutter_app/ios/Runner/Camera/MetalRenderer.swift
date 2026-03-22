@@ -79,7 +79,11 @@ struct CCDParams {
     var deviceCcm20: Float = 0.0
     var deviceCcm21: Float = 0.0
     var deviceCcm22: Float = 1.0
+    var grainRoughness: Float = 0.5
     var circularFisheye: Float = 0.0
+    var grainLumaBias: Float = 0.65
+    var grainColorVariation: Float = 0.08
+    var highlightRolloffSoftKnee: Float = 0.35
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -314,6 +318,9 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = num("colorBiasG") { ccdParams.colorBiasG = v }
         if let v = num("colorBiasB") { ccdParams.colorBiasB = v }
         if let v = num("grainSize") { ccdParams.grainSize = v }
+        if let v = num("grainRoughness") { ccdParams.grainRoughness = v }
+        if let v = num("grainLumaBias") { ccdParams.grainLumaBias = v }
+        if let v = num("grainColorVariation") { ccdParams.grainColorVariation = v }
         if let v = num("sharpness") { ccdParams.sharpness = v }
         if let v = num("highlightWarmAmount") { ccdParams.highlightWarmAmount = v }
         if let v = num("luminanceNoise") { ccdParams.luminanceNoise = v }
@@ -335,6 +342,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = num("skinLumaSoften") { ccdParams.skinLumaSoften = v }
         if let v = num("skinRedLimit") { ccdParams.skinRedLimit = v }
         if let v = num("toneCurveStrength") { ccdParams.toneCurveStrength = v }
+        if let v = num("highlightRolloffSoftKnee") { ccdParams.highlightRolloffSoftKnee = v }
 
         // ── FIX: Lightroom 风格曲线参数 ─────────────────────────────────────────────────────────────────
         if let v = num("highlights") { ccdParams.highlights = v }
@@ -378,6 +386,9 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
             ccdParams.grainAmount = 0.0
             ccdParams.noiseAmount = 0.0
             ccdParams.grainSize = 1.0
+            ccdParams.grainRoughness = 0.0
+            ccdParams.grainLumaBias = 0.65
+            ccdParams.grainColorVariation = 0.0
             ccdParams.luminanceNoise = 0.0
             ccdParams.chromaNoise = 0.0
             ccdParams.vignetteAmount = 0.0
@@ -385,6 +396,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
             ccdParams.bloomAmount = 0.0
             ccdParams.halationAmount = 0.0
             ccdParams.highlightRolloff = 0.0
+            ccdParams.highlightRolloffSoftKnee = 0.35
             ccdParams.toneCurveStrength = 0.0
             ccdParams.paperTexture = 0.0
             ccdParams.edgeFalloff = 0.0

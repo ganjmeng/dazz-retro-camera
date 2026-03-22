@@ -36,13 +36,13 @@
     "vignette": 0.1,
     "sharpen": 0.16,
     "sharpness": 1.12,
-    "grain": 0.50,
+    "grain": 0.5,
     "grainSize": 2.2,
-    "luminanceNoise": 0.20,
+    "luminanceNoise": 0.2,
     "chromaNoise": 0.0,
     "bloom": 0.0,
     "halation": 0.0,
-    "highlightRolloff": 0.30,
+    "highlightRolloff": 0.3,
     "developmentSoftness": 0.012,
     "chemicalIrregularity": 0.05,
     "centerGain": 0.0,
@@ -57,18 +57,18 @@
     "colorBiasG": 0.0,
     "colorBiasB": 0.0,
     "toneCurveStrength": 0.96,
-    "toneMapToe": 0.20,
+    "toneMapToe": 0.2,
     "toneMapShoulder": 0.48,
     "toneMapStrength": 0.68,
-    "midGrayDensity": 0.20,
-    "highlightRolloffPivot": 0.60,
+    "midGrayDensity": 0.2,
+    "highlightRolloffPivot": 0.6,
     "skinHueProtect": false,
     "skinSatProtect": 1.0,
     "skinLumaSoften": 0.0,
     "skinRedLimit": 1.0,
     "grainAmount": 0.0,
     "vignetteAmount": 0.0,
-    "paperTexture": 0.10,
+    "paperTexture": 0.1,
     "noiseAmount": 0.06,
     "irregUvScale": 2.5,
     "irregFreq1": 1.0,
@@ -98,7 +98,11 @@
     "sceneShadowResponse": 0.28,
     "sceneHighlightResponse": 0.34,
     "sceneWhitesResponse": 0.32,
-    "toneCurveResponse": 0.9
+    "toneCurveResponse": 0.9,
+    "grainLumaBias": 0.72,
+    "grainColorVariation": 0.0,
+    "highlightRolloffSoftKnee": 0.42,
+    "grainRoughness": 0.65
   },
   "modules": {
     "filters": [
@@ -112,7 +116,7 @@
         "grain": "medium",
         "grainSize": 2.0,
         "vignette": 0.15,
-        "sharpness": 1.00,
+        "sharpness": 1.0,
         "thumbnail": "assets/thumbnails/films/trix_400.jpg",
         "filmRollType": "advance",
         "filmRollStyle": "35mm",
@@ -261,7 +265,9 @@
         "height": 4
       }
     ],
-    "frames": [],
+    "frames": [
+
+    ],
     "watermarks": {
       "presets": [
         {
@@ -284,7 +290,9 @@
         "allowOrientationChange": true
       }
     },
-    "extras": []
+    "extras": [
+
+    ]
   },
   "defaultSelection": {
     "filterId": "trix_400",

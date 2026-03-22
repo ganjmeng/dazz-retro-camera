@@ -69,6 +69,7 @@ struct CaptureParams {
     float jpegArtifacts;
     float fisheyeMode;
     float grainSize;
+    float grainRoughness;
     float sharpness;
     float highlightWarmAmount;
     float luminanceNoise;
@@ -133,9 +134,14 @@ struct CaptureParams {
     float splitToneBalance;
     float lightLeakAmount;
     float lightLeakSeed;
+    float grainLumaBias;
+    float grainColorVariation;
+    float highlightRolloffSoftKnee;
 };
 
 // ── 工具函数 ─────────────────────────────────────────────────────────────
+
+static float applyHighlightRolloffScalar(float x, float amount, float pivot, float knee);
 
 /// 圆形鱼眼 UV 重映射（等距投影，与 CameraShaders.metal 完全一致）
 /// 返回 float2(-1) 表示圆形以外区域
@@ -282,21 +288,15 @@ static float3 cp_bloom(float3 color, float bloomAmount) {
 }
 
 /// Highlight Rolloff（高光柔和滴落，成片专属）
-static float3 cp_highlightRolloff(float3 color, float rolloff, float pivot) {
+static float3 cp_highlightRolloff(float3 color, float rolloff, float pivot, float softKnee) {
     if (rolloff < 0.001) return color;
-    float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
     float p = clamp(pivot, 0.52, 0.92);
-    float kneeStart = max(0.45, p - rolloff * 0.16);
-    float kneeEnd = min(1.0, p + (1.0 - p) * (0.58 + 0.32 * rolloff));
-    if (lum <= kneeStart) return color;
-    float mask = smoothstep(kneeStart, kneeEnd, lum);
-    float targetLum = mix(lum, kneeStart + (lum - kneeStart) * (1.0 - 0.62 * rolloff), mask);
-    float lumScale = targetLum / max(lum, 1e-4);
-    float neutralPull = mask * rolloff * 0.10;
-    float3 compressed = color * lumScale;
-    compressed = mix(compressed, float3(dot(compressed, float3(0.2126, 0.7152, 0.0722))), neutralPull);
-    color = clamp(mix(color, compressed, mask * (0.72 + 0.22 * rolloff)), 0.0, 1.0);
-    return color;
+    float knee = clamp(softKnee, 0.0, 1.0);
+    return clamp(float3(
+        applyHighlightRolloffScalar(color.r, rolloff, p, knee),
+        applyHighlightRolloffScalar(color.g, rolloff, p, knee),
+        applyHighlightRolloffScalar(color.b, rolloff, p, knee)
+    ), 0.0, 1.0);
 }
 
 static float cp_filmicCurve(float x, float toe, float shoulder) {
@@ -377,7 +377,7 @@ static float3 cp_noise(float3 color, float2 uv, float amount, float time) {
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
     float n = cp_random(uv * 800.0, time) - 0.5;
     float dark = 1.0 - lum;
-    return clamp(color + n * amount * 0.2 * dark, 0.0, 1.0);
+    return clamp(color + n * amount * 0.24 * dark, 0.0, 1.0);
 }
 
 static float3 cp_fade(float3 color, float amount) {
@@ -561,25 +561,50 @@ static float3 cp_developmentSoften(float3 color, float2 uv, float softness,
 }
 
 /// Film Grain（成片专用：hash 低频颗粒，更接近真实胶片质感）
-static float3 cp_grain(float3 color, float2 uv, float amount, float grainSize, float time) {
+static float applyHighlightRolloffScalar(float x, float amount, float pivot, float knee) {
+    if (x <= pivot) return x;
+    float t = clamp((x - pivot) / max(1e-5, 1.0 - pivot), 0.0, 1.0);
+    t = smoothstep(0.0, 1.0, pow(t, 1.0 + knee));
+    float compressed = pivot + (1.0 - pivot) * (1.0 - exp(-t * (1.0 + amount * 4.0)));
+    return mix(x, compressed, amount);
+}
+
+static float3 cp_grain(
+    float3 color,
+    float2 uv,
+    float amount,
+    float grainSize,
+    float roughness,
+    float lumaBias,
+    float colorVariation
+) {
     if (amount < 0.001) return color;
-    float gSize = clamp(grainSize, 0.55, 2.2);
-    float2 cell = max(float2(0.00035), float2(gSize / 320.0, gSize / 420.0));
-    float2 gridUv = floor(uv / cell) * cell;
-    float timeSeed = floor(time * 18.0) / 18.0;
-    float g1 = cp_random(gridUv * 1.0 + float2(0.17, 0.31), timeSeed * 0.11);
-    float g2 = cp_random(gridUv * 1.9 + float2(2.41, 1.73), timeSeed * 0.17);
-    float g3 = cp_random(gridUv * 3.7 + float2(4.13, 3.19), timeSeed * 0.23);
-    float grain = (g1 - 0.5) * 0.62 + (g2 - 0.5) * 0.26 + (g3 - 0.5) * 0.12;
-    float clump = smoothstep(0.58, 0.98, g1);
-    grain *= mix(0.72, 1.35, clump);
+    float gSize = clamp(grainSize, 0.55, 2.6);
+    float rough = clamp(roughness, 0.0, 1.0);
+    float lumaWeight = clamp(lumaBias, 0.0, 1.0);
+    float colorWeight = clamp(colorVariation, 0.0, 0.5);
+    float2 baseScale = float2(400.0 / gSize, 320.0 / gSize);
+    float fine = cp_random(floor(uv * baseScale) / baseScale + float2(0.17, 0.31), 0.0);
+    float mid = cp_random(floor(uv * (baseScale * 0.35)) / (baseScale * 0.35) + float2(2.41, 1.73), 0.0);
+    float coarse = cp_random(floor(uv * (baseScale * 0.12)) / (baseScale * 0.12) + float2(4.13, 3.19), 0.0);
+    float high = (fine - 0.5) * 0.60 + (mid - 0.5) * 0.30 + (coarse - 0.5) * 0.10;
+    float low = (cp_random(floor(uv * (baseScale * 0.18)) / (baseScale * 0.18) + float2(6.31, 5.17), 0.0) - 0.5) * 2.0;
+    float grain = high * mix(1.0, low, rough);
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
-    float midMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 1.6);
-    float shadowBoost = smoothstep(0.55, 0.05, lum) * 0.35;
-    float mask = clamp(0.30 + midMask * 0.78 + shadowBoost, 0.0, 1.35);
-    float chromaJitter = (g2 - g3) * 0.045 * amount;
-    float3 grainRgb = float3(grain + chromaJitter, grain, grain - chromaJitter);
-    return clamp(color + grainRgb * amount * 0.34 * mask, 0.0, 1.0);
+    float dark = smoothstep(0.05, 0.25, lum);
+    float bright = 1.0 - smoothstep(0.70, 0.95, lum);
+    float midMask = dark * bright;
+    float brightFalloff = 1.0 - smoothstep(0.75, 1.0, lum);
+    float mask = mix(midMask, brightFalloff, lumaWeight);
+    mask *= (1.0 + fwidth(lum) * 2.0);
+    float2 p = uv * 2.0 - 1.0;
+    float vignetteMask = smoothstep(0.30, 1.0, dot(p, p));
+    mask *= mix(1.0, 1.18, vignetteMask);
+    float jitterR = (cp_random(uv * baseScale * 1.03 + float2(1.7), 0.0) - 0.5) * colorWeight;
+    float jitterG = (cp_random(uv * baseScale * 1.11 + float2(2.3), 0.0) - 0.5) * colorWeight;
+    float jitterB = (cp_random(uv * baseScale * 0.97 + float2(3.1), 0.0) - 0.5) * colorWeight;
+    float3 grainRgb = float3(grain + jitterR, grain + jitterG, grain + jitterB);
+    return clamp(color + grainRgb * amount * mask, 0.0, 1.0);
 }
 
 /// Vignette（smoothstep 暗角，与预览统一）
@@ -690,7 +715,12 @@ kernel void capturePipeline(
     color = cp_bloom(color, params.bloomAmount);
 
     // ── Pass 10: Highlight Rolloff（成片专属）────────────────────────────────────────
-    color = cp_highlightRolloff(color, params.highlightRolloff, params.highlightRolloffPivot);
+    color = cp_highlightRolloff(
+        color,
+        params.highlightRolloff,
+        params.highlightRolloffPivot,
+        params.highlightRolloffSoftKnee
+    );
 
     // ── Pass 10b: Highlight Rolloff 2（FXN-R 专属）────────────────────────────────
     if (params.highlightRolloff2 > 0.001) {
@@ -747,17 +777,25 @@ kernel void capturePipeline(
     color = cp_paperTexture(color, uv, params.paperTexture, params.time);
 
     // ── Pass 16: Film Grain（胶片颗粒）─────────────────────────────────────────────
-    color = cp_grain(color, uv, params.grainAmount, params.grainSize, params.time);
+    color = cp_grain(
+        color,
+        uv,
+        params.grainAmount,
+        params.grainSize,
+        params.grainRoughness,
+        params.grainLumaBias,
+        params.grainColorVariation
+    );
     color = cp_noise(color, uv, params.noiseAmount, params.time);
     if (params.luminanceNoise > 0.0) {
         float ln = cp_random(uv * 600.0, params.time + 1.7) - 0.5;
-        color = clamp(color + ln * params.luminanceNoise * 0.15, 0.0, 1.0);
+        color = clamp(color + ln * params.luminanceNoise * 0.17, 0.0, 1.0);
     }
     if (params.chromaNoise > 0.0) {
         float cr = cp_random(uv * 500.0, params.time + 3.1) - 0.5;
         float cg = cp_random(uv * 500.0, params.time + 5.3) - 0.5;
         float cb = cp_random(uv * 500.0, params.time + 7.7) - 0.5;
-        color = clamp(color + float3(cr, cg, cb) * params.chromaNoise * 0.08, 0.0, 1.0);
+        color = clamp(color + float3(cr, cg, cb) * params.chromaNoise * 0.09, 0.0, 1.0);
     }
     color = cp_fade(color, params.fadeAmount);
     color = cp_splitTone(
