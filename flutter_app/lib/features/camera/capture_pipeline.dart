@@ -1021,8 +1021,9 @@ class CapturePipeline {
     if (dustAmount > 0.001) {
       final a = dustAmount.clamp(0.0, 1.0);
       final layerCount = (2 + (a * 4).floor()).clamp(2, 5);
-      final brightOpacity = (0.22 + a * 0.68).clamp(0.2, 0.92);
-      final darkOpacity = (0.08 + a * 0.3).clamp(0.08, 0.4);
+      // Debug forcing: make dust overlay visibility unmistakable.
+      final brightOpacity = 1.0;
+      final darkOpacity = 1.0;
       for (var i = 0; i < layerCount; i++) {
         final asset =
             _dustLightPlusAssets[rng.nextInt(_dustLightPlusAssets.length)];
@@ -1066,8 +1067,8 @@ class CapturePipeline {
 
       // Procedural dust: ensure visibility even when texture assets are low-contrast.
       final dotCount = (18 + a * 120).round();
-      final whiteDotAlpha = (0.14 + a * 0.38).clamp(0.12, 0.52);
-      final darkDotAlpha = (0.08 + a * 0.24).clamp(0.06, 0.34);
+      final whiteDotAlpha = 1.0;
+      final darkDotAlpha = 1.0;
       final whitePaint = Paint()
         ..blendMode = BlendMode.screen
         ..color = Colors.white.withValues(alpha: whiteDotAlpha);
@@ -1095,8 +1096,8 @@ class CapturePipeline {
       final appearProb = (0.6 + a * 0.4).clamp(0.6, 1.0);
       if (rng.nextDouble() < appearProb) {
         final layerCount = (2 + (a * 3).floor()).clamp(2, 4);
-        final brightOpacity = (0.24 + a * 0.68).clamp(0.2, 0.94);
-        final darkOpacity = (0.08 + a * 0.24).clamp(0.06, 0.36);
+        final brightOpacity = 1.0;
+        final darkOpacity = 1.0;
         for (var i = 0; i < layerCount; i++) {
           final asset = _scratchLightPlusAssets[
               rng.nextInt(_scratchLightPlusAssets.length)];
@@ -1149,14 +1150,12 @@ class CapturePipeline {
           ..blendMode = BlendMode.screen
           ..strokeCap = StrokeCap.round
           ..style = PaintingStyle.stroke
-          ..color = Colors.white
-              .withValues(alpha: (0.14 + a * 0.32).clamp(0.12, 0.48));
+          ..color = Colors.white.withValues(alpha: 1.0);
         final darkLine = Paint()
           ..blendMode = BlendMode.multiply
           ..strokeCap = StrokeCap.round
           ..style = PaintingStyle.stroke
-          ..color =
-              Colors.black.withValues(alpha: (0.08 + a * 0.2).clamp(0.06, 0.3));
+          ..color = Colors.black.withValues(alpha: 1.0);
         for (var i = 0; i < scratchCount; i++) {
           final cx = bounds.left + rng.nextDouble() * bounds.width;
           final cy = bounds.top + rng.nextDouble() * bounds.height;
