@@ -1051,21 +1051,15 @@ class PreviewRenderParams {
         effectiveBeautyStrength.clamp(0.0, 1.0),
     };
 
-    // 比例切换/重建 renderer 时，原生端需要完整渲染参数才能稳定恢复预览特效。
-    // 这里以完整 toJson 为基底，再根据预览性能模式覆盖美颜相关字段。
-    final json = Map<String, dynamic>.from(toJson())
-      ..['beautyStrength'] = previewBeauty;
-
-    // Preview keeps only core/base effects.
-    // Advanced atmosphere and texture terms are capture-only.
-    json['grainAmount'] = 0.0;
-    json['luminanceNoise'] = 0.0;
-    json['chromaNoise'] = 0.0;
-    json['noiseAmount'] = 0.0;
-    json['paperTexture'] = 0.0;
-    json['chemicalIrregularity'] = 0.0;
-    json['fadeAmount'] = 0.0;
-    json['lightLeakAmount'] = 0.0;
+    final json = <String, dynamic>{
+      if (cameraId.isNotEmpty) 'cameraId': cameraId,
+      if (effectiveBaseLut?.isNotEmpty == true) 'baseLut': effectiveBaseLut,
+      'lutStrength': effectiveLutStrength,
+      'temperatureShift': effectiveTemperature,
+      'tintShift': effectiveTint,
+      'exposureOffset': exposureOffset + effectiveLensExposure,
+      'beautyStrength': previewBeauty,
+    };
 
     if (previewBeauty > 0.0) {
       json['skinHueProtect'] = 1.0;
