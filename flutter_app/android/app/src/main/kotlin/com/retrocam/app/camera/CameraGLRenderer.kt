@@ -456,11 +456,11 @@ vec3 applyPaperTexture(vec3 c, vec2 uv, float amount) {
 vec3 applyHighlightRolloffPreview(vec3 c, float rolloff) {
     if (rolloff < 0.001) return c;
     float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    if (lum > 0.70) {
-        float t = (lum - 0.70) / 0.30;
-        float compress = 1.0 - t * t * (3.0 - 2.0 * t) * rolloff * 0.3;
-        c *= compress;
-    }
+    float kneeStart = clamp(0.72 - rolloff * 0.10, 0.58, 0.82);
+    float mask = smoothstep(kneeStart, 1.0, lum);
+    float targetLum = mix(lum, kneeStart + (lum - kneeStart) * (1.0 - 0.58 * rolloff), mask);
+    float lumScale = targetLum / max(lum, 1e-4);
+    c *= lumScale;
     return clamp(c, 0.0, 1.0);
 }
 
@@ -624,18 +624,23 @@ void main() {
 
     // Pass 18: 胶片颗粒（亮度依赖 + grainSize 控制）
     if (uGrainAmount > 0.0) {
-        // 使用 grainSize 缩放 UV，控制颗粒大小（值越大颗粒越粗）
-        vec2 grainUV = uv / max(uGrainSize * uTexelSize * 800.0, vec2(0.001));
-        float timeSeed = floor(uTime * 24.0) / 24.0;
-        // 多层噪声叠加：模拟银盐晶体的自然随机分布
-        float grain = random(grainUV, timeSeed) - 0.5;
-        grain += (random(grainUV * 1.7, timeSeed + 1.0) - 0.5) * 0.5;
-        grain *= 0.667; // 归一化
-        // 亮度依赖掩码：中间调颗粒最强，纯黑/纯白区域平滑
+        float gSize = clamp(uGrainSize, 0.55, 2.2);
+        vec2 cell = max(vec2(0.00035), vec2(gSize / 320.0, gSize / 420.0));
+        vec2 gridUv = floor(uv / cell) * cell;
+        float timeSeed = floor(uTime * 18.0) / 18.0;
+        float g1 = random(gridUv * 1.0 + vec2(0.17, 0.31), timeSeed * 0.11);
+        float g2 = random(gridUv * 1.9 + vec2(2.41, 1.73), timeSeed * 0.17);
+        float g3 = random(gridUv * 3.7 + vec2(4.13, 3.19), timeSeed * 0.23);
+        float grain = (g1 - 0.5) * 0.62 + (g2 - 0.5) * 0.26 + (g3 - 0.5) * 0.12;
+        float clump = smoothstep(0.58, 0.98, g1);
+        grain *= mix(0.72, 1.35, clump);
         float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
-        float lumMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 2.0); // 抛物线：0→0, 0.5→1, 1→0
-        lumMask = mix(0.3, 1.0, lumMask); // 保留最低 30% 强度，避免完全无颗粒
-        color = clamp(color + grain * uGrainAmount * 0.25 * lumMask, 0.0, 1.0);
+        float midMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 1.6);
+        float shadowBoost = smoothstep(0.55, 0.05, lum) * 0.35;
+        float mask = clamp(0.30 + midMask * 0.78 + shadowBoost, 0.0, 1.35);
+        float chromaJitter = (g2 - g3) * 0.045 * uGrainAmount;
+        vec3 grainRgb = vec3(grain + chromaJitter, grain, grain - chromaJitter);
+        color = clamp(color + grainRgb * uGrainAmount * 0.34 * mask, 0.0, 1.0);
     }
 
     // Pass 19: 数字噪点

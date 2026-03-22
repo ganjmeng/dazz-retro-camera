@@ -285,25 +285,33 @@ static float3 cp_bloom(float3 color, float bloomAmount) {
 static float3 cp_highlightRolloff(float3 color, float rolloff, float pivot) {
     if (rolloff < 0.001) return color;
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
-    float t0 = clamp(pivot, 0.5, 0.95);
-    if (lum > t0) {
-        float mask = smoothstep(t0, 1.0, lum);
-        float3 compressed = float3(
-            color.r * (1.0 - mask * rolloff * 0.10),
-            color.g * (1.0 - mask * rolloff * 0.13),
-            color.b * (1.0 - mask * rolloff * 0.18)
-        );
-        color = clamp(mix(color, compressed, mask * rolloff * 0.75), 0.0, 1.0);
-    }
+    float p = clamp(pivot, 0.52, 0.92);
+    float kneeStart = max(0.45, p - rolloff * 0.16);
+    float kneeEnd = min(1.0, p + (1.0 - p) * (0.58 + 0.32 * rolloff));
+    if (lum <= kneeStart) return color;
+    float mask = smoothstep(kneeStart, kneeEnd, lum);
+    float targetLum = mix(lum, kneeStart + (lum - kneeStart) * (1.0 - 0.62 * rolloff), mask);
+    float lumScale = targetLum / max(lum, 1e-4);
+    float neutralPull = mask * rolloff * 0.10;
+    float3 compressed = color * lumScale;
+    compressed = mix(compressed, float3(dot(compressed, float3(0.2126, 0.7152, 0.0722))), neutralPull);
+    color = clamp(mix(color, compressed, mask * (0.72 + 0.22 * rolloff)), 0.0, 1.0);
     return color;
 }
 
 static float cp_filmicCurve(float x, float toe, float shoulder) {
     float c = clamp(x, 0.0, 1.0);
-    float toeCurve = mix(c, c * c, clamp(toe, 0.0, 1.0));
-    float shoulderCurve =
-        1.0 - pow(max(1.0 - toeCurve, 0.0), 1.0 + clamp(shoulder, 0.0, 1.0) * 1.8);
-    return clamp(mix(toeCurve, shoulderCurve, clamp(shoulder, 0.0, 1.0)), 0.0, 1.0);
+    float t = clamp(toe, 0.0, 1.0);
+    float s = clamp(shoulder, 0.0, 1.0);
+    float a = 0.22 + s * 0.26;
+    float b = 0.30 + t * 0.24;
+    float c2 = 0.10 + t * 0.18;
+    float d = 0.20 + s * 0.22;
+    float e = 0.01;
+    float f = 0.30 + s * 0.18;
+    float y = ((c * (a * c + c2 * b) + d * e) / (c * (a * c + b) + d * f)) - e / f;
+    float w = ((1.0 * (a * 1.0 + c2 * b) + d * e) / (1.0 * (a * 1.0 + b) + d * f)) - e / f;
+    return clamp(y / max(w, 1e-4), 0.0, 1.0);
 }
 
 static float3 cp_filmicToneMap(float3 color, float toe, float shoulder, float strength) {
@@ -555,13 +563,23 @@ static float3 cp_developmentSoften(float3 color, float2 uv, float softness,
 /// Film Grain（成片专用：hash 低频颗粒，更接近真实胶片质感）
 static float3 cp_grain(float3 color, float2 uv, float amount, float grainSize, float time) {
     if (amount < 0.001) return color;
-    float grain  = cp_random(uv * 500.0, time * 0.1) - 0.5;
-    float grain2 = cp_random(uv * 250.0, time * 0.07 + time * 0.13) - 0.5;
-    float g = mix(grain, grain2, 0.3);
+    float gSize = clamp(grainSize, 0.55, 2.2);
+    float2 cell = max(float2(0.00035), float2(gSize / 320.0, gSize / 420.0));
+    float2 gridUv = floor(uv / cell) * cell;
+    float timeSeed = floor(time * 18.0) / 18.0;
+    float g1 = cp_random(gridUv * 1.0 + float2(0.17, 0.31), timeSeed * 0.11);
+    float g2 = cp_random(gridUv * 1.9 + float2(2.41, 1.73), timeSeed * 0.17);
+    float g3 = cp_random(gridUv * 3.7 + float2(4.13, 3.19), timeSeed * 0.23);
+    float grain = (g1 - 0.5) * 0.62 + (g2 - 0.5) * 0.26 + (g3 - 0.5) * 0.12;
+    float clump = smoothstep(0.58, 0.98, g1);
+    grain *= mix(0.72, 1.35, clump);
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
-    float lumMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 2.0);
-    lumMask = mix(0.55, 1.0, lumMask);
-    return clamp(color + float3(g * amount * 0.28 * lumMask), 0.0, 1.0);
+    float midMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 1.6);
+    float shadowBoost = smoothstep(0.55, 0.05, lum) * 0.35;
+    float mask = clamp(0.30 + midMask * 0.78 + shadowBoost, 0.0, 1.35);
+    float chromaJitter = (g2 - g3) * 0.045 * amount;
+    float3 grainRgb = float3(grain + chromaJitter, grain, grain - chromaJitter);
+    return clamp(color + grainRgb * amount * 0.34 * mask, 0.0, 1.0);
 }
 
 /// Vignette（smoothstep 暗角，与预览统一）

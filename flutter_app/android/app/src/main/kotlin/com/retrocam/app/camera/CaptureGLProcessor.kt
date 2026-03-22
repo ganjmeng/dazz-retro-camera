@@ -395,15 +395,17 @@ vec3 applyHalation(vec3 c, float amount, vec2 uv) {
 vec3 applyHighlightRolloff(vec3 c, float rolloff, float pivot) {
     if (rolloff < 0.001) return c;
     float lum = luminance(c);
-    float t0 = clamp(pivot, 0.5, 0.95);
-    if (lum <= t0) return c;
-    float mask = smoothstep(t0, 1.0, lum);
-    vec3 compressed = vec3(
-        c.r * (1.0 - mask * rolloff * 0.12),
-        c.g * (1.0 - mask * rolloff * 0.16),
-        c.b * (1.0 - mask * rolloff * 0.22)
-    );
-    return clamp(mix(c, compressed, mask * 0.85), 0.0, 1.0);
+    float p = clamp(pivot, 0.52, 0.92);
+    float kneeStart = max(0.45, p - rolloff * 0.16);
+    float kneeEnd = min(1.0, p + (1.0 - p) * (0.58 + 0.32 * rolloff));
+    if (lum <= kneeStart) return c;
+    float mask = smoothstep(kneeStart, kneeEnd, lum);
+    float targetLum = mix(lum, kneeStart + (lum - kneeStart) * (1.0 - 0.62 * rolloff), mask);
+    float lumScale = targetLum / max(lum, 1e-4);
+    float neutralPull = mask * rolloff * 0.10;
+    vec3 compressed = c * lumScale;
+    compressed = mix(compressed, vec3(luminance(compressed)), neutralPull);
+    return clamp(mix(c, compressed, mask * (0.72 + 0.22 * rolloff)), 0.0, 1.0);
 }
 
 // ── Pass 11b: Highlight Rolloff 2（FXN-R 专属，二次压缩）────────────────────
@@ -507,14 +509,23 @@ vec3 applyPaperTexture(vec3 c, vec2 uv, float amount, float time) {
 // ── Pass 17: Film Grain（亮度依赖 + grainSize 控制）─────────────────────
 vec3 applyGrain(vec3 c, vec2 uv, float amount, float time, float grainSz) {
     if (amount < 0.001) return c;
-    vec2 grainUV = uv / max(grainSz * uTexelSize * 800.0, vec2(0.001));
-    float grain = hash(grainUV + vec2(time * 0.1)) - 0.5;
-    grain += (hash(grainUV * 1.7 + vec2(time * 0.07, time * 0.13)) - 0.5) * 0.5;
-    grain *= 0.667;
+    float gSize = clamp(grainSz, 0.55, 2.2);
+    vec2 cell = max(vec2(0.00035), vec2(gSize / 320.0, gSize / 420.0));
+    vec2 gridUv = floor(uv / cell) * cell;
+    float timeSeed = floor(time * 18.0) / 18.0;
+    float g1 = hash(gridUv * 1.0 + vec2(0.17, 0.31) + vec2(timeSeed * 0.11));
+    float g2 = hash(gridUv * 1.9 + vec2(2.41, 1.73) + vec2(timeSeed * 0.17));
+    float g3 = hash(gridUv * 3.7 + vec2(4.13, 3.19) + vec2(timeSeed * 0.23));
+    float grain = (g1 - 0.5) * 0.62 + (g2 - 0.5) * 0.26 + (g3 - 0.5) * 0.12;
+    float clump = smoothstep(0.58, 0.98, g1);
+    grain *= mix(0.72, 1.35, clump);
     float lum = luminance(c);
-    float lumMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 2.0);
-    lumMask = mix(0.5, 1.0, lumMask);
-    return clamp(c + grain * amount * 0.30 * lumMask, 0.0, 1.0);
+    float midMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 1.6);
+    float shadowBoost = smoothstep(0.55, 0.05, lum) * 0.35;
+    float mask = clamp(0.30 + midMask * 0.78 + shadowBoost, 0.0, 1.35);
+    float chromaJitter = (g2 - g3) * 0.045 * amount;
+    vec3 grainRgb = vec3(grain + chromaJitter, grain, grain - chromaJitter);
+    return clamp(c + grainRgb * amount * 0.34 * mask, 0.0, 1.0);
 }
 
 // ── Pass 18: Digital Noise（成片专用：hash 暗部增强噪点）────────────────────
@@ -559,10 +570,17 @@ vec3 applyDehaze(vec3 c, float amount) {
 
 float filmicCurve(float x, float toe, float shoulder) {
     float c = clamp(x, 0.0, 1.0);
-    float toeCurve = mix(c, c * c, clamp(toe, 0.0, 1.0));
-    float shoulderCurve =
-        1.0 - pow(max(1.0 - toeCurve, 0.0), 1.0 + clamp(shoulder, 0.0, 1.0) * 1.8);
-    return clamp(mix(toeCurve, shoulderCurve, clamp(shoulder, 0.0, 1.0)), 0.0, 1.0);
+    float t = clamp(toe, 0.0, 1.0);
+    float s = clamp(shoulder, 0.0, 1.0);
+    float a = 0.22 + s * 0.26;
+    float b = 0.30 + t * 0.24;
+    float c2 = 0.10 + t * 0.18;
+    float d = 0.20 + s * 0.22;
+    float e = 0.01;
+    float f = 0.30 + s * 0.18;
+    float y = ((c * (a * c + c2 * b) + d * e) / (c * (a * c + b) + d * f)) - e / f;
+    float w = ((1.0 * (a * 1.0 + c2 * b) + d * e) / (1.0 * (a * 1.0 + b) + d * f)) - e / f;
+    return clamp(y / max(w, 1e-4), 0.0, 1.0);
 }
 
 vec3 applyFilmicToneMap(vec3 c, float toe, float shoulder, float strength) {

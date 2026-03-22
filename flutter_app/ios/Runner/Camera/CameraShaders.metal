@@ -336,13 +336,12 @@ float applyFxnrToneCurve(float x) {
 /// 对高亮区域施加柔和压制，防止过曝层次失真
 float3 applyHighlightRolloff(float3 color, float rolloff) {
     if (rolloff <= 0.0) return color;
-    float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
-    // 高光区域：亮度 > (1 - rolloff)
-    float threshold = 1.0 - rolloff;
-    float highlight = clamp((luma - threshold) / rolloff, 0.0, 1.0);
-    // 在高光区域施加 S 形压制，保留色彩层次
-    float compress = 1.0 - highlight * highlight * 0.3;
-    return clamp(color * compress, 0.0, 1.0);
+    float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float kneeStart = clamp(0.72 - rolloff * 0.10, 0.58, 0.82);
+    float mask = smoothstep(kneeStart, 1.0, lum);
+    float targetLum = mix(lum, kneeStart + (lum - kneeStart) * (1.0 - 0.58 * rolloff), mask);
+    float lumScale = targetLum / max(lum, 1e-4);
+    return clamp(color * lumScale, 0.0, 1.0);
 }
 
 // MARK: - Tint 偏移（绿-品轴）
@@ -438,6 +437,27 @@ float3 applyChemicalIrregularity(float3 color, float2 uv, float amount, float ti
     return clamp(color + irr * amount * midMask * 0.2, 0.0, 1.0);
 }
 
+float3 applyStructuredGrain(float3 color, float2 uv, float amount, float grainSize, float time) {
+    if (amount <= 0.0) return color;
+    float gSize = clamp(grainSize, 0.55, 2.2);
+    float2 cell = max(float2(0.00035), float2(gSize / 320.0, gSize / 420.0));
+    float2 gridUv = floor(uv / cell) * cell;
+    float timeSeed = floor(time * 18.0) / 18.0;
+    float g1 = random(gridUv * 1.0 + float2(0.17, 0.31), timeSeed * 0.11);
+    float g2 = random(gridUv * 1.9 + float2(2.41, 1.73), timeSeed * 0.17);
+    float g3 = random(gridUv * 3.7 + float2(4.13, 3.19), timeSeed * 0.23);
+    float grain = (g1 - 0.5) * 0.62 + (g2 - 0.5) * 0.26 + (g3 - 0.5) * 0.12;
+    float clump = smoothstep(0.58, 0.98, g1);
+    grain *= mix(0.72, 1.35, clump);
+    float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float midMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 1.6);
+    float shadowBoost = smoothstep(0.55, 0.05, lum) * 0.35;
+    float mask = clamp(0.30 + midMask * 0.78 + shadowBoost, 0.0, 1.35);
+    float chromaJitter = (g2 - g3) * 0.045 * amount;
+    float3 grainRgb = float3(grain + chromaJitter, grain, grain - chromaJitter);
+    return clamp(color + grainRgb * amount * 0.34 * mask, 0.0, 1.0);
+}
+
 // MARK: - CCD 风格片段着色器
 fragment float4 ccdFragmentShader(
     VertexOut in [[stage_in]],
@@ -447,6 +467,7 @@ fragment float4 ccdFragmentShader(
     constant CCDParams &params [[buffer(0)]]
 ) {
     constexpr sampler textureSampler(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
+    (void)grainTexture;
 
     float2 uv = in.texCoord;
 
@@ -534,10 +555,7 @@ fragment float4 ccdFragmentShader(
     }
     
     // === Pass 4: 胶片颗粒 (Grain) ===
-    // 从预烘焙的噪点纹理中采样并叠加
-    // grain 采样（预留用于未来胶片效果）
-    float3 grain = grainTexture.sample(textureSampler, uv * 2.0).rgb;
-    (void)grain; // 防止未使用警告
+    color = applyStructuredGrain(color, uv, params.grainAmount, params.grainSize, params.time);
     
     // === Pass 5: 动态数字噪点 (Noise) ===
     // 模拟 CCD 传感器的暗部噪点，使用时间种子使其动态变化
