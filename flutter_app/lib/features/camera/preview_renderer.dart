@@ -1059,6 +1059,48 @@ class PreviewRenderParams {
       'tintShift': effectiveTint,
       'exposureOffset': exposureOffset + effectiveLensExposure,
       'beautyStrength': previewBeauty,
+      // 预览白名单策略：非核心特效一律显式置零，避免原生端沿用旧值。
+      'contrast': 1.0,
+      'saturation': 1.0,
+      'highlights': 0.0,
+      'shadows': 0.0,
+      'whites': 0.0,
+      'blacks': 0.0,
+      'clarity': 0.0,
+      'vibrance': 0.0,
+      'colorBiasR': 0.0,
+      'colorBiasG': 0.0,
+      'colorBiasB': 0.0,
+      'grainAmount': 0.0,
+      'noiseAmount': 0.0,
+      'grainSize': 1.0,
+      'luminanceNoise': 0.0,
+      'chromaNoise': 0.0,
+      'vignetteAmount': 0.0,
+      'chromaticAberration': 0.0,
+      'bloomAmount': 0.0,
+      'halationAmount': 0.0,
+      'highlightRolloff': 0.0,
+      'highlightRolloff2': 0.0,
+      'toneCurveStrength': 0.0,
+      'dehaze': 0.0,
+      'highlightWarmAmount': 0.0,
+      'toneMapStrength': 0.0,
+      'midGrayDensity': 0.0,
+      'lensVignette': 0.0,
+      'softFocus': 0.0,
+      'paperTexture': 0.0,
+      'developmentSoftness': 0.0,
+      'chemicalIrregularity': 0.0,
+      'fadeAmount': 0.0,
+      'lightLeakAmount': 0.0,
+      'shadowTintR': 0.0,
+      'shadowTintG': 0.0,
+      'shadowTintB': 0.0,
+      'highlightTintR': 0.0,
+      'highlightTintG': 0.0,
+      'highlightTintB': 0.0,
+      'splitToneBalance': 0.5,
     };
 
     if (previewBeauty > 0.0) {
@@ -1141,21 +1183,12 @@ class PreviewFilterWidget extends StatelessWidget {
             sourceAspectRatio > 0.01 ? sourceAspectRatio : 3 / 4;
         final containerAspect = containerW / containerH;
         final circularFisheye = params.activeLens?.circularFisheyeCrop == true;
-        final keepSourceAspect = params.isFrontCamera && !circularFisheye;
         double contentW, contentH;
 
         if (circularFisheye) {
           final squareEdge = containerW < containerH ? containerW : containerH;
           contentW = squareEdge;
           contentH = squareEdge;
-        } else if (keepSourceAspect) {
-          if (containerAspect >= sensorAspect) {
-            contentH = containerH;
-            contentW = containerH * sensorAspect;
-          } else {
-            contentW = containerW;
-            contentH = containerW / sensorAspect;
-          }
         } else if (containerAspect >= sensorAspect) {
           contentW = containerW;
           contentH = containerW / sensorAspect;
@@ -1167,25 +1200,19 @@ class PreviewFilterWidget extends StatelessWidget {
         return ColoredBox(
           color: Colors.black,
           child: Center(
-            child: keepSourceAspect
-                ? SizedBox(
-                    width: contentW,
-                    height: contentH,
-                    child: Texture(textureId: textureId),
-                  )
-                : ClipRect(
-                    child: OverflowBox(
-                      maxWidth: contentW,
-                      maxHeight: contentH,
-                      child: SizedBox(
-                        width: contentW,
-                        height: contentH,
-                        // Phase 2 重构：所有渲染特效已下沉到 Native GPU Shader
-                        // Flutter 层仅显示纯 Texture，不再做像素级渲染
-                        child: Texture(textureId: textureId),
-                      ),
-                    ),
+            child: ClipRect(
+              child: OverflowBox(
+                maxWidth: contentW,
+                maxHeight: contentH,
+                child: SizedBox(
+                  width: contentW,
+                  height: contentH,
+                  // Phase 2 重构：所有渲染特效已下沉到 Native GPU Shader
+                  // Flutter 层仅显示纯 Texture，不再做像素级渲染
+                  child: Texture(textureId: textureId),
                   ),
+              ),
+            ),
           ),
         );
       },

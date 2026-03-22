@@ -377,9 +377,7 @@ static float3 cp_noise(float3 color, float2 uv, float amount, float time) {
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
     float n = cp_random(uv * 800.0, time) - 0.5;
     float dark = 1.0 - lum;
-    // 保留亮部最小噪点底噪，避免高光场景成片过度“数码干净”。
-    float tonal = mix(0.40, 1.0, clamp(dark, 0.0, 1.0));
-    return clamp(color + n * amount * 0.24 * tonal, 0.0, 1.0);
+    return clamp(color + n * amount * 0.2 * dark, 0.0, 1.0);
 }
 
 static float3 cp_fade(float3 color, float amount) {
@@ -578,10 +576,10 @@ static float3 cp_grain(float3 color, float2 uv, float amount, float grainSize, f
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
     float midMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 1.6);
     float shadowBoost = smoothstep(0.55, 0.05, lum) * 0.35;
-    float mask = clamp(0.40 + midMask * 0.78 + shadowBoost, 0.0, 1.40);
+    float mask = clamp(0.30 + midMask * 0.78 + shadowBoost, 0.0, 1.35);
     float chromaJitter = (g2 - g3) * 0.045 * amount;
     float3 grainRgb = float3(grain + chromaJitter, grain, grain - chromaJitter);
-    return clamp(color + grainRgb * amount * 0.38 * mask, 0.0, 1.0);
+    return clamp(color + grainRgb * amount * 0.34 * mask, 0.0, 1.0);
 }
 
 /// Vignette（smoothstep 暗角，与预览统一）
@@ -753,13 +751,13 @@ kernel void capturePipeline(
     color = cp_noise(color, uv, params.noiseAmount, params.time);
     if (params.luminanceNoise > 0.0) {
         float ln = cp_random(uv * 600.0, params.time + 1.7) - 0.5;
-        color = clamp(color + ln * params.luminanceNoise * 0.18, 0.0, 1.0);
+        color = clamp(color + ln * params.luminanceNoise * 0.15, 0.0, 1.0);
     }
     if (params.chromaNoise > 0.0) {
         float cr = cp_random(uv * 500.0, params.time + 3.1) - 0.5;
         float cg = cp_random(uv * 500.0, params.time + 5.3) - 0.5;
         float cb = cp_random(uv * 500.0, params.time + 7.7) - 0.5;
-        color = clamp(color + float3(cr, cg, cb) * params.chromaNoise * 0.10, 0.0, 1.0);
+        color = clamp(color + float3(cr, cg, cb) * params.chromaNoise * 0.08, 0.0, 1.0);
     }
     color = cp_fade(color, params.fadeAmount);
     color = cp_splitTone(
