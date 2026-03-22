@@ -976,7 +976,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // readyVersionChanged 意味着 native 摄像头完成了一次重建（比例切换/相机切换触发）。
     // 此时即使 signal 与上次相同，也必须强制重放——因为 signal 可能在重建过程中就已记录，
     // 但参数在重建完成后被 native 重置，导致特效丢失。
-    if (!firstRuntimeFrame && !readyVersionChanged && nextSignal == _lastNativeReplaySignal) return;
+    if (!firstRuntimeFrame &&
+        !readyVersionChanged &&
+        nextSignal == _lastNativeReplaySignal) return;
     _lastNativeReplaySignal = nextSignal;
     _scheduleNativeReadyReplay();
   }
@@ -6132,7 +6134,6 @@ class _DebugOverlay extends ConsumerWidget {
     final camInfo = ref.watch(cameraServiceProvider).activeCameraDebugInfo;
 
     final lines = <String>[
-      '── DAZZ DEBUG ──',
       'Camera: ${st.activeCameraId}  (${cam?.name ?? "loading"})',
       'Filter: ${st.activeFilterId ?? "none"}  Lens: ${st.activeLensId ?? "default"}',
       'Ratio: ${st.activeRatioId ?? "default"}  Frame: ${st.activeFrameId ?? "none"}',
@@ -6186,35 +6187,112 @@ class _DebugOverlay extends ConsumerWidget {
         'Focal: ${camInfo["focalLengths"] ?? "?"}mm',
       ] else
         '(iOS or not yet initialized)',
+      '',
+      '── Lifecycle Trace (latest 14) ──',
+      if (st.lifecycleTrace.isNotEmpty)
+        ...st.lifecycleTrace.skip(
+          st.lifecycleTrace.length > 14 ? st.lifecycleTrace.length - 14 : 0,
+        )
+      else
+        '(empty)',
     ];
-    return IgnorePointer(
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.black.withAlpha(180),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+            color: const Color(0xFF00FF88).withAlpha(120), width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '── DAZZ DEBUG ──',
+                  style: TextStyle(
+                    color: Color(0xFF00FF88),
+                    fontSize: 9.5,
+                    fontFamily: 'monospace',
+                    height: 1.4,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              _TinyDebugButton(
+                label: 'COPY',
+                onTap: () async {
+                  final report = ref
+                      .read(cameraAppProvider.notifier)
+                      .buildLifecycleTraceReport();
+                  await Clipboard.setData(ClipboardData(text: report));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('已复制诊断串'),
+                        duration: Duration(milliseconds: 900),
+                      ),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(width: 6),
+              _TinyDebugButton(
+                label: 'CLEAR',
+                onTap: () {
+                  ref.read(cameraAppProvider.notifier).clearLifecycleTrace();
+                },
+              ),
+            ],
+          ),
+          ...lines.map((line) => Text(
+                line,
+                style: TextStyle(
+                  color: line.startsWith('──')
+                      ? const Color(0xFF00FF88)
+                      : Colors.white.withAlpha(220),
+                  fontSize: 9.5,
+                  fontFamily: 'monospace',
+                  height: 1.4,
+                  fontWeight:
+                      line.startsWith('──') ? FontWeight.w700 : FontWeight.w400,
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+class _TinyDebugButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _TinyDebugButton({
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
         decoration: BoxDecoration(
-          color: Colors.black.withAlpha(180),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-              color: const Color(0xFF00FF88).withAlpha(120), width: 0.5),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: const Color(0xFF00FF88).withAlpha(180)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: lines
-              .map((line) => Text(
-                    line,
-                    style: TextStyle(
-                      color: line.startsWith('──')
-                          ? const Color(0xFF00FF88)
-                          : Colors.white.withAlpha(220),
-                      fontSize: 9.5,
-                      fontFamily: 'monospace',
-                      height: 1.4,
-                      fontWeight: line.startsWith('──')
-                          ? FontWeight.w700
-                          : FontWeight.w400,
-                    ),
-                  ))
-              .toList(),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF00FF88),
+            fontSize: 8.5,
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
