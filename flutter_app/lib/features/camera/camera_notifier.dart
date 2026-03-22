@@ -96,6 +96,11 @@ class CameraAppState {
   final int burstProgress; // 当前连拍进度（0=未开始，1~N=第N张完成）
   final bool isBursting; // 是否正在连拍中
   final List<String> lifecycleTrace; // 生命周期诊断轨迹（可复制）
+  final bool lifecycleSyncInFlight;
+  final bool lifecycleSyncQueued;
+  final bool deferredRenderPushAfterLifecycle;
+  final int renderParamsVersion;
+  final int lastAckedRenderParamsVersion;
   // Debug: 最近一次拍照的分辨率信息
   final String lastCaptureRaw; // e.g. "4032×3024" 原始分辨率
   final String lastCaptureOutput; // e.g. "3024×3024" 输出分辨率
@@ -163,6 +168,11 @@ class CameraAppState {
     this.burstProgress = 0,
     this.isBursting = false,
     this.lifecycleTrace = const [],
+    this.lifecycleSyncInFlight = false,
+    this.lifecycleSyncQueued = false,
+    this.deferredRenderPushAfterLifecycle = false,
+    this.renderParamsVersion = 0,
+    this.lastAckedRenderParamsVersion = 0,
     this.lastCaptureRaw = '',
     this.lastCaptureOutput = '',
     this.runtimeDeviceBrand = '',
@@ -231,6 +241,11 @@ class CameraAppState {
     bool? isBursting,
     List<String>? lifecycleTrace,
     bool clearLifecycleTrace = false,
+    bool? lifecycleSyncInFlight,
+    bool? lifecycleSyncQueued,
+    bool? deferredRenderPushAfterLifecycle,
+    int? renderParamsVersion,
+    int? lastAckedRenderParamsVersion,
     String? lastCaptureRaw,
     String? lastCaptureOutput,
     String? runtimeDeviceBrand,
@@ -313,6 +328,14 @@ class CameraAppState {
       lifecycleTrace: clearLifecycleTrace
           ? const []
           : (lifecycleTrace ?? this.lifecycleTrace),
+      lifecycleSyncInFlight:
+          lifecycleSyncInFlight ?? this.lifecycleSyncInFlight,
+      lifecycleSyncQueued: lifecycleSyncQueued ?? this.lifecycleSyncQueued,
+      deferredRenderPushAfterLifecycle: deferredRenderPushAfterLifecycle ??
+          this.deferredRenderPushAfterLifecycle,
+      renderParamsVersion: renderParamsVersion ?? this.renderParamsVersion,
+      lastAckedRenderParamsVersion:
+          lastAckedRenderParamsVersion ?? this.lastAckedRenderParamsVersion,
       lastCaptureRaw: lastCaptureRaw ?? this.lastCaptureRaw,
       lastCaptureOutput: lastCaptureOutput ?? this.lastCaptureOutput,
       runtimeDeviceBrand: runtimeDeviceBrand ?? this.runtimeDeviceBrand,
@@ -420,11 +443,35 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     if (next.length > _kLifecycleTraceMaxLines) {
       next.removeRange(0, next.length - _kLifecycleTraceMaxLines);
     }
-    state = state.copyWith(lifecycleTrace: next);
+    state = state.copyWith(
+      lifecycleTrace: next,
+      lifecycleSyncInFlight: _isLifecycleResyncInFlight,
+      lifecycleSyncQueued: _lifecycleResyncQueued,
+      deferredRenderPushAfterLifecycle: _deferredRenderPushAfterLifecycle,
+      renderParamsVersion: _renderParamsVersion,
+      lastAckedRenderParamsVersion: _lastAckedRenderParamsVersion,
+    );
+  }
+
+  void _publishLifecycleDebugStatus() {
+    state = state.copyWith(
+      lifecycleSyncInFlight: _isLifecycleResyncInFlight,
+      lifecycleSyncQueued: _lifecycleResyncQueued,
+      deferredRenderPushAfterLifecycle: _deferredRenderPushAfterLifecycle,
+      renderParamsVersion: _renderParamsVersion,
+      lastAckedRenderParamsVersion: _lastAckedRenderParamsVersion,
+    );
   }
 
   void clearLifecycleTrace() {
-    state = state.copyWith(clearLifecycleTrace: true);
+    state = state.copyWith(
+      clearLifecycleTrace: true,
+      lifecycleSyncInFlight: _isLifecycleResyncInFlight,
+      lifecycleSyncQueued: _lifecycleResyncQueued,
+      deferredRenderPushAfterLifecycle: _deferredRenderPushAfterLifecycle,
+      renderParamsVersion: _renderParamsVersion,
+      lastAckedRenderParamsVersion: _lastAckedRenderParamsVersion,
+    );
   }
 
   String buildLifecycleTraceReport() {
@@ -436,6 +483,11 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       'lensId=${state.activeLensId}',
       'filterId=${state.activeFilterId}',
       'zoom=${state.zoomLevel.toStringAsFixed(2)}',
+      'syncInFlight=${state.lifecycleSyncInFlight}',
+      'syncQueued=${state.lifecycleSyncQueued}',
+      'deferredRender=${state.deferredRenderPushAfterLifecycle}',
+      'renderVersion=${state.renderParamsVersion}',
+      'ackVersion=${state.lastAckedRenderParamsVersion}',
       'previewMode=${state.previewPerformanceMode.name}',
       'cameraName=${camera?.name ?? "null"}',
       'traceLines=${state.lifecycleTrace.length}',
@@ -1937,6 +1989,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   void _applyCurrentRenderParamsToNative({bool throttled = false}) {
     if (_isLifecycleResyncInFlight) {
       _deferredRenderPushAfterLifecycle = true;
+      _publishLifecycleDebugStatus();
       return;
     }
     if (!throttled) {
@@ -1957,6 +2010,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     if (params == null) return;
     final json = params.toPreviewJson(mode: state.previewPerformanceMode);
     final version = ++_renderParamsVersion;
+    _publishLifecycleDebugStatus();
     debugPrint(
         '[CameraNotifier] _applyCurrentRenderParamsToNative: sending ${json.length} params to native (v=$version)');
     _ref
@@ -1967,6 +2021,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           ackVersion >= version &&
           ackVersion > _lastAckedRenderParamsVersion) {
         _lastAckedRenderParamsVersion = ackVersion;
+        _publishLifecycleDebugStatus();
       }
     });
   }
@@ -1994,6 +2049,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           ackVersion >= version &&
           ackVersion > _lastAckedRenderParamsVersion) {
         _lastAckedRenderParamsVersion = ackVersion;
+        _publishLifecycleDebugStatus();
       }
       _recordLifecycleTrace(
           'runtimeSync.done v=$version ack=${ackVersion ?? -1}');
@@ -2089,6 +2145,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
 
   void _scheduleViewportRatioSync({bool immediate = false}) {
     _lifecycleResyncQueued = true;
+    _publishLifecycleDebugStatus();
     _recordLifecycleTrace(
         'lifecycleQueue.schedule immediate=$immediate inFlight=$_isLifecycleResyncInFlight');
     if (immediate) {
@@ -2107,10 +2164,12 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   Future<void> _flushLifecycleResync() async {
     if (_isLifecycleResyncInFlight) {
       _lifecycleResyncQueued = true;
+      _publishLifecycleDebugStatus();
       _recordLifecycleTrace('lifecycleQueue.skip alreadyInFlight');
       return;
     }
     _isLifecycleResyncInFlight = true;
+    _publishLifecycleDebugStatus();
     _recordLifecycleTrace('lifecycleQueue.begin');
     try {
       while (_lifecycleResyncQueued) {
@@ -2122,9 +2181,11 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       }
     } finally {
       _isLifecycleResyncInFlight = false;
+      _publishLifecycleDebugStatus();
       _recordLifecycleTrace('lifecycleQueue.end');
       if (_deferredRenderPushAfterLifecycle) {
         _deferredRenderPushAfterLifecycle = false;
+        _publishLifecycleDebugStatus();
         _applyCurrentRenderParamsToNative();
       }
     }
@@ -2134,6 +2195,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     _viewportRatioPushTimer?.cancel();
     _viewportRatioPushTimer = null;
     _lifecycleResyncQueued = true;
+    _publishLifecycleDebugStatus();
     await _flushLifecycleResync();
   }
 

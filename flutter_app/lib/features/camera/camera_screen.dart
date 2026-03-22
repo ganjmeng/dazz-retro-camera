@@ -6131,9 +6131,16 @@ class _DebugOverlay extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final params = st.renderParams;
     final cam = st.camera;
-    final camInfo = ref.watch(cameraServiceProvider).activeCameraDebugInfo;
+    final camSvc = ref.watch(cameraServiceProvider);
+    final camInfo = camSvc.activeCameraDebugInfo;
 
     final lines = <String>[
+      '── Key Status ──',
+      'Svc: ready=${camSvc.isReady} phase=${camSvc.lifecyclePhase} tex=${camSvc.textureId ?? -1} rv=${camSvc.cameraReadyVersion}',
+      'Sync: inFlight=${st.lifecycleSyncInFlight} queued=${st.lifecycleSyncQueued} deferred=${st.deferredRenderPushAfterLifecycle}',
+      'Version: sent=${st.renderParamsVersion} ack=${st.lastAckedRenderParamsVersion}',
+      'Preview: src=${camSvc.previewSourceAspectRatio.toStringAsFixed(3)} rtUpdatedAt=${camSvc.runtimeStatsUpdatedAtMs}',
+      '',
       'Camera: ${st.activeCameraId}  (${cam?.name ?? "loading"})',
       'Filter: ${st.activeFilterId ?? "none"}  Lens: ${st.activeLensId ?? "default"}',
       'Ratio: ${st.activeRatioId ?? "default"}  Frame: ${st.activeFrameId ?? "none"}',
