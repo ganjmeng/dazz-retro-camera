@@ -145,6 +145,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
     private var cachedLensParams: Map<String, Any> = emptyMap()
     // GL Renderer
     private var glRenderer: CameraGLRenderer? = null
+    @Volatile private var lastRendererReady: Boolean = false
     // ── 用于 switchLens 等待新 renderer 就绪 ──
     @Volatile private var rendererReadyLatch: CountDownLatch? = null
     // ── 内存拍摄缓存：takePhoto 内存模式拿到的字节，供 processWithGpu 直接使用 ──
@@ -393,37 +394,46 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 val h = request.resolution.height
                 previewStreamWidth = w
                 previewStreamHeight = h
+                var activeRenderer: CameraGLRenderer? = null
+                var inputSurface: Surface? = null
+                repeat(2) { attempt ->
+                    if (inputSurface != null) return@repeat
+                    val candidate = CameraGLRenderer(st, flutterPluginBinding.applicationContext)
+                    candidate.initialize(w, h)
+                    val candidateSurface = candidate.getInputSurface()
+                    if (candidateSurface != null) {
+                        activeRenderer = candidate
+                        inputSurface = candidateSurface
+                    } else {
+                        candidate.release()
+                        Log.w(
+                            TAG,
+                            "GL renderer init attempt ${attempt + 1} failed for ${w}x${h}"
+                        )
+                    }
+                }
 
-                // 在 cameraExecutor 上初始化 GL（initialize 内部用 glExecutor 异步完成，
-                // 并通过 CountDownLatch 同步等待，cameraExecutor 上阻塞是安全的）
-                val renderer = CameraGLRenderer(st, flutterPluginBinding.applicationContext)
-                renderer.initialize(w, h)
-                glRenderer = renderer
-                applyPreviewMirrorToRenderer(renderer)
-
-                // ── FIX: 切换摄像头后重新应用缓存的 preset 参数 ──────────
-                // switchLens 会重建 renderer，但不会重新调用 setPreset，
-                // 导致新 renderer 的所有 uniform 参数为默认值（无效果）。
-                reapplyPresetToRenderer(renderer)
-
-                // ── 通知 handleSwitchLens：新 renderer 已就绪 ──
-                latch.countDown()
-
-                val inputSurface = renderer.getInputSurface()
-                if (inputSurface != null) {
+                if (activeRenderer != null && inputSurface != null) {
+                    val renderer = activeRenderer!!
+                    glRenderer = renderer
+                    lastRendererReady = true
+                    applyPreviewMirrorToRenderer(renderer)
+                    reapplyPresetToRenderer(renderer)
+                    latch.countDown()
                     Log.d("CameraPlugin", "GL renderer ready, providing GL input surface")
                     request.provideSurface(
-                        inputSurface,
+                        inputSurface!!,
                         cameraExecutor
                     ) {
-                    // 只有当 glRenderer 仍然是本次创建的 renderer 时才清空
-                    // 避免 bindCameraUseCases 重新调用后，旧的 Surface 释放 callback 把新的 glRenderer 清空
-                    renderer.release()
-                    if (glRenderer === renderer) glRenderer = null
-                }
+                        renderer.release()
+                        if (glRenderer === renderer) glRenderer = null
+                    }
                 } else {
-                    // GL 初始化失败，降级到直通模式
-                    Log.w("CameraPlugin", "GL renderer init failed, falling back to direct mode")
+                    // 兜底直通模式：保证预览不断，但同步回执会返回 rendererReady=false 触发上层重试。
+                    glRenderer = null
+                    lastRendererReady = false
+                    latch.countDown()
+                    Log.w("CameraPlugin", "GL renderer unavailable, falling back to direct mode")
                     st.setDefaultBufferSize(w, h)
                     val surface = Surface(st)
                     request.provideSurface(
@@ -843,7 +853,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             result.success(
                 mapOf(
                     "appliedVersion" to cachedRenderVersion,
-                    "rendererReady" to (glRenderer != null),
+                    "rendererReady" to (lastRendererReady && glRenderer != null),
                     "staleIgnored" to true
                 )
             )
@@ -858,7 +868,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         result.success(
             mapOf(
                 "appliedVersion" to cachedRenderVersion,
-                "rendererReady" to (glRenderer != null)
+                "rendererReady" to (lastRendererReady && glRenderer != null)
             )
         )
     }
@@ -1950,22 +1960,27 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
     private fun scheduleRendererStateReplay(
         reason: String,
-        onComplete: (() -> Unit)? = null
+        onComplete: ((Boolean) -> Unit)? = null
     ) {
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
-        val replayDelays = longArrayOf(90L, 220L)
+        val replayDelays = longArrayOf(60L, 160L, 320L, 560L, 900L)
         if (replayDelays.isEmpty()) {
-            onComplete?.invoke()
+            onComplete?.invoke(false)
             return
         }
         val finalDelay = replayDelays.maxOrNull() ?: 0L
+        var replayAppliedCount = 0
         replayDelays.forEach { delayMs ->
             handler.postDelayed({
                 try {
                     glRenderer?.let { renderer ->
                         reapplyPresetToRenderer(renderer)
                         renderer.setSharpen(currentSharpenLevel)
+                        applyPreviewMirrorToRenderer(renderer)
+                        replayAppliedCount += 1
                         Log.d(TAG, "renderer state replayed after $reason (+${delayMs}ms)")
+                    } ?: run {
+                        Log.w(TAG, "renderer replay skipped after $reason (+${delayMs}ms): renderer=null")
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "renderer replay after $reason failed: ${e.message}")
@@ -1973,7 +1988,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             }, delayMs)
         }
         handler.postDelayed({
-            onComplete?.invoke()
+            onComplete?.invoke(replayAppliedCount > 0)
         }, finalDelay + 10L)
     }
 
@@ -2056,7 +2071,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             result.success(
                 mapOf(
                     "appliedVersion" to cachedRenderVersion,
-                    "rendererReady" to (glRenderer != null),
+                    "rendererReady" to (lastRendererReady && glRenderer != null),
                     "staleIgnored" to true
                 )
             )
@@ -2110,7 +2125,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         result.success(
             mapOf(
                 "appliedVersion" to cachedRenderVersion,
-                "rendererReady" to (glRenderer != null)
+                "rendererReady" to (lastRendererReady && glRenderer != null)
             )
         )
     }
@@ -2126,7 +2141,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             result.success(
                 mapOf(
                     "appliedVersion" to cachedRenderVersion,
-                    "rendererReady" to (glRenderer != null),
+                    "rendererReady" to (lastRendererReady && glRenderer != null),
                     "rebound" to false,
                     "staleIgnored" to true
                 )
@@ -2210,7 +2225,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             result.success(
                 mapOf(
                     "appliedVersion" to cachedRenderVersion,
-                    "rendererReady" to (glRenderer != null),
+                    "rendererReady" to (lastRendererReady && glRenderer != null),
                     "rebound" to false
                 )
             )
@@ -2223,12 +2238,20 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 reason = "syncCameraState",
                 onReady = {
                     applyState()
-                    scheduleRendererStateReplay("syncCameraState") {
+                    scheduleRendererStateReplay("syncCameraState") { replayApplied ->
+                        val rendererReady = (lastRendererReady && glRenderer != null && replayApplied)
+                        if (!rendererReady) {
+                            Log.w(
+                                TAG,
+                                "syncCameraState completed but renderer not fully ready: " +
+                                    "lastRendererReady=$lastRendererReady replayApplied=$replayApplied rendererNull=${glRenderer == null}"
+                            )
+                        }
                         sendEvent("onCameraReady", activeCameraDebugInfo)
                         result.success(
                             mapOf(
                                 "appliedVersion" to cachedRenderVersion,
-                                "rendererReady" to (glRenderer != null),
+                                "rendererReady" to rendererReady,
                                 "rebound" to true
                             )
                         )

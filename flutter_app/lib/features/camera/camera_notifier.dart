@@ -430,6 +430,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
   bool _isLifecycleResyncInFlight = false;
   bool _deferredRenderPushAfterLifecycle = false;
   int _lifecycleSyncToken = 0;
+  int _lastRendererRetryToken = -1;
 
   CameraAppNotifier(this._ref) : super(const CameraAppState());
 
@@ -2166,14 +2167,24 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           'cameraSync.abort stale token=$syncToken latest=$_lifecycleSyncToken after=syncCameraState');
       return;
     }
-    if (ackVersion != null &&
-        ackVersion >= version &&
+    if (ackVersion == null) {
+      _recordLifecycleTrace(
+          'cameraSync.warn token=$syncToken ack=null rendererNotReady');
+      if (_lastRendererRetryToken != syncToken) {
+        _lastRendererRetryToken = syncToken;
+        _lifecycleResyncQueued = true;
+        _publishLifecycleDebugStatus();
+        _recordLifecycleTrace('cameraSync.retry token=$syncToken once');
+      }
+      return;
+    }
+    if (ackVersion >= version &&
         ackVersion > _lastAckedRenderParamsVersion) {
       _lastAckedRenderParamsVersion = ackVersion;
       _publishLifecycleDebugStatus();
     }
     _recordLifecycleTrace(
-        'cameraSync.done token=$syncToken cam=${camera.id} ack=${ackVersion ?? -1}');
+        'cameraSync.done token=$syncToken cam=${camera.id} ack=$ackVersion');
   }
 
   void _enqueueLifecycleResync(String reason) {

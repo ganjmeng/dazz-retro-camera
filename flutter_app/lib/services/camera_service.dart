@@ -308,6 +308,13 @@ class CameraService extends StateNotifier<CameraState> {
       });
       _lastCameraPresetPayload = Map<String, dynamic>.from(presetPayload);
       _lastLensParamsPayload = Map<String, dynamic>.from(lensParams);
+      final readyRaw = result?['rendererReady'];
+      final rendererReady = readyRaw is bool
+          ? readyRaw
+          : (readyRaw?.toString().toLowerCase() == 'true');
+      if (!rendererReady) {
+        return null;
+      }
       final raw = result?['appliedVersion'];
       if (raw is num) return raw.toInt();
       return int.tryParse(raw?.toString() ?? '');
