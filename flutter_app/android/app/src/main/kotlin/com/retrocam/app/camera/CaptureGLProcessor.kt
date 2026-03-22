@@ -522,10 +522,10 @@ vec3 applyGrain(vec3 c, vec2 uv, float amount, float time, float grainSz) {
     float lum = luminance(c);
     float midMask = 1.0 - pow(abs(lum * 2.0 - 1.0), 1.6);
     float shadowBoost = smoothstep(0.55, 0.05, lum) * 0.35;
-    float mask = clamp(0.30 + midMask * 0.78 + shadowBoost, 0.0, 1.35);
+    float mask = clamp(0.40 + midMask * 0.78 + shadowBoost, 0.0, 1.40);
     float chromaJitter = (g2 - g3) * 0.045 * amount;
     vec3 grainRgb = vec3(grain + chromaJitter, grain, grain - chromaJitter);
-    return clamp(c + grainRgb * amount * 0.34 * mask, 0.0, 1.0);
+    return clamp(c + grainRgb * amount * 0.38 * mask, 0.0, 1.0);
 }
 
 // ── Pass 18: Digital Noise（成片专用：hash 暗部增强噪点）────────────────────
@@ -534,7 +534,9 @@ vec3 applyNoise(vec3 c, vec2 uv, float amount, float time) {
     float lum   = dot(c, vec3(0.2126, 0.7152, 0.0722));
     float noise = hash(uv * 800.0 + vec2(time)) - 0.5;
     float dark  = 1.0 - lum;
-    return clamp(c + noise * amount * 0.2 * dark, 0.0, 1.0);
+    // 保留亮部最小噪点底噪，避免高光场景成片过度“数码干净”。
+    float tonal = mix(0.40, 1.0, clamp(dark, 0.0, 1.0));
+    return clamp(c + noise * amount * 0.24 * tonal, 0.0, 1.0);
 }
 
 // ── Pass 19: Vignette（smoothstep 暗角，与预览统一）─────────────────────────
@@ -780,14 +782,14 @@ void main() {
     // Pass 18b: Luminance Noise
     if (uLuminanceNoise > 0.0) {
         float ln = hash(uv * 600.0 + vec2(uTime + 1.7)) - 0.5;
-        color = clamp(color + ln * uLuminanceNoise * 0.15, 0.0, 1.0);
+        color = clamp(color + ln * uLuminanceNoise * 0.18, 0.0, 1.0);
     }
     // Pass 18c: Chroma Noise
     if (uChromaNoise > 0.0) {
         float cr = hash(uv * 500.0 + vec2(uTime + 3.1)) - 0.5;
         float cg = hash(uv * 500.0 + vec2(uTime + 5.3)) - 0.5;
         float cb = hash(uv * 500.0 + vec2(uTime + 7.7)) - 0.5;
-        color = clamp(color + vec3(cr, cg, cb) * uChromaNoise * 0.08, 0.0, 1.0);
+        color = clamp(color + vec3(cr, cg, cb) * uChromaNoise * 0.10, 0.0, 1.0);
     }
 
     // Pass 20: Fade（褒色）
