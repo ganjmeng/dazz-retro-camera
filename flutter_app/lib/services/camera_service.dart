@@ -100,6 +100,34 @@ class CameraState {
   }
 }
 
+class CameraSyncAck {
+  final int? appliedVersion;
+  final bool rendererReady;
+  final bool rebound;
+  final int targetVersion;
+  final int rendererRequestedVersion;
+  final int rendererAppliedVersion;
+  final bool replayApplied;
+  final bool staleIgnored;
+
+  const CameraSyncAck({
+    required this.appliedVersion,
+    required this.rendererReady,
+    required this.rebound,
+    required this.targetVersion,
+    required this.rendererRequestedVersion,
+    required this.rendererAppliedVersion,
+    required this.replayApplied,
+    required this.staleIgnored,
+  });
+
+  String toTraceSummary() {
+    return 'ready=$rendererReady target=$targetVersion req=$rendererRequestedVersion '
+        'applied=$rendererAppliedVersion ack=${appliedVersion ?? -1} '
+        'replayApplied=$replayApplied rebound=$rebound stale=$staleIgnored';
+  }
+}
+
 /// 封装 MethodChannel 和 EventChannel，管理相机的所有原生交互
 class CameraService extends StateNotifier<CameraState> {
   CameraService() : super(const CameraState());
@@ -280,7 +308,7 @@ class CameraService extends StateNotifier<CameraState> {
     }
   }
 
-  Future<int?> syncCameraState({
+  Future<CameraSyncAck?> syncCameraState({
     required CameraDefinition camera,
     required Map<String, dynamic> lensParams,
     required Map<String, dynamic> renderParams,
@@ -312,12 +340,43 @@ class CameraService extends StateNotifier<CameraState> {
       final rendererReady = readyRaw is bool
           ? readyRaw
           : (readyRaw?.toString().toLowerCase() == 'true');
-      if (!rendererReady) {
-        return null;
-      }
       final raw = result?['appliedVersion'];
-      if (raw is num) return raw.toInt();
-      return int.tryParse(raw?.toString() ?? '');
+      final appliedVersion =
+          raw is num ? raw.toInt() : int.tryParse(raw?.toString() ?? '');
+      final targetRaw = result?['targetVersion'];
+      final targetVersion = targetRaw is num
+          ? targetRaw.toInt()
+          : int.tryParse(targetRaw?.toString() ?? '') ?? (version ?? -1);
+      final requestedRaw = result?['rendererRequestedVersion'];
+      final rendererRequestedVersion = requestedRaw is num
+          ? requestedRaw.toInt()
+          : int.tryParse(requestedRaw?.toString() ?? '') ?? -1;
+      final appliedRaw = result?['rendererAppliedVersion'];
+      final rendererAppliedVersion = appliedRaw is num
+          ? appliedRaw.toInt()
+          : int.tryParse(appliedRaw?.toString() ?? '') ?? -1;
+      final reboundRaw = result?['rebound'];
+      final rebound = reboundRaw is bool
+          ? reboundRaw
+          : (reboundRaw?.toString().toLowerCase() == 'true');
+      final replayRaw = result?['replayApplied'];
+      final replayApplied = replayRaw is bool
+          ? replayRaw
+          : (replayRaw?.toString().toLowerCase() == 'true');
+      final staleRaw = result?['staleIgnored'];
+      final staleIgnored = staleRaw is bool
+          ? staleRaw
+          : (staleRaw?.toString().toLowerCase() == 'true');
+      return CameraSyncAck(
+        appliedVersion: appliedVersion,
+        rendererReady: rendererReady,
+        rebound: rebound,
+        targetVersion: targetVersion,
+        rendererRequestedVersion: rendererRequestedVersion,
+        rendererAppliedVersion: rendererAppliedVersion,
+        replayApplied: replayApplied,
+        staleIgnored: staleIgnored,
+      );
     } catch (e) {
       print('Error syncing camera state: $e');
       return null;

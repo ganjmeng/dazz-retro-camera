@@ -2151,7 +2151,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           'cameraSync.skip token=$syncToken reason=noRenderParams');
       return;
     }
-    final ackVersion =
+    final ack =
         await _ref.read(cameraServiceProvider.notifier).syncCameraState(
               camera: camera,
               lensParams: lensParams,
@@ -2167,9 +2167,9 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
           'cameraSync.abort stale token=$syncToken latest=$_lifecycleSyncToken after=syncCameraState');
       return;
     }
-    if (ackVersion == null) {
+    if (ack == null) {
       _recordLifecycleTrace(
-          'cameraSync.warn token=$syncToken ack=null rendererNotReady');
+          'cameraSync.error token=$syncToken ack=null callFailed');
       if (_lastRendererRetryToken != syncToken) {
         _lastRendererRetryToken = syncToken;
         _lifecycleResyncQueued = true;
@@ -2178,13 +2178,30 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       }
       return;
     }
+    if (!ack.rendererReady) {
+      _recordLifecycleTrace(
+          'cameraSync.warn token=$syncToken ${ack.toTraceSummary()}');
+      if (_lastRendererRetryToken != syncToken) {
+        _lastRendererRetryToken = syncToken;
+        _lifecycleResyncQueued = true;
+        _publishLifecycleDebugStatus();
+        _recordLifecycleTrace('cameraSync.retry token=$syncToken once');
+      }
+      return;
+    }
+    final ackVersion = ack.appliedVersion;
+    if (ackVersion == null) {
+      _recordLifecycleTrace(
+          'cameraSync.warn token=$syncToken ${ack.toTraceSummary()} ackMissing');
+      return;
+    }
     if (ackVersion >= version &&
         ackVersion > _lastAckedRenderParamsVersion) {
       _lastAckedRenderParamsVersion = ackVersion;
       _publishLifecycleDebugStatus();
     }
     _recordLifecycleTrace(
-        'cameraSync.done token=$syncToken cam=${camera.id} ack=$ackVersion');
+        'cameraSync.done token=$syncToken cam=${camera.id} ${ack.toTraceSummary()}');
   }
 
   void _enqueueLifecycleResync(String reason) {

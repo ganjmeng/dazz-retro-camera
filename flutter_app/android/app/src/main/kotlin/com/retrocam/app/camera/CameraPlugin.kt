@@ -2159,14 +2159,19 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val zoom = (call.argument<Double>("zoom") ?: 1.0).coerceIn(0.6, 20.0)
         val version = (call.argument<Int>("version") ?: cachedRenderVersion).coerceAtLeast(0)
         if (version < cachedRenderVersion) {
-            result.success(
-                mapOf(
-                    "appliedVersion" to cachedRenderVersion,
-                    "rendererReady" to (lastRendererReady && glRenderer != null),
-                    "rebound" to false,
-                    "staleIgnored" to true
+            val payload = mutableMapOf<String, Any>(
+                "appliedVersion" to cachedRenderVersion,
+                "rendererReady" to (lastRendererReady && glRenderer != null),
+                "rebound" to false,
+                "staleIgnored" to true
+            )
+            payload.putAll(
+                buildRendererVersionPayload(
+                    targetVersion = cachedRenderVersion,
+                    replayApplied = false
                 )
             )
+            result.success(payload)
             return
         }
         val nextViewportWidth =
@@ -2244,13 +2249,18 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         val owner = lifecycleOwner
         if ((!viewportChanged && !livePhotoBindingChanged) || owner == null || cameraProvider == null || surfaceTexture == null) {
             applyState()
-            result.success(
-                mapOf(
-                    "appliedVersion" to cachedRenderVersion,
-                    "rendererReady" to (lastRendererReady && glRenderer != null),
-                    "rebound" to false
+            val payload = mutableMapOf<String, Any>(
+                "appliedVersion" to cachedRenderVersion,
+                "rendererReady" to (lastRendererReady && glRenderer != null),
+                "rebound" to false
+            )
+            payload.putAll(
+                buildRendererVersionPayload(
+                    targetVersion = cachedRenderVersion,
+                    replayApplied = false
                 )
             )
+            result.success(payload)
             return
         }
 
@@ -2273,13 +2283,18 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                             )
                         }
                         sendEvent("onCameraReady", activeCameraDebugInfo)
-                        result.success(
-                            mapOf(
-                                "appliedVersion" to cachedRenderVersion,
-                                "rendererReady" to rendererReady,
-                                "rebound" to true
+                        val payload = mutableMapOf<String, Any>(
+                            "appliedVersion" to cachedRenderVersion,
+                            "rendererReady" to rendererReady,
+                            "rebound" to true
+                        )
+                        payload.putAll(
+                            buildRendererVersionPayload(
+                                targetVersion = cachedRenderVersion,
+                                replayApplied = replayApplied
                             )
                         )
+                        result.success(payload)
                     }
                 },
                 onError = { e ->
@@ -2787,6 +2802,19 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
     private fun applyPreviewMirrorToRenderer(renderer: CameraGLRenderer? = glRenderer) {
         renderer?.setPreviewMirror(shouldMirrorCurrentLens())
+    }
+
+    private fun buildRendererVersionPayload(
+        targetVersion: Int,
+        replayApplied: Boolean = false
+    ): Map<String, Any> {
+        val renderer = glRenderer
+        return mapOf(
+            "targetVersion" to targetVersion,
+            "rendererRequestedVersion" to (renderer?.getRequestedStateVersion() ?: -1),
+            "rendererAppliedVersion" to (renderer?.getAppliedStateVersion() ?: -1),
+            "replayApplied" to replayApplied
+        )
     }
 
     // ─────────────────────────────────────────────
