@@ -115,6 +115,24 @@ struct CaptureParams {
     float toneMapStrength;
     float midGrayDensity;
     float highlightRolloffPivot;
+    float dehaze;
+    float lensVignette;
+    float topBottomBias;
+    float leftRightBias;
+    float bwMixerEnabled;
+    float bwMixerR;
+    float bwMixerG;
+    float bwMixerB;
+    float fadeAmount;
+    float shadowTintR;
+    float shadowTintG;
+    float shadowTintB;
+    float highlightTintR;
+    float highlightTintG;
+    float highlightTintB;
+    float splitToneBalance;
+    float lightLeakAmount;
+    float lightLeakSeed;
 };
 
 // ── 工具函数 ─────────────────────────────────────────────────────────────
@@ -306,6 +324,79 @@ static float3 cp_midGrayDensity(float3 color, float density) {
     float mask = exp(-dist * 10.0);
     float gain = exp2(clamp(density, -1.0, 1.0) * 0.8 * mask);
     return clamp(color * gain, 0.0, 1.0);
+}
+
+static float3 cp_dehaze(float3 color, float amount) {
+    if (amount < 0.001) return color;
+    float minC = min(color.r, min(color.g, color.b));
+    float maxC = max(color.r, max(color.g, color.b));
+    float haze = clamp(minC * 0.65 + (1.0 - (maxC - minC)) * 0.35, 0.0, 1.0);
+    float gain = 1.0 + amount * 0.55;
+    float offset = haze * amount * 0.12;
+    return float3(
+        clamp((color.r - offset) * gain, 0.0, 1.0),
+        clamp((color.g - offset) * gain, 0.0, 1.0),
+        clamp((color.b - offset * 1.05) * gain, 0.0, 1.0)
+    );
+}
+
+static float3 cp_highlightWarm(float3 color, float amount) {
+    if (amount < 0.001) return color;
+    float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
+    if (lum <= 0.55) return color;
+    float mask = smoothstep(0.55, 1.0, lum) * clamp(amount, 0.0, 1.0);
+    float3 target = float3(
+        clamp(color.r + 0.08, 0.0, 1.0),
+        clamp(color.g + 0.035, 0.0, 1.0),
+        clamp(color.b - 0.045, 0.0, 1.0)
+    );
+    return clamp(mix(color, target, float3(mask, mask * 0.9, mask * 0.85)), 0.0, 1.0);
+}
+
+static float3 cp_directionalBias(float3 color, float2 uv, float topBottomBias, float leftRightBias) {
+    float directional = 1.0 + (uv.y - 0.5) * topBottomBias * 0.35 + (uv.x - 0.5) * leftRightBias * 0.35;
+    return clamp(color * directional, 0.0, 1.0);
+}
+
+static float3 cp_bwMixer(float3 color, float enabled, float r, float g, float b) {
+    if (enabled < 0.5) return color;
+    float y = clamp(dot(color, float3(r, g, b)), 0.0, 1.0);
+    return float3(y);
+}
+
+static float3 cp_noise(float3 color, float2 uv, float amount, float time) {
+    if (amount < 0.001) return color;
+    float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float n = cp_random(uv * 800.0, time) - 0.5;
+    float dark = 1.0 - lum;
+    return clamp(color + n * amount * 0.2 * dark, 0.0, 1.0);
+}
+
+static float3 cp_fade(float3 color, float amount) {
+    if (amount < 0.001) return color;
+    float3 outColor = color * (1.0 - amount) + amount;
+    float lum = dot(outColor, float3(0.2126, 0.7152, 0.0722));
+    float hlCompress = smoothstep(0.8, 1.0, lum) * amount * 0.3;
+    return clamp(outColor - hlCompress, 0.0, 1.0);
+}
+
+static float3 cp_splitTone(float3 color, float3 shadowTint, float3 highlightTint, float balance) {
+    if (length(shadowTint) + length(highlightTint) < 0.001) return color;
+    float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float shadowMask = 1.0 - smoothstep(0.0, balance, lum);
+    float highlightMask = smoothstep(balance, 1.0, lum);
+    return clamp(color + shadowTint * shadowMask + highlightTint * highlightMask, 0.0, 1.0);
+}
+
+static float3 cp_lightLeak(float3 color, float2 uv, float amount, float seed) {
+    if (amount < 0.001) return color;
+    float angle = cp_random(float2(seed, seed * 0.7), 0.0) * 6.2832;
+    float2 leakCenter = float2(0.5 + cos(angle) * 0.5, 0.5 + sin(angle) * 0.5);
+    float dist = length(uv - leakCenter);
+    float leak = smoothstep(0.8, 0.0, dist) * amount;
+    float hue = cp_random(float2(seed * 1.3, seed * 2.1), 0.0);
+    float3 leakColor = mix(float3(1.0, 0.4, 0.1), float3(1.0, 0.8, 0.2), hue);
+    return clamp(1.0 - (1.0 - color) * (1.0 - leakColor * leak), 0.0, 1.0);
 }
 
 /// Center Gain（中心增亮，成片专属）
@@ -610,6 +701,9 @@ kernel void capturePipeline(
         params.toneMapShoulder,
         params.toneMapStrength
     );
+    color = cp_dehaze(color, params.dehaze);
+    color = cp_highlightWarm(color, params.highlightWarmAmount);
+    color = cp_bwMixer(color, params.bwMixerEnabled, params.bwMixerR, params.bwMixerG, params.bwMixerB);
 
     // ── Pass 11: Center Gain（成片专属）──────────────────────────────────────────
     color = cp_centerGain(color, uv, params.centerGain);
@@ -621,6 +715,7 @@ kernel void capturePipeline(
     // ── Pass 13: Edge Falloff + Corner Warm Shift（成片专属）───────────────────────
     color *= cp_edgeFalloff(uv, params.edgeFalloff, params.time);
     color = cp_cornerWarm(color, uv, params.cornerWarmShift);
+    color = cp_directionalBias(color, uv, params.topBottomBias, params.leftRightBias);
 
     // ── Pass 13b: Development Softness（显影柔化）────────────────────────────────────
     if (params.developmentSoftness > 0.001) {
@@ -635,11 +730,31 @@ kernel void capturePipeline(
 
     // ── Pass 16: Film Grain（胶片颗粒）─────────────────────────────────────────────
     color = cp_grain(color, uv, params.grainAmount, params.grainSize, params.time);
+    color = cp_noise(color, uv, params.noiseAmount, params.time);
+    if (params.luminanceNoise > 0.0) {
+        float ln = cp_random(uv * 600.0, params.time + 1.7) - 0.5;
+        color = clamp(color + ln * params.luminanceNoise * 0.15, 0.0, 1.0);
+    }
+    if (params.chromaNoise > 0.0) {
+        float cr = cp_random(uv * 500.0, params.time + 3.1) - 0.5;
+        float cg = cp_random(uv * 500.0, params.time + 5.3) - 0.5;
+        float cb = cp_random(uv * 500.0, params.time + 7.7) - 0.5;
+        color = clamp(color + float3(cr, cg, cb) * params.chromaNoise * 0.08, 0.0, 1.0);
+    }
+    color = cp_fade(color, params.fadeAmount);
+    color = cp_splitTone(
+        color,
+        float3(params.shadowTintR, params.shadowTintG, params.shadowTintB),
+        float3(params.highlightTintR, params.highlightTintG, params.highlightTintB),
+        clamp(params.splitToneBalance, 0.0, 1.0)
+    );
+    color = cp_lightLeak(color, uv, params.lightLeakAmount, params.lightLeakSeed);
 
     // ── Pass 17: Vignette（暗角）──────────────────────────────────────────────────
     // 鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗（与预览 Shader 一致）
-    if (params.vignetteAmount > 0.001 && (!isFisheye || !useCircularFisheye)) {
-        color *= cp_vignette(uv, params.vignetteAmount);
+    float totalVignette = min(params.vignetteAmount + params.lensVignette, 1.0);
+    if (totalVignette > 0.001 && (!isFisheye || !useCircularFisheye)) {
+        color *= cp_vignette(uv, totalVignette);
     }
 
     // ── Pass 18: LUT 色彩映射（成片专属）───────────────────────────────────────────────

@@ -87,6 +87,24 @@ struct MetalCaptureParams {
     var toneMapStrength: Float = 0
     var midGrayDensity: Float = 0
     var highlightRolloffPivot: Float = 0.76
+    var dehaze: Float = 0
+    var lensVignette: Float = 0
+    var topBottomBias: Float = 0
+    var leftRightBias: Float = 0
+    var bwMixerEnabled: Float = 0
+    var bwMixerR: Float = 0.299
+    var bwMixerG: Float = 0.587
+    var bwMixerB: Float = 0.114
+    var fadeAmount: Float = 0
+    var shadowTintR: Float = 0
+    var shadowTintG: Float = 0
+    var shadowTintB: Float = 0
+    var highlightTintR: Float = 0
+    var highlightTintG: Float = 0
+    var highlightTintB: Float = 0
+    var splitToneBalance: Float = 0.5
+    var lightLeakAmount: Float = 0
+    var lightLeakSeed: Float = 0
 }
 
 /// 独立的动态曲线参数缓冲（buffer(1)），避免破坏主参数结构体内存布局。
@@ -325,6 +343,9 @@ class CaptureProcessor {
         p.halationAmount     = getFloat(params, "halationAmount", 0)
         p.grainSize          = getFloat(params, "grainSize", 1.0)
         p.sharpness          = getFloat(params, "sharpness", 1.0)
+        p.highlightWarmAmount = getFloat(params, "highlightWarmAmount", 0)
+        p.luminanceNoise     = getFloat(params, "luminanceNoise", 0)
+        p.chromaNoise        = getFloat(params, "chromaNoise", 0)
 
         // 成片专属参数
         p.highlightRolloff   = getFloat(params, "highlightRolloff", 0)
@@ -363,8 +384,34 @@ class CaptureProcessor {
         p.toneMapStrength    = getFloat(params, "toneMapStrength", 0.0)
         p.midGrayDensity     = getFloat(params, "midGrayDensity", 0.0)
         p.highlightRolloffPivot = getFloat(params, "highlightRolloffPivot", 0.76)
+        p.dehaze             = getFloat(params, "dehaze", 0.0)
+        p.lensVignette       = getFloat(params, "lensVignette", 0.0)
+        p.topBottomBias      = getFloat(params, "topBottomBias", 0.0)
+        p.leftRightBias      = getFloat(params, "leftRightBias", 0.0)
+        p.fadeAmount         = getFloat(params, "fadeAmount", 0.0)
+        p.shadowTintR        = getFloat(params, "shadowTintR", 0.0)
+        p.shadowTintG        = getFloat(params, "shadowTintG", 0.0)
+        p.shadowTintB        = getFloat(params, "shadowTintB", 0.0)
+        p.highlightTintR     = getFloat(params, "highlightTintR", 0.0)
+        p.highlightTintG     = getFloat(params, "highlightTintG", 0.0)
+        p.highlightTintB     = getFloat(params, "highlightTintB", 0.0)
+        p.splitToneBalance   = getFloat(params, "splitToneBalance", 0.5)
+        p.lightLeakAmount    = getFloat(params, "lightLeakAmount", 0.0)
+        p.lightLeakSeed      = getFloat(params, "lightLeakSeed", Float(Date().timeIntervalSince1970))
+        if let mixer = params["bwChannelMixer"] as? [Any], mixer.count >= 3 {
+            let r = (mixer[0] as? NSNumber)?.floatValue ?? 0.299
+            let g = (mixer[1] as? NSNumber)?.floatValue ?? 0.587
+            let b = (mixer[2] as? NSNumber)?.floatValue ?? 0.114
+            p.bwMixerEnabled = 1.0
+            p.bwMixerR = r
+            p.bwMixerG = g
+            p.bwMixerB = b
+        }
         if p.toneMapStrength > 0.001 || abs(p.midGrayDensity) > 0.001 {
             print("[CaptureProcessor] toneMap toe=\(p.toneMapToe) shoulder=\(p.toneMapShoulder) strength=\(p.toneMapStrength) midGray=\(p.midGrayDensity) pivot=\(p.highlightRolloffPivot)")
+        }
+        if p.dehaze > 0.001 || p.bwMixerEnabled > 0.5 || abs(p.topBottomBias) > 0.001 || abs(p.leftRightBias) > 0.001 {
+            print("[CaptureProcessor] ext dehaze=\(p.dehaze) bw=\(p.bwMixerEnabled > 0.5) tb=\(p.topBottomBias) lr=\(p.leftRightBias) fade=\(p.fadeAmount) leak=\(p.lightLeakAmount)")
         }
 
         return p
