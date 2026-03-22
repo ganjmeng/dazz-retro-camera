@@ -282,6 +282,12 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
             if let v = params[key] as? String { return Float(v) }
             return nil
         }
+        func boolVal(_ key: String) -> Bool {
+            if let v = params[key] as? Bool { return v }
+            if let v = params[key] as? NSNumber { return v.intValue != 0 }
+            if let v = params[key] as? String { return v == "1" || v.lowercased() == "true" }
+            return false
+        }
         // 相机 ID 切换不需要持锁，单独处理
         if let camId = params["cameraId"] as? String, !camId.isEmpty {
             currentCameraId = camId   // 触发 didSet → rebuildPipeline()
@@ -356,17 +362,56 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = num("deviceCcm20") { ccdParams.deviceCcm20 = v }
         if let v = num("deviceCcm21") { ccdParams.deviceCcm21 = v }
         if let v = num("deviceCcm22") { ccdParams.deviceCcm22 = v }
+        if boolVal("previewWhitelist") {
+            // 预览白名单：仅保留 LUT + 色温/色调 + 曝光 + 美颜相关参数。
+            ccdParams.contrast = 1.0
+            ccdParams.saturation = 1.0
+            ccdParams.highlights = 0.0
+            ccdParams.shadows = 0.0
+            ccdParams.whites = 0.0
+            ccdParams.blacks = 0.0
+            ccdParams.clarity = 0.0
+            ccdParams.vibrance = 0.0
+            ccdParams.colorBiasR = 0.0
+            ccdParams.colorBiasG = 0.0
+            ccdParams.colorBiasB = 0.0
+            ccdParams.grainAmount = 0.0
+            ccdParams.noiseAmount = 0.0
+            ccdParams.grainSize = 1.0
+            ccdParams.luminanceNoise = 0.0
+            ccdParams.chromaNoise = 0.0
+            ccdParams.vignetteAmount = 0.0
+            ccdParams.chromaticAberration = 0.0
+            ccdParams.bloomAmount = 0.0
+            ccdParams.halationAmount = 0.0
+            ccdParams.highlightRolloff = 0.0
+            ccdParams.toneCurveStrength = 0.0
+            ccdParams.paperTexture = 0.0
+            ccdParams.edgeFalloff = 0.0
+            ccdParams.exposureVariation = 0.0
+            ccdParams.cornerWarmShift = 0.0
+            ccdParams.centerGain = 0.0
+            ccdParams.developmentSoftness = 0.0
+            ccdParams.chemicalIrregularity = 0.0
+        }
 
-        // ── 纹理加载（#2 路径缓存：相同路径不重复加载）────────────────────────────────
+        // ── LUT 加载：路径相同但纹理为空时也要重试，避免启动早期加载失败后一直无特效 ──
         if let lutAsset = (params["baseLut"] as? String) ?? (params["lut"] as? String) {
             if !lutAsset.isEmpty {
-                if lutAsset != cachedLutPath {
-                    cachedLutPath = lutAsset
+                let shouldReload = (lutAsset != cachedLutPath) || (lutTexture == nil)
+                if shouldReload {
                     loadAssetTexture(assetPath: lutAsset) { [weak self] texture in
-                        self?.lutTexture = texture
+                        guard let self else { return }
+                        if let texture {
+                            self.lutTexture = texture
+                            self.cachedLutPath = lutAsset
+                        } else {
+                            // 保持可重试状态
+                            self.lutTexture = nil
+                            self.cachedLutPath = ""
+                        }
                     }
                 }
-                // 路径相同：lutTexture 保持不变，跳过加载
             } else {
                 // lut 键存在但为空字符串：清除 LUT
                 cachedLutPath = ""

@@ -1288,6 +1288,12 @@ void main() {
             is String -> v.toFloatOrNull()
             else -> null
         }
+        fun boolOrFalse(v: Any?): Boolean = when (v) {
+            is Boolean -> v
+            is Number -> v.toInt() != 0
+            is String -> v.equals("true", ignoreCase = true) || v == "1"
+            else -> false
+        }
         (params["stateVersion"] as? Number)?.toInt()?.let {
             if (it > requestedStateVersion) {
                 requestedStateVersion = it
@@ -1363,26 +1369,76 @@ void main() {
         numberOrNull(params["deviceCcm20"])?.let { deviceCcm20 = it }
         numberOrNull(params["deviceCcm21"])?.let { deviceCcm21 = it }
         numberOrNull(params["deviceCcm22"])?.let { deviceCcm22 = it }
+        if (boolOrFalse(params["previewWhitelist"])) {
+            // 预览白名单：仅保留 LUT + 色温/色调 + 曝光 + 美颜相关参数。
+            contrast = 1.0f
+            saturation = 1.0f
+            highlights = 0.0f
+            shadows = 0.0f
+            whites = 0.0f
+            blacks = 0.0f
+            clarity = 0.0f
+            vibrance = 0.0f
+            colorBiasR = 0.0f
+            colorBiasG = 0.0f
+            colorBiasB = 0.0f
+            grainAmount = 0.0f
+            noiseAmount = 0.0f
+            grainSize = 1.0f
+            luminanceNoise = 0.0f
+            chromaNoise = 0.0f
+            vignetteAmount = 0.0f
+            chromaticAberration = 0.0f
+            bloomAmount = 0.0f
+            halationAmount = 0.0f
+            highlightRolloff = 0.0f
+            highlightRolloff2 = 0.0f
+            toneCurveStrength = 0.0f
+            paperTexture = 0.0f
+            edgeFalloff = 0.0f
+            exposureVariation = 0.0f
+            cornerWarmShift = 0.0f
+            centerGain = 0.0f
+            developmentSoftness = 0.0f
+            chemicalIrregularity = 0.0f
+            fadeAmount = 0.0f
+            shadowTintR = 0.0f
+            shadowTintG = 0.0f
+            shadowTintB = 0.0f
+            highlightTintR = 0.0f
+            highlightTintG = 0.0f
+            highlightTintB = 0.0f
+            lightLeakAmount = 0.0f
+        }
         // #1 LUT 参数处理（路径缓存：相同路径不重复加载）
         val newLutPath = (params["baseLut"] as? String) ?: ""
-        if (newLutPath != lutPath) {
+        if (newLutPath.isEmpty()) {
+            lutPath = ""
+            cachedLutPath = ""
+            lutEnabled = 0.0f
+        } else {
+            val shouldReload =
+                newLutPath != lutPath || newLutPath != cachedLutPath || lutTextureId == 0
             lutPath = newLutPath
-            if (newLutPath.isNotEmpty()) {
+            if (shouldReload) {
                 glExecutor.execute {
                     val context = contextRef?.get() ?: return@execute
-                    if (newLutPath != cachedLutPath) {
-                        val texId = loadLutTextureGL(context, newLutPath)
-                        if (texId != 0) {
-                            if (lutTextureId != 0) GLES30.glDeleteTextures(1, intArrayOf(lutTextureId), 0)
-                            lutTextureId = texId
-                            cachedLutPath = newLutPath
+                    val texId = loadLutTextureGL(context, newLutPath)
+                    if (texId != 0) {
+                        if (lutTextureId != 0) {
+                            GLES30.glDeleteTextures(1, intArrayOf(lutTextureId), 0)
                         }
+                        lutTextureId = texId
+                        cachedLutPath = newLutPath
+                    } else {
+                        // Keep retryable state when LUT load fails (e.g. renderer not fully ready yet).
+                        cachedLutPath = ""
                     }
                     lutEnabled = if (lutTextureId != 0) 1.0f else 0.0f
                     lutSize = 33.0f
                 }
             } else {
-                lutEnabled = 0.0f
+                lutEnabled = if (lutTextureId != 0) 1.0f else 0.0f
             }
         }
     }
