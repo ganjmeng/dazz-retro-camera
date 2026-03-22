@@ -2138,40 +2138,42 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
     required int syncToken,
   }) async {
     final viewport = _viewportDimensionsFor(camera, sourceState);
+    final lensParams = _buildLensParamsFor(camera, sourceState);
+    final renderParams = _buildRenderParamsJsonFor(sourceState);
+    final zoom = sourceState.zoomLevel;
+    final version = ++_renderParamsVersion;
+    _publishLifecycleDebugStatus();
     _recordLifecycleTrace(
-        'cameraSync.begin token=$syncToken cam=${camera.id} ratio=${sourceState.activeRatioId}');
-    await _ref.read(cameraServiceProvider.notifier).setCamera(camera);
-    if (syncToken != _lifecycleSyncToken) {
+        'cameraSync.begin token=$syncToken cam=${camera.id} ratio=${sourceState.activeRatioId} v=$version');
+    if (renderParams == null) {
       _recordLifecycleTrace(
-          'cameraSync.abort stale token=$syncToken latest=$_lifecycleSyncToken after=setCamera');
+          'cameraSync.skip token=$syncToken reason=noRenderParams');
       return;
     }
-    _recordLifecycleTrace('cameraSync.setPreset ok cam=${camera.id}');
-    if (viewport != null) {
-      _recordLifecycleTrace(
-          'cameraSync.viewport begin ${viewport.width}:${viewport.height}');
-      await _ref.read(cameraServiceProvider.notifier).updateViewportRatio(
-            width: viewport.width,
-            height: viewport.height,
-          );
-      if (syncToken != _lifecycleSyncToken) {
-        _recordLifecycleTrace(
-            'cameraSync.abort stale token=$syncToken latest=$_lifecycleSyncToken after=viewport');
-        return;
-      }
-      _recordLifecycleTrace(
-          'cameraSync.viewport done ${viewport.width}:${viewport.height}');
-    }
-    await _syncCurrentPreviewStateToNative(
-      sourceState: sourceState,
-      syncToken: syncToken,
-    );
+    final ackVersion =
+        await _ref.read(cameraServiceProvider.notifier).syncCameraState(
+              camera: camera,
+              lensParams: lensParams,
+              renderParams: renderParams,
+              zoom: zoom,
+              viewportWidth: viewport?.width ?? 3,
+              viewportHeight: viewport?.height ?? 4,
+              livePhotoEnabled: sourceState.livePhotoEnabled,
+              version: version,
+            );
     if (syncToken != _lifecycleSyncToken) {
       _recordLifecycleTrace(
-          'cameraSync.abort stale token=$syncToken latest=$_lifecycleSyncToken after=runtime');
+          'cameraSync.abort stale token=$syncToken latest=$_lifecycleSyncToken after=syncCameraState');
       return;
     }
-    _recordLifecycleTrace('cameraSync.done token=$syncToken cam=${camera.id}');
+    if (ackVersion != null &&
+        ackVersion >= version &&
+        ackVersion > _lastAckedRenderParamsVersion) {
+      _lastAckedRenderParamsVersion = ackVersion;
+      _publishLifecycleDebugStatus();
+    }
+    _recordLifecycleTrace(
+        'cameraSync.done token=$syncToken cam=${camera.id} ack=${ackVersion ?? -1}');
   }
 
   void _enqueueLifecycleResync(String reason) {

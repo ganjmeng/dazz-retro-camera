@@ -509,12 +509,11 @@ void main() {
 
       expect(c.read(cameraAppProvider).activeRatioId, 'ratio_1_1');
       final methodNames = calls.map((e) => e.method).toList();
-      expect(methodNames, contains('setPreset'));
-      expect(methodNames, contains('updateViewportRatio'));
+      expect(methodNames, contains('syncCameraState'));
       expect(
-        methodNames.where((m) => m == 'syncRuntimeState').length,
+        methodNames.where((m) => m == 'syncCameraState').length,
         1,
-        reason: '比例切换应采用一次 runtime 同步，避免旧参数多次重放覆盖新比例',
+        reason: '比例切换应采用一次原子 cameraState 同步，避免中间态覆盖',
       );
     });
   });
