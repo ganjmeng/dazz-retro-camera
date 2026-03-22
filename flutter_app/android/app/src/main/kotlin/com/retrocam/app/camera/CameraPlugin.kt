@@ -826,6 +826,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         merged.putAll(cachedPresetShaderParams)
         merged.putAll(cachedRenderParams)
         merged.putAll(cachedLensParams)
+        merged["stateVersion"] = cachedRenderVersion
         cachedEffectivePreviewParams = merged
     }
 
@@ -861,10 +862,15 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         }
         if (params.isNotEmpty()) {
             cachedRenderParams = params
-            glRenderer?.updateParams(params)
         }
         cachedRenderVersion = maxOf(cachedRenderVersion, version)
         rebuildEffectivePreviewParams()
+        if (params.isNotEmpty()) {
+            val paramsWithVersion = mutableMapOf<String, Any>()
+            paramsWithVersion.putAll(params)
+            paramsWithVersion["stateVersion"] = cachedRenderVersion
+            glRenderer?.updateParams(paramsWithVersion)
+        }
         result.success(
             mapOf(
                 "appliedVersion" to cachedRenderVersion,
@@ -1960,6 +1966,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
 
     private fun scheduleRendererStateReplay(
         reason: String,
+        targetVersion: Int? = null,
         onComplete: ((Boolean) -> Unit)? = null
     ) {
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -1988,7 +1995,20 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             }, delayMs)
         }
         handler.postDelayed({
-            onComplete?.invoke(replayAppliedCount > 0)
+            val replayApplied = replayAppliedCount > 0
+            val renderer = glRenderer
+            val versionApplied = if (targetVersion == null) {
+                true
+            } else {
+                val appliedVersion = renderer?.getAppliedStateVersion() ?: -1
+                val requestedVersion = renderer?.getRequestedStateVersion() ?: -1
+                Log.d(
+                    TAG,
+                    "renderer replay check after $reason: target=$targetVersion requested=$requestedVersion applied=$appliedVersion"
+                )
+                appliedVersion >= targetVersion
+            }
+            onComplete?.invoke(replayApplied && versionApplied)
         }, finalDelay + 10L)
     }
 
@@ -2112,6 +2132,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         merged["distortion"] = distortion
         cachedRenderParams = renderParams
         cachedRenderVersion = maxOf(cachedRenderVersion, version)
+        merged["stateVersion"] = cachedRenderVersion
         cachedLensParams = mapOf(
             "vignette" to vignette,
             "chromaticAberration" to chromaticAberration,
@@ -2200,6 +2221,7 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             merged["bloomAmount"] = bloom
             merged["softFocus"] = softFocus
             merged["distortion"] = distortion
+            merged["stateVersion"] = cachedRenderVersion
             if (merged.isNotEmpty()) {
                 glRenderer?.updateParams(merged)
             }
@@ -2238,7 +2260,10 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 reason = "syncCameraState",
                 onReady = {
                     applyState()
-                    scheduleRendererStateReplay("syncCameraState") { replayApplied ->
+                    scheduleRendererStateReplay(
+                        reason = "syncCameraState",
+                        targetVersion = cachedRenderVersion
+                    ) { replayApplied ->
                         val rendererReady = (lastRendererReady && glRenderer != null && replayApplied)
                         if (!rendererReady) {
                             Log.w(
@@ -2860,9 +2885,13 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
         if (cachedEffectivePreviewParams.isNotEmpty()) {
             renderer.updateParams(cachedEffectivePreviewParams)
         } else if (params.isNotEmpty()) {
+            params["stateVersion"] = cachedRenderVersion
             renderer.updateParams(params)
         } else if (cachedRenderParams.isNotEmpty()) {
-            renderer.updateParams(cachedRenderParams)
+            val renderParamsWithVersion = mutableMapOf<String, Any>()
+            renderParamsWithVersion.putAll(cachedRenderParams)
+            renderParamsWithVersion["stateVersion"] = cachedRenderVersion
+            renderer.updateParams(renderParamsWithVersion)
         }
 
         // ── FIX: 恢复缓存的 lens 参数（fisheyeMode / vignette）──────────────

@@ -789,6 +789,8 @@ void main() {
     private var inputSurface: Surface? = null
     @Volatile private var currentCameraId: String = ""
     @Volatile private var pendingCameraId: String = ""
+    @Volatile private var requestedStateVersion: Int = 0
+    @Volatile private var appliedStateVersion: Int = 0
 
     // ── 渲染参数 ─────────────────────────────────────────────────────────────────
     @Volatile private var contrast: Float = 1.0f
@@ -1249,6 +1251,9 @@ void main() {
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, lutTextureId)
             GLES30.glUniform1i(uLutTexture, 2)
         }
+        if (requestedStateVersion > appliedStateVersion) {
+            appliedStateVersion = requestedStateVersion
+        }
         time += 0.016f
         // 绘制全屏四边形
         vb.position(0)
@@ -1277,6 +1282,11 @@ void main() {
             is Number -> v.toFloat()
             is String -> v.toFloatOrNull()
             else -> null
+        }
+        (params["stateVersion"] as? Number)?.toInt()?.let {
+            if (it > requestedStateVersion) {
+                requestedStateVersion = it
+            }
         }
         (params["contrast"]            as? Number)?.let { contrast            = it.toFloat() }
         (params["saturation"]          as? Number)?.let { saturation          = it.toFloat() }
@@ -1404,6 +1414,10 @@ void main() {
     // ── 获取相机输入 Surface ──────────────────────────────────────────────────
 
     fun getInputSurface(): Surface? = if (initialized.get()) inputSurface else null
+
+    fun getAppliedStateVersion(): Int = appliedStateVersion
+
+    fun getRequestedStateVersion(): Int = requestedStateVersion
 
     // ── 释放 ─────────────────────────────────────────────────────────────────
 
