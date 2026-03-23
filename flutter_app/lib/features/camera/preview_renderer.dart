@@ -1122,6 +1122,7 @@ class PreviewRenderParams {
 
   Map<String, dynamic> toCaptureJson() {
     final json = Map<String, dynamic>.from(toJson());
+    final isBwClassic = cameraId == 'bw_classic';
 
     double read(String key, [double fallback = 0.0]) =>
         (json[key] as num?)?.toDouble() ?? fallback;
@@ -1133,10 +1134,19 @@ class PreviewRenderParams {
     json.remove('toneMapShoulder');
     json.remove('toneMapStrength');
     json.remove('midGrayDensity');
-    json.remove('highlightRolloff');
     json.remove('highlightRolloff2');
-    json.remove('highlightRolloffPivot');
-    json.remove('highlightRolloffSoftKnee');
+
+    // Restore only a very light highlight-edge protection layer on export.
+    // This keeps LUTs as the main look while avoiding the old washed/veiled
+    // result from re-enabling the full tone-shaping stack.
+    final rolloffScale = isBwClassic ? 0.42 : 0.32;
+    final rolloffLimit = isBwClassic ? 0.12 : 0.10;
+    json['highlightRolloff'] =
+        (read('highlightRolloff') * rolloffScale).clamp(0.0, rolloffLimit);
+    json['highlightRolloffPivot'] =
+        read('highlightRolloffPivot', 0.76).clamp(0.80, 0.88);
+    json['highlightRolloffSoftKnee'] =
+        (read('highlightRolloffSoftKnee', 0.35) * 0.55).clamp(0.14, 0.24);
 
     // Capture should keep texture and contrast. A few global "atmosphere" terms
     // were making almost every camera look veiled/washed, especially on bright
