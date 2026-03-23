@@ -886,6 +886,7 @@ void main() {
     @Volatile private var lutStrength: Float = 1.0f
     @Volatile private var lutSize: Float = 33.0f
     @Volatile private var lutPath: String = ""
+    @Volatile private var desiredLutPath: String = ""
     @Volatile private var previewWhitelistEnabled: Boolean = false
     @Volatile private var deviceGamma: Float = 1.0f
     @Volatile private var deviceWhiteScaleR: Float = 1.0f
@@ -1152,6 +1153,10 @@ void main() {
         val eglOk = EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
         if (!eglOk) {
             Log.w(TAG, "renderFrame: eglMakeCurrent failed: 0x${Integer.toHexString(EGL14.eglGetError())}")
+        }
+
+        if (eglOk) {
+            syncLutTextureIfNeeded()
         }
 
         // 更新相机帧纹理（无论是否渲染都必须消费，否则帧积压导致斜条纹）
@@ -1456,27 +1461,10 @@ void main() {
         }
         // #1 LUT 参数处理（路径缓存：相同路径不重复加载）
         val newLutPath = (params["baseLut"] as? String) ?: ""
-        if (newLutPath != lutPath) {
-            lutPath = newLutPath
-            if (newLutPath.isNotEmpty()) {
-                glExecutor.execute {
-                    val context = contextRef?.get() ?: return@execute
-                    if (newLutPath != cachedLutPath) {
-                        val texId = loadLutTextureGL(context, newLutPath)
-                        if (texId != 0) {
-                            if (lutTextureId != 0) {
-                                GLES30.glDeleteTextures(1, intArrayOf(lutTextureId), 0)
-                            }
-                            lutTextureId = texId
-                            cachedLutPath = newLutPath
-                        }
-                    }
-                    lutEnabled = if (lutTextureId != 0) 1.0f else 0.0f
-                    lutSize = 33.0f
-                }
-            } else {
-                lutEnabled = 0.0f
-            }
+        lutPath = newLutPath
+        desiredLutPath = newLutPath
+        if (newLutPath.isEmpty()) {
+            lutEnabled = 0.0f
         }
     }
 
@@ -1556,6 +1544,10 @@ void main() {
                 GLES30.glDeleteTextures(1, intArrayOf(cameraTexId), 0)
                 cameraTexId = 0
             }
+            if (lutTextureId != 0) {
+                GLES30.glDeleteTextures(1, intArrayOf(lutTextureId), 0)
+                lutTextureId = 0
+            }
             if (eglDisplay != EGL14.EGL_NO_DISPLAY) {
                 EGL14.eglMakeCurrent(
                     eglDisplay,
@@ -1573,6 +1565,38 @@ void main() {
             }
         }
         glExecutor.shutdown()
+    }
+
+    private fun syncLutTextureIfNeeded() {
+        val targetPath = desiredLutPath
+        if (targetPath.isEmpty()) {
+            if (lutTextureId != 0) {
+                GLES30.glDeleteTextures(1, intArrayOf(lutTextureId), 0)
+                lutTextureId = 0
+            }
+            cachedLutPath = ""
+            lutEnabled = 0.0f
+            return
+        }
+        if (targetPath == cachedLutPath && lutTextureId != 0) {
+            lutEnabled = 1.0f
+            return
+        }
+        val context = contextRef?.get() ?: return
+        val texId = loadLutTextureGL(context, targetPath)
+        if (texId == 0) {
+            cachedLutPath = ""
+            lutEnabled = 0.0f
+            return
+        }
+        if (lutTextureId != 0) {
+            GLES30.glDeleteTextures(1, intArrayOf(lutTextureId), 0)
+        }
+        lutTextureId = texId
+        cachedLutPath = targetPath
+        lutEnabled = 1.0f
+        lutSize = 33.0f
+        Log.d(TAG, "syncLutTextureIfNeeded applied: $targetPath")
     }
 
     // ── 着色器编译工具 ────────────────────────────────────────────────────────
