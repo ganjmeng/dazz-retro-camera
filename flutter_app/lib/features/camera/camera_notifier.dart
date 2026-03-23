@@ -749,6 +749,7 @@ class CameraAppNotifier extends StateNotifier<CameraAppState> {
       // 关键修复：加载相机后立即将 defaultLook 色彩参数同步到原生 GPU shader
       // 修复 FQS 紫色偏色问题：确保 colorBiasR/G/B、grainSize、sharpness 等专用字段正确传递
       await _syncViewportRatioToNativeImmediately(reason: 'cameraLoad');
+      _applyCurrentRenderParamsToNative();
       _recordLifecycleTrace('loadCamera.done id=$cameraId');
     } catch (e) {
       state =

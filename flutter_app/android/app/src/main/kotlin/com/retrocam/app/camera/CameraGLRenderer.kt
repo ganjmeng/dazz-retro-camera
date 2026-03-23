@@ -1468,6 +1468,12 @@ void main() {
                 glExecutor.execute {
                     val context = contextRef?.get() ?: return@execute
                     val texId = loadLutTextureGL(context, newLutPath)
+                    if (newLutPath != lutPath) {
+                        if (texId != 0) {
+                            GLES30.glDeleteTextures(1, intArrayOf(texId), 0)
+                        }
+                        return@execute
+                    }
                     if (texId != 0) {
                         if (lutTextureId != 0) {
                             GLES30.glDeleteTextures(1, intArrayOf(lutTextureId), 0)

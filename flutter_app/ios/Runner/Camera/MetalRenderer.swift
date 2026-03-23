@@ -152,6 +152,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
     // #2 路径缓存：路径不变时跳过重新加载，消除 EV 滑动时的重复 I/O 和预览闪烁
     private var cachedLutPath: String = ""
     private var cachedGrainPath: String = ""
+    private var requestedLutPath: String = ""
 
     // MARK: - Asset Bundle
 
@@ -412,10 +413,12 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         // ── LUT 加载：路径相同但纹理为空时也要重试，避免启动早期加载失败后一直无特效 ──
         if let lutAsset = (params["baseLut"] as? String) ?? (params["lut"] as? String) {
             if !lutAsset.isEmpty {
+                requestedLutPath = lutAsset
                 let shouldReload = (lutAsset != cachedLutPath) || (lutTexture == nil)
                 if shouldReload {
-                    loadAssetTexture(assetPath: lutAsset) { [weak self] texture in
+                    loadLutTexture(assetPath: lutAsset) { [weak self] texture in
                         guard let self else { return }
+                        guard self.requestedLutPath == lutAsset else { return }
                         if let texture {
                             self.lutTexture = texture
                             self.cachedLutPath = lutAsset
@@ -424,10 +427,14 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
                             self.lutTexture = nil
                             self.cachedLutPath = ""
                         }
+                        self.paramsLock.lock()
+                        self.ccdParams.lutEnabled = self.lutTexture != nil ? 1.0 : 0.0
+                        self.paramsLock.unlock()
                     }
                 }
             } else {
                 // lut 键存在但为空字符串：清除 LUT
+                requestedLutPath = ""
                 cachedLutPath = ""
                 lutTexture = nil
             }
@@ -454,22 +461,14 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
 
     // MARK: - Texture Loading
 
-    private func loadAssetTexture(assetPath: String, completion: @escaping (MTLTexture?) -> Void) {
-        guard let loader = textureLoader else {
-            completion(nil)
-            return
-        }
-
-        // 尝试从 Flutter asset 路径查找文件
+    private func resolveAssetURL(assetPath: String) -> URL? {
         var fileURL: URL?
 
-        // 1. 通过 assetLookup 闭包（由 CameraPlugin 注入）查找
         if let lookup = assetLookup, let key = lookup(assetPath) {
             fileURL = Bundle.main.url(forResource: key, withExtension: nil)
                 ?? URL(fileURLWithPath: key)
         }
 
-        // 2. 直接在 Bundle.main 中查找
         if fileURL == nil {
             let lastComponent = (assetPath as NSString).lastPathComponent
             let nameWithoutExt = (lastComponent as NSString).deletingPathExtension
@@ -477,13 +476,21 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
             fileURL = Bundle.main.url(forResource: nameWithoutExt, withExtension: ext)
         }
 
-        // 3. 在 Flutter assets 目录下查找
         if fileURL == nil {
             let flutterAssetPath = "Frameworks/App.framework/flutter_assets/" + assetPath
             fileURL = Bundle.main.url(forResource: flutterAssetPath, withExtension: nil)
         }
 
-        guard let url = fileURL else {
+        return fileURL
+    }
+
+    private func loadAssetTexture(assetPath: String, completion: @escaping (MTLTexture?) -> Void) {
+        guard let loader = textureLoader else {
+            completion(nil)
+            return
+        }
+
+        guard let url = resolveAssetURL(assetPath: assetPath) else {
             print("[MetalRenderer] Asset not found: \(assetPath)")
             completion(nil)
             return
@@ -498,6 +505,89 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
             if let error = error {
                 print("[MetalRenderer] Texture load error for \(assetPath): \(error)")
             }
+            completion(texture)
+        }
+    }
+
+    private func loadLutTexture(assetPath: String, completion: @escaping (MTLTexture?) -> Void) {
+        guard let url = resolveAssetURL(assetPath: assetPath) else {
+            print("[MetalRenderer] LUT asset not found: \(assetPath)")
+            completion(nil)
+            return
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else {
+                completion(nil)
+                return
+            }
+            guard let content = try? String(contentsOf: url, encoding: .utf8) else {
+                print("[MetalRenderer] LUT read failed: \(assetPath)")
+                completion(nil)
+                return
+            }
+
+            var lutSize = 33
+            var dataValues: [Float] = []
+            dataValues.reserveCapacity(33 * 33 * 33 * 3)
+
+            for line in content.components(separatedBy: .newlines) {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("#") || trimmed.isEmpty { continue }
+                if trimmed.hasPrefix("LUT_3D_SIZE") {
+                    if let sizeStr = trimmed.components(separatedBy: .whitespaces).last,
+                       let size = Int(sizeStr) {
+                        lutSize = size
+                    }
+                    continue
+                }
+                if trimmed.hasPrefix("TITLE") || trimmed.hasPrefix("DOMAIN") { continue }
+                let parts = trimmed.components(separatedBy: .whitespaces)
+                if parts.count == 3,
+                   let r = Float(parts[0]), let g = Float(parts[1]), let b = Float(parts[2]) {
+                    dataValues.append(r)
+                    dataValues.append(g)
+                    dataValues.append(b)
+                }
+            }
+
+            let expectedCount = lutSize * lutSize * lutSize
+            guard dataValues.count == expectedCount * 3 else {
+                print("[MetalRenderer] LUT data count mismatch for \(assetPath): \(dataValues.count / 3) vs \(expectedCount)")
+                completion(nil)
+                return
+            }
+
+            let texW = lutSize * lutSize
+            let texH = lutSize
+            var rgba = [UInt8](repeating: 255, count: texW * texH * 4)
+            for i in 0..<(lutSize * lutSize * lutSize) {
+                rgba[i * 4 + 0] = UInt8(min(max(dataValues[i * 3 + 0] * 255.0, 0), 255))
+                rgba[i * 4 + 1] = UInt8(min(max(dataValues[i * 3 + 1] * 255.0, 0), 255))
+                rgba[i * 4 + 2] = UInt8(min(max(dataValues[i * 3 + 2] * 255.0, 0), 255))
+            }
+
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .rgba8Unorm,
+                width: texW,
+                height: texH,
+                mipmapped: false
+            )
+            descriptor.usage = .shaderRead
+            descriptor.storageMode = .shared
+
+            guard let texture = self.device.makeTexture(descriptor: descriptor) else {
+                completion(nil)
+                return
+            }
+
+            texture.replace(
+                region: MTLRegionMake2D(0, 0, texW, texH),
+                mipmapLevel: 0,
+                withBytes: &rgba,
+                bytesPerRow: texW * 4
+            )
+            print("[MetalRenderer] LUT loaded: \(assetPath) (\(lutSize)^3)")
             completion(texture)
         }
     }
