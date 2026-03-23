@@ -10,7 +10,6 @@ import android.opengl.GLES11Ext
 import android.opengl.GLES30
 import android.util.Log
 import android.view.Surface
-import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -1457,39 +1456,26 @@ void main() {
         }
         // #1 LUT 参数处理（路径缓存：相同路径不重复加载）
         val newLutPath = (params["baseLut"] as? String) ?: ""
-        if (newLutPath.isEmpty()) {
-            lutPath = ""
-            cachedLutPath = ""
-            lutEnabled = 0.0f
-        } else {
-            val shouldReload =
-                newLutPath != lutPath || newLutPath != cachedLutPath || lutTextureId == 0
+        if (newLutPath != lutPath) {
             lutPath = newLutPath
-            if (shouldReload) {
+            if (newLutPath.isNotEmpty()) {
                 glExecutor.execute {
                     val context = contextRef?.get() ?: return@execute
-                    val texId = loadLutTextureGL(context, newLutPath)
-                    if (newLutPath != lutPath) {
+                    if (newLutPath != cachedLutPath) {
+                        val texId = loadLutTextureGL(context, newLutPath)
                         if (texId != 0) {
-                            GLES30.glDeleteTextures(1, intArrayOf(texId), 0)
+                            if (lutTextureId != 0) {
+                                GLES30.glDeleteTextures(1, intArrayOf(lutTextureId), 0)
+                            }
+                            lutTextureId = texId
+                            cachedLutPath = newLutPath
                         }
-                        return@execute
-                    }
-                    if (texId != 0) {
-                        if (lutTextureId != 0) {
-                            GLES30.glDeleteTextures(1, intArrayOf(lutTextureId), 0)
-                        }
-                        lutTextureId = texId
-                        cachedLutPath = newLutPath
-                    } else {
-                        // Keep retryable state when LUT load fails (e.g. renderer not fully ready yet).
-                        cachedLutPath = ""
                     }
                     lutEnabled = if (lutTextureId != 0) 1.0f else 0.0f
                     lutSize = 33.0f
                 }
             } else {
-                lutEnabled = if (lutTextureId != 0) 1.0f else 0.0f
+                lutEnabled = 0.0f
             }
         }
     }
@@ -1612,27 +1598,7 @@ void main() {
     // #1 LUT 纹理加载（在 GL 线程中调用）
     private fun loadLutTextureGL(context: Context, assetPath: String): Int {
         return try {
-            if (eglDisplay == EGL14.EGL_NO_DISPLAY ||
-                eglSurface == EGL14.EGL_NO_SURFACE ||
-                eglContext == EGL14.EGL_NO_CONTEXT
-            ) {
-                Log.w(TAG, "loadLutTextureGL skipped: EGL not ready for $assetPath")
-                return 0
-            }
-            if (!EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) {
-                Log.w(
-                    TAG,
-                    "loadLutTextureGL eglMakeCurrent failed for $assetPath: 0x${
-                        Integer.toHexString(EGL14.eglGetError())
-                    }"
-                )
-                return 0
-            }
-            val inputStream = openFlutterAssetStream(context, assetPath)
-                ?: run {
-                    Log.w(TAG, "loadLutTextureGL asset not found: $assetPath")
-                    return 0
-                }
+            val inputStream = context.assets.open(assetPath.removePrefix("assets/"))
             val lines = inputStream.bufferedReader().readLines()
             inputStream.close()
             var lutSize = 33
@@ -1664,57 +1630,18 @@ void main() {
             pixels.rewind()
             val texIds = IntArray(1)
             GLES30.glGenTextures(1, texIds, 0)
-            if (texIds[0] == 0) {
-                Log.w(TAG, "loadLutTextureGL glGenTextures returned 0 for $assetPath")
-                return 0
-            }
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texIds[0])
             GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
             GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
             GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
             GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
             GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA, n * n, n, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, pixels)
-            val glError = GLES30.glGetError()
-            if (glError != GLES30.GL_NO_ERROR) {
-                Log.w(
-                    TAG,
-                    "loadLutTextureGL glTexImage2D failed for $assetPath: 0x${Integer.toHexString(glError)}"
-                )
-                GLES30.glDeleteTextures(1, texIds, 0)
-                return 0
-            }
-            Log.d(TAG, "LUT loaded into preview renderer: $assetPath (${lutSize}^3)")
             texIds[0]
         } catch (e: Exception) {
             Log.e(TAG, "loadLutTextureGL failed: $assetPath", e)
             0
         }
     }
-
-    private fun openFlutterAssetStream(context: Context, assetPath: String): InputStream? {
-        val candidates = LinkedHashSet<String>()
-        val normalized = assetPath
-            .removePrefix("/")
-            .removePrefix("flutter_assets/")
-        if (normalized.isNotEmpty()) {
-            candidates.add(normalized)
-            if (normalized.startsWith("assets/")) {
-                candidates.add(normalized.removePrefix("assets/"))
-                candidates.add("flutter_assets/$normalized")
-            } else {
-                candidates.add("assets/$normalized")
-                candidates.add("flutter_assets/assets/$normalized")
-            }
-        }
-        for (candidate in candidates) {
-            val stream = runCatching { context.assets.open(candidate) }.getOrNull()
-            if (stream != null) {
-                return stream
-            }
-        }
-        return null
-    }
-
     private fun createProgram(vertSrc: String, fragSrc: String): Int {
         val vert = compileShader(GLES30.GL_VERTEX_SHADER, vertSrc)
         val frag = compileShader(GLES30.GL_FRAGMENT_SHADER, fragSrc)
