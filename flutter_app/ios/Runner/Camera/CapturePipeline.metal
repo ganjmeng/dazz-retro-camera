@@ -130,9 +130,12 @@ struct CaptureParams {
     float splitToneBalance;
     float lightLeakAmount;
     float lightLeakSeed;
+    float dustAmount;
+    float scratchAmount;
     float grainLumaBias;
     float grainColorVariation;
     float highlightRolloffSoftKnee;
+    float grainPatternStrength;
 };
 
 // ── 工具函数 ─────────────────────────────────────────────────────────────
@@ -183,6 +186,19 @@ static float2 cp_barrelDistortUV(float2 uv, float strength, float aspect) {
 /// 伪随机数生成（与所有预览 Shader 完全一致）
 static float cp_random(float2 uv, float seed) {
     return fract(sin(dot(uv + seed, float2(127.1, 311.7))) * 43758.5453123);
+}
+
+static float cp_noise(float2 p, float seed) {
+    float2 i = floor(p);
+    float2 f = fract(p);
+    float a = cp_random(i, seed);
+    float b = cp_random(i + float2(1.0, 0.0), seed);
+    float c = cp_random(i + float2(0.0, 1.0), seed);
+    float d = cp_random(i + float2(1.0, 1.0), seed);
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return mix(a, b, u.x) +
+           (c - a) * u.y * (1.0 - u.x) +
+           (d - b) * u.x * u.y;
 }
 
 /// 色温偏移：正值偏暖（加R减B），负值偏冷（减R加B）
@@ -402,12 +418,21 @@ static float3 cp_bwMixer(float3 color, float enabled, float r, float g, float b)
     return float3(y);
 }
 
-static float3 cp_noise(float3 color, float2 uv, float amount, float time) {
+static float3 cp_noise(float3 color,
+                       float2 uv,
+                       float amount,
+                       float luminanceNoise,
+                       float chromaNoise,
+                       float time) {
     if (amount < 0.001) return color;
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
-    float n = cp_random(uv * 800.0, time) - 0.5;
-    float dark = 1.0 - lum;
-    return clamp(color + n * amount * 0.24 * dark, 0.0, 1.0);
+    float noiseMask = 1.0 - smoothstep(0.15, 0.75, lum);
+    float ln = (cp_random(uv * 780.0, time + 1.7) - 0.5) * max(luminanceNoise, 0.0);
+    float cr = (cp_random(uv * 811.0, time + 3.1) - 0.5) * max(chromaNoise, 0.0);
+    float cg = (cp_random(uv * 853.0, time + 5.3) - 0.5) * max(chromaNoise, 0.0);
+    float cb = (cp_random(uv * 887.0, time + 7.7) - 0.5) * max(chromaNoise, 0.0);
+    float3 sensorNoise = (float3(ln) + float3(cr, cg, cb)) * noiseMask;
+    return clamp(color + sensorNoise * amount, 0.0, 1.0);
 }
 
 static float3 cp_fade(float3 color, float amount) {
@@ -435,6 +460,87 @@ static float3 cp_lightLeak(float3 color, float2 uv, float amount, float seed) {
     float hue = cp_random(float2(seed * 1.3, seed * 2.1), 0.0);
     float3 leakColor = mix(float3(1.0, 0.4, 0.1), float3(1.0, 0.8, 0.2), hue);
     return clamp(1.0 - (1.0 - color) * (1.0 - leakColor * leak), 0.0, 1.0);
+}
+
+static float cp_lineDistance(float2 p, float2 a, float2 b) {
+    float2 pa = p - a;
+    float2 ba = b - a;
+    float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-5), 0.0, 1.0);
+    return length(pa - ba * h);
+}
+
+static float cp_luminance(float3 color) {
+    return dot(color, float3(0.299, 0.587, 0.114));
+}
+
+static float cp_dustLayer(float2 uv, float seed, float density) {
+    float2 grid = floor(uv * 140.0);
+    float rnd = cp_random(grid, seed);
+    float appear = step(1.0 - density, rnd);
+    float2 center = (grid + float2(
+        cp_random(grid, seed * 1.3),
+        cp_random(grid, seed * 2.1)
+    )) / 140.0;
+    float d = length(uv - center);
+    float r = mix(0.0015, 0.004, cp_random(grid, seed * 3.7));
+    float soft = 1.0 - smoothstep(r * 0.6, r, d);
+    return appear * soft;
+}
+
+static float cp_dustCluster(float2 uv, float seed) {
+    float n1 = cp_noise(uv * 6.0 + seed, seed);
+    float n2 = cp_noise(uv * 18.0 + seed * 2.0, seed * 2.0);
+    float cluster = n1 * 0.7 + n2 * 0.3;
+    return smoothstep(0.6, 0.9, cluster);
+}
+
+static float cp_scratchLayer(float2 uv, float seed, float amount) {
+    float result = 0.0;
+    float count = floor(amount * 4.0);
+    for (int i = 0; i < 3; ++i) {
+        if (float(i) >= count) break;
+        float s = seed + float(i) * 17.0;
+        float x = cp_random(float2(s, 0.0), 0.0);
+        float curve = sin(uv.y * 10.0 + s) * 0.002;
+        float width = mix(0.0006, 0.002, cp_random(float2(s, 1.0), 0.0));
+        float line = 1.0 - smoothstep(width, width * 2.0, abs(uv.x - (x + curve)));
+        float breakMask = step(0.3, cp_random(float2(floor(uv.y * 40.0), s), 0.0));
+        float variation = mix(0.5, 1.0, cp_random(float2(floor(uv.y * 20.0), s), 0.0));
+        result += line * breakMask * variation;
+    }
+    return result;
+}
+
+static float cp_stainLayer(float2 uv, float seed) {
+    float n = cp_noise(uv * 2.5 + seed, seed);
+    return smoothstep(0.65, 0.95, n);
+}
+
+static float cp_paperArtifactTexture(float2 uv) {
+    float p1 = cp_noise(uv * 8.0, 0.0);
+    float p2 = cp_noise(uv * 32.0, 1.0);
+    return p1 * 0.7 + p2 * 0.3;
+}
+
+static float3 cp_applyFilmArtifacts(float3 color, float2 uv, float dustAmount, float scratchAmount, float paperAmount, float seed) {
+    float luma = cp_luminance(color);
+    float d = cp_dustLayer(uv, seed, dustAmount);
+    float cluster = cp_dustCluster(uv, seed) * dustAmount * 0.6;
+    float dustVis = smoothstep(0.1, 0.4, luma) * (1.0 - smoothstep(0.85, 1.0, luma));
+    float3 dustColor = (cp_random(uv, seed) < 0.7) ? float3(-0.08) : float3(0.06);
+    color += dustColor * (d + cluster) * dustVis;
+
+    float s = cp_scratchLayer(uv, seed, scratchAmount);
+    float scratchVis = smoothstep(0.2, 0.5, luma) * (1.0 - smoothstep(0.9, 1.0, luma));
+    float3 scratchColor = (cp_random(uv * 2.0, seed) < 0.75) ? float3(-0.12) : float3(0.08);
+    color += scratchColor * s * scratchVis;
+
+    float stain = cp_stainLayer(uv, seed);
+    color *= 1.0 - stain * 0.03 * dustAmount;
+
+    float p = cp_paperArtifactTexture(uv);
+    color += float3((p - 0.5) * 0.02 * paperAmount);
+    return clamp(color, 0.0, 1.0);
 }
 
 /// Center Gain（中心增亮，成片专属）
@@ -473,14 +579,6 @@ static float3 cp_cornerWarm(float3 color, float2 uv, float amount) {
 }
 
 /// Paper Texture（相纸纹理，成片专属）
-static float3 cp_paperTexture(float3 color, float2 uv, float amount, float time) {
-    if (amount < 0.001) return color;
-    float paper1 = cp_random(uv * 8.0, 0.0) * 2.0 - 1.0;
-    float paper2 = cp_random(uv * 32.0, 1.0) * 2.0 - 1.0;
-    float paper = paper1 * 0.7 + paper2 * 0.3;
-    return clamp(color + float3(paper * amount * 0.04), 0.0, 1.0);
-}
-
 /// Chemical Irregularity（化学不规则感，成片专属）
 static float3 cp_chemicalIrregularity(float3 color, float2 uv, float amount, float time) {
     if (amount < 0.001) return color;
@@ -603,6 +701,7 @@ static float3 cp_grain(
     float3 color,
     float2 uv,
     float amount,
+    float patternStrength,
     float grainSize,
     float roughness,
     float lumaBias,
@@ -636,7 +735,7 @@ static float3 cp_grain(
     float jitterB = (cp_random(uv * baseScale * 0.97 + float2(3.1), 0.0) - 0.5) * colorWeight;
     float3 monoGrain = float3(grain);
     float3 colorGrain = float3(grain + jitterR, grain + jitterG, grain + jitterB);
-    float3 grainRgb = mix(monoGrain, colorGrain, colorMix);
+    float3 grainRgb = mix(monoGrain, colorGrain, colorMix) * max(patternStrength, 0.0);
     return clamp(color + grainRgb * amount * mask * 0.55, 0.0, 1.0);
 }
 
@@ -798,7 +897,6 @@ kernel void capturePipeline(
 
     // ── Pass 11: 介质前置层 ──────────────────────────────────────────────
     color = cp_chemicalIrregularity(color, uv, params.chemicalIrregularity, params.time);
-    color = cp_paperTexture(color, uv, params.paperTexture, params.time);
     color = cp_fade(color, params.fadeAmount);
     color = cp_splitTone(
         color,
@@ -812,23 +910,22 @@ kernel void capturePipeline(
         color,
         uv,
         params.grainAmount,
+        params.grainPatternStrength,
         params.grainSize,
         params.grainRoughness,
         params.grainLumaBias,
         params.grainColorVariation
     );
-    color = cp_noise(color, uv, params.noiseAmount, params.time);
-    if (params.luminanceNoise > 0.0) {
-        float ln = cp_random(uv * 600.0, params.time + 1.7) - 0.5;
-        color = clamp(color + ln * params.luminanceNoise * 0.17, 0.0, 1.0);
-    }
-    if (params.chromaNoise > 0.0) {
-        float cr = cp_random(uv * 500.0, params.time + 3.1) - 0.5;
-        float cg = cp_random(uv * 500.0, params.time + 5.3) - 0.5;
-        float cb = cp_random(uv * 500.0, params.time + 7.7) - 0.5;
-        color = clamp(color + float3(cr, cg, cb) * params.chromaNoise * 0.09, 0.0, 1.0);
-    }
-    // ── Pass 13: 光学成品层 ──────────────────────────────────────────────
+    color = cp_noise(
+        color,
+        uv,
+        params.noiseAmount,
+        params.luminanceNoise,
+        params.chromaNoise,
+        params.time
+    );
+    // ── Pass 13: Artifacts / 光学成品层 ───────────────────────────────────
+    color = cp_applyFilmArtifacts(color, uv, params.dustAmount, params.scratchAmount, params.paperTexture, params.lightLeakSeed);
     color = cp_lightLeak(color, uv, params.lightLeakAmount, params.lightLeakSeed);
 
     // 鱼眼模式下不叠加额外暗角，圆形边缘已有自然渐暗（与预览 Shader 一致）
