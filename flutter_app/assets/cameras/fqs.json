@@ -11,6 +11,13 @@
     "colorDepth": 8
   },
   "defaultLook": {
+    "lutStyleFamily": "film_scan",
+    "lutStructureWeight": 0.58,
+    "lutGrainWeight": 0.98,
+    "lutGlowWeight": 0.6,
+    "lutPaperWeight": 0.12,
+    "lutSoftnessWeight": 0.5,
+    "lutWarmWeight": 0.18,
     "baseLut": "assets/lut/cameras/fqs_superia400_natural.cube",
     "baseLutDaylight": "assets/lut/cameras/fqs_superia400_natural.cube",
     "baseLutIndoor": "assets/lut/cameras/fqs_superia400_natural.cube",
@@ -59,7 +66,7 @@
       }
     ],
     "dehaze": 1.9,
-    "highlightRolloff": 0.14,
+    "highlightRolloff": 0.09,
     "edgeFalloff": 0.05,
     "exposureVariation": 0.024,
     "cornerWarmShift": -0.008,
@@ -75,9 +82,9 @@
     "toneCurveStrength": 1.0,
     "toneMapToe": 0.18,
     "toneMapShoulder": 0.33,
-    "toneMapStrength": 0.42,
-    "midGrayDensity": 0.1,
-    "highlightRolloffPivot": 0.62,
+    "toneMapStrength": 0.2,
+    "midGrayDensity": 0.03,
+    "highlightRolloffPivot": 0.76,
     "grainAmount": 0.145,
     "vignetteAmount": 0.0,
     "paperTexture": 0.0,
@@ -113,7 +120,7 @@
     "sharpen": 0.05,
     "grainLumaBias": 0.58,
     "grainColorVariation": 0.045,
-    "highlightRolloffSoftKnee": 0.26,
+    "highlightRolloffSoftKnee": 0.16,
     "grainRoughness": 0.48
   },
   "modules": {

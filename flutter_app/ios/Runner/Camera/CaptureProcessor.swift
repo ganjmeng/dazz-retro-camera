@@ -51,6 +51,12 @@ struct MetalCaptureParams {
     var highlightRolloff: Float = 0
     var highlightRolloff2: Float = 0   // 高光柔和滚落 2（FXN-R 专属）
     var toneCurveStrength: Float = 0   // Tone Curve 强度（FXN-R 专属）
+    var lutStructureWeight: Float = 0
+    var lutGrainWeight: Float = 0
+    var lutGlowWeight: Float = 0
+    var lutPaperWeight: Float = 0
+    var lutSoftnessWeight: Float = 0
+    var lutWarmWeight: Float = 0
     var paperTexture: Float = 0
     var edgeFalloff: Float = 0
     var exposureVariation: Float = 0
@@ -362,6 +368,12 @@ class CaptureProcessor {
         p.highlightRolloff   = getFloat(params, "highlightRolloff", 0)
         p.highlightRolloff2  = getFloat(params, "highlightRolloff2", 0)
         p.toneCurveStrength  = getFloat(params, "toneCurveStrength", 0)
+        p.lutStructureWeight = getFloat(params, "lutStructureWeight", 0)
+        p.lutGrainWeight     = getFloat(params, "lutGrainWeight", 0)
+        p.lutGlowWeight      = getFloat(params, "lutGlowWeight", 0)
+        p.lutPaperWeight     = getFloat(params, "lutPaperWeight", 0)
+        p.lutSoftnessWeight  = getFloat(params, "lutSoftnessWeight", 0)
+        p.lutWarmWeight      = getFloat(params, "lutWarmWeight", 0)
         p.paperTexture       = getFloat(params, "paperTexture", 0)
         p.edgeFalloff        = getFloat(params, "edgeFalloff", 0)
         p.exposureVariation  = getFloat(params, "exposureVariation", 0)
@@ -423,6 +435,9 @@ class CaptureProcessor {
         }
         if p.toneMapStrength > 0.001 || abs(p.midGrayDensity) > 0.001 {
             print("[CaptureProcessor] toneMap toe=\(p.toneMapToe) shoulder=\(p.toneMapShoulder) strength=\(p.toneMapStrength) midGray=\(p.midGrayDensity) pivot=\(p.highlightRolloffPivot)")
+        }
+        if p.lutStructureWeight > 0.001 || p.lutGrainWeight > 0.001 || p.lutGlowWeight > 0.001 {
+            print("[CaptureProcessor] lutWeights structure=\(p.lutStructureWeight) grain=\(p.lutGrainWeight) glow=\(p.lutGlowWeight) paper=\(p.lutPaperWeight) soft=\(p.lutSoftnessWeight) warm=\(p.lutWarmWeight)")
         }
         if p.dehaze > 0.001 || p.bwMixerEnabled > 0.5 || abs(p.topBottomBias) > 0.001 || abs(p.leftRightBias) > 0.001 {
             print("[CaptureProcessor] ext dehaze=\(p.dehaze) bw=\(p.bwMixerEnabled > 0.5) tb=\(p.topBottomBias) lr=\(p.leftRightBias) fade=\(p.fadeAmount) leak=\(p.lightLeakAmount)")

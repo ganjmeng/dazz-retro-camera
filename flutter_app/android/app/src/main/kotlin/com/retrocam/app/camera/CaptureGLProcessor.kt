@@ -418,11 +418,13 @@ vec3 applyHighlightRolloff(vec3 c, float rolloff, float pivot, float knee) {
     if (rolloff < 0.001) return c;
     float p = clamp(pivot, 0.52, 0.92);
     float k = clamp(knee, 0.0, 1.0);
-    return clamp(vec3(
-        applyHighlightRolloffScalar(c.r, rolloff, p, k),
-        applyHighlightRolloffScalar(c.g, rolloff, p, k),
-        applyHighlightRolloffScalar(c.b, rolloff, p, k)
-    ), 0.0, 1.0);
+    float lum = luminance(c);
+    if (lum <= p) return c;
+    float compressedLum = applyHighlightRolloffScalar(lum, rolloff * 0.9, p, k);
+    float lumScale = compressedLum / max(lum, 1e-4);
+    float mask = smoothstep(p, min(0.995, p + (1.0 - p) * (0.42 + k * 0.28)), lum);
+    float scale = mix(1.0, max(lumScale, 0.84), mask * clamp(rolloff * 1.15, 0.0, 1.0));
+    return clamp(c * scale, 0.0, 1.0);
 }
 
 // ── Pass 11b: Highlight Rolloff 2（FXN-R 专属，二次压缩）────────────────────
@@ -700,7 +702,11 @@ vec3 applyFilmicToneMap(vec3 c, float toe, float shoulder, float strength) {
         filmicCurve(c.g, toe, shoulder),
         filmicCurve(c.b, toe, shoulder)
     );
-    return clamp(mix(c, mapped, clamp(strength, 0.0, 1.0)), 0.0, 1.0);
+    float lum = luminance(c);
+    float shadowMask = (1.0 - smoothstep(0.08, 0.30, lum)) * (0.35 + clamp(toe, 0.0, 1.0) * 0.65);
+    float highlightMask = smoothstep(0.62, 0.90, lum) * (0.35 + clamp(shoulder, 0.0, 1.0) * 0.65);
+    float blend = clamp(max(shadowMask, highlightMask) * strength, 0.0, 1.0);
+    return clamp(mix(c, mapped, blend), 0.0, 1.0);
 }
 
 vec3 applyMidGrayDensity(vec3 c, float density) {
@@ -708,8 +714,8 @@ vec3 applyMidGrayDensity(vec3 c, float density) {
     float lum = luminance(c);
     float anchor = 0.18;
     float dist = abs(lum - anchor);
-    float mask = exp(-dist * 10.0);
-    float gain = exp2(clamp(density, -1.0, 1.0) * 0.8 * mask);
+    float mask = exp(-dist * 18.0) * (1.0 - smoothstep(0.46, 0.78, lum));
+    float gain = exp2(clamp(density, -1.0, 1.0) * 0.42 * mask);
     return clamp(c * gain, 0.0, 1.0);
 }
 
@@ -1707,6 +1713,9 @@ void main() {
         Log.d(
             TAG,
             "capture.json ext dehaze=${f("dehaze")} warm=${f("highlightWarmAmount")} " +
+                "lutStruct=${f("lutStructureWeight")} lutGrain=${f("lutGrainWeight")} " +
+                "lutGlow=${f("lutGlowWeight")} lutPaper=${f("lutPaperWeight")} " +
+                "lutSoft=${f("lutSoftnessWeight")} lutWarm=${f("lutWarmWeight")} " +
                 "tb=${f("topBottomBias")} lr=${f("leftRightBias")} " +
                 "bw=${hasBwMixer} tonePts=${if (toneCount >= 2) toneCount else 0} " +
                 "tmToe=${f("toneMapToe")} tmShoulder=${f("toneMapShoulder")} " +

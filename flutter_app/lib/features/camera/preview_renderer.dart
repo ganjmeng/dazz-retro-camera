@@ -27,6 +27,16 @@ enum CalibrationScene {
   backlit,
 }
 
+enum LutStyleFamily {
+  bw,
+  instant,
+  filmScan,
+  cleanDigital,
+  ccd,
+  consumerWarm,
+  generalFilm,
+}
+
 class DeviceColorProfile {
   static const String calibrationVersion = 'v3.2';
   final String id;
@@ -334,6 +344,160 @@ class PreviewRenderParams {
     }
   }
 
+  LutStyleFamily get _lutStyleFamily {
+    switch (defaultLook.lutStyleFamily?.toLowerCase()) {
+      case 'bw':
+        return LutStyleFamily.bw;
+      case 'instant':
+        return LutStyleFamily.instant;
+      case 'filmscan':
+      case 'film_scan':
+        return LutStyleFamily.filmScan;
+      case 'cleandigital':
+      case 'clean_digital':
+        return LutStyleFamily.cleanDigital;
+      case 'ccd':
+        return LutStyleFamily.ccd;
+      case 'consumerwarm':
+      case 'consumer_warm':
+        return LutStyleFamily.consumerWarm;
+      case 'generalfilm':
+      case 'general_film':
+        return LutStyleFamily.generalFilm;
+    }
+    if (hasBwMixer || cameraId.contains('bw')) return LutStyleFamily.bw;
+    final lut = (effectiveBaseLut ?? defaultLook.baseLut ?? '').toLowerCase();
+    if (cameraId.contains('inst') ||
+        lut.contains('inst') ||
+        lut.contains('polaroid')) {
+      return LutStyleFamily.instant;
+    }
+    if (cameraId.contains('ccd') || lut.contains('ccd')) {
+      return LutStyleFamily.ccd;
+    }
+    if (cameraId.contains('grd') ||
+        cameraId.contains('u300') ||
+        cameraId.contains('d_classic')) {
+      return LutStyleFamily.cleanDigital;
+    }
+    if (lut.contains('trix') ||
+        lut.contains('hp5') ||
+        lut.contains('superia') ||
+        lut.contains('kodak') ||
+        lut.contains('gold') ||
+        lut.contains('portra')) {
+      return LutStyleFamily.filmScan;
+    }
+    if (lut.contains('warm') || lut.contains('gold')) {
+      return LutStyleFamily.consumerWarm;
+    }
+    return LutStyleFamily.generalFilm;
+  }
+
+  double get _lutStructureScale {
+    final base = switch (_lutStyleFamily) {
+      LutStyleFamily.bw => 0.72,
+      LutStyleFamily.instant => 0.56,
+      LutStyleFamily.filmScan => 0.64,
+      LutStyleFamily.cleanDigital => 0.42,
+      LutStyleFamily.ccd => 0.48,
+      LutStyleFamily.consumerWarm => 0.58,
+      LutStyleFamily.generalFilm => 0.62,
+    };
+    return (defaultLook.lutStructureWeight ?? base).clamp(0.2, 1.4);
+  }
+
+  double get _lutGrainScale {
+    final base = switch (_lutStyleFamily) {
+      LutStyleFamily.bw => 1.18,
+      LutStyleFamily.instant => 0.82,
+      LutStyleFamily.filmScan => 1.08,
+      LutStyleFamily.cleanDigital => 0.74,
+      LutStyleFamily.ccd => 0.78,
+      LutStyleFamily.consumerWarm => 0.9,
+      LutStyleFamily.generalFilm => 1.0,
+    };
+    return (defaultLook.lutGrainWeight ?? base).clamp(0.2, 1.6);
+  }
+
+  double get _lutGlowScale {
+    final base = switch (_lutStyleFamily) {
+      LutStyleFamily.bw => 0.55,
+      LutStyleFamily.instant => 0.9,
+      LutStyleFamily.filmScan => 0.72,
+      LutStyleFamily.cleanDigital => 0.45,
+      LutStyleFamily.ccd => 0.58,
+      LutStyleFamily.consumerWarm => 0.68,
+      LutStyleFamily.generalFilm => 0.7,
+    };
+    return (defaultLook.lutGlowWeight ?? base).clamp(0.0, 1.4);
+  }
+
+  double get _lutPaperScale {
+    final base = switch (_lutStyleFamily) {
+      LutStyleFamily.instant => 1.0,
+      LutStyleFamily.bw => 0.85,
+      LutStyleFamily.filmScan => 0.7,
+      LutStyleFamily.cleanDigital => 0.25,
+      LutStyleFamily.ccd => 0.2,
+      LutStyleFamily.consumerWarm => 0.4,
+      LutStyleFamily.generalFilm => 0.45,
+    };
+    return (defaultLook.lutPaperWeight ?? base).clamp(0.0, 1.4);
+  }
+
+  double get _lutSoftnessScale {
+    final base = switch (_lutStyleFamily) {
+      LutStyleFamily.instant => 0.8,
+      LutStyleFamily.bw => 0.7,
+      LutStyleFamily.filmScan => 0.62,
+      LutStyleFamily.cleanDigital => 0.38,
+      LutStyleFamily.ccd => 0.46,
+      LutStyleFamily.consumerWarm => 0.56,
+      LutStyleFamily.generalFilm => 0.58,
+    };
+    return (defaultLook.lutSoftnessWeight ?? base).clamp(0.0, 1.4);
+  }
+
+  double get _captureAtmosphereScale {
+    final base = switch (_lutStyleFamily) {
+      LutStyleFamily.bw => 0.82,
+      LutStyleFamily.instant => 0.72,
+      LutStyleFamily.filmScan => 0.76,
+      LutStyleFamily.cleanDigital => 0.48,
+      LutStyleFamily.ccd => 0.56,
+      LutStyleFamily.consumerWarm => 0.64,
+      LutStyleFamily.generalFilm => 0.68,
+    };
+    return (defaultLook.lutGlowWeight ?? base).clamp(0.0, 1.4);
+  }
+
+  double get _captureSoftFocusScale {
+    final base = switch (_lutStyleFamily) {
+      LutStyleFamily.instant => 0.78,
+      LutStyleFamily.bw => 0.46,
+      LutStyleFamily.filmScan => 0.54,
+      LutStyleFamily.cleanDigital => 0.34,
+      LutStyleFamily.ccd => 0.4,
+      LutStyleFamily.consumerWarm => 0.5,
+      LutStyleFamily.generalFilm => 0.52,
+    };
+    return (defaultLook.lutSoftnessWeight ?? base).clamp(0.0, 1.4);
+  }
+
+  double get _captureWarmScale {
+    final base = switch (_lutStyleFamily) {
+      LutStyleFamily.bw => 0.0,
+      LutStyleFamily.instant => 0.58,
+      LutStyleFamily.filmScan => 0.42,
+      LutStyleFamily.cleanDigital => 0.18,
+      LutStyleFamily.ccd => 0.12,
+      LutStyleFamily.consumerWarm => 0.34,
+      LutStyleFamily.generalFilm => 0.26,
+    };
+    return (defaultLook.lutWarmWeight ?? base).clamp(0.0, 1.2);
+  }
+
   // Effective vignette = defaultLook + lens override
   double get effectiveVignette {
     final base = defaultLook.vignette;
@@ -357,7 +521,10 @@ class PreviewRenderParams {
       SceneClass.indoor => 0.78,
       _ => 1.0,
     };
-    return ((base + lens) * defaultLook.bloomResponse * sceneScale)
+    return ((base + lens) *
+            defaultLook.bloomResponse *
+            sceneScale *
+            _lutGlowScale)
         .clamp(0.0, 1.0);
   }
 
@@ -371,7 +538,8 @@ class PreviewRenderParams {
     };
     return ((defaultLook.halation + filterHalation) *
             defaultLook.halationResponse *
-            sceneScale)
+            sceneScale *
+            _lutGlowScale)
         .clamp(0.0, 1.0);
   }
 
@@ -462,7 +630,8 @@ class PreviewRenderParams {
   double get effectiveGrainPattern => defaultLook.grain.clamp(0.0, 1.25);
   double get effectiveGrainAmount =>
       ((defaultLook.grainAmount + _filterGrainAmount(activeFilter?.grain)) *
-              _auditedSceneGrainScale(sceneClass))
+              _auditedSceneGrainScale(sceneClass) *
+              _lutGrainScale)
           .clamp(0.0, 1.0);
   double get effectiveGrain => effectiveGrainAmount;
   double get effectiveGrainSize {
@@ -493,12 +662,18 @@ class PreviewRenderParams {
   double get effectiveDehaze => (defaultLook.dehaze / 10.0).clamp(0.0, 1.0);
   double get highlightWarmAmount =>
       defaultLook.highlightWarmAmount.clamp(0.0, 1.0);
-  double get toneMapToe => defaultLook.toneMapToe.clamp(0.0, 1.0);
-  double get toneMapShoulder => defaultLook.toneMapShoulder.clamp(0.0, 1.0);
-  double get toneMapStrength => defaultLook.toneMapStrength.clamp(0.0, 1.0);
-  double get midGrayDensity => defaultLook.midGrayDensity.clamp(-1.0, 1.0);
+  double get toneMapToe =>
+      (defaultLook.toneMapToe * _lutStructureScale).clamp(0.0, 1.0);
+  double get toneMapShoulder =>
+      (defaultLook.toneMapShoulder * _lutStructureScale).clamp(0.0, 1.0);
+  double get toneMapStrength =>
+      (defaultLook.toneMapStrength * _lutStructureScale).clamp(0.0, 1.0);
+  double get midGrayDensity =>
+      (defaultLook.midGrayDensity * (_lutStructureScale * 0.7))
+          .clamp(-1.0, 1.0);
   double get highlightRolloffPivot =>
-      defaultLook.highlightRolloffPivot.clamp(0.5, 0.95);
+      (defaultLook.highlightRolloffPivot + (1.0 - _lutStructureScale) * 0.10)
+          .clamp(0.5, 0.95);
   double get topBottomBias => defaultLook.topBottomBias.clamp(-1.0, 1.0);
   double get leftRightBias => defaultLook.leftRightBias.clamp(-1.0, 1.0);
   bool get hasCustomToneCurve => defaultLook.toneCurvePoints.isNotEmpty;
@@ -556,7 +731,8 @@ class PreviewRenderParams {
   double get highlightRolloff => ((defaultLook.highlightRolloff +
               _sceneHighlightRolloffBoost(sceneClass) *
                   _exposureProtectionMix) *
-          defaultLook.highlightRolloffResponse)
+          defaultLook.highlightRolloffResponse *
+          _lutStructureScale)
       .clamp(0.0, 1.0);
 
   double get effectiveHighlightRolloff2 {
@@ -567,7 +743,8 @@ class PreviewRenderParams {
     };
     return (defaultLook.highlightRolloff2 *
             defaultLook.highlightRolloffResponse *
-            sceneScale)
+            sceneScale *
+            _lutStructureScale)
         .clamp(0.0, 1.0);
   }
 
@@ -579,7 +756,8 @@ class PreviewRenderParams {
     };
     return (defaultLook.toneCurveStrength *
             defaultLook.toneCurveResponse *
-            sceneScale)
+            sceneScale *
+            _lutStructureScale)
         .clamp(0.0, 1.0);
   }
 
@@ -836,7 +1014,8 @@ class PreviewRenderParams {
       SceneClass.backlit || SceneClass.highDynamic => 0.82,
       _ => 1.0,
     };
-    return (defaultLook.paperTexture * sceneScale).clamp(0.0, 1.0);
+    return (defaultLook.paperTexture * sceneScale * _lutPaperScale)
+        .clamp(0.0, 1.0);
   }
 
   double get developmentSoftness {
@@ -846,8 +1025,7 @@ class PreviewRenderParams {
       SceneClass.indoor => 0.86,
       _ => 1.0,
     };
-    return (defaultLook.developmentSoftness * sceneScale +
-            effectiveBeautyStrength * 0.28)
+    return (defaultLook.developmentSoftness * sceneScale * _lutSoftnessScale)
         .clamp(0.0, 1.0);
   }
 
@@ -994,7 +1172,8 @@ class PreviewRenderParams {
         'midGrayDensity': midGrayDensity,
         'highlightRolloffPivot': highlightRolloffPivot,
         'highlightRolloffSoftKnee':
-            defaultLook.highlightRolloffSoftKnee.clamp(0.0, 1.0),
+            (defaultLook.highlightRolloffSoftKnee * _lutStructureScale)
+                .clamp(0.0, 1.0),
         'lensVignette': effectiveVignette,
         'exposureOffset': exposureOffset + effectiveLensExposure,
         'distortion': effectiveDistortion,
@@ -1122,41 +1301,23 @@ class PreviewRenderParams {
 
   Map<String, dynamic> toCaptureJson() {
     final json = Map<String, dynamic>.from(toJson());
-    final isBwClassic = cameraId == 'bw_classic';
 
     double read(String key, [double fallback = 0.0]) =>
         (json[key] as num?)?.toDouble() ?? fallback;
 
-    // Let camera LUTs remain the primary look layer. Disable capture-side tone
-    // shaping completely so we can evaluate LUT output without duplicated
-    // shoulder compression, mid-gray shaping, or black lift from the shader.
-    json.remove('toneMapToe');
-    json.remove('toneMapShoulder');
-    json.remove('toneMapStrength');
-    json.remove('midGrayDensity');
-    json.remove('highlightRolloff2');
-
-    // Restore only a very light highlight-edge protection layer on export.
-    // This keeps LUTs as the main look while avoiding the old washed/veiled
-    // result from re-enabling the full tone-shaping stack.
-    final rolloffScale = isBwClassic ? 0.42 : 0.32;
-    final rolloffLimit = isBwClassic ? 0.12 : 0.10;
-    json['highlightRolloff'] =
-        (read('highlightRolloff') * rolloffScale).clamp(0.0, rolloffLimit);
-    json['highlightRolloffPivot'] =
-        read('highlightRolloffPivot', 0.76).clamp(0.80, 0.88);
-    json['highlightRolloffSoftKnee'] =
-        (read('highlightRolloffSoftKnee', 0.35) * 0.55).clamp(0.14, 0.24);
-
     // Capture should keep texture and contrast. A few global "atmosphere" terms
     // were making almost every camera look veiled/washed, especially on bright
     // indoor scenes. Keep the look, but compress the haze-inducing terms.
-    json['bloomAmount'] = (read('bloomAmount') * 0.18).clamp(0.0, 1.0);
-    json['softFocus'] = (read('softFocus') * 0.14).clamp(0.0, 1.0);
+    json['bloomAmount'] =
+        (read('bloomAmount') * 0.18 * _captureAtmosphereScale).clamp(0.0, 1.0);
+    json['softFocus'] =
+        (read('softFocus') * 0.14 * _captureSoftFocusScale).clamp(0.0, 1.0);
     json['developmentSoftness'] =
-        (read('developmentSoftness') * 0.16).clamp(0.0, 1.0);
+        (read('developmentSoftness') * 0.16 * _captureAtmosphereScale)
+            .clamp(0.0, 1.0);
     json['highlightWarmAmount'] =
-        (read('highlightWarmAmount') * 0.18).clamp(0.0, 1.0);
+        (read('highlightWarmAmount') * 0.18 * _captureWarmScale)
+            .clamp(0.0, 1.0);
     json['skinLumaSoften'] = (read('skinLumaSoften') * 0.45).clamp(0.0, 0.30);
     json['dustAmount'] = defaultLook.dustAmount.clamp(0.0, 1.0);
     json['scratchAmount'] = defaultLook.scratchAmount.clamp(0.0, 1.0);

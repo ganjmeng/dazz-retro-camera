@@ -245,6 +245,13 @@ class SensorConfig {
 // ─────────────────────────────────────────────
 
 class DefaultLook {
+  final String? lutStyleFamily; // optional explicit LUT style family metadata
+  final double? lutStructureWeight; // optional per-LUT structure scaling override
+  final double? lutGrainWeight; // optional per-LUT grain scaling override
+  final double? lutGlowWeight; // optional per-LUT glow scaling override
+  final double? lutPaperWeight; // optional per-LUT paper scaling override
+  final double? lutSoftnessWeight; // optional per-LUT softness scaling override
+  final double? lutWarmWeight; // optional per-LUT highlight-warm scaling override
   final String? baseLut;
   final String? baseLutDaylight; // 场景 LUT：日光
   final String? baseLutIndoor; // 场景 LUT：室内
@@ -346,6 +353,13 @@ class DefaultLook {
   final double toneCurveResponse; // 0.0 ~ 1.0
 
   const DefaultLook({
+    this.lutStyleFamily,
+    this.lutStructureWeight,
+    this.lutGrainWeight,
+    this.lutGlowWeight,
+    this.lutPaperWeight,
+    this.lutSoftnessWeight,
+    this.lutWarmWeight,
     this.baseLut,
     this.baseLutDaylight,
     this.baseLutIndoor,
@@ -459,6 +473,13 @@ class DefaultLook {
       );
 
   factory DefaultLook.fromJson(Map<String, dynamic> json) => DefaultLook(
+        lutStyleFamily: json['lutStyleFamily'] as String?,
+        lutStructureWeight: (json['lutStructureWeight'] as num?)?.toDouble(),
+        lutGrainWeight: (json['lutGrainWeight'] as num?)?.toDouble(),
+        lutGlowWeight: (json['lutGlowWeight'] as num?)?.toDouble(),
+        lutPaperWeight: (json['lutPaperWeight'] as num?)?.toDouble(),
+        lutSoftnessWeight: (json['lutSoftnessWeight'] as num?)?.toDouble(),
+        lutWarmWeight: (json['lutWarmWeight'] as num?)?.toDouble(),
         baseLut: json['baseLut'] as String?,
         baseLutDaylight: json['baseLutDaylight'] as String?,
         baseLutIndoor: json['baseLutIndoor'] as String?,
@@ -567,6 +588,15 @@ class DefaultLook {
       );
 
   Map<String, dynamic> toJson() => {
+        if (lutStyleFamily != null) 'lutStyleFamily': lutStyleFamily,
+        if (lutStructureWeight != null)
+          'lutStructureWeight': lutStructureWeight,
+        if (lutGrainWeight != null) 'lutGrainWeight': lutGrainWeight,
+        if (lutGlowWeight != null) 'lutGlowWeight': lutGlowWeight,
+        if (lutPaperWeight != null) 'lutPaperWeight': lutPaperWeight,
+        if (lutSoftnessWeight != null)
+          'lutSoftnessWeight': lutSoftnessWeight,
+        if (lutWarmWeight != null) 'lutWarmWeight': lutWarmWeight,
         if (baseLut != null) 'baseLut': baseLut,
         if (baseLutDaylight != null) 'baseLutDaylight': baseLutDaylight,
         if (baseLutIndoor != null) 'baseLutIndoor': baseLutIndoor,

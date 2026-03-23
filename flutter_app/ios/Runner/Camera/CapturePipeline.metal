@@ -75,6 +75,12 @@ struct CaptureParams {
     float highlightRolloff;
     float highlightRolloff2;   // 高光柔和滚落 2（FXN-R 专属）
     float toneCurveStrength;   // Tone Curve 强度（FXN-R 专属）
+    float lutStructureWeight;
+    float lutGrainWeight;
+    float lutGlowWeight;
+    float lutPaperWeight;
+    float lutSoftnessWeight;
+    float lutWarmWeight;
     float paperTexture;
     float edgeFalloff;
     float exposureVariation;
@@ -338,11 +344,13 @@ static float3 cp_highlightRolloff(float3 color, float rolloff, float pivot, floa
     if (rolloff < 0.001) return color;
     float p = clamp(pivot, 0.52, 0.92);
     float knee = clamp(softKnee, 0.0, 1.0);
-    return clamp(float3(
-        applyHighlightRolloffScalar(color.r, rolloff, p, knee),
-        applyHighlightRolloffScalar(color.g, rolloff, p, knee),
-        applyHighlightRolloffScalar(color.b, rolloff, p, knee)
-    ), 0.0, 1.0);
+    float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
+    if (lum <= p) return color;
+    float compressedLum = applyHighlightRolloffScalar(lum, rolloff * 0.9, p, knee);
+    float lumScale = compressedLum / max(lum, 1e-4);
+    float mask = smoothstep(p, min(0.995, p + (1.0 - p) * (0.42 + knee * 0.28)), lum);
+    float scale = mix(1.0, max(lumScale, 0.84), mask * clamp(rolloff * 1.15, 0.0, 1.0));
+    return clamp(color * scale, 0.0, 1.0);
 }
 
 static float cp_filmicCurve(float x, float toe, float shoulder) {
@@ -367,7 +375,11 @@ static float3 cp_filmicToneMap(float3 color, float toe, float shoulder, float st
         cp_filmicCurve(color.g, toe, shoulder),
         cp_filmicCurve(color.b, toe, shoulder)
     );
-    return clamp(mix(color, mapped, clamp(strength, 0.0, 1.0)), 0.0, 1.0);
+    float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float shadowMask = (1.0 - smoothstep(0.08, 0.30, lum)) * (0.35 + clamp(toe, 0.0, 1.0) * 0.65);
+    float highlightMask = smoothstep(0.62, 0.90, lum) * (0.35 + clamp(shoulder, 0.0, 1.0) * 0.65);
+    float blend = clamp(max(shadowMask, highlightMask) * strength, 0.0, 1.0);
+    return clamp(mix(color, mapped, blend), 0.0, 1.0);
 }
 
 static float3 cp_midGrayDensity(float3 color, float density) {
@@ -375,8 +387,8 @@ static float3 cp_midGrayDensity(float3 color, float density) {
     float lum = dot(color, float3(0.2126, 0.7152, 0.0722));
     float anchor = 0.18;
     float dist = fabs(lum - anchor);
-    float mask = exp(-dist * 10.0);
-    float gain = exp2(clamp(density, -1.0, 1.0) * 0.8 * mask);
+    float mask = exp(-dist * 18.0) * (1.0 - smoothstep(0.46, 0.78, lum));
+    float gain = exp2(clamp(density, -1.0, 1.0) * 0.42 * mask);
     return clamp(color * gain, 0.0, 1.0);
 }
 

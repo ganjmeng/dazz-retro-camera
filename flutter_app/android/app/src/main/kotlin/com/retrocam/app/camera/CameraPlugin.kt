@@ -815,6 +815,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 (look["dustAmount"]          as? Number)?.let { params["dustAmount"]          = it }
                 (look["scratchAmount"]       as? Number)?.let { params["scratchAmount"]       = it }
                 (look["highlightWarmAmount"] as? Number)?.let { params["highlightWarmAmount"] = it }
+                (look["lutStructureWeight"]  as? Number)?.let { params["lutStructureWeight"]  = it }
+                (look["lutGrainWeight"]      as? Number)?.let { params["lutGrainWeight"]      = it }
+                (look["lutGlowWeight"]       as? Number)?.let { params["lutGlowWeight"]       = it }
+                (look["lutPaperWeight"]      as? Number)?.let { params["lutPaperWeight"]      = it }
+                (look["lutSoftnessWeight"]   as? Number)?.let { params["lutSoftnessWeight"]   = it }
+                (look["lutWarmWeight"]       as? Number)?.let { params["lutWarmWeight"]       = it }
                 (look["highlightRolloffSoftKnee"] as? Number)?.let { params["highlightRolloffSoftKnee"] = it }
                 (look["highlightRolloff"]    as? Number)?.let { params["highlightRolloff"]    = it }
                 (look["highlightRolloff2"]   as? Number)?.let { params["highlightRolloff2"]   = it }
@@ -3006,6 +3012,12 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             (look["luminanceNoise"]      as? Number)?.let { params["luminanceNoise"]      = it }
             (look["chromaNoise"]         as? Number)?.let { params["chromaNoise"]         = it }
             (look["highlightWarmAmount"] as? Number)?.let { params["highlightWarmAmount"] = it }
+            (look["lutStructureWeight"]  as? Number)?.let { params["lutStructureWeight"]  = it }
+            (look["lutGrainWeight"]      as? Number)?.let { params["lutGrainWeight"]      = it }
+            (look["lutGlowWeight"]       as? Number)?.let { params["lutGlowWeight"]       = it }
+            (look["lutPaperWeight"]      as? Number)?.let { params["lutPaperWeight"]      = it }
+            (look["lutSoftnessWeight"]   as? Number)?.let { params["lutSoftnessWeight"]   = it }
+            (look["lutWarmWeight"]       as? Number)?.let { params["lutWarmWeight"]       = it }
             (look["highlightRolloffSoftKnee"] as? Number)?.let { params["highlightRolloffSoftKnee"] = it }
             (look["highlightRolloff"]    as? Number)?.let { params["highlightRolloff"]    = it }
             (look["highlightRolloff2"]   as? Number)?.let { params["highlightRolloff2"]   = it }
