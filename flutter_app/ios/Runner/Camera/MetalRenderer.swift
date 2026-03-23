@@ -376,32 +376,20 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = num("deviceCcm22") { ccdParams.deviceCcm22 = v }
         previewWhitelistEnabled = boolVal("previewWhitelist")
         if previewWhitelistEnabled {
-            // 预览白名单：仅保留 LUT + 色温/色调 + 曝光 + 美颜相关参数。
-            ccdParams.contrast = 1.0
-            ccdParams.saturation = 1.0
+            // 预览白名单：保留 LUT、基础颜色骨架、highlight rolloff、轻颗粒和美颜；
+            // 关闭高成本或强介质化的项目，避免预览失真和掉帧。
             ccdParams.highlights = 0.0
             ccdParams.shadows = 0.0
             ccdParams.whites = 0.0
             ccdParams.blacks = 0.0
             ccdParams.clarity = 0.0
-            ccdParams.vibrance = 0.0
-            ccdParams.colorBiasR = 0.0
-            ccdParams.colorBiasG = 0.0
-            ccdParams.colorBiasB = 0.0
-            ccdParams.grainAmount = 0.0
-            ccdParams.grainPatternStrength = 1.0
             ccdParams.noiseAmount = 0.0
-            ccdParams.grainSize = 1.0
-            ccdParams.grainRoughness = 0.0
-            ccdParams.grainLumaBias = 0.65
-            ccdParams.grainColorVariation = 0.0
             ccdParams.luminanceNoise = 0.0
             ccdParams.chromaNoise = 0.0
             ccdParams.vignetteAmount = 0.0
             ccdParams.chromaticAberration = 0.0
             ccdParams.bloomAmount = 0.0
             ccdParams.halationAmount = 0.0
-            ccdParams.highlightRolloff = 0.0
             ccdParams.highlightRolloffSoftKnee = 0.35
             ccdParams.toneCurveStrength = 0.0
             ccdParams.paperTexture = 0.0

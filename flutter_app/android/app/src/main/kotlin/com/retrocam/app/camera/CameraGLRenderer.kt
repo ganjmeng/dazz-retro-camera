@@ -1414,32 +1414,20 @@ void main() {
         numberOrNull(params["deviceCcm22"])?.let { deviceCcm22 = it }
         previewWhitelistEnabled = boolOrFalse(params["previewWhitelist"])
         if (previewWhitelistEnabled) {
-            // 预览白名单：仅保留 LUT + 色温/色调 + 曝光 + 美颜相关参数。
-            contrast = 1.0f
-            saturation = 1.0f
+            // 预览白名单：保留 LUT、基础颜色骨架、highlight rolloff、轻颗粒和美颜；
+            // 关闭高成本或强介质化的项目，避免预览失真和掉帧。
             highlights = 0.0f
             shadows = 0.0f
             whites = 0.0f
             blacks = 0.0f
             clarity = 0.0f
-            vibrance = 0.0f
-            colorBiasR = 0.0f
-            colorBiasG = 0.0f
-            colorBiasB = 0.0f
-            grainAmount = 0.0f
-            grainPatternStrength = 1.0f
             noiseAmount = 0.0f
-            grainSize = 1.0f
-            grainRoughness = 0.0f
-            grainLumaBias = 0.65f
-            grainColorVariation = 0.0f
             luminanceNoise = 0.0f
             chromaNoise = 0.0f
             vignetteAmount = 0.0f
             chromaticAberration = 0.0f
             bloomAmount = 0.0f
             halationAmount = 0.0f
-            highlightRolloff = 0.0f
             highlightRolloff2 = 0.0f
             toneCurveStrength = 0.0f
             paperTexture = 0.0f

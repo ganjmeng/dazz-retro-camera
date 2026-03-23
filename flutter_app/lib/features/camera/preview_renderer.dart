@@ -1075,6 +1075,23 @@ class PreviewRenderParams {
       'temperatureShift': effectiveTemperature,
       'tintShift': effectiveTint,
       'exposureOffset': exposureOffset + effectiveLensExposure,
+      'contrast': effectiveContrast,
+      'saturation': effectiveSaturation,
+      'vibrance': effectiveVibrance,
+      'colorBiasR': effectiveColorBiasR,
+      'colorBiasG': effectiveColorBiasG,
+      'colorBiasB': effectiveColorBiasB,
+      'highlightRolloff': highlightRolloff,
+      'grain': effectiveGrainPattern,
+      'grainAmount': switch (mode) {
+        PreviewPerformanceMode.lightweight =>
+          (effectiveGrainAmount * 0.7).clamp(0.0, 1.0),
+        PreviewPerformanceMode.performance => effectiveGrainAmount,
+      },
+      'grainSize': effectiveGrainSize,
+      'grainRoughness': effectiveGrainRoughness,
+      'grainLumaBias': effectiveGrainLumaBias,
+      'grainColorVariation': effectiveGrainColorVariation,
       'beautyStrength': previewBeauty,
     };
 
