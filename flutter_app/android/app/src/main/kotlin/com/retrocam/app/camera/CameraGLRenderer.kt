@@ -94,6 +94,7 @@ uniform float uChromaticAberration;
 uniform float uNoiseAmount;
 uniform float uVignetteAmount;
 uniform float uGrainAmount;
+uniform float uGrainPatternStrength;
 uniform float uSharpen;
 uniform float uTime;
 uniform vec2  uTexelSize;   // 1/width, 1/height
@@ -663,26 +664,19 @@ void main() {
         float jitterB = (random(uv * baseScale * 0.97 + vec2(3.1), timeSeed * 0.29) - 0.5) * colorVar;
         vec3 monoGrain = vec3(grain);
         vec3 colorGrain = vec3(grain + jitterR, grain + jitterG, grain + jitterB);
-        vec3 grainRgb = mix(monoGrain, colorGrain, colorMix);
+        vec3 grainRgb = mix(monoGrain, colorGrain, colorMix) * max(uGrainPatternStrength, 0.0);
         color = clamp(color + grainRgb * uGrainAmount * mask * 0.55, 0.0, 1.0);
     }
 
     // Pass 19: 数字噪点
     if (uNoiseAmount > 0.0) {
-        float lum   = dot(color, vec3(0.2126, 0.7152, 0.0722));
-        float noise = random(uv, uTime) - 0.5;
-        float dark  = 1.0 - lum;
-        color = clamp(color + noise * uNoiseAmount * 0.2 * dark, 0.0, 1.0);
-    }
-    if (uLuminanceNoise > 0.0) {
-        float ln = random(uv, uTime + 1.7) - 0.5;
-        color = clamp(color + ln * uLuminanceNoise * 0.15, 0.0, 1.0);
-    }
-    if (uChromaNoise > 0.0) {
-        float cr = random(uv, uTime + 3.1) - 0.5;
-        float cg = random(uv, uTime + 5.3) - 0.5;
-        float cb = random(uv, uTime + 7.7) - 0.5;
-        color = clamp(color + vec3(cr, cg, cb) * uChromaNoise * 0.08, 0.0, 1.0);
+        float noiseMask = 1.0 - smoothstep(0.15, 0.75, dot(color, vec3(0.2126, 0.7152, 0.0722)));
+        float ln = (random(uv * 780.0, uTime + 1.7) - 0.5) * max(uLuminanceNoise, 0.0);
+        float cr = (random(uv * 811.0, uTime + 3.1) - 0.5) * max(uChromaNoise, 0.0);
+        float cg = (random(uv * 853.0, uTime + 5.3) - 0.5) * max(uChromaNoise, 0.0);
+        float cb = (random(uv * 887.0, uTime + 7.7) - 0.5) * max(uChromaNoise, 0.0);
+        vec3 sensorNoise = (vec3(ln) + vec3(cr, cg, cb)) * noiseMask;
+        color = clamp(color + sensorNoise * uNoiseAmount, 0.0, 1.0);
     }
 
     // Pass 20: Fade（褒色）
@@ -747,6 +741,7 @@ void main() {
     private var uNoiseAmount: Int = -1
     private var uVignetteAmount: Int = -1
     private var uGrainAmount: Int = -1
+    private var uGrainPatternStrength: Int = -1
     private var uSharpen: Int = -1
     private var uTime: Int = -1
     private var uTexelSize: Int = -1
@@ -832,6 +827,7 @@ void main() {
     @Volatile private var noiseAmount: Float = 0.0f
     @Volatile private var vignetteAmount: Float = 0.0f
     @Volatile private var grainAmount: Float = 0.0f
+    @Volatile private var grainPatternStrength: Float = 1.0f
     @Volatile private var sharpen: Float = 0.0f
     @Volatile private var time: Float = 0.0f
     @Volatile private var fisheyeMode: Float = 0.0f
@@ -1084,6 +1080,7 @@ void main() {
         uNoiseAmount          = GLES30.glGetUniformLocation(programId, "uNoiseAmount")
         uVignetteAmount       = GLES30.glGetUniformLocation(programId, "uVignetteAmount")
         uGrainAmount          = GLES30.glGetUniformLocation(programId, "uGrainAmount")
+        uGrainPatternStrength = GLES30.glGetUniformLocation(programId, "uGrainPatternStrength")
         uSharpen              = GLES30.glGetUniformLocation(programId, "uSharpen")
         uTime                 = GLES30.glGetUniformLocation(programId, "uTime")
         uTexelSize            = GLES30.glGetUniformLocation(programId, "uTexelSize")
@@ -1226,6 +1223,7 @@ void main() {
         GLES30.glUniform1f(uNoiseAmount,         noiseAmount)
         GLES30.glUniform1f(uVignetteAmount,      vignetteAmount)
         GLES30.glUniform1f(uGrainAmount,         grainAmount)
+        GLES30.glUniform1f(uGrainPatternStrength, grainPatternStrength)
         GLES30.glUniform1f(uSharpen,             sharpen)
         GLES30.glUniform1f(uTime,                time)
         GLES30.glUniform2f(uTexelSize,
@@ -1349,7 +1347,7 @@ void main() {
         (params["noiseAmount"]         as? Number)?.let { noiseAmount         = it.toFloat() }
         (params["vignette"]            as? Number)?.let { vignetteAmount      = it.toFloat() }
         (params["vignetteAmount"]      as? Number)?.let { vignetteAmount      = it.toFloat() }
-        (params["grain"]               as? Number)?.let { grainAmount         = it.toFloat() }
+        (params["grain"]               as? Number)?.let { grainPatternStrength = it.toFloat() }
         (params["grainAmount"]         as? Number)?.let { grainAmount         = it.toFloat() }
         (params["sharpen"]             as? Number)?.let { sharpen             = it.toFloat() }
         (params["highlights"]          as? Number)?.let { highlights          = it.toFloat() }
@@ -1429,6 +1427,7 @@ void main() {
             colorBiasG = 0.0f
             colorBiasB = 0.0f
             grainAmount = 0.0f
+            grainPatternStrength = 1.0f
             noiseAmount = 0.0f
             grainSize = 1.0f
             grainRoughness = 0.0f

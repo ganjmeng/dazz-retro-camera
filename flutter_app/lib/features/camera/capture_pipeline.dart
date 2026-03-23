@@ -34,7 +34,6 @@ class CapturePipeline {
   final CameraDefinition camera;
   // 临时调试开关：先关闭共享重后处理，验证成片是否被 capture 管线拉平成同一种质感。
   static const bool _kDisableSharedDartFallbackPost = true;
-  static const bool _kDisableArtifactOverlays = false;
   static const int _kFrameTextureCacheMaxEntries = 6;
   static final Map<String, ui.Image> _frameTextureCache = <String, ui.Image>{};
   static final List<String> _frameTextureLru = <String>[];
@@ -42,22 +41,6 @@ class CapturePipeline {
   static final Map<String, Uint8List> _frameAssetBytesCache =
       <String, Uint8List>{};
   static final List<String> _frameAssetBytesLru = <String>[];
-  static const List<String> _dustLightPlusAssets = <String>[
-    'assets/textures/artifacts/dust_01.png',
-    'assets/textures/artifacts/dust_02.png',
-    'assets/textures/artifacts/dust_03.png',
-    'assets/textures/artifacts/dust_04.png',
-    'assets/textures/artifacts/dust_05.png',
-    'assets/textures/artifacts/dust_06.png',
-  ];
-  static const List<String> _scratchLightPlusAssets = <String>[
-    'assets/textures/artifacts/scratch_01.png',
-    'assets/textures/artifacts/scratch_02.png',
-    'assets/textures/artifacts/scratch_03.png',
-    'assets/textures/artifacts/scratch_04.png',
-    'assets/textures/artifacts/scratch_05.png',
-    'assets/textures/artifacts/scratch_06.png',
-  ];
 
   /// 输出图像最大边长（像素）。超过此値时等比缩小画布。
   /// 各清晰度档位的输出最大边长（像素）
@@ -830,16 +813,6 @@ class CapturePipeline {
             outW, outH, lightLeakStrength);
       }
 
-      // ── 4d2. Dust / Scratch Overlay ────────────────────────────────────────
-      await _drawArtifactOverlays(
-        canvas,
-        frameOffsetX + leftPx,
-        frameOffsetY + topPx,
-        outW,
-        outH,
-        imagePath,
-      );
-
       // ── 4e. 色差（Chromatic Aberration）──────────────────────────────────────
       // GPU 成片管线已包含 Chromatic Aberration Pass，仅在 Dart 降级时由 Canvas 补充
       if (!gpuProcessed &&
@@ -996,194 +969,6 @@ class CapturePipeline {
     } catch (e, st) {
       debugPrint('[CapturePipeline] Error: $e\n$st');
       return null;
-    }
-  }
-
-  Future<void> _drawArtifactOverlays(
-    Canvas canvas,
-    double x,
-    double y,
-    double width,
-    double height,
-    String imagePath,
-  ) async {
-    if (_kDisableArtifactOverlays) return;
-
-    final dustAmount = camera.defaultLook.dustAmount;
-    final scratchAmount = camera.defaultLook.scratchAmount;
-    if (dustAmount <= 0.001 && scratchAmount <= 0.001) return;
-
-    final seed = imagePath.hashCode ^ camera.id.hashCode;
-    final rng = math.Random(seed);
-    final bounds = Rect.fromLTWH(x, y, width, height);
-
-    if (dustAmount > 0.001) {
-      final a = dustAmount.clamp(0.0, 1.0);
-      final layerCount = (2 + (a * 4).floor()).clamp(2, 5);
-      final brightOpacity = (0.10 + a * 0.20).clamp(0.08, 0.24);
-      final darkOpacity = (0.06 + a * 0.16).clamp(0.05, 0.18);
-      for (var i = 0; i < layerCount; i++) {
-        final asset =
-            _dustLightPlusAssets[rng.nextInt(_dustLightPlusAssets.length)];
-        final texture =
-            await _getFrameTexture(asset, width.toInt(), height.toInt());
-        canvas.save();
-        canvas.translate(bounds.center.dx, bounds.center.dy);
-        canvas.rotate((rng.nextDouble() - 0.5) * 0.24);
-        final scale = 0.94 + rng.nextDouble() * 0.16;
-        canvas.scale(scale, scale);
-        canvas.translate(-bounds.width / 2, -bounds.height / 2);
-        final src = Rect.fromLTWH(
-          0,
-          0,
-          texture.width.toDouble(),
-          texture.height.toDouble(),
-        );
-        final dst = Rect.fromLTWH(0, 0, bounds.width, bounds.height);
-        // 亮尘（偏白）：对暗部可见
-        canvas.drawImageRect(
-          texture,
-          src,
-          dst,
-          Paint()
-            ..filterQuality = FilterQuality.high
-            ..blendMode = BlendMode.screen
-            ..color = Colors.white.withValues(alpha: brightOpacity),
-        );
-        // 暗尘（偏灰黑）：对亮部可见，避免“只有黑场才看得见”
-        canvas.drawImageRect(
-          texture,
-          src,
-          dst,
-          Paint()
-            ..filterQuality = FilterQuality.high
-            ..blendMode = BlendMode.multiply
-            ..color = Colors.black.withValues(alpha: darkOpacity),
-        );
-        canvas.restore();
-      }
-
-      // Procedural dust: ensure visibility even when texture assets are low-contrast.
-      final dotCount = (18 + a * 120).round();
-      final whiteDotAlpha = (0.10 + a * 0.16).clamp(0.08, 0.20);
-      final darkDotAlpha = (0.06 + a * 0.12).clamp(0.05, 0.16);
-      final whitePaint = Paint()
-        ..blendMode = BlendMode.screen
-        ..color = Colors.white.withValues(alpha: whiteDotAlpha);
-      final darkPaint = Paint()
-        ..blendMode = BlendMode.multiply
-        ..color = Colors.black.withValues(alpha: darkDotAlpha);
-      for (var i = 0; i < dotCount; i++) {
-        final dx = bounds.left + rng.nextDouble() * bounds.width;
-        final dy = bounds.top + rng.nextDouble() * bounds.height;
-        final r = (0.35 + rng.nextDouble() * (1.1 + a * 2.6)).clamp(0.25, 4.5);
-        canvas.drawCircle(Offset(dx, dy), r, whitePaint);
-        if (rng.nextDouble() < 0.72) {
-          canvas.drawCircle(
-            Offset(dx + 0.2 + rng.nextDouble() * 0.8,
-                dy + 0.2 + rng.nextDouble() * 0.8),
-            r * (0.42 + rng.nextDouble() * 0.38),
-            darkPaint,
-          );
-        }
-      }
-    }
-
-    if (scratchAmount > 0.001) {
-      final a = scratchAmount.clamp(0.0, 1.0);
-      final appearProb = (0.6 + a * 0.4).clamp(0.6, 1.0);
-      if (rng.nextDouble() < appearProb) {
-        final layerCount = (2 + (a * 3).floor()).clamp(2, 4);
-        final brightOpacity = (0.08 + a * 0.18).clamp(0.06, 0.20);
-        final darkOpacity = (0.05 + a * 0.12).clamp(0.04, 0.14);
-        for (var i = 0; i < layerCount; i++) {
-          final asset = _scratchLightPlusAssets[
-              rng.nextInt(_scratchLightPlusAssets.length)];
-          final texture =
-              await _getFrameTexture(asset, width.toInt(), height.toInt());
-          canvas.save();
-          canvas.translate(bounds.center.dx, bounds.center.dy);
-          final rotation = (rng.nextDouble() * 2 - 1) * 0.55;
-          canvas.rotate(rotation);
-          final mirrorX = rng.nextBool() ? -1.0 : 1.0;
-          final mirrorY = rng.nextBool() ? -1.0 : 1.0;
-          canvas.scale(mirrorX, mirrorY);
-          final scale = 0.9 + rng.nextDouble() * 0.2;
-          canvas.scale(scale, scale);
-          canvas.translate(-bounds.width / 2, -bounds.height / 2);
-          final src = Rect.fromLTWH(
-            0,
-            0,
-            texture.width.toDouble(),
-            texture.height.toDouble(),
-          );
-          final dst = Rect.fromLTWH(0, 0, bounds.width, bounds.height);
-          // 亮划痕
-          canvas.drawImageRect(
-            texture,
-            src,
-            dst,
-            Paint()
-              ..filterQuality = FilterQuality.high
-              ..blendMode = BlendMode.screen
-              ..color = Colors.white.withValues(alpha: brightOpacity),
-          );
-          // 暗划痕
-          canvas.drawImageRect(
-            texture,
-            src,
-            dst,
-            Paint()
-              ..filterQuality = FilterQuality.high
-              ..blendMode = BlendMode.multiply
-              ..color = Colors.black.withValues(alpha: darkOpacity),
-          );
-          canvas.restore();
-        }
-
-        // Procedural scratches: visible long/short fibers independent of texture atlas.
-        final scratchCount = (2 + a * 10).round();
-        final baseAngle = (rng.nextDouble() * math.pi) - (math.pi / 2);
-        final whiteLine = Paint()
-          ..blendMode = BlendMode.screen
-          ..strokeCap = StrokeCap.round
-          ..style = PaintingStyle.stroke
-          ..color = Colors.white.withValues(
-            alpha: (0.10 + a * 0.18).clamp(0.08, 0.22),
-          );
-        final darkLine = Paint()
-          ..blendMode = BlendMode.multiply
-          ..strokeCap = StrokeCap.round
-          ..style = PaintingStyle.stroke
-          ..color = Colors.black.withValues(
-            alpha: (0.06 + a * 0.10).clamp(0.05, 0.14),
-          );
-        for (var i = 0; i < scratchCount; i++) {
-          final cx = bounds.left + rng.nextDouble() * bounds.width;
-          final cy = bounds.top + rng.nextDouble() * bounds.height;
-          final len = bounds.shortestSide *
-              (0.08 + rng.nextDouble() * (0.16 + a * 0.26));
-          final angle = baseAngle + (rng.nextDouble() - 0.5) * 0.8;
-          final dx = math.cos(angle) * len * 0.5;
-          final dy = math.sin(angle) * len * 0.5;
-          final p1 = Offset(cx - dx, cy - dy);
-          final p2 = Offset(cx + dx, cy + dy);
-          whiteLine.strokeWidth =
-              (0.45 + rng.nextDouble() * (0.9 + a * 1.1)).clamp(0.4, 2.2);
-          darkLine.strokeWidth =
-              (whiteLine.strokeWidth * 0.55).clamp(0.25, 1.2);
-          canvas.drawLine(p1, p2, whiteLine);
-          if (rng.nextDouble() < 0.85) {
-            canvas.drawLine(
-              p1.translate(0.45 + rng.nextDouble() * 0.45,
-                  0.45 + rng.nextDouble() * 0.45),
-              p2.translate(0.45 + rng.nextDouble() * 0.45,
-                  0.45 + rng.nextDouble() * 0.45),
-              darkLine,
-            );
-          }
-        }
-      }
     }
   }
 

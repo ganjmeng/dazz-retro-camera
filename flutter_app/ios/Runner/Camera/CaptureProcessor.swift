@@ -106,9 +106,12 @@ struct MetalCaptureParams {
     var splitToneBalance: Float = 0.5
     var lightLeakAmount: Float = 0
     var lightLeakSeed: Float = 0
+    var dustAmount: Float = 0
+    var scratchAmount: Float = 0
     var grainLumaBias: Float = 0.65
     var grainColorVariation: Float = 0.08
     var highlightRolloffSoftKnee: Float = 0.35
+    var grainPatternStrength: Float = 1.0
 }
 
 /// 独立的动态曲线参数缓冲（buffer(1)），避免破坏主参数结构体内存布局。
@@ -340,6 +343,7 @@ class CaptureProcessor {
 
         // 胶片效果参数
         p.grainAmount        = getFloat(params, "grainAmount", 0)
+        p.grainPatternStrength = getFloat(params, "grain", 1.0)
         p.noiseAmount        = getFloat(params, "noiseAmount", 0)
         p.vignetteAmount     = getFloat(params, "vignetteAmount", 0)
         p.chromaticAberration = getFloat(params, "chromaticAberration", 0)
@@ -406,6 +410,8 @@ class CaptureProcessor {
         p.splitToneBalance   = getFloat(params, "splitToneBalance", 0.5)
         p.lightLeakAmount    = getFloat(params, "lightLeakAmount", 0.0)
         p.lightLeakSeed      = getFloat(params, "lightLeakSeed", Float(Date().timeIntervalSince1970))
+        p.dustAmount         = getFloat(params, "dustAmount", 0.0)
+        p.scratchAmount      = getFloat(params, "scratchAmount", 0.0)
         if let mixer = params["bwChannelMixer"] as? [Any], mixer.count >= 3 {
             let r = (mixer[0] as? NSNumber)?.floatValue ?? 0.299
             let g = (mixer[1] as? NSNumber)?.floatValue ?? 0.587

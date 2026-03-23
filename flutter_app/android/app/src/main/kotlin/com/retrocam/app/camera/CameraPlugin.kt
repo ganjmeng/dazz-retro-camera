@@ -804,12 +804,16 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
                 (look["colorBiasR"]          as? Number)?.let { params["colorBiasR"]          = it }
                 (look["colorBiasG"]          as? Number)?.let { params["colorBiasG"]          = it }
                 (look["colorBiasB"]          as? Number)?.let { params["colorBiasB"]          = it }
+                (look["grain"]               as? Number)?.let { params["grain"]               = it }
+                (look["grainAmount"]         as? Number)?.let { params["grainAmount"]         = it }
                 (look["grainSize"]           as? Number)?.let { params["grainSize"]           = it }
                 (look["grainRoughness"]      as? Number)?.let { params["grainRoughness"]      = it }
                 (look["grainLumaBias"]       as? Number)?.let { params["grainLumaBias"]       = it }
                 (look["grainColorVariation"] as? Number)?.let { params["grainColorVariation"] = it }
                 (look["luminanceNoise"]      as? Number)?.let { params["luminanceNoise"]      = it }
                 (look["chromaNoise"]         as? Number)?.let { params["chromaNoise"]         = it }
+                (look["dustAmount"]          as? Number)?.let { params["dustAmount"]          = it }
+                (look["scratchAmount"]       as? Number)?.let { params["scratchAmount"]       = it }
                 (look["highlightWarmAmount"] as? Number)?.let { params["highlightWarmAmount"] = it }
                 (look["highlightRolloffSoftKnee"] as? Number)?.let { params["highlightRolloffSoftKnee"] = it }
                 (look["highlightRolloff"]    as? Number)?.let { params["highlightRolloff"]    = it }
@@ -2993,6 +2997,8 @@ class CameraPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAwa
             (look["colorBiasR"]          as? Number)?.let { params["colorBiasR"]          = it }
             (look["colorBiasG"]          as? Number)?.let { params["colorBiasG"]          = it }
             (look["colorBiasB"]          as? Number)?.let { params["colorBiasB"]          = it }
+            (look["grain"]               as? Number)?.let { params["grain"]               = it }
+            (look["grainAmount"]         as? Number)?.let { params["grainAmount"]         = it }
             (look["grainSize"]           as? Number)?.let { params["grainSize"]           = it }
             (look["grainRoughness"]      as? Number)?.let { params["grainRoughness"]      = it }
             (look["grainLumaBias"]       as? Number)?.let { params["grainLumaBias"]       = it }

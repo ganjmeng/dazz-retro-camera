@@ -98,6 +98,7 @@ struct CCDParams {
     float grainLumaBias;
     float grainColorVariation;
     float highlightRolloffSoftKnee;
+    float grainPatternStrength;
 };
 
 // MARK: - 工具函数
@@ -454,6 +455,7 @@ float3 applyStructuredGrain(
     float3 color,
     float2 uv,
     float amount,
+    float patternStrength,
     float grainSize,
     float roughness,
     float lumaBias,
@@ -489,7 +491,7 @@ float3 applyStructuredGrain(
     float jitterB = (random(uv * baseScale * 0.97 + float2(3.1), timeSeed * 0.29) - 0.5) * colorWeight;
     float3 monoGrain = float3(grain);
     float3 colorGrain = float3(grain + jitterR, grain + jitterG, grain + jitterB);
-    float3 grainRgb = mix(monoGrain, colorGrain, colorMix);
+    float3 grainRgb = mix(monoGrain, colorGrain, colorMix) * max(patternStrength, 0.0);
     return clamp(color + grainRgb * amount * mask * 0.55, 0.0, 1.0);
 }
 
@@ -599,6 +601,7 @@ fragment float4 ccdFragmentShader(
         color,
         uv,
         params.grainAmount,
+        params.grainPatternStrength,
         params.grainSize,
         params.grainRoughness,
         params.grainLumaBias,
@@ -606,24 +609,15 @@ fragment float4 ccdFragmentShader(
         params.time
     );
     
-    // === Pass 5: 动态数字噪点 (Noise) ===
-    // 模拟 CCD 传感器的暗部噪点，使用时间种子使其动态变化
+    // === Pass 5: 传感器噪声 (Noise) ===
     if (params.noiseAmount > 0.0) {
-        float noise = random(uv, params.time) - 0.5;
-        float darkMask = 1.0 - luminance;
-        color = clamp(color + noise * params.noiseAmount * 0.2 * darkMask, 0.0, 1.0);
-    }
-    // 亮度噪声（FXN-R=0.02）
-    if (params.luminanceNoise > 0.0) {
-        float ln = random(uv, params.time + 1.7) - 0.5;
-        color = clamp(color + ln * params.luminanceNoise * 0.15, 0.0, 1.0);
-    }
-    // 色度噪声（FXN-R=0.01，极低）
-    if (params.chromaNoise > 0.0) {
-        float cr = random(uv, params.time + 3.1) - 0.5;
-        float cg = random(uv, params.time + 5.3) - 0.5;
-        float cb = random(uv, params.time + 7.7) - 0.5;
-        color = clamp(color + float3(cr, cg, cb) * params.chromaNoise * 0.08, 0.0, 1.0);
+        float noiseMask = 1.0 - smoothstep(0.15, 0.75, luminance);
+        float ln = (random(uv * 780.0, params.time + 1.7) - 0.5) * max(params.luminanceNoise, 0.0);
+        float cr = (random(uv * 811.0, params.time + 3.1) - 0.5) * max(params.chromaNoise, 0.0);
+        float cg = (random(uv * 853.0, params.time + 5.3) - 0.5) * max(params.chromaNoise, 0.0);
+        float cb = (random(uv * 887.0, params.time + 7.7) - 0.5) * max(params.chromaNoise, 0.0);
+        float3 sensorNoise = (float3(ln) + float3(cr, cg, cb)) * noiseMask;
+        color = clamp(color + sensorNoise * params.noiseAmount, 0.0, 1.0);
     }
 
     // === Pass 6: 传感器非均匀性 + 肤色保护 ===

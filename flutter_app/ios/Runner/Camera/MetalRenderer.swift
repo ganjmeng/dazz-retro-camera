@@ -84,6 +84,7 @@ struct CCDParams {
     var grainLumaBias: Float = 0.65
     var grainColorVariation: Float = 0.08
     var highlightRolloffSoftKnee: Float = 0.35
+    var grainPatternStrength: Float = 1.0
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -308,6 +309,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
         if let v = num("temperatureShift") { ccdParams.temperatureShift = v }
         if let v = num("tintShift") { ccdParams.tintShift = v }
         if let v = num("grainAmount") { ccdParams.grainAmount = v }
+        if let v = num("grain") { ccdParams.grainPatternStrength = v }
         if let v = num("noise") { ccdParams.noiseAmount = v }
         if let v = num("vignette") { ccdParams.vignetteAmount = v }
         if let v = num("chromaticAberration") { ccdParams.chromaticAberration = v }
@@ -387,6 +389,7 @@ class MetalRenderer: NSObject, FlutterTexture, AVCaptureVideoDataOutputSampleBuf
             ccdParams.colorBiasG = 0.0
             ccdParams.colorBiasB = 0.0
             ccdParams.grainAmount = 0.0
+            ccdParams.grainPatternStrength = 1.0
             ccdParams.noiseAmount = 0.0
             ccdParams.grainSize = 1.0
             ccdParams.grainRoughness = 0.0

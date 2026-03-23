@@ -265,9 +265,10 @@ class DefaultLook {
   final double chromaticAberration;
   final double bloom; // 0.0 ~ 1.0
   final double flare;
-  final double grain; // 0.0 ~ 1.0 grain strength
+  final double grain; // film grain pattern / structure strength
+  final double grainAmount; // final film-grain blend weight
   final double dehaze; // 0.0 ~ 10.0 atmospheric dehaze strength
-  final double noiseAmount; // FIX: 0.0 ~ 1.0 digital noise strength（数字噪点强度）
+  final double noiseAmount; // final sensor-noise blend weight
   final double colorBiasR; // -1.0 ~ +1.0 red channel bias
   final double colorBiasG; // -1.0 ~ +1.0 green channel bias
   final double colorBiasB; // -1.0 ~ +1.0 blue channel bias
@@ -366,6 +367,7 @@ class DefaultLook {
     required this.bloom,
     required this.flare,
     this.grain = 0,
+    this.grainAmount = 0,
     this.dehaze = 0,
     this.noiseAmount = 0, // FIX: 数字噪点强度
     this.colorBiasR = 0,
@@ -478,8 +480,9 @@ class DefaultLook {
         bloom: _asDouble(json['bloom']),
         flare: _asDouble(json['flare']),
         grain: _asDouble(json['grain']),
+        grainAmount: _asDouble(json['grainAmount']),
         dehaze: _asDouble(json['dehaze']),
-        noiseAmount: _asDouble(json['noiseAmount']), // FIX: 数字噪点强度
+        noiseAmount: _asDouble(json['noiseAmount']),
         colorBiasR: _asDouble(json['colorBiasR']),
         colorBiasG: _asDouble(json['colorBiasG']),
         colorBiasB: _asDouble(json['colorBiasB']),
@@ -585,6 +588,7 @@ class DefaultLook {
         'bloom': bloom,
         'flare': flare,
         'grain': grain,
+        if (grainAmount != 0) 'grainAmount': grainAmount,
         'dehaze': dehaze,
         'noiseAmount': noiseAmount, // FIX: 数字噪点强度
         'colorBiasR': colorBiasR,

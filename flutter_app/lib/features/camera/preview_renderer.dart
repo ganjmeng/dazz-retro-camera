@@ -459,10 +459,12 @@ class PreviewRenderParams {
   double get effectiveVibrance => (defaultLook.vibrance +
           _auditedSceneVibranceOffset(sceneClass) * _sceneAdaptiveMix)
       .clamp(-100.0, 100.0);
-  double get effectiveGrain =>
-      ((defaultLook.grain + _filterGrainAmount(activeFilter?.grain)) *
+  double get effectiveGrainPattern => defaultLook.grain.clamp(0.0, 1.25);
+  double get effectiveGrainAmount =>
+      ((defaultLook.grainAmount + _filterGrainAmount(activeFilter?.grain)) *
               _auditedSceneGrainScale(sceneClass))
           .clamp(0.0, 1.0);
+  double get effectiveGrain => effectiveGrainAmount;
   double get effectiveGrainSize {
     final filterSize = activeFilter?.grainSize ?? defaultLook.grainSize;
     return filterSize.clamp(0.5, 3.0);
@@ -602,7 +604,7 @@ class PreviewRenderParams {
   double get chemicalIrregularity =>
       defaultLook.chemicalIrregularity.clamp(0.0, 0.1);
 
-  /// FIX: noiseAmount 现已添加到 DefaultLook
+  /// `noiseAmount` is the final sensor-noise blend weight.
   double get noiseAmount => defaultLook.noiseAmount.clamp(0.0, 1.0);
   double get skinSatProtect => (defaultLook.skinSatProtect -
           _dynamicSkinSatDelta() -
@@ -948,7 +950,8 @@ class PreviewRenderParams {
         'colorBiasR': effectiveColorBiasR,
         'colorBiasG': effectiveColorBiasG,
         'colorBiasB': effectiveColorBiasB,
-        'grainAmount': effectiveGrain,
+        'grain': effectiveGrainPattern,
+        'grainAmount': effectiveGrainAmount,
         'noiseAmount': noiseAmount,
         'vignetteAmount': effectiveVignette,
         'chromaticAberration': effectiveChromaticAberration,
@@ -1066,6 +1069,7 @@ class PreviewRenderParams {
 
     final json = <String, dynamic>{
       if (cameraId.isNotEmpty) 'cameraId': cameraId,
+      'previewWhitelist': true,
       if (effectiveBaseLut?.isNotEmpty == true) 'baseLut': effectiveBaseLut,
       'lutStrength': effectiveLutStrength,
       'temperatureShift': effectiveTemperature,
@@ -1105,6 +1109,18 @@ class PreviewRenderParams {
     double read(String key, [double fallback = 0.0]) =>
         (json[key] as num?)?.toDouble() ?? fallback;
 
+    // Let camera LUTs remain the primary look layer. Disable capture-side tone
+    // shaping completely so we can evaluate LUT output without duplicated
+    // shoulder compression, mid-gray shaping, or black lift from the shader.
+    json.remove('toneMapToe');
+    json.remove('toneMapShoulder');
+    json.remove('toneMapStrength');
+    json.remove('midGrayDensity');
+    json.remove('highlightRolloff');
+    json.remove('highlightRolloff2');
+    json.remove('highlightRolloffPivot');
+    json.remove('highlightRolloffSoftKnee');
+
     // Capture should keep texture and contrast. A few global "atmosphere" terms
     // were making almost every camera look veiled/washed, especially on bright
     // indoor scenes. Keep the look, but compress the haze-inducing terms.
@@ -1115,6 +1131,8 @@ class PreviewRenderParams {
     json['highlightWarmAmount'] =
         (read('highlightWarmAmount') * 0.18).clamp(0.0, 1.0);
     json['skinLumaSoften'] = (read('skinLumaSoften') * 0.45).clamp(0.0, 0.30);
+    json['dustAmount'] = defaultLook.dustAmount.clamp(0.0, 1.0);
+    json['scratchAmount'] = defaultLook.scratchAmount.clamp(0.0, 1.0);
 
     return json;
   }
