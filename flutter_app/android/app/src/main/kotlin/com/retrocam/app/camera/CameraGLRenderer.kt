@@ -10,6 +10,7 @@ import android.opengl.GLES11Ext
 import android.opengl.GLES30
 import android.util.Log
 import android.view.Surface
+import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -1627,7 +1628,11 @@ void main() {
                 )
                 return 0
             }
-            val inputStream = context.assets.open(assetPath.removePrefix("assets/"))
+            val inputStream = openFlutterAssetStream(context, assetPath)
+                ?: run {
+                    Log.w(TAG, "loadLutTextureGL asset not found: $assetPath")
+                    return 0
+                }
             val lines = inputStream.bufferedReader().readLines()
             inputStream.close()
             var lutSize = 33
@@ -1685,6 +1690,31 @@ void main() {
             0
         }
     }
+
+    private fun openFlutterAssetStream(context: Context, assetPath: String): InputStream? {
+        val candidates = LinkedHashSet<String>()
+        val normalized = assetPath
+            .removePrefix("/")
+            .removePrefix("flutter_assets/")
+        if (normalized.isNotEmpty()) {
+            candidates.add(normalized)
+            if (normalized.startsWith("assets/")) {
+                candidates.add(normalized.removePrefix("assets/"))
+                candidates.add("flutter_assets/$normalized")
+            } else {
+                candidates.add("assets/$normalized")
+                candidates.add("flutter_assets/assets/$normalized")
+            }
+        }
+        for (candidate in candidates) {
+            val stream = runCatching { context.assets.open(candidate) }.getOrNull()
+            if (stream != null) {
+                return stream
+            }
+        }
+        return null
+    }
+
     private fun createProgram(vertSrc: String, fragSrc: String): Int {
         val vert = compileShader(GLES30.GL_VERTEX_SHADER, vertSrc)
         val frag = compileShader(GLES30.GL_FRAGMENT_SHADER, fragSrc)
