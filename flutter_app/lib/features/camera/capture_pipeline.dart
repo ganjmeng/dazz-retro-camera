@@ -54,6 +54,24 @@ class CapturePipeline {
 
   CapturePipeline({required this.camera});
 
+  double _stableArtifactSeed(
+    String imagePath,
+    String selectedRatioId,
+    int fileSize,
+    int modifiedMs,
+  ) {
+    const int fnvOffset = 0x811C9DC5;
+    const int fnvPrime = 0x01000193;
+    final source =
+        '$imagePath|${camera.id}|$selectedRatioId|$fileSize|$modifiedMs';
+    var hash = fnvOffset;
+    for (final codeUnit in source.codeUnits) {
+      hash ^= codeUnit;
+      hash = (hash * fnvPrime) & 0xFFFFFFFF;
+    }
+    return (hash & 0x7FFFFFFF) / 65536.0;
+  }
+
   Future<Uint8List> _getFrameAssetBytes(String assetPath) async {
     final cached = _frameAssetBytesCache[assetPath];
     if (cached != null) {
@@ -145,8 +163,16 @@ class CapturePipeline {
         try {
           debugPrint(
               "[CapturePipeline] Attempting to use native GPU pipeline...");
+          final fileStat = await File(imagePath).stat();
+          final artifactSeed = _stableArtifactSeed(
+            imagePath,
+            selectedRatioId,
+            fileStat.size,
+            fileStat.modified.millisecondsSinceEpoch,
+          );
           final gpuParams = <String, dynamic>{
             ...?captureParamsJson,
+            'lightLeakSeed': artifactSeed,
             if (fisheyeMode) 'fisheyeMode': 1.0,
             if (fisheyeMode) 'circularFisheye': useCircularFisheye ? 1.0 : 0.0,
           };

@@ -610,7 +610,13 @@ float dustCluster(vec2 uv, float seed) {
 
 float scratchLayer(vec2 uv, float seed, float amount) {
     float result = 0.0;
-    float count = floor(amount * 4.0);
+    float scaled = clamp(amount, 0.0, 1.0) * 40.0;
+    float count = floor(scaled);
+    float extraChance = fract(scaled);
+    if (count < 3.0 && hash(vec2(seed, 71.0)) < extraChance) {
+        count += 1.0;
+    }
+    count = clamp(count, 0.0, 3.0);
     for (int i = 0; i < 3; i++) {
         if (float(i) >= count) break;
         float s = seed + float(i) * 17.0;
